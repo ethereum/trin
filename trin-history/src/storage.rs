@@ -21,7 +21,11 @@ impl ContentStore for HistoryStorage {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
-    fn put<V: AsRef<[u8]>>(&mut self, key: Self::Key, value: V) -> Result<(), ContentStoreError> {
+    fn put<V: AsRef<[u8]>>(
+        &mut self,
+        key: Self::Key,
+        value: V,
+    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
         self.store.insert(&key, value.as_ref().to_vec())
     }
 

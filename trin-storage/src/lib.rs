@@ -52,7 +52,15 @@ pub trait ContentStore {
     fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError>;
 
     /// Puts a piece of content into the store.
-    fn put<V: AsRef<[u8]>>(&mut self, key: Self::Key, value: V) -> Result<(), ContentStoreError>;
+    /// Returns a list of keys that were evicted from the store, which should be gossiped into the
+    /// network. In the future this might be updated to a separate table that stores a queue
+    /// of content keys to be gossiped and gossips them in a background task.
+    #[allow(clippy::type_complexity)]
+    fn put<V: AsRef<[u8]>>(
+        &mut self,
+        key: Self::Key,
+        value: V,
+    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError>;
 
     /// Returns whether the content denoted by `key` is within the radius of the data store and not
     /// already stored within the data store.
@@ -114,12 +122,16 @@ impl ContentStore for MemoryContentStore {
         Ok(val)
     }
 
-    fn put<V: AsRef<[u8]>>(&mut self, key: Self::Key, value: V) -> Result<(), ContentStoreError> {
+    fn put<V: AsRef<[u8]>>(
+        &mut self,
+        key: Self::Key,
+        value: V,
+    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
         let content_id = key.content_id();
         let value: &[u8] = value.as_ref();
         self.store.insert(content_id.to_vec(), value.to_vec());
 
-        Ok(())
+        Ok(vec![])
     }
 
     fn is_key_within_radius_and_unavailable(

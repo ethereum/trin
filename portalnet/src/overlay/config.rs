@@ -22,6 +22,7 @@ pub struct OverlayConfig {
     pub query_num_results: usize,
     pub findnodes_query_distances_per_peer: usize,
     pub disable_poke: bool,
+    pub gossip_dropped: bool,
     pub utp_transfer_limit: usize,
 }
 
@@ -40,6 +41,7 @@ impl Default for OverlayConfig {
             query_num_results: MAX_NODES_PER_BUCKET,
             findnodes_query_distances_per_peer: 3,
             disable_poke: false,
+            gossip_dropped: false,
             utp_transfer_limit: DEFAULT_UTP_TRANSFER_LIMIT,
         }
     }

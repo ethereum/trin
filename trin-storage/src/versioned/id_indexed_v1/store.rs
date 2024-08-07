@@ -110,6 +110,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 "High storage usage ({}) -> Pruning",
                 self.usage_stats.total_entry_size_bytes,
             );
+            // ignore dropped content...
             self.prune()?;
         } else if self
             .pruning_strategy
@@ -235,13 +236,13 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
     }
 
     /// Inserts content key/value pair into storage and prunes the db if necessary.
-    ///
+    /// Returns any content items that were pruned.
     /// It returns `InsufficientRadius` error if content is outside radius.
     pub fn insert(
         &mut self,
         content_key: &TContentKey,
         content_value: Vec<u8>,
-    ) -> Result<(), ContentStoreError> {
+    ) -> Result<Vec<(TContentKey, Vec<u8>)>, ContentStoreError> {
         let insert_with_pruning_timer = self.metrics.start_process_timer("insert_with_pruning");
 
         let content_id = content_key.content_id();
@@ -275,12 +276,14 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
         self.usage_stats.total_entry_size_bytes += content_size as u64;
         self.usage_stats.report_metrics(&self.metrics);
 
-        if self.pruning_strategy.should_prune(&self.usage_stats) {
-            self.prune()?;
-        }
+        let dropped_content = if self.pruning_strategy.should_prune(&self.usage_stats) {
+            self.prune()?
+        } else {
+            vec![]
+        };
 
         self.metrics.stop_process_timer(insert_with_pruning_timer);
-        Ok(())
+        Ok(dropped_content)
     }
 
     /// Deletes content with the given content id.
@@ -441,11 +444,13 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
     }
 
     /// Prunes database and updates `radius`.
-    fn prune(&mut self) -> Result<(), ContentStoreError> {
+    /// Returns any content items that were pruned.
+    fn prune(&mut self) -> Result<Vec<(TContentKey, Vec<u8>)>, ContentStoreError> {
+        let mut deleted_content: Vec<(TContentKey, Vec<u8>)> = Vec::new();
         if !self.pruning_strategy.should_prune(&self.usage_stats) {
             warn!(Db = %self.config.content_type,
                 "Pruning requested but not needed. Skipping");
-            return Ok(());
+            return Ok(deleted_content);
         }
 
         let pruning_timer = self.metrics.start_process_timer("prune");
@@ -466,30 +471,46 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                     Db = %self.config.content_type,
                     "Entries to prune is 0. This is not supposed to happen (we should be above storage capacity)."
                 );
-                return Ok(());
+                return Ok(deleted_content);
             }
 
             let delete_timer = self.metrics.start_process_timer("prune_delete");
-            let deleted_content_sizes = delete_query
+            let deleted_content_result = delete_query
                 .query_map(named_params! { ":limit": to_delete }, |row| {
-                    row.get("content_size")
+                    let key_bytes: Vec<u8> = row.get("content_key")?;
+                    let value_bytes: Vec<u8> = row.get("content_value")?;
+                    let size: u64 = row.get("content_size")?;
+                    TContentKey::try_from(key_bytes)
+                        .map(|key| (key, value_bytes, size))
+                        .map_err(|e| {
+                            rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
+                        })
                 })?
-                .collect::<Result<Vec<u64>, rusqlite::Error>>()?;
+                .collect::<Result<Vec<(TContentKey, Vec<u8>, u64)>, rusqlite::Error>>()?;
             let pruning_duration = self.metrics.stop_process_timer(delete_timer);
             self.pruning_strategy
                 .observe_pruning_duration(pruning_duration);
 
-            if to_delete != deleted_content_sizes.len() as u64 {
+            let deleted_content_count = deleted_content_result.len() as u64;
+            if to_delete != deleted_content_count {
                 error!(Db = %self.config.content_type,
-                    "Attempted to delete {to_delete} but deleted {}",
-                    deleted_content_sizes.len());
+                    "Attempted to delete {to_delete} but deleted {deleted_content_count}");
                 self.init_usage_stats()?;
                 break;
             }
 
+            let deleted_content_values = deleted_content_result
+                .iter()
+                .map(|(key, value, _)| (key.clone(), value.clone()))
+                .collect::<Vec<(TContentKey, Vec<u8>)>>();
+            let deleted_content_size = deleted_content_result
+                .iter()
+                .map(|(_, _, size)| size)
+                .sum::<u64>();
             self.usage_stats.entry_count -= to_delete;
-            self.usage_stats.total_entry_size_bytes -= deleted_content_sizes.iter().sum::<u64>();
+            self.usage_stats.total_entry_size_bytes -= deleted_content_size;
             self.usage_stats.report_metrics(&self.metrics);
+            deleted_content.extend(deleted_content_values);
         }
         // Free connection.
         drop(delete_query);
@@ -504,7 +525,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             self.usage_stats.total_entry_size_bytes,
         );
         self.metrics.stop_process_timer(pruning_timer);
-        Ok(())
+        Ok(deleted_content)
     }
 }
 

@@ -5,6 +5,7 @@ use discv5::{
     kbucket::{self, KBucketsTable},
 };
 use futures::channel::oneshot;
+use itertools::Itertools;
 use parking_lot::RwLock;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
@@ -25,8 +26,8 @@ use ethportal_api::{
         enr::Enr,
         portal_wire::{PopulatedOffer, PopulatedOfferWithResult, Request, Response},
     },
-    utils::bytes::hex_encode,
-    OverlayContentKey, RawContentKey,
+    utils::bytes::{hex_encode, hex_encode_compact},
+    OverlayContentKey,
 };
 
 /// Datatype to store the result of a gossip request.
@@ -48,6 +49,13 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
     utp_controller: Option<Arc<UtpController>>,
 ) -> usize {
+    // Propagate all validated content, whether or not it was stored.
+    let ids_to_propagate: Vec<String> = content
+        .iter()
+        .unique_by(|(key, _)| key.content_id())
+        .map(|(key, _)| hex_encode_compact(key.content_id()))
+        .collect();
+    debug!(ids = ?ids_to_propagate, "propagating validated content");
     // Get all connected nodes from overlay routing table
     let kbuckets = kbuckets.read();
     let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
@@ -68,25 +76,24 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
 
     // HashMap to temporarily store all interested ENRs and the content.
     // Key is base64 string of node's ENR.
-    let mut enrs_and_content: HashMap<String, Vec<(RawContentKey, Vec<u8>)>> = HashMap::new();
+    let mut enrs_and_content: HashMap<String, Vec<(TContentKey, Vec<u8>)>> = HashMap::new();
 
     for (content_key, content_value) in content {
         let interested_enrs = calculate_interested_enrs(&content_key, &all_nodes);
 
         // Temporarily store all randomly selected nodes with the content of interest.
         // We want this so we can offer all the content to an interested node in one request.
-        let raw_item = (content_key.into(), content_value);
         for enr in interested_enrs {
             enrs_and_content
                 .entry(enr.to_base64())
                 .or_default()
-                .push(raw_item.clone());
+                .push((content_key.clone(), content_value.clone()));
         }
     }
 
     let num_propagated_peers = enrs_and_content.len();
     // Create and send OFFER overlay request to the interested nodes
-    for (enr_string, interested_content) in enrs_and_content.into_iter() {
+    for (enr_string, mut interested_content) in enrs_and_content.into_iter() {
         let permit = match utp_controller {
             Some(ref utp_controller) => match utp_controller.get_outbound_semaphore() {
                 Some(permit) => Some(permit),
@@ -103,6 +110,26 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
             }
         };
 
+        // offer messages are limited to 64 content keys
+        if interested_content.len() > 64 {
+            warn!(
+                enr = %enr,
+                content.len = interested_content.len(),
+                "Too many content items to offer to a single peer, dropping {}.",
+                interested_content.len() - 64
+            );
+            // sort content keys by distance to the node
+            interested_content.sort_by_cached_key(|(key, _)| {
+                XorMetric::distance(&key.content_id(), &enr.node_id().raw())
+            });
+            // take 64 closest content keys
+            interested_content.truncate(64);
+        }
+        // change content keys to raw content keys
+        let interested_content = interested_content
+            .into_iter()
+            .map(|(key, value)| (key.into(), value))
+            .collect();
         let offer_request = Request::PopulatedOffer(PopulatedOffer {
             content_items: interested_content,
         });

@@ -28,20 +28,25 @@ impl ContentStore for StateStorage {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
-    fn put<V: AsRef<[u8]>>(&mut self, key: Self::Key, value: V) -> Result<(), ContentStoreError> {
+    fn put<V: AsRef<[u8]>>(
+        &mut self,
+        key: Self::Key,
+        value: V,
+    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
         let key = StateContentKey::try_from(key.to_bytes())?;
         let value = StateContentValue::decode(value.as_ref())?;
 
         match &key {
-            StateContentKey::AccountTrieNode(account_trie_node_key) => {
-                self.put_account_trie_node(&key, account_trie_node_key, value)
-            }
-            StateContentKey::ContractStorageTrieNode(contract_storage_trie_key) => {
-                self.put_contract_storage_trie_node(&key, contract_storage_trie_key, value)
-            }
-            StateContentKey::ContractBytecode(contract_bytecode_key) => {
-                self.put_contract_bytecode(&key, contract_bytecode_key, value)
-            }
+            StateContentKey::AccountTrieNode(account_trie_node_key) => self
+                .put_account_trie_node(&key, account_trie_node_key, value)
+                // ignore any pruned content in state network
+                .and(Ok(vec![])),
+            StateContentKey::ContractStorageTrieNode(contract_storage_trie_key) => self
+                .put_contract_storage_trie_node(&key, contract_storage_trie_key, value)
+                .and(Ok(vec![])),
+            StateContentKey::ContractBytecode(contract_bytecode_key) => self
+                .put_contract_bytecode(&key, contract_bytecode_key, value)
+                .and(Ok(vec![])),
         }
     }
 
@@ -97,7 +102,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &AccountTrieNodeKey,
         value: StateContentValue,
-    ) -> Result<(), ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
         let StateContentValue::AccountTrieNodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(
@@ -133,7 +138,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &ContractStorageTrieNodeKey,
         value: StateContentValue,
-    ) -> Result<(), ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
         let StateContentValue::ContractStorageTrieNodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(
@@ -169,7 +174,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &ContractBytecodeKey,
         value: StateContentValue,
-    ) -> Result<(), ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
         let StateContentValue::ContractBytecodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(

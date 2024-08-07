@@ -137,6 +137,7 @@ where
             config.query_num_results,
             config.findnodes_query_distances_per_peer,
             config.disable_poke,
+            config.gossip_dropped,
         )
         .await;
 
