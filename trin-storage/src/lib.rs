@@ -52,7 +52,7 @@ pub trait ContentStore {
     fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError>;
 
     /// Puts a piece of content into the store.
-    /// Returns a list of keys that were evicted from the store, which are gossiped into the
+    /// Returns a list of keys that were evicted from the store, which should be gossiped into the
     /// network. In the future this might be updated to a separate table that stores a queue
     /// of content keys to be gossiped and gossips them in a background task.
     #[allow(clippy::type_complexity)]

@@ -27,7 +27,7 @@ use ethportal_api::{
         portal_wire::{PopulatedOffer, PopulatedOfferWithResult, Request, Response},
     },
     utils::bytes::{hex_encode, hex_encode_compact},
-    OverlayContentKey, RawContentKey,
+    OverlayContentKey,
 };
 
 /// Datatype to store the result of a gossip request.
@@ -76,19 +76,18 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
 
     // HashMap to temporarily store all interested ENRs and the content.
     // Key is base64 string of node's ENR.
-    let mut enrs_and_content: HashMap<String, Vec<(RawContentKey, Vec<u8>)>> = HashMap::new();
+    let mut enrs_and_content: HashMap<String, Vec<(TContentKey, Vec<u8>)>> = HashMap::new();
 
     for (content_key, content_value) in content {
         let interested_enrs = calculate_interested_enrs(&content_key, &all_nodes);
 
         // Temporarily store all randomly selected nodes with the content of interest.
         // We want this so we can offer all the content to an interested node in one request.
-        let raw_item = (content_key.into(), content_value);
         for enr in interested_enrs {
             enrs_and_content
                 .entry(enr.to_base64())
                 .or_default()
-                .push(raw_item.clone());
+                .push((content_key.clone(), content_value.clone()));
         }
     }
 
@@ -120,22 +119,17 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
                 interested_content.len() - 64
             );
             // sort content keys by distance to the node
-            interested_content.sort_by(|a, b| {
-                let mut raw_a = [0u8; 32];
-                raw_a.copy_from_slice(&a.0);
-                let mut raw_b = [0u8; 32];
-                raw_b.copy_from_slice(&b.0);
-                let distance_a = XorMetric::distance(&raw_a, &enr.node_id().raw());
-                let distance_b = XorMetric::distance(&raw_b, &enr.node_id().raw());
-                distance_a.partial_cmp(&distance_b).unwrap_or_else(|| {
-                    warn!(a = %distance_a, b = %distance_b, "Error comparing two distances");
-                    std::cmp::Ordering::Less
-                })
+            interested_content.sort_by_cached_key(|(key, _)| {
+                XorMetric::distance(&key.content_id(), &enr.node_id().raw())
             });
             // take 64 closest content keys
             interested_content.truncate(64);
         }
-
+        // change content keys to raw content keys
+        let interested_content = interested_content
+            .into_iter()
+            .map(|(key, value)| (key.into(), value))
+            .collect();
         let offer_request = Request::PopulatedOffer(PopulatedOffer {
             content_items: interested_content,
         });

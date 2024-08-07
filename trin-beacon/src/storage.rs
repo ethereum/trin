@@ -228,11 +228,8 @@ impl ContentStore for BeaconStorage {
         key: Self::Key,
         value: V,
     ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
-        match self.store(&key, &value.as_ref().to_vec()) {
-            // in the beacon network we don't return any dropped content for propagation
-            Ok(_) => Ok(vec![]),
-            Err(err) => Err(err),
-        }
+        // in the beacon network we don't return any dropped content for propagation
+        self.store(&key, &value.as_ref().to_vec()).and(Ok(vec![]))
     }
 
     /// The "radius" concept is not applicable for Beacon network

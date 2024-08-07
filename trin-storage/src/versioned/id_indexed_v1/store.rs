@@ -236,7 +236,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
     }
 
     /// Inserts content key/value pair into storage and prunes the db if necessary.
-    ///
+    /// Returns any content items that were pruned.
     /// It returns `InsufficientRadius` error if content is outside radius.
     pub fn insert(
         &mut self,
@@ -276,10 +276,11 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
         self.usage_stats.total_entry_size_bytes += content_size as u64;
         self.usage_stats.report_metrics(&self.metrics);
 
-        let mut dropped_content: Vec<(TContentKey, Vec<u8>)> = Vec::new();
-        if self.pruning_strategy.should_prune(&self.usage_stats) {
-            dropped_content.extend(self.prune()?);
-        }
+        let dropped_content = if self.pruning_strategy.should_prune(&self.usage_stats) {
+            self.prune()?
+        } else {
+            vec![]
+        };
 
         self.metrics.stop_process_timer(insert_with_pruning_timer);
         Ok(dropped_content)
@@ -478,13 +479,14 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 .query_map(named_params! { ":limit": to_delete }, |row| {
                     let key_bytes: Vec<u8> = row.get("content_key")?;
                     let value_bytes: Vec<u8> = row.get("content_value")?;
+                    let size: u64 = row.get("content_size")?;
                     TContentKey::try_from(key_bytes)
-                        .map(|key| (key, value_bytes))
+                        .map(|key| (key, value_bytes, size))
                         .map_err(|e| {
                             rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
                         })
                 })?
-                .collect::<Result<Vec<(TContentKey, Vec<u8>)>, rusqlite::Error>>()?;
+                .collect::<Result<Vec<(TContentKey, Vec<u8>, u64)>, rusqlite::Error>>()?;
             let pruning_duration = self.metrics.stop_process_timer(delete_timer);
             self.pruning_strategy
                 .observe_pruning_duration(pruning_duration);
@@ -497,16 +499,18 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 break;
             }
 
+            let deleted_content_values = deleted_content_result
+                .iter()
+                .map(|(key, value, _)| (key.clone(), value.clone()))
+                .collect::<Vec<(TContentKey, Vec<u8>)>>();
             let deleted_content_size = deleted_content_result
                 .iter()
-                .map(|(key, value)| {
-                    key.content_id().len() as u64 + key.to_bytes().len() as u64 + value.len() as u64
-                })
+                .map(|(_, _, size)| size)
                 .sum::<u64>();
             self.usage_stats.entry_count -= to_delete;
             self.usage_stats.total_entry_size_bytes -= deleted_content_size;
             self.usage_stats.report_metrics(&self.metrics);
-            deleted_content.extend(deleted_content_result);
+            deleted_content.extend(deleted_content_values);
         }
         // Free connection.
         drop(delete_query);

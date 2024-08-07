@@ -37,15 +37,16 @@ impl ContentStore for StateStorage {
         let value = StateContentValue::decode(value.as_ref())?;
 
         match &key {
-            StateContentKey::AccountTrieNode(account_trie_node_key) => {
-                self.put_account_trie_node(&key, account_trie_node_key, value)
-            }
-            StateContentKey::ContractStorageTrieNode(contract_storage_trie_key) => {
-                self.put_contract_storage_trie_node(&key, contract_storage_trie_key, value)
-            }
-            StateContentKey::ContractBytecode(contract_bytecode_key) => {
-                self.put_contract_bytecode(&key, contract_bytecode_key, value)
-            }
+            StateContentKey::AccountTrieNode(account_trie_node_key) => self
+                .put_account_trie_node(&key, account_trie_node_key, value)
+                // ignore any pruned content in state network
+                .and(Ok(vec![])),
+            StateContentKey::ContractStorageTrieNode(contract_storage_trie_key) => self
+                .put_contract_storage_trie_node(&key, contract_storage_trie_key, value)
+                .and(Ok(vec![])),
+            StateContentKey::ContractBytecode(contract_bytecode_key) => self
+                .put_contract_bytecode(&key, contract_bytecode_key, value)
+                .and(Ok(vec![])),
         }
     }
 
@@ -128,14 +129,8 @@ impl StateStorage {
         let trie_node = TrieNode {
             node: last_trie_node.clone(),
         };
-        match self
-            .store
+        self.store
             .insert(content_key, StateContentValue::TrieNode(trie_node).encode())
-        {
-            // ignore any dropped content that's returned
-            Ok(_) => Ok(vec![]),
-            Err(e) => Err(e),
-        }
     }
 
     fn put_contract_storage_trie_node(
@@ -170,14 +165,8 @@ impl StateStorage {
         let trie_node = TrieNode {
             node: last_trie_node.clone(),
         };
-        match self
-            .store
+        self.store
             .insert(content_key, StateContentValue::TrieNode(trie_node).encode())
-        {
-            // ignore any dropped content that's returned
-            Ok(_) => Ok(vec![]),
-            Err(e) => Err(e),
-        }
     }
 
     fn put_contract_bytecode(
@@ -206,14 +195,10 @@ impl StateStorage {
 
         let contract_code = ContractBytecode { code: value.code };
 
-        match self.store.insert(
+        self.store.insert(
             content_key,
             StateContentValue::ContractBytecode(contract_code).encode(),
-        ) {
-            // ignore any dropped content that's returned
-            Ok(_) => Ok(vec![]),
-            Err(e) => Err(e),
-        }
+        )
     }
 }
 
