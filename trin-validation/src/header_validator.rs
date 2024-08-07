@@ -11,8 +11,8 @@ use anyhow::anyhow;
 use ethportal_api::{
     consensus::historical_summaries::HistoricalSummaries,
     types::execution::header_with_proof::{
-        BeaconBlockBodyProof, BeaconBlockHeaderProof, BlockHeaderProof, HeaderWithProof,
-        HistoricalRootsBlockProof, HistoricalSummariesBlockProof,
+        BeaconBlockProof, BlockHeaderProof, HeaderWithProof, HistoricalRootsBlockProof,
+        HistoricalSummariesBlockProof,
     },
     Header,
 };
@@ -104,15 +104,10 @@ impl HeaderValidator {
         }
 
         // Verify the chain of proofs for post-merge/pre-capella block header
-        Self::verify_beacon_block_body_proof(
+        Self::verify_beacon_block_proof(
             header_hash,
-            &proof.beacon_block_body_proof,
-            proof.beacon_block_body_root,
-        )?;
-        Self::verify_beacon_block_header_proof(
-            proof.beacon_block_body_root,
-            &proof.beacon_block_header_proof,
-            proof.beacon_block_header_root,
+            &proof.beacon_block_proof,
+            proof.beacon_block_root,
         )?;
 
         let block_root_index = proof.slot % EPOCH_SIZE;
@@ -122,7 +117,7 @@ impl HeaderValidator {
             self.historical_roots_acc.historical_roots[historical_root_index as usize];
 
         if !verify_merkle_proof(
-            proof.beacon_block_header_root,
+            proof.beacon_block_root,
             &proof.historical_roots_proof,
             14,
             gen_index as usize,
@@ -152,15 +147,10 @@ impl HeaderValidator {
         }
 
         // Verify the chain of proofs for post-merge/pre-capella block header
-        Self::verify_beacon_block_body_proof(
+        Self::verify_beacon_block_proof(
             header_hash,
-            &proof.beacon_block_body_proof,
-            proof.beacon_block_body_root,
-        )?;
-        Self::verify_beacon_block_header_proof(
-            proof.beacon_block_body_root,
-            &proof.beacon_block_header_proof,
-            proof.beacon_block_header_root,
+            &proof.beacon_block_proof,
+            proof.beacon_block_root,
         )?;
 
         let block_root_index = proof.slot % EPOCH_SIZE;
@@ -171,7 +161,7 @@ impl HeaderValidator {
             historical_summaries[historical_summary_index as usize].block_summary_root;
 
         if !verify_merkle_proof(
-            proof.beacon_block_header_root,
+            proof.beacon_block_root,
             &proof.historical_summaries_proof,
             13,
             gen_index as usize,
@@ -185,35 +175,35 @@ impl HeaderValidator {
         Ok(())
     }
 
-    /// Verify that the beacon block body root is included in the beacon header
-    fn verify_beacon_block_header_proof(
+    /// Verify that the execution block header is included in the beacon block
+    fn verify_beacon_block_proof(
+        header_hash: B256,
+        block_body_proof: &BeaconBlockProof,
         block_body_root: B256,
-        block_header_proof: &BeaconBlockHeaderProof,
-        block_header_root: B256,
     ) -> anyhow::Result<()> {
+        // BeaconBlock level:
+        // - 8 as there are 5 fields
+        // - 4 as index (pos) of field is 4
+        // let gen_index_top_level = (1 * 1 * 8 + 4)
+        // BeaconBlockBody level:
+        // - 16 as there are 10 fields
+        // - 9 as index (pos) of field is 9
+        // let gen_index_mid_level = (gen_index_top_level * 1 * 16 + 9)
+        // ExecutionPayload level:
+        // - 16 as there are 14 fields
+        // - 12 as pos of field is 12
+        // let gen_index = (gen_index_mid_level * 1 * 16 + 12) = 3228
+        let gen_index = 3228;
+
         if !verify_merkle_proof(
+            header_hash,
+            block_body_proof,
+            11,
+            gen_index,
             block_body_root,
-            block_header_proof,
-            3,
-            12,
-            block_header_root,
         ) {
             return Err(anyhow!(
-                "Merkle proof validation failed for BeaconBlockHeaderProof"
-            ));
-        }
-        Ok(())
-    }
-
-    /// Verify that the execution block header is included in the beacon block body
-    fn verify_beacon_block_body_proof(
-        header_hash: B256,
-        block_body_proof: &BeaconBlockBodyProof,
-        block_body_root: B256,
-    ) -> anyhow::Result<()> {
-        if !verify_merkle_proof(header_hash, block_body_proof, 8, 412, block_body_root) {
-            return Err(anyhow!(
-                "Merkle proof validation failed for BeaconBlockBodyProof"
+                "Merkle proof validation failed for BeaconBlockProof"
             ));
         }
         Ok(())
@@ -405,14 +395,13 @@ mod test {
             .validate_header_with_proof(&future_hwp)
             .unwrap();
     }
-    #[ignore] // ignored because of https://github.com/ethereum/trin/issues/1358
     #[tokio::test]
     async fn header_validator_validate_post_merge_pre_capella_header() {
         let header_validator = get_mainnet_header_validator();
 
         // Read the historical roots block proof from a test file
         let file = fs::read_to_string("./../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_bellatrix/beacon_block_proof-15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01.yaml").unwrap();
-        let mut value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
+        let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let block_number: u64 = 15539558;
         let header_hash = value
             .get("execution_block_header")
@@ -420,18 +409,6 @@ mod test {
             .as_str()
             .unwrap();
         let header_hash = B256::from_str(header_hash).unwrap();
-
-        // Change the first value of beacon_block_header_proof from Number to String.
-        // This is required because yaml Value deserialize 0x0000.. as Number(0) instead of String
-        let inner_value = value
-            .get_mut("beacon_block_header_proof")
-            .unwrap()
-            .get_mut(0)
-            .unwrap();
-        *inner_value = serde_yaml::Value::String(
-            "0x0000000000000000000000000000000000000000000000000000000000000000".to_string(),
-        );
-
         let historical_roots_block_proof: HistoricalRootsBlockProof =
             serde_yaml::from_value(value).unwrap();
 
@@ -460,12 +437,8 @@ mod test {
     }
 
     #[rstest]
-    // ignored because of https://github.com/ethereum/trin/issues/1358
-    #[ignore]
     #[case(17034870)]
-    #[ignore]
     #[case(17042287)]
-    #[ignore]
     #[case(17062257)]
     #[tokio::test]
     async fn header_validator_validate_post_capella_header(#[case] block_number: u64) {
@@ -473,32 +446,19 @@ mod test {
 
         // Read the historical roots block proof from a test file
         let file = fs::read_to_string(format!("./../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/beacon_block_proof-{block_number}.yaml")).unwrap();
-        let mut value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
+        let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let header_hash = value
             .get("execution_block_header")
             .unwrap()
             .as_str()
             .unwrap();
         let header_hash = B256::from_str(header_hash).unwrap();
-
-        // Change the first value of beacon_block_header_proof from Number to String.
-        // This is required because yaml Value deserialize 0x0000.. as Number(0) instead of String
-        let inner_value = value
-            .get_mut("beacon_block_header_proof")
-            .unwrap()
-            .get_mut(0)
-            .unwrap();
-        *inner_value = serde_yaml::Value::String(
-            "0x0000000000000000000000000000000000000000000000000000000000000000".to_string(),
-        );
-
         let historical_summaries_block_proof: HistoricalSummariesBlockProof =
             serde_yaml::from_value(value).unwrap();
 
         // Load historical summaries from ssz file
         let historical_summaries_bytes = std::fs::read("./../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/historical_summaries_at_slot_8953856.ssz"
         ).expect("cannot load HistoricalSummaries bytes from test file");
-
         let historical_summaries = HistoricalSummaries::from_ssz_bytes(&historical_summaries_bytes)
             .expect("cannot decode HistoricalSummaries bytes");
 
