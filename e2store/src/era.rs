@@ -54,11 +54,7 @@ impl Era {
             let entry: Entry = file.entries[idx].clone();
             let fork = get_beacon_fork(next_slot);
             let beacon_block = CompressedSignedBeaconBlock::try_from(&entry, fork)?;
-            next_slot = match &beacon_block.block {
-                SignedBeaconBlock::Bellatrix(block) => block.message.slot,
-                SignedBeaconBlock::Capella(block) => block.message.slot,
-                SignedBeaconBlock::Deneb(block) => block.message.slot,
-            } + 1;
+            next_slot = beacon_block.block.slot() + 1;
             blocks.push(beacon_block);
         }
         let fork = get_beacon_fork(slot_index_state.slot_index.starting_slot);
