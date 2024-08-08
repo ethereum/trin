@@ -116,10 +116,8 @@ impl ssz::Encode for PreMergeAccumulatorProof {
     }
 }
 
-/// Proof that execution header root is part of BeaconBlockBody
-pub type BeaconBlockBodyProof = FixedVector<B256, typenum::U8>;
-/// Proof that BeaconBlockBody root is part of BeaconBlockHeader
-pub type BeaconBlockHeaderProof = FixedVector<B256, typenum::U3>;
+/// Proof that execution header root is part of BeaconBlock
+pub type BeaconBlockProof = FixedVector<B256, typenum::U11>;
 /// Proof that BeaconBlockHeader root is part of HistoricalRoots
 pub type HistoricalRootsProof = FixedVector<B256, typenum::U14>;
 /// Proof that BeaconBlockHeader root is part of HistoricalSummaries
@@ -131,10 +129,8 @@ pub type HistoricalSummariesProof = FixedVector<B256, typenum::U13>;
 // Total size (8 + 1 + 3 + 1 + 14) * 32 bytes + 4 bytes = 868 bytes
 #[derive(Debug, Clone, PartialEq, Encode, Decode, Serialize, Deserialize)]
 pub struct HistoricalRootsBlockProof {
-    pub beacon_block_body_proof: BeaconBlockBodyProof,
-    pub beacon_block_body_root: B256,
-    pub beacon_block_header_proof: BeaconBlockHeaderProof,
-    pub beacon_block_header_root: B256,
+    pub beacon_block_proof: BeaconBlockProof,
+    pub beacon_block_root: B256,
     pub historical_roots_proof: HistoricalRootsProof,
     pub slot: u64,
 }
@@ -144,10 +140,8 @@ pub struct HistoricalRootsBlockProof {
 /// beacon chain `historical_summaries`.
 #[derive(Debug, Clone, PartialEq, Encode, Decode, Serialize, Deserialize)]
 pub struct HistoricalSummariesBlockProof {
-    pub beacon_block_body_proof: BeaconBlockBodyProof,
-    pub beacon_block_body_root: B256,
-    pub beacon_block_header_proof: BeaconBlockHeaderProof,
-    pub beacon_block_header_root: B256,
+    pub beacon_block_proof: BeaconBlockProof,
+    pub beacon_block_root: B256,
     pub historical_summaries_proof: HistoricalSummariesProof,
     pub slot: u64,
 }
