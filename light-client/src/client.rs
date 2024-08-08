@@ -459,4 +459,8 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
     pub async fn get_header(&self) -> Result<BeaconBlockHeader> {
         self.node.read().await.get_header()
     }
+
+    pub async fn get_finalized_header(&self) -> Result<BeaconBlockHeader> {
+        self.node.read().await.get_finalized_header()
+    }
 }

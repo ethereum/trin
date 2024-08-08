@@ -42,6 +42,10 @@ pub trait BeaconNetworkApi {
     #[method(name = "beaconPing")]
     async fn ping(&self, enr: Enr) -> RpcResult<PongInfo>;
 
+    /// Get the finalized state root of the finalized beacon header.
+    #[method(name = "beaconFinalizedStateRoot")]
+    async fn finalized_state_root(&self) -> RpcResult<B256>;
+
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the
     /// designated peer and wait for a response
     #[method(name = "beaconFindNodes")]
