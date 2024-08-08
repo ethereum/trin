@@ -7,6 +7,7 @@ use crate::{
     PortalRpcModule,
 };
 use ethportal_api::types::query_trace::QueryTrace;
+use serde::{Deserialize, Serialize};
 use std::io;
 
 /// Rpc Errors.
@@ -78,6 +79,22 @@ impl From<RpcServeError> for ErrorObjectOwned {
             RpcServeError::ContentNotFound { message, trace } => {
                 ErrorObject::owned(-39001, message, Some(trace))
             }
+        }
+    }
+}
+
+/// The JSON format of the "ContentNotFound" error.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContentNotFoundJsonError {
+    pub message: String,
+    pub trace: Option<QueryTrace>,
+}
+
+impl From<ContentNotFoundJsonError> for RpcServeError {
+    fn from(e: ContentNotFoundJsonError) -> Self {
+        RpcServeError::ContentNotFound {
+            message: e.message,
+            trace: e.trace,
         }
     }
 }
