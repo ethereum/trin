@@ -165,6 +165,15 @@ impl SignedBeaconBlock {
             }
         }
     }
+
+    /// Returns slot of the beacon block.
+    pub fn slot(&self) -> u64 {
+        match self {
+            SignedBeaconBlock::Bellatrix(block) => block.message.slot,
+            SignedBeaconBlock::Capella(block) => block.message.slot,
+            SignedBeaconBlock::Deneb(block) => block.message.slot,
+        }
+    }
 }
 
 #[cfg(test)]
