@@ -412,7 +412,8 @@ impl RpcModuleBuilder {
                                 .history_tx
                                 .clone()
                                 .expect("History protocol not initialized");
-                            EthApi::new(history_tx).into_rpc().into()
+                            let state_tx = self.state_tx.clone();
+                            EthApi::new(history_tx, state_tx).into_rpc().into()
                         }
                         PortalRpcModule::History => {
                             let history_tx = self

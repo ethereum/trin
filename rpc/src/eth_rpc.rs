@@ -1,9 +1,12 @@
-use alloy_primitives::{B256, U256};
-use reth_rpc_types::{other::OtherFields, Block, BlockTransactions};
+use alloy_primitives::{Address, Bytes, B256, U256};
+use reth_rpc_types::{other::OtherFields, Block, BlockId, BlockTransactions};
 use tokio::sync::mpsc;
 
 use ethportal_api::{
-    types::{execution::block_body::BlockBody, jsonrpc::request::HistoryJsonRpcRequest},
+    types::{
+        execution::block_body::BlockBody,
+        jsonrpc::request::{HistoryJsonRpcRequest, StateJsonRpcRequest},
+    },
     EthApiServer,
 };
 use trin_validation::constants::CHAIN_ID;
@@ -15,12 +18,19 @@ use crate::{
 };
 
 pub struct EthApi {
-    network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+    history_network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+    _state_network: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
 }
 
 impl EthApi {
-    pub fn new(network: mpsc::UnboundedSender<HistoryJsonRpcRequest>) -> Self {
-        Self { network }
+    pub fn new(
+        history_network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+        state_network: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
+    ) -> Self {
+        Self {
+            history_network,
+            _state_network: state_network,
+        }
     }
 }
 
@@ -42,8 +52,8 @@ impl EthApiServer for EthApi {
             .into());
         }
 
-        let header = find_header_by_hash(&self.network, block_hash).await?;
-        let body = find_block_body_by_hash(&self.network, block_hash).await?;
+        let header = find_header_by_hash(&self.history_network, block_hash).await?;
+        let body = find_block_body_by_hash(&self.history_network, block_hash).await?;
         let transactions = match body {
             BlockBody::Legacy(body) => body.txs,
             BlockBody::Merge(body) => body.txs,
@@ -66,6 +76,23 @@ impl EthApiServer for EthApi {
             withdrawals: None,
         };
         Ok(block)
+    }
+
+    async fn get_balance(&self, _address: Address, _block: BlockId) -> RpcResult<U256> {
+        todo!()
+    }
+
+    async fn get_code(&self, _address: Address, _block: BlockId) -> RpcResult<Bytes> {
+        todo!()
+    }
+
+    async fn get_storage_at(
+        &self,
+        _address: Address,
+        _slot: U256,
+        _block: BlockId,
+    ) -> RpcResult<Bytes> {
+        todo!()
     }
 }
 
