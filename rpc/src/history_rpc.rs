@@ -1,7 +1,6 @@
-use crate::{fetch::proxy_query_to_history_subnet, serde::from_value};
-
-use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
+use tokio::sync::mpsc;
+
 use ethportal_api::{
     types::{
         enr::Enr,
@@ -11,7 +10,11 @@ use ethportal_api::{
     },
     HistoryContentKey, HistoryContentValue, HistoryNetworkApiServer, RoutingTableInfo,
 };
-use tokio::sync::mpsc;
+
+use crate::{
+    fetch::proxy_to_subnet,
+    jsonrpsee::core::{async_trait, RpcResult},
+};
 
 pub struct HistoryNetworkApi {
     network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
@@ -28,74 +31,56 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     /// Returns meta information about overlay routing table.
     async fn routing_table_info(&self) -> RpcResult<RoutingTableInfo> {
         let endpoint = HistoryEndpoint::RoutingTableInfo;
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: RoutingTableInfo = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Write an Ethereum Node Record to the overlay routing table.
     async fn add_enr(&self, enr: Enr) -> RpcResult<bool> {
         let endpoint = HistoryEndpoint::AddEnr(enr);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: bool = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Fetch the latest ENR associated with the given node ID.
     async fn get_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
         let endpoint = HistoryEndpoint::GetEnr(node_id);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: Enr = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Delete Node ID from the overlay routing table.
     async fn delete_enr(&self, node_id: NodeId) -> RpcResult<bool> {
         let endpoint = HistoryEndpoint::DeleteEnr(node_id);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: bool = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Fetch the ENR representation associated with the given Node ID.
     async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
         let endpoint = HistoryEndpoint::LookupEnr(node_id);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: Enr = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Send a PING message to the designated node and wait for a PONG response
     async fn ping(&self, enr: Enr) -> RpcResult<PongInfo> {
         let endpoint = HistoryEndpoint::Ping(enr);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: PongInfo = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the
     /// designated peer and wait for a response
     async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<FindNodesInfo> {
         let endpoint = HistoryEndpoint::FindNodes(enr, distances);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: FindNodesInfo = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Lookup a target node within in the network
     async fn recursive_find_nodes(&self, node_id: NodeId) -> RpcResult<Vec<Enr>> {
         let endpoint = HistoryEndpoint::RecursiveFindNodes(node_id);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: Vec<Enr> = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Lookup a target node within in the network
     async fn radius(&self) -> RpcResult<DataRadius> {
         let endpoint = HistoryEndpoint::DataRadius;
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: DataRadius = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Send FINDCONTENT message to get the content with a content key.
@@ -105,9 +90,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         content_key: HistoryContentKey,
     ) -> RpcResult<ContentInfo> {
         let endpoint = HistoryEndpoint::FindContent(enr, content_key);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: ContentInfo = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Lookup a target content key in the network
@@ -116,8 +99,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         content_key: HistoryContentKey,
     ) -> RpcResult<ContentInfo> {
         let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        Ok(from_value(result)?)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Lookup a target content key in the network. Return tracing info.
@@ -126,9 +108,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         content_key: HistoryContentKey,
     ) -> RpcResult<TraceContentInfo> {
         let endpoint = HistoryEndpoint::TraceRecursiveFindContent(content_key);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let info: TraceContentInfo = from_value(result)?;
-        Ok(info)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Pagination of local content keys
@@ -138,9 +118,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         limit: u64,
     ) -> RpcResult<PaginateLocalContentInfo> {
         let endpoint = HistoryEndpoint::PaginateLocalContentKeys(offset, limit);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: PaginateLocalContentInfo = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Send the provided content to interested peers. Clients may choose to send to some or all
@@ -151,9 +129,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         content_value: HistoryContentValue,
     ) -> RpcResult<u32> {
         let endpoint = HistoryEndpoint::Gossip(content_key, content_value);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: u32 = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Send the provided content to interested peers. Clients may choose to send to some or all
@@ -164,9 +140,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         content_value: HistoryContentValue,
     ) -> RpcResult<TraceGossipInfo> {
         let endpoint = HistoryEndpoint::TraceGossip(content_key, content_value);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: TraceGossipInfo = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
@@ -180,9 +154,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         content_value: HistoryContentValue,
     ) -> RpcResult<AcceptInfo> {
         let endpoint = HistoryEndpoint::Offer(enr, content_key, content_value);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: AcceptInfo = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Send an OFFER request with given ContentKeys, to the designated peer and wait for a
@@ -195,9 +167,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         content_keys: Vec<HistoryContentKey>,
     ) -> RpcResult<AcceptInfo> {
         let endpoint = HistoryEndpoint::WireOffer(enr, content_keys);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: AcceptInfo = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Store content key with a content data to the local database.
@@ -207,9 +177,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         content_value: HistoryContentValue,
     ) -> RpcResult<bool> {
         let endpoint = HistoryEndpoint::Store(content_key, content_value);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: bool = from_value(result)?;
-        Ok(result)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Get a content from the local database.
@@ -218,8 +186,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         content_key: HistoryContentKey,
     ) -> RpcResult<HistoryContentValue> {
         let endpoint = HistoryEndpoint::LocalContent(content_key);
-        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        Ok(from_value(result)?)
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 }
 

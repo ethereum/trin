@@ -144,3 +144,27 @@ pub enum BeaconEndpoint {
     /// params: [node_id]
     RecursiveFindNodes(NodeId),
 }
+
+/// The common functionality of subnetwork endpoints.
+pub trait SubnetworkEndpoint {
+    /// The subnetwork name.
+    fn subnetwork() -> &'static str;
+}
+
+impl SubnetworkEndpoint for StateEndpoint {
+    fn subnetwork() -> &'static str {
+        "state"
+    }
+}
+
+impl SubnetworkEndpoint for HistoryEndpoint {
+    fn subnetwork() -> &'static str {
+        "history"
+    }
+}
+
+impl SubnetworkEndpoint for BeaconEndpoint {
+    fn subnetwork() -> &'static str {
+        "beacon"
+    }
+}
