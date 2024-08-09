@@ -77,6 +77,10 @@ impl<R: ConsensusRpc> Node<R> {
         self.config.chain.chain_id
     }
 
+    pub fn get_finalized_header(&self) -> Result<BeaconBlockHeader> {
+        Ok(self.consensus.get_finalized_header().clone())
+    }
+
     pub fn get_header(&self) -> Result<BeaconBlockHeader> {
         self.check_head_age()?;
         Ok(self.consensus.get_header().clone())

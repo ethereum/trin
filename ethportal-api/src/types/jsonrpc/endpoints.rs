@@ -113,6 +113,8 @@ pub enum BeaconEndpoint {
     FindContent(Enr, BeaconContentKey),
     /// params: [enr, distances]
     FindNodes(Enr, Vec<u16>),
+    /// params: None
+    FinalizedStateRoot,
     /// params: node_id
     GetEnr(NodeId),
     /// params: content_key

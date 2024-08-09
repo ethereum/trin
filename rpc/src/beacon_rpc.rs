@@ -151,6 +151,7 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         Ok(result)
     }
 
+    /// Get the optimistic state root of the optimistic beacon header.
     async fn optimistic_state_root(&self) -> RpcResult<B256> {
         let endpoint = BeaconEndpoint::OptimisticStateRoot;
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
@@ -167,6 +168,14 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         let endpoint = BeaconEndpoint::FindContent(enr, content_key);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         let result: ContentInfo = from_value(result)?;
+        Ok(result)
+    }
+
+    /// Get the finalized state root of the finalized beacon header.
+    async fn finalized_state_root(&self) -> RpcResult<B256> {
+        let endpoint = BeaconEndpoint::FinalizedStateRoot;
+        let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
+        let result: B256 = from_value(result)?;
         Ok(result)
     }
 
