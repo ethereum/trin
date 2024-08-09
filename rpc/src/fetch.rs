@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use alloy_primitives::B256;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -8,7 +10,7 @@ use ethportal_api::{
         execution::{block_body::BlockBody, header::Header},
         history::ContentInfo,
         jsonrpc::{
-            endpoints::HistoryEndpoint,
+            endpoints::{HistoryEndpoint, SubnetworkEndpoint},
             request::{HistoryJsonRpcRequest, JsonRpcRequest},
         },
         query_trace::QueryTrace,
@@ -16,7 +18,10 @@ use ethportal_api::{
     HistoryContentKey, HistoryContentValue,
 };
 
-use crate::{errors::RpcServeError, serde::from_value};
+use crate::{
+    errors::{ContentNotFoundJsonError, RpcServeError},
+    serde::from_value,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ContentNotFoundError {
@@ -25,10 +30,14 @@ struct ContentNotFoundError {
 }
 
 /// Fetch and deserialize data from Portal subnetwork.
-pub async fn proxy_to_subnet<TEndpoint, TOutput: serde::de::DeserializeOwned>(
+pub async fn proxy_to_subnet<TEndpoint, TOutput>(
     network: &mpsc::UnboundedSender<JsonRpcRequest<TEndpoint>>,
     endpoint: TEndpoint,
-) -> Result<TOutput, RpcServeError> {
+) -> Result<TOutput, RpcServeError>
+where
+    TEndpoint: SubnetworkEndpoint + Clone,
+    TOutput: serde::de::DeserializeOwned,
+{
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
     let message = JsonRpcRequest {
         endpoint,
@@ -37,24 +46,23 @@ pub async fn proxy_to_subnet<TEndpoint, TOutput: serde::de::DeserializeOwned>(
     let _ = network.send(message);
 
     let Some(response) = resp_rx.recv().await else {
-        return Err(RpcServeError::Message(
-            "Internal error: No response from subnetwork".to_string(),
-        ));
+        return Err(RpcServeError::Message(format!(
+            "Internal error: No response from {} subnetwork",
+            TEndpoint::subnetwork()
+        )));
     };
 
     match response {
         Ok(result) => from_value(result),
         Err(msg) => {
             if msg.contains("Unable to locate content on the network") {
-                let error: ContentNotFoundError = serde_json::from_str(&msg).map_err(|e| {
+                let error: ContentNotFoundJsonError = serde_json::from_str(&msg).map_err(|e| {
                     RpcServeError::Message(format!(
-                        "Failed to parse error message from subnetwork: {e:?}",
+                        "Failed to parse error message from {} subnetwork: {e:?}",
+                        TEndpoint::subnetwork()
                     ))
                 })?;
-                Err(RpcServeError::ContentNotFound {
-                    message: error.message,
-                    trace: error.trace,
-                })
+                Err(error.into())
             } else {
                 Err(RpcServeError::Message(msg))
             }
