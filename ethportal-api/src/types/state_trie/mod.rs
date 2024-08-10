@@ -10,6 +10,7 @@ use super::bytes::{ByteList1024, ByteList32K};
 
 pub mod account_state;
 pub mod nibbles;
+pub mod trie_traversal;
 mod utils;
 
 /// The RLP encoding of a trie node.

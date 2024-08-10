@@ -32,6 +32,13 @@ impl Nibbles {
     pub fn unpack_nibble_pair(packed_nibbles: &u8) -> [u8; 2] {
         [packed_nibbles >> 4, packed_nibbles & 0xF]
     }
+
+    pub fn unpack_nibbles(packed_nibbles: &[u8]) -> Vec<u8> {
+        packed_nibbles
+            .iter()
+            .flat_map(Self::unpack_nibble_pair)
+            .collect()
+    }
 }
 
 impl Encode for Nibbles {

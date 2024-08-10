@@ -16,7 +16,7 @@ use trin_validation::{
 };
 
 use super::{
-    error::StateValidationError,
+    error::{check_node_hash, StateValidationError},
     trie::{validate_account_state, validate_node_trie_proof},
 };
 
@@ -55,14 +55,8 @@ impl StateValidator {
     ) -> Result<ValidationResult<StateContentKey>, StateValidationError> {
         match value {
             StateContentValue::TrieNode(value) => {
-                if value.node.node_hash() == key.node_hash {
-                    Ok(ValidationResult::new(/* valid_for_storing= */ false))
-                } else {
-                    Err(StateValidationError::InvalidNodeHash {
-                        node_hash: value.node.node_hash(),
-                        expected_node_hash: key.node_hash,
-                    })
-                }
+                check_node_hash(&value.node, &key.node_hash)?;
+                Ok(ValidationResult::new(/* valid_for_storing= */ false))
             }
             StateContentValue::AccountTrieNodeWithProof(value) => {
                 let state_root = self.get_state_root(value.block_hash).await;
@@ -83,14 +77,8 @@ impl StateValidator {
     ) -> Result<ValidationResult<StateContentKey>, StateValidationError> {
         match value {
             StateContentValue::TrieNode(value) => {
-                if value.node.node_hash() == key.node_hash {
-                    Ok(ValidationResult::new(/* valid_for_storing= */ false))
-                } else {
-                    Err(StateValidationError::InvalidNodeHash {
-                        node_hash: value.node.node_hash(),
-                        expected_node_hash: key.node_hash,
-                    })
-                }
+                check_node_hash(&value.node, &key.node_hash)?;
+                Ok(ValidationResult::new(/* valid_for_storing= */ false))
             }
             StateContentValue::ContractStorageTrieNodeWithProof(value) => {
                 let state_root = self.get_state_root(value.block_hash).await;
