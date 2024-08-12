@@ -42,26 +42,23 @@ impl Default for JsonRequest {
     }
 }
 
-/// History network JSON-RPC request
+/// The network JSON-RPC request.
+///
+/// The <T> generic corresponds to the endpoint type.
 #[derive(Debug, Clone)]
-pub struct HistoryJsonRpcRequest {
-    pub endpoint: HistoryEndpoint,
+pub struct JsonRpcRequest<T> {
+    pub endpoint: T,
     pub resp: Responder<Value, String>,
 }
+
+/// History network JSON-RPC request
+pub type HistoryJsonRpcRequest = JsonRpcRequest<HistoryEndpoint>;
 
 /// State network JSON-RPC request
-#[derive(Debug)]
-pub struct StateJsonRpcRequest {
-    pub endpoint: StateEndpoint,
-    pub resp: Responder<Value, String>,
-}
+pub type StateJsonRpcRequest = JsonRpcRequest<StateEndpoint>;
 
 /// Beacon chain network JSON-RPC request
-#[derive(Debug)]
-pub struct BeaconJsonRpcRequest {
-    pub endpoint: BeaconEndpoint,
-    pub resp: Responder<Value, String>,
-}
+pub type BeaconJsonRpcRequest = JsonRpcRequest<BeaconEndpoint>;
 
 fn default_params() -> Params {
     Params::None
