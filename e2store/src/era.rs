@@ -1,6 +1,6 @@
-use crate::{
-    e2s::{E2StoreFile, Entry},
-    era1::VersionEntry,
+use crate::e2store::{
+    memory::E2StoreMemory,
+    types::{Entry, VersionEntry},
 };
 use anyhow::{anyhow, ensure};
 use ethportal_api::consensus::{
@@ -40,7 +40,7 @@ impl Era {
     }
 
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
-        let file = E2StoreFile::deserialize(buf)?;
+        let file = E2StoreMemory::deserialize(buf)?;
         let version = VersionEntry::try_from(&file.entries[0])?;
         let entries_length = file.entries.len();
         let mut blocks = vec![];
@@ -71,7 +71,7 @@ impl Era {
 
     /// Deserialize the `BeaconState` from the `Era` file.
     pub fn deserialize_to_beacon_state(buf: &[u8]) -> anyhow::Result<BeaconState> {
-        let file = E2StoreFile::deserialize(buf)?;
+        let file = E2StoreMemory::deserialize(buf)?;
         // The compressed `BeaconState` is the second to last entry in the file.
         let entries_length = file.entries.len();
         let slot_index_state = SlotIndexStateEntry::try_from(&file.entries[entries_length - 1])?;
@@ -83,7 +83,7 @@ impl Era {
     #[allow(dead_code)]
     fn write(&self) -> anyhow::Result<Vec<u8>> {
         let mut entries: Vec<Entry> = vec![];
-        let version_entry: Entry = self.version.clone().try_into()?;
+        let version_entry: Entry = self.version.clone().into();
         entries.push(version_entry);
         for block in &self.blocks {
             let block_entry: Entry = block.clone().try_into()?;
@@ -95,7 +95,7 @@ impl Era {
         entries.push(slot_index_block_entry);
         let slot_index_state_entry: Entry = self.slot_index_state.clone().try_into()?;
         entries.push(slot_index_state_entry);
-        let file = E2StoreFile { entries };
+        let file = E2StoreMemory { entries };
 
         let file_length = file.length();
         let mut buf = vec![0; file_length];
