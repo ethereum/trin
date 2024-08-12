@@ -7882,6 +7882,7 @@ dependencies = [
 name = "trin-beacon"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
  "anyhow",
  "chrono",
  "discv5",
@@ -7899,6 +7900,7 @@ dependencies = [
  "ssz_types",
  "tokio",
  "tracing",
+ "tree_hash",
  "trin-metrics",
  "trin-storage",
  "trin-validation",

@@ -770,7 +770,7 @@ mod test {
     fn test_beacon_storage_get_put_historical_summaries() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
         let mut storage = BeaconStorage::new(config).unwrap();
-        let value = test_utils::get_history_summaries_with_proof();
+        let (value, _) = test_utils::get_history_summaries_with_proof();
         let epoch = value.historical_summaries_with_proof.epoch;
         let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
             epoch,

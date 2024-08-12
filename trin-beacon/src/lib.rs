@@ -11,7 +11,6 @@ mod test_utils;
 pub mod validation;
 
 use std::sync::Arc;
-
 use tokio::{
     sync::{broadcast, mpsc, RwLock},
     task::JoinHandle,
