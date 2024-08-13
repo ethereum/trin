@@ -50,10 +50,10 @@ impl Era {
 
         // Iterate over the block entries. Skip the first and last 3 entries.
         let mut next_slot = slot_index_block.slot_index.starting_slot;
-        for idx in 1..entries_length - 4 {
-            let entry: Entry = file.entries[idx].clone();
+        for idx in 1..entries_length - 3 {
+            let entry = &file.entries[idx];
             let fork = get_beacon_fork(next_slot);
-            let beacon_block = CompressedSignedBeaconBlock::try_from(&entry, fork)?;
+            let beacon_block = CompressedSignedBeaconBlock::try_from(entry, fork)?;
             next_slot = beacon_block.block.slot() + 1;
             blocks.push(beacon_block);
         }
