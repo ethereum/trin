@@ -214,7 +214,7 @@ jobs:
       tag: 1.79.0
     environment:
       RUSTFLAGS: "-D warnings"
-      RUST_LOG: "debug"
+      RUST_LOG: "debug,html5ever=error,selectors=error"
     steps:
       - checkout
       - checkout-submodules

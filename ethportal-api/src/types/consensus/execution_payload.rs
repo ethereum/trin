@@ -123,6 +123,30 @@ impl ExecutionPayloadBellatrix {
 
         proof_hashes
     }
+
+    pub fn transaction_root(&self) -> B256 {
+        self.transactions.tree_hash_root()
+    }
+}
+
+impl ExecutionPayloadCapella {
+    pub fn transaction_root(&self) -> B256 {
+        self.transactions.tree_hash_root()
+    }
+
+    pub fn withdrawals_root(&self) -> B256 {
+        self.withdrawals.tree_hash_root()
+    }
+}
+
+impl ExecutionPayloadDeneb {
+    pub fn transaction_root(&self) -> B256 {
+        self.transactions.tree_hash_root()
+    }
+
+    pub fn withdrawals_root(&self) -> B256 {
+        self.withdrawals.tree_hash_root()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize, Encode, Decode, TreeHash)]

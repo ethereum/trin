@@ -1,0 +1,102 @@
+use std::time::Duration;
+
+use e2store::{
+    era::{CompressedSignedBeaconBlock, Era},
+    era1::{BlockTuple, Era1, BLOCK_TUPLE_COUNT},
+};
+use ethportal_api::{consensus::beacon_block::SignedBeaconBlock, BlockBody};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use surf::Client;
+use tokio::time::sleep;
+use tracing::{info, warn};
+
+use crate::era::{
+    beacon::BeaconBody,
+    types::{EraType, ProcessedBlock, TransactionsWithSender},
+};
+
+use super::types::ProcessedEra;
+
+pub fn process_era1_file(raw_era1: Vec<u8>, epoch_index: u64) -> anyhow::Result<ProcessedEra> {
+    let mut blocks = Vec::with_capacity(BLOCK_TUPLE_COUNT);
+    for BlockTuple { header, body, .. } in Era1::iter_tuples(raw_era1) {
+        let transactions_with_recovered_senders = body
+            .body
+            .transactions()?
+            .into_par_iter()
+            .map(|tx| TransactionsWithSender {
+                sender_address: tx
+                    .get_transaction_sender_address()
+                    .expect("We should always be able to get the sender address of a transaction"),
+                transaction: tx,
+            })
+            .collect();
+        let uncles = match body.body {
+            BlockBody::Legacy(legacy_body) => Some(legacy_body.uncles.clone()),
+            _ => None,
+        };
+        blocks.push(ProcessedBlock {
+            header: header.header,
+            uncles,
+            transactions: transactions_with_recovered_senders,
+        });
+    }
+
+    info!("Done processing era1 file {epoch_index}");
+
+    Ok(ProcessedEra {
+        first_block_number: blocks[0].header.number,
+        blocks,
+        era_type: EraType::Era1,
+        epoch_index,
+    })
+}
+
+pub fn process_era_file(raw_era: Vec<u8>, epoch_index: u64) -> anyhow::Result<ProcessedEra> {
+    let mut blocks = vec![];
+    for CompressedSignedBeaconBlock { block } in Era::iter_blocks(raw_era) {
+        // Before the merge occurred the beacon chain was already executing bellatrix blocks,
+        // because the merge didn't occur yet the execution_payloads were empty. Hence we skip those
+        // blocks.
+        if block.execution_block_number() == 0 {
+            continue;
+        }
+
+        let block_with_recovered_senders = match block {
+            SignedBeaconBlock::Bellatrix(block) => block.process_beacon_block(),
+            SignedBeaconBlock::Capella(block) => block.process_beacon_block(),
+            SignedBeaconBlock::Deneb(block) => block.process_beacon_block(),
+        };
+        blocks.push(block_with_recovered_senders);
+    }
+
+    info!("Done processing era file {epoch_index}");
+
+    Ok(ProcessedEra {
+        first_block_number: blocks[0].header.number,
+        blocks,
+        era_type: EraType::Era,
+        epoch_index,
+    })
+}
+
+pub async fn download_raw_era(era_path: String, http_client: Client) -> anyhow::Result<Vec<u8>> {
+    info!("Downloading era file {era_path}");
+    let mut attempts = 1u32;
+    let raw_era1 = loop {
+        match http_client.get(&era_path).recv_bytes().await {
+            Ok(raw_era1) => break raw_era1,
+            Err(err) => {
+                warn!("Failed to download era1 file {attempts} times | Error: {err} | Path {era_path}");
+                attempts += 1;
+                if attempts > 10 {
+                    anyhow::bail!("Failed to download era1 file after {attempts} attempts");
+                }
+                sleep(Duration::from_secs_f64((attempts as f64).log2())).await;
+            }
+        }
+    };
+
+    info!("Done downloading era file {era_path}, now processing it");
+    Ok(raw_era1)
+}

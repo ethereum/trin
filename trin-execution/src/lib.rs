@@ -3,7 +3,7 @@ pub mod cli;
 pub mod config;
 pub mod content;
 pub mod dao_fork;
-pub mod era_manager;
+pub mod era;
 pub mod execution;
 pub mod metrics;
 pub mod spec_id;

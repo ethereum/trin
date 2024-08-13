@@ -80,6 +80,25 @@ impl Era {
         Ok(era_state.state)
     }
 
+    /// Iterate over beacon blocks.
+    pub fn iter_blocks(raw_era1: Vec<u8>) -> impl Iterator<Item = CompressedSignedBeaconBlock> {
+        let file = E2StoreMemory::deserialize(&raw_era1).expect("invalid era1 file");
+        let entries_length = file.entries.len();
+        let block_index = SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])
+            .expect("missing block index entry")
+            .slot_index;
+
+        let mut next_slot = block_index.starting_slot;
+        (1..entries_length - 3).map(move |idx| {
+            let entry: Entry = file.entries[idx].clone();
+            let fork = get_beacon_fork(next_slot);
+            let beacon_block =
+                CompressedSignedBeaconBlock::try_from(&entry, fork).expect("invalid block");
+            next_slot = beacon_block.block.slot() + 1;
+            beacon_block
+        })
+    }
+
     #[allow(dead_code)]
     fn write(&self) -> anyhow::Result<Vec<u8>> {
         let mut entries: Vec<Entry> = vec![];
@@ -110,7 +129,7 @@ pub struct CompressedSignedBeaconBlock {
 }
 
 impl CompressedSignedBeaconBlock {
-    fn try_from(entry: &Entry, fork: ForkName) -> Result<Self, anyhow::Error> {
+    pub fn try_from(entry: &Entry, fork: ForkName) -> Result<Self, anyhow::Error> {
         ensure!(
             entry.header.type_ == 0x01,
             "invalid compressed signed beacon block entry: incorrect header type"
@@ -257,7 +276,7 @@ impl TryFrom<Entry> for SlotIndexBlock {
 // slot-index := starting-slot | index | index | index ... | count
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SlotIndexStateEntry {
-    slot_index: SlotIndexState,
+    pub slot_index: SlotIndexState,
 }
 
 impl TryFrom<&Entry> for SlotIndexStateEntry {
@@ -304,7 +323,7 @@ impl TryInto<Entry> for SlotIndexStateEntry {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SlotIndexState {
-    starting_slot: u64,
+    pub starting_slot: u64,
     indices: [u64; 1],
     count: u64,
 }
@@ -326,7 +345,7 @@ impl TryFrom<Entry> for SlotIndexState {
     }
 }
 
-fn get_beacon_fork(slot_index: u64) -> ForkName {
+pub fn get_beacon_fork(slot_index: u64) -> ForkName {
     if slot_index < 4_636_672 {
         panic!("e2store/era doesn't support this fork");
     } else if (4_636_672..6_209_536).contains(&slot_index) {

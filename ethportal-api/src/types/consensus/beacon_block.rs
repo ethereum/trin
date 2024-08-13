@@ -174,6 +174,17 @@ impl SignedBeaconBlock {
             SignedBeaconBlock::Deneb(block) => block.message.slot,
         }
     }
+
+    /// Returns execution block number.
+    pub fn execution_block_number(&self) -> u64 {
+        match self {
+            SignedBeaconBlock::Bellatrix(block) => {
+                block.message.body.execution_payload.block_number
+            }
+            SignedBeaconBlock::Capella(block) => block.message.body.execution_payload.block_number,
+            SignedBeaconBlock::Deneb(block) => block.message.body.execution_payload.block_number,
+        }
+    }
 }
 
 #[cfg(test)]

@@ -47,3 +47,46 @@ pub fn underlying_io_error_kind(error: &Error) -> Option<io::ErrorKind> {
     }
     None
 }
+
+const ERA_DIR_URL: &str = "https://mainnet.era.nimbus.team/";
+
+/// Fetches era file download links
+pub async fn get_era_file_download_links(http_client: &Client) -> anyhow::Result<Vec<String>> {
+    let index_html = http_client
+        .get(ERA_DIR_URL)
+        .recv_string()
+        .await
+        .map_err(|e| anyhow!("{e}"))?;
+    let index_html = Html::parse_document(&index_html);
+    let selector = Selector::parse("a[href*='mainnet-']").expect("to be able to parse selector");
+    let era_files: Vec<String> = index_html
+        .select(&selector)
+        .map(|element| {
+            let href = element
+                .value()
+                .attr("href")
+                .expect("to be able to get href");
+            format!("{ERA_DIR_URL}{href}")
+        })
+        .collect();
+    Ok(era_files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_get_shuffled_era1_files() {
+        let http_client = Client::new();
+        let era1_files = get_shuffled_era1_files(&http_client).await.unwrap();
+        assert_eq!(era1_files.len(), ERA1_FILE_COUNT);
+    }
+
+    #[tokio::test]
+    async fn test_get_era_file_download_links() {
+        let http_client = Client::new();
+        let era_files = get_era_file_download_links(&http_client).await.unwrap();
+        assert!(!era_files.is_empty());
+    }
+}
