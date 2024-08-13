@@ -1,48 +1,33 @@
-use std::collections::VecDeque;
-
 use alloy_primitives::B256;
 use alloy_rlp::Decodable;
-use eth_trie::node::Node;
+
 use ethportal_api::types::state_trie::{
-    account_state::AccountState, nibbles::Nibbles, EncodedTrieNode, TrieProof,
+    account_state::AccountState,
+    nibbles::Nibbles,
+    trie_traversal::{NextTraversalNode, NodeTraversal, TraversalResult},
+    EncodedTrieNode, TrieProof,
 };
 
-use super::error::StateValidationError;
+use super::error::{check_node_hash, StateValidationError};
 
-/// The result of proof validation
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrieProofValidationInfo<'nodes, 'path> {
-    /// The last node in the proof (whose presence we were proving)
-    pub last_node: &'nodes EncodedTrieNode,
-    /// Tha nibbles that were not used to reach the last node of the proof.
-    pub remaining_path: &'path [u8],
-    /// The consumed nibbles while traversing each inner node of a proof
-    pub inner_nodes_consumed_path: Vec<VecDeque<u8>>,
-}
-
-/// Validate the trie proof and return validation info.
-pub fn validate_node_trie_proof<'proof, 'path>(
+/// Validate the trie proof.
+pub fn validate_node_trie_proof(
     root_hash: Option<B256>,
     node_hash: B256,
-    path: &'path Nibbles,
-    proof: &'proof TrieProof,
-) -> Result<TrieProofValidationInfo<'proof, 'path>, StateValidationError> {
-    let validation_info = validate_trie_proof(root_hash, path.nibbles(), proof)?;
+    path: &Nibbles,
+    proof: &TrieProof,
+) -> Result<(), StateValidationError> {
+    let (last_node, remaining_path) = validate_trie_proof(root_hash, path.nibbles(), proof)?;
 
-    // verify that we used entire path
-    if !validation_info.remaining_path.is_empty() {
+    // Check that we used entire path
+    if !remaining_path.is_empty() {
         return Err(StateValidationError::PathTooLong);
     }
 
-    // verify that node hash is correct
-    if node_hash != validation_info.last_node.node_hash() {
-        return Err(StateValidationError::InvalidNodeHash {
-            node_hash: validation_info.last_node.node_hash(),
-            expected_node_hash: node_hash,
-        });
-    }
+    // Check that node hash is correct
+    check_node_hash(last_node, &node_hash)?;
 
-    Ok(validation_info)
+    Ok(())
 }
 
 /// Validate the trie proof associated with the account state.
@@ -51,169 +36,107 @@ pub fn validate_account_state(
     address_hash: &B256,
     proof: &TrieProof,
 ) -> Result<AccountState, StateValidationError> {
-    let path: Vec<u8> = address_hash
-        .as_slice()
-        .iter()
-        .flat_map(Nibbles::unpack_nibble_pair)
-        .collect();
+    let path = Nibbles::unpack_nibbles(address_hash.as_slice());
 
-    let validation_info = validate_trie_proof(root_hash, &path, proof)?;
+    // Validate the proof
+    let (last_node, remaining_path) = validate_trie_proof(root_hash, &path, proof)?;
 
-    // decode last node
-    let Node::Leaf(last_node) = validation_info.last_node.as_trie_node()? else {
-        return Err(StateValidationError::LeafNodeExpected);
-    };
+    // Decode last node and extract value
+    let last_node = last_node.as_trie_node()?;
+    let traversal_result = last_node.traverse(remaining_path);
+    let value = check_traversal_result_is_value(traversal_result)?;
 
-    // verify that remaining part matches node's prefix
-    let mut last_node_key = last_node.key.clone();
-    // the last byte of the leaf's key is used to indicate that it's part of the leaf and shold be
-    // removed in this context
-    last_node_key
-        .pop()
-        .expect("last byte of the leaf's prefix must be present");
-    if last_node_key.get_data() != validation_info.remaining_path {
-        return Err(StateValidationError::InvalidLeafPath {
-            path: last_node_key.get_data().to_vec(),
-            expected_path: validation_info.remaining_path.into(),
-        });
-    }
-
-    Ok(Decodable::decode(&mut last_node.value.as_slice())?)
+    // Decode account state
+    Ok(AccountState::decode(&mut value.as_ref())?)
 }
 
-/// Validates the Trie Proof and returns relevant info.
+/// Validates the Trie Proof.
 ///
-/// * `root_hash` - Expected hash of the first node in the proof, None if any is valid
-/// * `path` - The path that should be used to reach the last node.
-/// * `proof` - The proof that we are to validating.
-fn validate_trie_proof<'nodes, 'path>(
+/// If successful, it returns tuple of:
+///
+/// - last node in the proof (whose presence we are proving)
+/// - remaining (unused) nibbles from the path
+fn validate_trie_proof<'proof, 'path>(
     root_hash: Option<B256>,
     path: &'path [u8],
-    proof: &'nodes TrieProof,
-) -> Result<TrieProofValidationInfo<'nodes, 'path>, StateValidationError> {
-    let Some((last_node, inner_nodes)) = proof.split_last() else {
+    proof: &'proof TrieProof,
+) -> Result<(&'proof EncodedTrieNode, &'path [u8]), StateValidationError> {
+    // Make sure there is at least one node in proof
+    let Some((first_node, nodes)) = proof.split_first() else {
         return Err(StateValidationError::EmptyTrieProof);
     };
 
-    let mut expected_node_hash = root_hash;
-    let mut consumed_paths = Vec::<VecDeque<u8>>::new();
+    // Check root hash
+    if let Some(root_hash) = root_hash {
+        check_node_hash(first_node, &root_hash)?;
+    }
+
+    let mut node = first_node;
     let mut remaining_path = path;
 
-    for node in inner_nodes {
-        // Validate the hash of the node
-        if let Some(expected_node_hash) = expected_node_hash {
-            if expected_node_hash != node.node_hash() {
-                return Err(StateValidationError::InvalidNodeHash {
-                    node_hash: node.node_hash(),
-                    expected_node_hash,
-                });
-            }
-        }
-
+    for next_node in nodes {
         // Traverse the node
-        let node = node.as_trie_node()?;
-        let traversal_info = traverse_node(&node, remaining_path)?;
-        expected_node_hash = Some(traversal_info.next_node);
-        consumed_paths.push(traversal_info.consumed_path);
-        remaining_path = traversal_info.remaining_path;
+        let traversal_result = node.as_trie_node()?.traverse(remaining_path);
+        let next_traversal_node = check_traversal_result_is_node(traversal_result)?;
+
+        // Check the hash of the next node matches
+        check_node_hash(next_node, &next_traversal_node.hash)?;
+
+        // Update node and remaining_path for next iteration
+        node = next_node;
+        remaining_path = next_traversal_node.remaining_path;
     }
 
-    // Validate the hash of the last node
-    if let Some(expected_node_hash) = expected_node_hash {
-        if expected_node_hash != last_node.node_hash() {
-            return Err(StateValidationError::InvalidNodeHash {
-                node_hash: last_node.node_hash(),
-                expected_node_hash,
-            });
+    Ok((node, remaining_path))
+}
+
+fn check_traversal_result_is_node(
+    traversal_result: TraversalResult,
+) -> Result<NextTraversalNode, StateValidationError> {
+    match traversal_result {
+        TraversalResult::Empty(empty_node_info) => {
+            Err(StateValidationError::UnexpectedEmptyNode(empty_node_info))
         }
+        TraversalResult::Value(_) => Err(StateValidationError::UnexpectedValue),
+        TraversalResult::Node(next_node) => Ok(next_node),
+        TraversalResult::Error(error) => Err(error.into()),
     }
-
-    Ok(TrieProofValidationInfo {
-        last_node,
-        remaining_path,
-        inner_nodes_consumed_path: consumed_paths,
-    })
 }
 
-/// The result of traversing a node via path,
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct NodeTraversalInfo<'path> {
-    /// The next node that we reached
-    next_node: B256,
-    /// Nibbles consumed while traversing the node.
-    consumed_path: VecDeque<u8>,
-    /// Nibbles that remained after traversing the node.
-    remaining_path: &'path [u8],
-}
-
-/// For a given trie `node` and path, consumes beginning of the `path` to reach the next trie node.
-/// Returns error if next node doesn't exist along given path.
-fn traverse_node<'path>(
-    node: &Node,
-    path: &'path [u8],
-) -> Result<NodeTraversalInfo<'path>, StateValidationError> {
-    match node {
-        Node::Empty => Err(StateValidationError::UnexpectedEmptyNode),
-        Node::Leaf(_) => Err(StateValidationError::UnexpectedLeafNode),
-        Node::Extension(extension_node) => {
-            let extension_node = extension_node.read()?;
-
-            let extension_node_prefix = extension_node.prefix.get_data();
-            if extension_node_prefix.is_empty() {
-                return Err(StateValidationError::EmptyExtensionPath);
-            }
-            let Some(remaining_path) = path.strip_prefix(extension_node_prefix) else {
-                return Err(StateValidationError::InvalidExtensionPath {
-                    path: extension_node_prefix.into(),
-                    expected_path: path.into(),
-                });
-            };
-
-            let mut traverse_node_info = traverse_node(&extension_node.node, remaining_path)?;
-
-            // Append all nibbles from extension_node_prefix at the beginning of consumed_path.
-            // Doing it in reverse order because there we can't push front all at once.
-            extension_node_prefix
-                .iter()
-                .rev()
-                .for_each(|nibble| traverse_node_info.consumed_path.push_front(*nibble));
-
-            Ok(traverse_node_info)
+fn check_traversal_result_is_value(
+    traversal_result: TraversalResult,
+) -> Result<Vec<u8>, StateValidationError> {
+    match traversal_result {
+        TraversalResult::Empty(empty_node_info) => {
+            Err(StateValidationError::UnexpectedEmptyNode(empty_node_info))
         }
-        Node::Branch(branch_node) => {
-            let branch_node = branch_node.read()?;
-            let Some((first_nibble, remaining_path)) = path.split_first() else {
-                return Err(StateValidationError::PathTooShort);
-            };
-            let mut traverse_node_info = traverse_node(
-                &branch_node.children[*first_nibble as usize],
-                remaining_path,
-            )?;
-            traverse_node_info.consumed_path.push_front(*first_nibble);
-            Ok(traverse_node_info)
-        }
-        Node::Hash(hash) => Ok(NodeTraversalInfo {
-            next_node: hash.hash,
-            consumed_path: VecDeque::new(),
-            remaining_path: path,
-        }),
+        TraversalResult::Value(value) => Ok(value),
+        TraversalResult::Node(_) => Err(StateValidationError::LeafNodeExpected),
+        TraversalResult::Error(error) => Err(error.into()),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{array, str::FromStr};
 
     use alloy_primitives::{keccak256, Address, U256};
     use anyhow::Result;
-    use eth_trie::{nibbles::Nibbles as EthTrieNibbles, node::empty_children};
+    use eth_trie::{
+        nibbles::Nibbles as EthTrieNibbles,
+        node::{empty_children, Node},
+    };
     use ethportal_api::utils::bytes::hex_decode;
-    use rstest::rstest;
 
     use super::*;
 
+    fn create_branch() -> Node {
+        let children = array::from_fn(|_| Node::from_hash(B256::random()));
+        Node::from_branch(children, None)
+    }
+
     fn create_branch_with_child(child: Node, child_index: usize) -> Node {
-        let mut children = [(); 16].map(|_| Node::from_hash(B256::random()));
+        let mut children = array::from_fn(|_| Node::from_hash(B256::random()));
         children[child_index] = child;
         Node::from_branch(children, None)
     }
@@ -232,23 +155,13 @@ mod tests {
 
     #[test]
     fn validate_node_trie_proof_single() {
-        let node = EncodedTrieNode::from(&create_branch_with_child(Node::Empty, 1));
+        let node = EncodedTrieNode::from(&create_branch());
         let node_hash = node.node_hash();
 
         let path = Nibbles::try_from_unpacked_nibbles(&[]).unwrap();
         let proof = TrieProof::from(vec![node.clone()]);
 
-        let validation_info =
-            validate_node_trie_proof(Some(node_hash), node_hash, &path, &proof).unwrap();
-
-        assert_eq!(
-            validation_info,
-            TrieProofValidationInfo {
-                last_node: &node,
-                remaining_path: &[],
-                inner_nodes_consumed_path: vec![]
-            }
-        );
+        assert!(validate_node_trie_proof(Some(node_hash), node_hash, &path, &proof).is_ok());
     }
 
     #[test]
@@ -262,26 +175,17 @@ mod tests {
         let path = Nibbles::try_from_unpacked_nibbles(&[4]).unwrap();
         let proof = TrieProof::from(vec![root_node.clone(), last_node.clone()]);
 
-        let validation_info = validate_node_trie_proof(
+        assert!(validate_node_trie_proof(
             Some(root_node.node_hash()),
             last_node.node_hash(),
             &path,
             &proof,
         )
-        .unwrap();
-
-        assert_eq!(
-            validation_info,
-            TrieProofValidationInfo {
-                last_node: &last_node,
-                remaining_path: &[],
-                inner_nodes_consumed_path: vec![[4].into()]
-            }
-        );
+        .is_ok());
     }
 
     #[test]
-    fn validate_node_trie_proof_complex() -> Result<()> {
+    fn validate_node_trie_proof_complex() {
         let last_node = EncodedTrieNode::from(&create_leaf(&[3, 2, 1], &[0x11, 0x22, 0x33]));
         let branch_node = EncodedTrieNode::from(&create_branch_with_child(
             Node::from_hash(last_node.node_hash()),
@@ -296,30 +200,21 @@ mod tests {
             7,
         ));
 
-        let path = Nibbles::try_from_unpacked_nibbles(&[7, 6, 5, 4])?;
+        let path = Nibbles::try_from_unpacked_nibbles(&[7, 6, 5, 4]).unwrap();
         let proof = TrieProof::from(vec![
             root_node.clone(),
             extension_node,
             branch_node,
             last_node.clone(),
         ]);
-        let validation_info = validate_node_trie_proof(
+
+        assert!(validate_node_trie_proof(
             Some(root_node.node_hash()),
             last_node.node_hash(),
             &path,
             &proof,
-        )?;
-
-        assert_eq!(
-            validation_info,
-            TrieProofValidationInfo {
-                last_node: &last_node,
-                remaining_path: &[],
-                inner_nodes_consumed_path: vec![[7].into(), [6, 5].into(), [4].into()]
-            }
-        );
-
-        Ok(())
+        )
+        .is_ok());
     }
 
     #[test]
@@ -398,10 +293,7 @@ mod tests {
     #[test]
     fn validate_account_state_just_leaf() {
         let address_hash = B256::random();
-        let path: Vec<u8> = address_hash
-            .iter()
-            .flat_map(Nibbles::unpack_nibble_pair)
-            .collect();
+        let path = Nibbles::unpack_nibbles(address_hash.as_slice());
         let account_state = AccountState {
             nonce: 1,
             balance: U256::from_be_slice(B256::random().as_slice()),
@@ -419,18 +311,15 @@ mod tests {
     #[should_panic = "LeafNodeExpected"]
     fn validate_account_state_last_node_is_not_leaf() {
         let address_hash = B256::random();
-        let node = EncodedTrieNode::from(&create_branch_with_child(Node::Empty, 1));
+        let node = EncodedTrieNode::from(&create_branch());
         validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
     }
 
     #[test]
-    #[should_panic = "InvalidLeafPath"]
+    #[should_panic = "DifferentLeafPrefix"]
     fn validate_account_state_invalid_leaf_path() {
         let address_hash = B256::random();
-        let mut path: Vec<u8> = address_hash
-            .iter()
-            .flat_map(Nibbles::unpack_nibble_pair)
-            .collect();
+        let mut path = Nibbles::unpack_nibbles(address_hash.as_slice());
         // use one less nibble in the path to make it invalid
         path.pop();
 
@@ -448,10 +337,7 @@ mod tests {
     #[should_panic = "DecodingAccountState"]
     fn validate_account_state_non_decodable_account_state() {
         let address_hash = B256::random();
-        let path: Vec<u8> = address_hash
-            .iter()
-            .flat_map(Nibbles::unpack_nibble_pair)
-            .collect();
+        let path = Nibbles::unpack_nibbles(address_hash.as_slice());
         let node = EncodedTrieNode::from(&create_leaf(&path, &[0x12, 0x34]));
         validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
     }
@@ -475,14 +361,7 @@ mod tests {
         let path = [2, 3, 4];
         let validation_info = validate_trie_proof(None, &path, &proof).unwrap();
 
-        assert_eq!(
-            validation_info,
-            TrieProofValidationInfo {
-                last_node: &node,
-                remaining_path: &path,
-                inner_nodes_consumed_path: vec![],
-            }
-        )
+        assert_eq!(validation_info, (&node, path.as_slice()));
     }
 
     #[test]
@@ -496,14 +375,7 @@ mod tests {
         let path = [2, 3, 4];
         let validation_info = validate_trie_proof(Some(node.node_hash()), &path, &proof).unwrap();
 
-        assert_eq!(
-            validation_info,
-            TrieProofValidationInfo {
-                last_node: &node,
-                remaining_path: &path,
-                inner_nodes_consumed_path: vec![],
-            }
-        )
+        assert_eq!(validation_info, (&node, path.as_slice()));
     }
 
     #[test]
@@ -522,6 +394,7 @@ mod tests {
             7,
         ));
 
+        let path = [7, 6, 5, 4, 3, 2];
         let proof = TrieProof::from(vec![
             root_node.clone(),
             extension_node,
@@ -529,16 +402,9 @@ mod tests {
             last_node.clone(),
         ]);
         let validation_info =
-            validate_trie_proof(Some(root_node.node_hash()), &[7, 6, 5, 4, 3, 2], &proof).unwrap();
+            validate_trie_proof(Some(root_node.node_hash()), &path, &proof).unwrap();
 
-        assert_eq!(
-            validation_info,
-            TrieProofValidationInfo {
-                last_node: &last_node,
-                remaining_path: &[3, 2],
-                inner_nodes_consumed_path: vec![[7].into(), [6, 5].into(), [4].into()],
-            }
-        )
+        assert_eq!(validation_info, (&last_node, &path[4..]));
     }
 
     #[test]
@@ -590,132 +456,5 @@ mod tests {
         let node = Node::from_branch(empty_children(), None);
         let proof = TrieProof::from(vec![EncodedTrieNode::from(&node)]);
         validate_trie_proof(Some(B256::random()), &[], &proof).unwrap();
-    }
-
-    #[test]
-    fn traverse_node_direct_hash() -> Result<()> {
-        let hash = B256::random();
-        assert_eq!(
-            traverse_node(&Node::from_hash(hash), &[])?,
-            NodeTraversalInfo {
-                next_node: hash,
-                consumed_path: VecDeque::new(),
-                remaining_path: &[]
-            }
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn traverse_node_direct_hash_with_path() -> Result<()> {
-        let hash = B256::random();
-        assert_eq!(
-            traverse_node(&Node::from_hash(hash), &[1, 2, 3])?,
-            NodeTraversalInfo {
-                next_node: hash,
-                consumed_path: VecDeque::new(),
-                remaining_path: &[1, 2, 3]
-            }
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn traverse_node_branch_to_hash() -> Result<()> {
-        let hash = B256::random();
-        let path = [1, 2, 3];
-        assert_eq!(
-            traverse_node(&create_branch_with_child(Node::from_hash(hash), 1), &path)?,
-            NodeTraversalInfo {
-                next_node: hash,
-                consumed_path: vec![1].into(),
-                remaining_path: &[2, 3]
-            }
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn traverse_node_extension_to_hash() -> Result<()> {
-        let hash = B256::random();
-        let path = [1, 2, 3, 4, 5];
-        let node = create_extension(&[1, 2], Node::from_hash(hash));
-        assert_eq!(
-            traverse_node(&node, &path)?,
-            NodeTraversalInfo {
-                next_node: hash,
-                consumed_path: vec![1, 2].into(),
-                remaining_path: &[3, 4, 5]
-            }
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn traverse_node_extension_to_branch_to_hash() -> Result<()> {
-        let hash = B256::random();
-        let path = [1, 2, 3, 4, 5];
-        let node = create_extension(&[1, 2], create_branch_with_child(Node::from_hash(hash), 3));
-        assert_eq!(
-            traverse_node(&node, &path)?,
-            NodeTraversalInfo {
-                next_node: hash,
-                consumed_path: vec![1, 2, 3].into(),
-                remaining_path: &[4, 5]
-            }
-        );
-        Ok(())
-    }
-
-    #[test]
-    #[should_panic = "EmptyExtensionPath"]
-    fn traverse_node_extension_empty_path() {
-        let hash = B256::random();
-        let node = create_extension(&[], Node::from_hash(hash));
-        traverse_node(&node, &[1]).unwrap();
-    }
-
-    #[test]
-    #[should_panic = "InvalidExtensionPath"]
-    fn traverse_node_extension_missmatched_path() {
-        let hash = B256::random();
-        let node = create_extension(&[2], Node::from_hash(hash));
-        traverse_node(&node, &[1, 2]).unwrap();
-    }
-
-    #[test]
-    #[should_panic = "PathTooShort"]
-    fn traverse_node_branch_empty_path() {
-        let hash = B256::random();
-        let node = create_branch_with_child(Node::from_hash(hash), 1);
-        traverse_node(&node, &[]).unwrap();
-    }
-
-    #[rstest]
-    #[should_panic = "UnexpectedEmptyNode"]
-    #[case::empty(Node::Empty, &[])]
-    #[should_panic = "UnexpectedEmptyNode"]
-    #[case::branch_to_empty(Node::from_branch(empty_children(), None), &[1])]
-    #[should_panic = "UnexpectedEmptyNode"]
-    #[case::extension_to_branch_to_empty(
-        create_extension(&[1], Node::from_branch(empty_children(), None)),
-        &[1, 2],
-    )]
-    fn traverse_node_to_empty(#[case] node: Node, #[case] path: &[u8]) {
-        traverse_node(&node, path).unwrap();
-    }
-
-    #[rstest]
-    #[should_panic = "UnexpectedLeafNode"]
-    #[case::leaf(create_leaf(&[], &[]), &[])]
-    #[should_panic = "UnexpectedLeafNode"]
-    #[case::branch_to_leaf(create_branch_with_child(create_leaf(&[], &[]), 1), &[1])]
-    #[should_panic = "UnexpectedLeafNode"]
-    #[case::extension_to_branch_to_leaf(
-        create_extension(&[1, 2], create_branch_with_child(create_leaf(&[], &[]), 3)),
-        &[1, 2, 3],
-    )]
-    fn traverse_node_to_leaf(#[case] node: Node, #[case] path: &[u8]) {
-        traverse_node(&node, path).unwrap();
     }
 }

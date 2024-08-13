@@ -1,30 +1,18 @@
-use std::sync::PoisonError;
-
 use alloy_primitives::B256;
 use eth_trie::TrieError;
+use ethportal_api::types::state_trie::{
+    trie_traversal::{EmptyNodeInfo, TraversalError},
+    EncodedTrieNode,
+};
 use thiserror::Error;
 
 // An error that happened while validating state content
 #[derive(Debug, Error)]
 pub enum StateValidationError {
-    #[error("Reached empty node while traversing the trie")]
-    UnexpectedEmptyNode,
-    #[error("Reached leaf node while traversing the trie")]
-    UnexpectedLeafNode,
-    #[error("Path of the leaf node {path:X?} doesn't match expected path {expected_path:X?}")]
-    InvalidLeafPath {
-        path: Vec<u8>,
-        expected_path: Vec<u8>,
-    },
-    #[error("Path of the extension node is empty")]
-    EmptyExtensionPath,
-    #[error("Path of the extension node {path:X?} is not prefix of the path {expected_path:X?}")]
-    InvalidExtensionPath {
-        path: Vec<u8>,
-        expected_path: Vec<u8>,
-    },
-    #[error("Path is too short")]
-    PathTooShort,
+    #[error("Reached empty node while traversing the trie: {0:?}")]
+    UnexpectedEmptyNode(EmptyNodeInfo),
+    #[error("Reached value while traversing the trie")]
+    UnexpectedValue,
     #[error("Path is too long")]
     PathTooLong,
     #[error("The TrieProof is empty")]
@@ -41,18 +29,25 @@ pub enum StateValidationError {
         bytecode_hash: B256,
         expected_bytecode_hash: B256,
     },
+    #[error("Error while traversing the trie node: {0}")]
+    NodeTraversalError(#[from] TraversalError),
     #[error("Invalid content type for content key: {0}")]
     InvalidContentValueType(&'static str),
     #[error("Unable to decode node: {0}")]
     DecodingNode(#[from] TrieError),
     #[error("Unable to decode account state: {0}")]
     DecodingAccountState(#[from] alloy_rlp::Error),
-    #[error("Error while validating: {0}")]
-    Custom(String),
 }
 
-impl<T> From<PoisonError<T>> for StateValidationError {
-    fn from(err: PoisonError<T>) -> Self {
-        StateValidationError::Custom(err.to_string())
+/// Checks the node has expected hash.
+pub fn check_node_hash(node: &EncodedTrieNode, hash: &B256) -> Result<(), StateValidationError> {
+    let node_hash = node.node_hash();
+    if &node_hash == hash {
+        Ok(())
+    } else {
+        Err(StateValidationError::InvalidNodeHash {
+            node_hash,
+            expected_node_hash: *hash,
+        })
     }
 }
