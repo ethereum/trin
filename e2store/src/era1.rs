@@ -1,4 +1,7 @@
-use crate::e2s::{E2StoreFile, Entry};
+use crate::e2store::{
+    memory::E2StoreMemory,
+    types::{Entry, VersionEntry},
+};
 use alloy_primitives::{B256, U256};
 use alloy_rlp::Decodable;
 use anyhow::ensure;
@@ -41,7 +44,7 @@ impl Era1 {
     /// this is useful for processing large era1 files without storing the entire
     /// deserialized era1 object in memory.
     pub fn iter_tuples(raw_era1: Vec<u8>) -> impl Iterator<Item = BlockTuple> {
-        let file = E2StoreFile::deserialize(&raw_era1).expect("invalid era1 file");
+        let file = E2StoreMemory::deserialize(&raw_era1).expect("invalid era1 file");
         let block_index =
             BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))
                 .expect("invalid block index entry")
@@ -56,7 +59,7 @@ impl Era1 {
     }
 
     pub fn get_tuple_by_index(raw_era1: &[u8], index: u64) -> BlockTuple {
-        let file = E2StoreFile::deserialize(raw_era1).expect("invalid era1 file");
+        let file = E2StoreMemory::deserialize(raw_era1).expect("invalid era1 file");
         let mut entries: [Entry; 4] = Default::default();
         for (j, entry) in entries.iter_mut().enumerate() {
             file.entries[index as usize * 4 + j + 1].clone_into(entry);
@@ -65,7 +68,7 @@ impl Era1 {
     }
 
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
-        let file = E2StoreFile::deserialize(buf)?;
+        let file = E2StoreMemory::deserialize(buf)?;
         ensure!(
             // era1 file #0-1895 || era1 file #1896
             file.entries.len() == ERA1_ENTRY_COUNT || file.entries.len() == 21451,
@@ -97,7 +100,7 @@ impl Era1 {
     #[allow(dead_code)]
     fn write(&self) -> anyhow::Result<Vec<u8>> {
         let mut entries: Vec<Entry> = vec![];
-        let version_entry: Entry = self.version.clone().try_into()?;
+        let version_entry: Entry = self.version.clone().into();
         entries.push(version_entry);
         for block_tuple in &self.block_tuples {
             let block_tuple_entries: [Entry; 4] = block_tuple.clone().try_into()?;
@@ -107,7 +110,7 @@ impl Era1 {
         entries.push(accumulator_entry);
         let block_index_entry: Entry = self.block_index.clone().try_into()?;
         entries.push(block_index_entry);
-        let file = E2StoreFile { entries };
+        let file = E2StoreMemory { entries };
         ensure!(
             // era1 file #0-1895 || era1 file #1896
             file.entries.len() == ERA1_ENTRY_COUNT || file.entries.len() == 21451,
@@ -163,45 +166,6 @@ impl TryInto<[Entry; 4]> for BlockTuple {
             self.receipts.try_into()?,
             self.total_difficulty.try_into()?,
         ])
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct VersionEntry {
-    version: Entry,
-}
-
-impl TryFrom<&Entry> for VersionEntry {
-    type Error = anyhow::Error;
-
-    fn try_from(entry: &Entry) -> anyhow::Result<Self> {
-        ensure!(
-            entry.header.type_ == 0x3265,
-            "invalid version entry: incorrect header type"
-        );
-        ensure!(
-            entry.header.length == 0,
-            "invalid version entry: incorrect header length"
-        );
-        ensure!(
-            entry.header.reserved == 0,
-            "invalid version entry: incorrect header reserved bytes"
-        );
-        ensure!(
-            entry.value.is_empty(),
-            "invalid version entry: non-empty value"
-        );
-        Ok(Self {
-            version: entry.clone(),
-        })
-    }
-}
-
-impl TryInto<Entry> for VersionEntry {
-    type Error = anyhow::Error;
-
-    fn try_into(self) -> anyhow::Result<Entry> {
-        Ok(self.version)
     }
 }
 
