@@ -1,3 +1,4 @@
+use alloy_primitives::B256;
 use ethportal_api::{
     consensus::{
         beacon_state::BeaconStateDeneb,
@@ -15,6 +16,7 @@ use ethportal_api::{
     },
 };
 use serde_json::Value;
+use tree_hash::TreeHash;
 
 // Valid number range for the test cases is 0..4
 pub fn get_light_client_bootstrap(number: u8) -> ForkVersionedLightClientBootstrap {
@@ -84,7 +86,7 @@ pub fn get_light_client_optimistic_update(number: u8) -> ForkVersionedLightClien
     }
 }
 
-pub fn get_history_summaries_with_proof() -> ForkVersionedHistoricalSummariesWithProof {
+pub fn get_history_summaries_with_proof() -> (ForkVersionedHistoricalSummariesWithProof, B256) {
     let value = std::fs::read_to_string(
         "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/value.yaml",
     )
@@ -102,8 +104,11 @@ pub fn get_history_summaries_with_proof() -> ForkVersionedHistoricalSummariesWit
         proof: historical_summaries_state_proof.clone(),
     };
 
-    ForkVersionedHistoricalSummariesWithProof {
-        fork_name: ForkName::Deneb,
-        historical_summaries_with_proof,
-    }
+    (
+        ForkVersionedHistoricalSummariesWithProof {
+            fork_name: ForkName::Deneb,
+            historical_summaries_with_proof,
+        },
+        beacon_state.tree_hash_root(),
+    )
 }

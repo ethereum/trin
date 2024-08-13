@@ -11,6 +11,7 @@ description = "Beacon network subprotocol for Trin."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
+alloy-primitives = "0.7.0"
 anyhow = "1.0.68"
 chrono = "0.4.38"
 discv5 = { version = "0.4.1", features = ["serde"] }
@@ -26,6 +27,7 @@ serde_json = "1.0.89"
 ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "2a5922de75f00746890bf4ea9ad663c9d5d58efe" }
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
+tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
 trin-metrics = { path = "../trin-metrics" }
 trin-storage = { path = "../trin-storage" }
 trin-validation = { path = "../trin-validation" }

@@ -1,21 +1,25 @@
+use alloy_primitives::B256;
 use anyhow::anyhow;
 use chrono::Duration;
-use ssz::Decode;
-use std::sync::Arc;
-
 use ethportal_api::{
     consensus::fork::ForkName,
-    types::content_value::beacon::{
-        ForkVersionedHistoricalSummariesWithProof, ForkVersionedLightClientBootstrap,
-        ForkVersionedLightClientFinalityUpdate, ForkVersionedLightClientOptimisticUpdate,
-        LightClientUpdatesByRange,
+    types::{
+        content_key::beacon::HistoricalSummariesWithProofKey,
+        content_value::beacon::{
+            ForkVersionedHistoricalSummariesWithProof, ForkVersionedLightClientBootstrap,
+            ForkVersionedLightClientFinalityUpdate, ForkVersionedLightClientOptimisticUpdate,
+            LightClientUpdatesByRange,
+        },
     },
     BeaconContentKey,
 };
 use light_client::consensus::rpc::portal_rpc::expected_current_slot;
+use ssz::Decode;
+use std::sync::Arc;
 use tokio::sync::RwLock;
-
+use tree_hash::TreeHash;
 use trin_validation::{
+    merkle::proof::verify_merkle_proof,
     oracle::HeaderOracle,
     validator::{ValidationResult, Validator},
 };
@@ -135,33 +139,83 @@ impl Validator<BeaconContentKey> for BeaconValidator {
             }
             BeaconContentKey::HistoricalSummariesWithProof(key) => {
                 let fork_versioned_historical_summaries =
-                    ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(content).map_err(
-                        |err| {
-                            anyhow!(
-                                "Historical summaries with proof has invalid SSZ bytes: {:?}",
-                                err
-                            )
-                        },
-                    )?;
+                    Self::general_summaries_validation(content, key)?;
 
-                // Check if the historical summaries with proof epoch matches the content key epoch
-                if fork_versioned_historical_summaries
-                    .historical_summaries_with_proof
-                    .epoch
-                    != key.epoch
-                {
-                    return Err(anyhow!(
-                        "Historical summaries with proof epoch does not match the content key epoch: {} != {}",
-                        fork_versioned_historical_summaries.historical_summaries_with_proof.epoch,
-                        key.epoch
-                    ));
-                }
+                let latest_finalized_root = self
+                    .header_oracle
+                    .read()
+                    .await
+                    .get_finalized_state_root()
+                    .await?;
 
-                // TODO: Validate the historical summaries with proof against current state root
+                Self::state_summaries_validation(
+                    fork_versioned_historical_summaries,
+                    latest_finalized_root,
+                )
+                .await?;
             }
         }
 
         Ok(ValidationResult::new(true))
+    }
+}
+
+impl BeaconValidator {
+    /// General validation for the historical summaries with proof content
+    fn general_summaries_validation(
+        content: &[u8],
+        key: &HistoricalSummariesWithProofKey,
+    ) -> anyhow::Result<ForkVersionedHistoricalSummariesWithProof> {
+        let fork_versioned_historical_summaries =
+            ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(content).map_err(|err| {
+                anyhow!("Historical summaries with proof has invalid SSZ bytes: {err:?}",)
+            })?;
+
+        // Check if the historical summaries with proof epoch matches the content key epoch
+        if fork_versioned_historical_summaries
+            .historical_summaries_with_proof
+            .epoch
+            != key.epoch
+        {
+            return Err(anyhow!(
+                        "Historical summaries with proof epoch does not match the content key epoch: {} != {}",
+                        fork_versioned_historical_summaries.historical_summaries_with_proof.epoch,
+                        key.epoch
+                    ));
+        }
+        Ok(fork_versioned_historical_summaries)
+    }
+
+    /// Validate historical summaries against the latest finalized state root
+    async fn state_summaries_validation(
+        fork_versioned_historical_summaries: ForkVersionedHistoricalSummariesWithProof,
+        latest_finalized_root: B256,
+    ) -> anyhow::Result<()> {
+        let historical_summaries_state_proof = fork_versioned_historical_summaries
+            .historical_summaries_with_proof
+            .proof;
+        let historical_summaries_root = fork_versioned_historical_summaries
+            .historical_summaries_with_proof
+            .historical_summaries
+            .tree_hash_root();
+
+        // let gen_index =
+        // 31 (because there are 31 top level leafs) +
+        // 28 (the position of historical_summaries field in BeaconState)
+        let gen_index = 59;
+
+        if !verify_merkle_proof(
+            historical_summaries_root,
+            &historical_summaries_state_proof,
+            5,
+            gen_index,
+            latest_finalized_root,
+        ) {
+            return Err(anyhow!(
+                "Merkle proof validation failed for HistoricalSummariesProof"
+            ));
+        }
+        Ok(())
     }
 }
 #[cfg(test)]
@@ -347,37 +401,41 @@ mod tests {
             "Light client optimistic update is not from the recent fork. Expected deneb, got capella"
         );
     }
+
     #[tokio::test]
     async fn test_validate_historical_summaries_with_proof() {
-        let validator = BeaconValidator {
-            header_oracle: Arc::new(RwLock::new(HeaderOracle::default())),
-        };
-        let summaries_with_proof = test_utils::get_history_summaries_with_proof();
+        let (summaries_with_proof, state_root) = test_utils::get_history_summaries_with_proof();
         let content = summaries_with_proof.as_ssz_bytes();
-        let content_key =
-            BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
-                epoch: 450508969718611630,
-            });
-        let result = validator
-            .validate_content(&content_key, &content)
-            .await
-            .unwrap();
-
-        assert!(result.valid_for_storing);
+        let content_key = HistoricalSummariesWithProofKey {
+            epoch: 450508969718611630,
+        };
+        let result = BeaconValidator::general_summaries_validation(&content, &content_key);
+        assert!(result.is_ok());
 
         // Expect error because the epoch does not match the content key epoch
-        let invalid_content_key =
-            BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
-                epoch: 0,
-            });
-        let result = validator
-            .validate_content(&invalid_content_key, &content)
-            .await
+        let invalid_content_key = HistoricalSummariesWithProofKey { epoch: 0 };
+        let result = BeaconValidator::general_summaries_validation(&content, &invalid_content_key)
             .unwrap_err();
-
         assert_eq!(
             result.to_string(),
             "Historical summaries with proof epoch does not match the content key epoch: 450508969718611630 != 0"
+        );
+
+        // Test historical summaries validation against the latest finalized state root
+        let result =
+            BeaconValidator::state_summaries_validation(summaries_with_proof.clone(), state_root)
+                .await;
+        assert!(result.is_ok());
+
+        // Test historical summaries validation against invalid finalized state root
+        let invalid_state_root = B256::random();
+        let result =
+            BeaconValidator::state_summaries_validation(summaries_with_proof, invalid_state_root)
+                .await
+                .unwrap_err();
+        assert_eq!(
+            result.to_string(),
+            "Merkle proof validation failed for HistoricalSummariesProof"
         );
     }
 }
