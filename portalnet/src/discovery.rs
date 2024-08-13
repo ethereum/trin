@@ -236,6 +236,16 @@ impl Discovery {
                         let _ = talk_req_tx.send(talk_req).await;
                     }
                     Event::SessionEstablished(enr, socket_addr) => {
+                        // TODO: this is a temporary fix to prevent caching of eth2 nodes
+                        // and will be updated to a more stable solution as soon as it
+                        // validates the theory of what is causing the issue on mainnet.
+                        if enr.get(ENR_PORTAL_CLIENT_KEY).is_none() {
+                            debug!(
+                                enr = ?enr,
+                                "discv5 session established with node that does not have a portal client key, not caching"
+                            );
+                            continue;
+                        }
                         if let Some(old) = node_addr_cache.write().put(
                             enr.node_id(),
                             NodeAddress {
@@ -243,20 +253,19 @@ impl Discovery {
                                 socket_addr,
                             },
                         ) {
-                            tracing::debug!(
+                            debug!(
                                 old = ?(old.enr, old.socket_addr),
                                 new = ?(enr, socket_addr),
                                 "cached node address updated"
                             );
                         } else {
-                            tracing::debug!(addr = ?(enr, socket_addr), "node address cached");
+                            debug!(addr = ?(enr, socket_addr), "node address cached");
                         }
                     }
                     _ => continue,
                 }
             }
         });
-
         Ok(talk_req_rx)
     }
 
