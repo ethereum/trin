@@ -35,9 +35,33 @@ Read through the "Setup" section of the [Deployment Instructions](../releases/de
 
 #### Checklist
 
-Every day, go down the checklist for that day of the week. If you think of new daily things to add to the checklist, create a PR to suggest it.
+Every day, go down the daily and items for that day of the week. If you think of new daily things to add to the checklist, create a PR.
 
-- TODO: import checklist
+- **Daily**
+  - Read Discord, especially for help requests or signs of network issues
+  - Monitor [Glados](http://glados.ethportal.net/) changes, and correlate with releases (trin, glados, other clients?)
+  - Monitor [portal-hive](https://portal-hive.ethdevops.io/) changes
+    - Check the dates, did all test suites run on the previous cycle?
+    - For each suite, did the expected number of tests run?
+    - Did clients start failing any new tests?
+      - If trin failing, create rotation issue to pursue
+      - If other client failing, notify the team
+  - Look for [inspiration for Flamingo projects](../rotation/index.md#maintenance-inspiration)
+
+- **Monday** - kickoff
+  - Announce that you are on rotation in Discord
+  - Give yourself the Discord role `@trin-flamingo`
+  - Discuss ongoing issues and in-progress tasks with previous Flamingo
+  - Give weekly summary update in all-Portal call
+  - Pick day of week for deployment (usually Wednesday or Thursday), discuss in `#trin`
+
+- **Wednesday or Thursday** - release
+  - [Release](../releases/release_checklist.md) and [deploy](../releases/deployment.md) new version of trin
+
+- **Friday** - wrap-up
+  - Haven't deployed yet? Oops, a bit late. Get it done as early as possible.
+  - Comment on the checklist to add/update/delete anything?
+  - Identify the next Flamingo and prepare for [handoff](#handoff)
 
 As long as there aren't any major incidents, you should finish the checklist with plenty of time left in your day. See [Maintenance Inspiration](#maintenance-inspiration) for what to do for the rest of the day.
 
