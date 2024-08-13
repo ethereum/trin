@@ -418,7 +418,7 @@ impl Discv5UdpSocket {
 }
 
 /// A wrapper around `Enr` that implements `ConnectionPeer`.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct UtpEnr(pub Enr);
 
 impl UtpEnr {
@@ -430,6 +430,16 @@ impl UtpEnr {
         self.0
             .get(ENR_PORTAL_CLIENT_KEY)
             .and_then(|v| String::from_utf8(v.to_vec()).ok())
+    }
+}
+
+impl std::fmt::Debug for UtpEnr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let peer_client_type = self.client().unwrap_or_else(|| "Unknown".to_string());
+        f.debug_struct("UtpEnr")
+            .field("enr", &self.0)
+            .field("Peer Client Type", &peer_client_type)
+            .finish()
     }
 }
 
