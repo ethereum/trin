@@ -5,6 +5,7 @@ Recently, we started a new process. It is evolving, so this doc will evolve with
 Every Monday, a full-time member of trin rotates into a maintenance position. The person in that role is called the "Flamingo" ([truly amazing animals](https://www.reddit.com/r/Flamingo/comments/odzxry/are_flamingos_extremophiles/)).
 
 Some responsibilities for the Flamingo are:
+
 - monitor glados & hive to watch for regressions; investigate & resolve them
 - answer questions from other Portal teams
 - run releases & deployments
@@ -20,31 +21,30 @@ There are some daily tasks, and some transition tasks: Kickoff on Monday & Hando
 
 Unlike your code-heavy weeks, this can be an interruption-heavy week. Although it's often good practice to not get distracted by inbound messages while coding, this week is the opposite: as soon as you see new messages (like on Discord), jump into it.
 
-Start with Kickoff on Monday morning:
-
 ### Kickoff
 
-At the end of the previous week, you will get the [Flamingo notes](https://notes.ethereum.org/YAiNsmc8SSq05TwYdk-8Eg) from the previous Flamingo. They will include incidents from the prior weeks and any in-progress tasks. This will be crucial to get a quick understanding of the state of the network and any in-progress tasks to resume.
+Have a discussion with the previous Flamingo on any ongoing issues or in-progress tasks. This is crucial to get a quick understanding of the state of the network and any in-progress tasks to resume.
 
-Read through the notes, and then generate the new checklist for the week, by [creating a note from this template](https://notes.ethereum.org/?nav=overview&template=b35733cd-b374-4b79-bc57-f2bb58ee651e).
-
-Link the generated checklist into the Flamingo notes for your week. Make sure your status is "online" in Discord. Make sure you're tagged under the `trin-flamingo` role. Put on your favorite pink shirt. Watch a [silly flamingo video](https://www.youtube.com/watch?v=gWNWtbPEWw0). Fly.
+Make sure your status is "online" in Discord. Make sure you're tagged under the `trin-flamingo` role (ping discord Admin). Put on your favorite pink shirt. Watch a [silly flamingo video](https://www.youtube.com/watch?v=gWNWtbPEWw0). Fly.
 
 ### First
 
-Read through the "Setup" section of the [Deployment Instructions](../releases/deployment.md) and follow the steps to make sure that your PGP and SSH keys are in place and ready for a deployment. 
+Read through the "Setup" section of the [Deployment Instructions](../releases/deployment.md) and follow the steps to make sure that your PGP and SSH keys are in place and ready for a deployment.
 
 ### Daily
 
 #### Checklist
 
-Every day, go down the checklist for that day of the week, resolve items and check them off. If you think of new daily things to add to the checklist, comment on the template to suggest it.
+Every day, go down the checklist for that day of the week. If you think of new daily things to add to the checklist, create a PR to suggest it.
+
+- TODO: import checklist
 
 As long as there aren't any major incidents, you should finish the checklist with plenty of time left in your day. See [Maintenance Inspiration](#maintenance-inspiration) for what to do for the rest of the day.
 
 #### Maintenance Inspiration
 
 When you get to the end of your checklist, here are ideas for what to work on next:
+
 - Respond to [Github Participating Notifications](https://github.com/notifications?query=reason%3Aparticipating)
 - Review PRs that have been stuck for >24 hours
 - Find a [Flamingo Issue](https://github.com/ethereum/trin/issues?q=is%3Aopen+is%3Aissue+label%3Aflamingo) that seems promising, and assign it to yourself (and the project dashboard)
@@ -66,22 +66,15 @@ When you get to the end of your checklist, here are ideas for what to work on ne
 - Add new integration tools (eg~ portal-hive -> Discord bot?)
 - Scratch your own itch! What do you wish was easier? Now is the time to build it.
 
-Be sure to update the week's notes as you go, adding: notable incidents, summaries of what you are working on, and ideas for future work.
-
 ### Handoff
 
-Before handing off the notes on Friday, be sure to read through the notes to cleanly summarize the week's activities. Link to any helpful issues, and delete any text that is only meaningful to you.
-
-Double check the [Flamingo schedule](https://notes.ethereum.org/@njgheorghita/r1angO2lT) and make sure you're available for your next rotation. If not, please switch with somebody asap.
-
-Think through: what kinds of things do you wish were on the notes that you got on Monday?
-
-After a while, everyone should have the Flamingo Notes link. Sending the link anyway helps accomplish a few things:
-1. Signal to the next Flamingo that you're done writing up the notes
-2. Give the next Flamingo a reminder that their turn is coming up
-3. A failsafe to make sure we didn't forget to pick a Flamingo for the following week
+Look back at your week as Flamingo and summarize it in notes if needed. Prepare for a kickoff discussion with the next Flamingo and update them on your work from previous week.
 
 Especially while we continue to develop the procedure, try to be available the following Monday to help the subsequent Flamingo transition in, and get started.
+
+Think through: what kinds of things do you think should on the checklist?
+
+Double check the [Flamingo schedule](https://notes.ethereum.org/@njgheorghita/r1angO2lT) and make sure you're available for your next rotation. If not, please switch with somebody asap.
 
 ## Being the Announcer
 
@@ -90,6 +83,7 @@ The Flamingo is often the first to notice downtime. Whether it's something that 
 ## *Not* Flamingo
 
 If you're not Flamingo currently, there are some situations where it is important to ping the Flamingo in Discord with `@flamingo-trin`. For example:
+
 - You notice the network behaving abnormally
 - You notice any of our tooling behaving abnormally (github, Circle, glados, etc)
 - You have a PR that has had no review activity after asking more than 24 hours ago
