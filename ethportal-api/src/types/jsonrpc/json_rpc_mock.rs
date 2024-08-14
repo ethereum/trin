@@ -29,7 +29,7 @@ pub struct MockJsonRpcBuilder<T> {
 }
 
 impl<T: PartialEq + Send + 'static> MockJsonRpcBuilder<T> {
-    pub fn new_builder() -> Self {
+    pub fn new() -> Self {
         Self {
             interactions: vec![],
         }
@@ -87,5 +87,11 @@ impl<T: PartialEq + Send + 'static> MockJsonRpcBuilder<T> {
             }
         });
         tx
+    }
+}
+
+impl<T: PartialEq + Send + 'static> Default for MockJsonRpcBuilder<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
