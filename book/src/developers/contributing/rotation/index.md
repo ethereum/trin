@@ -96,7 +96,7 @@ Look back at your week as Flamingo and summarize it in notes if needed. Prepare 
 
 Especially while we continue to develop the procedure, try to be available the following Monday to help the subsequent Flamingo transition in, and get started.
 
-Think through: what kinds of things do you think should on the checklist?
+Think through: what kinds of things do you think should be on the checklist?
 
 Double check the [Flamingo schedule](https://notes.ethereum.org/@njgheorghita/r1angO2lT) and make sure you're available for your next rotation. If not, please switch with somebody asap.
 
