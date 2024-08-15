@@ -37,6 +37,8 @@ pub enum StateValidationError {
     DecodingNode(#[from] TrieError),
     #[error("Unable to decode account state: {0}")]
     DecodingAccountState(#[from] alloy_rlp::Error),
+    #[error("Failed to find header for a given hash. Err: {0}")]
+    HeaderNotFound(#[from] anyhow::Error),
 }
 
 /// Checks the node has expected hash.

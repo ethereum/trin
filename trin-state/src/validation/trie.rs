@@ -12,7 +12,7 @@ use super::error::{check_node_hash, StateValidationError};
 
 /// Validate the trie proof.
 pub fn validate_node_trie_proof(
-    root_hash: Option<B256>,
+    root_hash: B256,
     node_hash: B256,
     path: &Nibbles,
     proof: &TrieProof,
@@ -32,7 +32,7 @@ pub fn validate_node_trie_proof(
 
 /// Validate the trie proof associated with the account state.
 pub fn validate_account_state(
-    root_hash: Option<B256>,
+    root_hash: B256,
     address_hash: &B256,
     proof: &TrieProof,
 ) -> Result<AccountState, StateValidationError> {
@@ -57,7 +57,7 @@ pub fn validate_account_state(
 /// - last node in the proof (whose presence we are proving)
 /// - remaining (unused) nibbles from the path
 fn validate_trie_proof<'proof, 'path>(
-    root_hash: Option<B256>,
+    root_hash: B256,
     path: &'path [u8],
     proof: &'proof TrieProof,
 ) -> Result<(&'proof EncodedTrieNode, &'path [u8]), StateValidationError> {
@@ -67,9 +67,7 @@ fn validate_trie_proof<'proof, 'path>(
     };
 
     // Check root hash
-    if let Some(root_hash) = root_hash {
-        check_node_hash(first_node, &root_hash)?;
-    }
+    check_node_hash(first_node, &root_hash)?;
 
     let mut node = first_node;
     let mut remaining_path = path;
@@ -161,7 +159,7 @@ mod tests {
         let path = Nibbles::try_from_unpacked_nibbles(&[]).unwrap();
         let proof = TrieProof::from(vec![node.clone()]);
 
-        assert!(validate_node_trie_proof(Some(node_hash), node_hash, &path, &proof).is_ok());
+        assert!(validate_node_trie_proof(node_hash, node_hash, &path, &proof).is_ok());
     }
 
     #[test]
@@ -176,7 +174,7 @@ mod tests {
         let proof = TrieProof::from(vec![root_node.clone(), last_node.clone()]);
 
         assert!(validate_node_trie_proof(
-            Some(root_node.node_hash()),
+            root_node.node_hash(),
             last_node.node_hash(),
             &path,
             &proof,
@@ -209,7 +207,7 @@ mod tests {
         ]);
 
         assert!(validate_node_trie_proof(
-            Some(root_node.node_hash()),
+            root_node.node_hash(),
             last_node.node_hash(),
             &path,
             &proof,
@@ -229,7 +227,8 @@ mod tests {
         let path = Nibbles::try_from_unpacked_nibbles(&[4, 3, 2, 1]).unwrap();
         let proof = TrieProof::from(vec![root_node.clone(), last_node.clone()]);
 
-        validate_node_trie_proof(None, last_node.node_hash(), &path, &proof).unwrap();
+        validate_node_trie_proof(root_node.node_hash(), last_node.node_hash(), &path, &proof)
+            .unwrap();
     }
 
     #[test]
@@ -246,7 +245,8 @@ mod tests {
 
         // This should be the hash of the last_node, and it should fail if it is anything else
         let wrong_last_node_hash = root_node.node_hash();
-        validate_node_trie_proof(None, wrong_last_node_hash, &path, &proof).unwrap();
+        validate_node_trie_proof(root_node.node_hash(), wrong_last_node_hash, &path, &proof)
+            .unwrap();
     }
 
     #[test]
@@ -279,11 +279,7 @@ mod tests {
           ].map(|trie_node| EncodedTrieNode::from(hex_decode(trie_node).unwrap()));
 
         assert_eq!(
-            validate_account_state(
-                Some(state_root),
-                &address_hash,
-                &account_proof.to_vec().into()
-            )?,
+            validate_account_state(state_root, &address_hash, &account_proof.to_vec().into())?,
             account_state
         );
 
@@ -302,7 +298,7 @@ mod tests {
         };
         let node = EncodedTrieNode::from(&create_leaf(&path, &alloy_rlp::encode(&account_state)));
         assert_eq!(
-            validate_account_state(None, &address_hash, &vec![node].into()).unwrap(),
+            validate_account_state(node.node_hash(), &address_hash, &vec![node].into()).unwrap(),
             account_state
         );
     }
@@ -312,7 +308,7 @@ mod tests {
     fn validate_account_state_last_node_is_not_leaf() {
         let address_hash = B256::random();
         let node = EncodedTrieNode::from(&create_branch());
-        validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
+        validate_account_state(node.node_hash(), &address_hash, &vec![node].into()).unwrap();
     }
 
     #[test]
@@ -330,7 +326,7 @@ mod tests {
             code_hash: B256::random(),
         };
         let node = EncodedTrieNode::from(&create_leaf(&path, &alloy_rlp::encode(account_state)));
-        validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
+        validate_account_state(node.node_hash(), &address_hash, &vec![node].into()).unwrap();
     }
 
     #[test]
@@ -339,7 +335,7 @@ mod tests {
         let address_hash = B256::random();
         let path = Nibbles::unpack_nibbles(address_hash.as_slice());
         let node = EncodedTrieNode::from(&create_leaf(&path, &[0x12, 0x34]));
-        validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
+        validate_account_state(node.node_hash(), &address_hash, &vec![node].into()).unwrap();
     }
 
     #[test]
@@ -347,7 +343,7 @@ mod tests {
     fn validate_account_state_non_decodable_leaf() {
         let address_hash = B256::random();
         let node = EncodedTrieNode::from(vec![0x12, 0x34]);
-        validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
+        validate_account_state(node.node_hash(), &address_hash, &vec![node].into()).unwrap();
     }
 
     #[test]
@@ -359,7 +355,7 @@ mod tests {
 
         let proof = TrieProof::from(vec![node.clone()]);
         let path = [2, 3, 4];
-        let validation_info = validate_trie_proof(None, &path, &proof).unwrap();
+        let validation_info = validate_trie_proof(node.node_hash(), &path, &proof).unwrap();
 
         assert_eq!(validation_info, (&node, path.as_slice()));
     }
@@ -373,7 +369,7 @@ mod tests {
 
         let proof = TrieProof::from(vec![node.clone()]);
         let path = [2, 3, 4];
-        let validation_info = validate_trie_proof(Some(node.node_hash()), &path, &proof).unwrap();
+        let validation_info = validate_trie_proof(node.node_hash(), &path, &proof).unwrap();
 
         assert_eq!(validation_info, (&node, path.as_slice()));
     }
@@ -401,8 +397,7 @@ mod tests {
             branch_node,
             last_node.clone(),
         ]);
-        let validation_info =
-            validate_trie_proof(Some(root_node.node_hash()), &path, &proof).unwrap();
+        let validation_info = validate_trie_proof(root_node.node_hash(), &path, &proof).unwrap();
 
         assert_eq!(validation_info, (&last_node, &path[4..]));
     }
@@ -420,34 +415,47 @@ mod tests {
 
         // First verify that correct order pass the validation
         let proof = TrieProof::from(vec![root_node.clone(), last_node.clone()]);
-        assert!(validate_trie_proof(None, &[2, 1], &proof).is_ok());
+        assert!(validate_trie_proof(root_node.node_hash(), &[2, 1], &proof).is_ok());
 
-        // Now verify that wrong order fails because Node hash doesn't match
+        // Now verify that wrong order fails because root hash doesn't match
         let proof = TrieProof::from(vec![last_node.clone(), root_node.clone()]);
-        let error = validate_trie_proof(None, &[2, 1], &proof).unwrap_err();
+        let error = validate_trie_proof(root_node.node_hash(), &[2, 1], &proof).unwrap_err();
         assert!(matches!(
             error,
             StateValidationError::InvalidNodeHash {
                 node_hash: _,
-                expected_node_hash: _,
-            }
+                expected_node_hash,
+            } if expected_node_hash == root_node.node_hash()
+        ));
+
+        // And that if fails even if root hash that corresponds to the first node is given
+        let proof = TrieProof::from(vec![last_node.clone(), root_node.clone()]);
+        let error = validate_trie_proof(last_node.node_hash(), &[2, 1], &proof).unwrap_err();
+        dbg!(&error);
+        dbg!(last_node.node_hash());
+        assert!(matches!(
+            error,
+            StateValidationError::InvalidNodeHash {
+                node_hash: _,
+                expected_node_hash,
+            } if expected_node_hash != last_node.node_hash()
         ));
 
         // And that it fails even if we reverse order in path
-        let error = validate_trie_proof(None, &[1, 2], &proof).unwrap_err();
+        let error = validate_trie_proof(last_node.node_hash(), &[1, 2], &proof).unwrap_err();
         assert!(matches!(
             error,
             StateValidationError::InvalidNodeHash {
                 node_hash: _,
-                expected_node_hash: _,
-            }
+                expected_node_hash,
+            } if expected_node_hash != last_node.node_hash()
         ));
     }
 
     #[test]
     #[should_panic = "EmptyTrieProof"]
     fn validate_trie_proof_empty_proof() {
-        validate_trie_proof(None, &[], &TrieProof::default()).unwrap();
+        validate_trie_proof(B256::random(), &[], &TrieProof::default()).unwrap();
     }
 
     #[test]
@@ -455,6 +463,6 @@ mod tests {
     fn validate_trie_proof_invalid_root_hash() {
         let node = Node::from_branch(empty_children(), None);
         let proof = TrieProof::from(vec![EncodedTrieNode::from(&node)]);
-        validate_trie_proof(Some(B256::random()), &[], &proof).unwrap();
+        validate_trie_proof(B256::random(), &[], &proof).unwrap();
     }
 }

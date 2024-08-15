@@ -1,8 +1,8 @@
-use std::net::SocketAddr;
+use std::{collections::HashSet, net::SocketAddr};
 
 use tokio::process::{Child, Command};
 
-use crate::cli::BridgeConfig;
+use crate::{cli::BridgeConfig, types::network::NetworkKind};
 use ethportal_api::utils::bytes::hex_encode;
 use portalnet::socket::stun_for_external;
 
@@ -13,12 +13,6 @@ pub fn fluffy_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
     let mut command = Command::new(bridge_config.executable_path.clone());
     let listen_all_ips = SocketAddr::new("0.0.0.0".parse().expect("to parse ip"), udp_port);
     let ip = stun_for_external(&listen_all_ips).expect("to stun for external ip");
-    let portal_subnetworks = bridge_config
-        .portal_subnetworks
-        .iter()
-        .map(|n| n.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
 
     command
         .kill_on_drop(true)
@@ -31,7 +25,10 @@ pub fn fluffy_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
             "--network:{}",
             bridge_config.network.get_network_name()
         ))
-        .arg(format!("--portal-subnetworks:{}", &portal_subnetworks))
+        .arg(format!(
+            "--portal-subnetworks:{}",
+            subnetworks_flag(bridge_config)
+        ))
         .arg(format!("--netkey-unsafe:{private_key}"));
     if let Some(client_metrics_url) = bridge_config.client_metrics_url {
         let address = client_metrics_url.ip().to_string();
@@ -57,12 +54,6 @@ pub fn trin_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
     let udp_port = bridge_config.base_discovery_port;
     let private_key = hex_encode(bridge_config.private_key);
     let mut command = Command::new(bridge_config.executable_path.clone());
-    let portal_subnetworks = bridge_config
-        .portal_subnetworks
-        .iter()
-        .map(|n| n.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
 
     command
         .kill_on_drop(true)
@@ -70,7 +61,7 @@ pub fn trin_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
         .args(["--mb", "0"])
         .args(["--web3-transport", "http"])
         .args(["--network", bridge_config.network.get_network_name()])
-        .args(["--portal-subnetworks", &portal_subnetworks])
+        .args(["--portal-subnetworks", &subnetworks_flag(bridge_config)])
         .args(["--unsafe-private-key", &private_key])
         .args([
             "--web3-http-address",
@@ -86,4 +77,21 @@ pub fn trin_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
         command.args(["--enable-metrics-with-url", &url]);
     }
     Ok(command.spawn()?)
+}
+
+/// Returns the subnetwork flag to be passed to the trin/fluffy handle.
+///
+/// This is a union of required subnetworks for each subnetwork from the config.
+pub fn subnetworks_flag(bridge_config: &BridgeConfig) -> String {
+    let subnetworks = bridge_config
+        .portal_subnetworks
+        .iter()
+        .flat_map(|subnetwork| match subnetwork {
+            NetworkKind::Beacon => vec![NetworkKind::Beacon],
+            NetworkKind::History => vec![NetworkKind::History],
+            NetworkKind::State => vec![NetworkKind::History, NetworkKind::State],
+        })
+        .map(|network_kind| network_kind.to_string())
+        .collect::<HashSet<_>>();
+    Vec::from_iter(subnetworks).join(",")
 }
