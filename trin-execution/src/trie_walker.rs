@@ -155,35 +155,22 @@ impl TrieWalker {
 
     pub fn get_proof(&self, node_hash: B256) -> TrieProof {
         // Build path and proof from the node to the root and reverse it at the end.
-        let (reverse_path_parts, mut reverse_proof) = self.collect_reversed_proof(node_hash);
-        let mut path = vec![];
-        for path_part in reverse_path_parts.iter().rev() {
-            for nibble in path_part.iter().rev() {
-                path.push(*nibble);
-            }
-        }
-
+        let (mut reverse_path_parts, mut reverse_proof) = self.collect_reversed_proof(node_hash);
+        reverse_path_parts.reverse();
         reverse_proof.reverse();
         TrieProof {
-            path,
+            path: reverse_path_parts.concat(),
             proof: reverse_proof,
         }
     }
 
     /// Used for gossipping a root to x trie node proof for the state network
     pub fn iter_proof(&self, node_hash: B256) -> impl Iterator<Item = TrieProof> {
-        let (reverse_path_parts, mut reverse_proof) = self.collect_reversed_proof(node_hash);
+        let (mut reverse_path_parts, mut reverse_proof) = self.collect_reversed_proof(node_hash);
+        reverse_path_parts.reverse();
         reverse_proof.reverse();
-        let mut path_parts = vec![];
-        for reverse_path_part in reverse_path_parts.iter().rev() {
-            if reverse_path_part.is_empty() {
-                continue;
-            }
-            let path_part: Vec<u8> = reverse_path_part.iter().rev().copied().collect();
-            path_parts.push(path_part);
-        }
         (0..reverse_proof.len()).map(move |i| TrieProof {
-            path: path_parts[0..i].concat(),
+            path: reverse_path_parts[0..=i].concat(),
             proof: reverse_proof[0..=i].to_vec(),
         })
     }
