@@ -160,7 +160,7 @@ impl TrieWalker {
         let (path_parts, proof) = self.collect_proof(node_hash);
         TrieProof {
             path: path_parts.concat(),
-            proof: proof,
+            proof,
         }
     }
 
