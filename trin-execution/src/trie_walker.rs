@@ -138,7 +138,7 @@ impl TrieWalker {
         Ok(trie_walker_nodes)
     }
 
-    fn collect_reversed_proof(&self, node_hash: B256) -> (Vec<Vec<u8>>, Vec<Bytes>) {
+    fn collect_proof(&self, node_hash: B256) -> (Vec<Vec<u8>>, Vec<Bytes>) {
         let mut reverse_path_parts = vec![];
         let mut reverse_proof = vec![];
         let mut next_node: Option<B256> = Some(node_hash);
@@ -150,28 +150,26 @@ impl TrieWalker {
             reverse_proof.push(Bytes(node.encoded_node.clone().into()));
             next_node = node.parent_hash;
         }
+        reverse_path_parts.reverse();
+        reverse_proof.reverse();
         (reverse_path_parts, reverse_proof)
     }
 
     pub fn get_proof(&self, node_hash: B256) -> TrieProof {
         // Build path and proof from the node to the root and reverse it at the end.
-        let (mut reverse_path_parts, mut reverse_proof) = self.collect_reversed_proof(node_hash);
-        reverse_path_parts.reverse();
-        reverse_proof.reverse();
+        let (path_parts, proof) = self.collect_proof(node_hash);
         TrieProof {
-            path: reverse_path_parts.concat(),
-            proof: reverse_proof,
+            path: path_parts.concat(),
+            proof: proof,
         }
     }
 
     /// Used for gossipping a root to x trie node proof for the state network
     pub fn iter_proof(&self, node_hash: B256) -> impl Iterator<Item = TrieProof> {
-        let (mut reverse_path_parts, mut reverse_proof) = self.collect_reversed_proof(node_hash);
-        reverse_path_parts.reverse();
-        reverse_proof.reverse();
-        (0..reverse_proof.len()).map(move |i| TrieProof {
-            path: reverse_path_parts[0..=i].concat(),
-            proof: reverse_proof[0..=i].to_vec(),
+        let (path_parts, proof) = self.collect_proof(node_hash);
+        (0..proof.len()).map(move |i| TrieProof {
+            path: path_parts[0..=i].concat(),
+            proof: proof[0..=i].to_vec(),
         })
     }
 }
