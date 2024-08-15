@@ -153,8 +153,10 @@ impl StateBridge {
                 let account_proof = walk_diff.get_proof(*node);
 
                 // gossip the account
-                self.gossip_account(&account_proof, block_tuple.header.header.hash())
-                    .await?;
+                for proof in walk_diff.iter_proof(*node) {
+                    self.gossip_account(&proof, block_tuple.header.header.hash())
+                        .await?;
+                }
 
                 let Some(encoded_last_node) = account_proof.proof.last() else {
                     error!("Account proof is empty. This should never happen maybe there is a bug in trie_walker?");
@@ -199,14 +201,15 @@ impl StateBridge {
                     TrieWalker::new(account.storage_root, storage_changed_nodes);
 
                 for storage_node in storage_walk_diff.nodes.keys() {
-                    let storage_proof = storage_walk_diff.get_proof(*storage_node);
-                    self.gossip_storage(
-                        &account_proof,
-                        &storage_proof,
-                        address_hash,
-                        block_tuple.header.header.hash(),
-                    )
-                    .await?;
+                    for storage_proof in storage_walk_diff.iter_proof(*storage_node) {
+                        self.gossip_storage(
+                            &account_proof,
+                            &storage_proof,
+                            address_hash,
+                            block_tuple.header.header.hash(),
+                        )
+                        .await?;
+                    }
                 }
             }
             // flush the database cache

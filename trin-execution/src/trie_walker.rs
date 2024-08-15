@@ -138,28 +138,54 @@ impl TrieWalker {
         Ok(trie_walker_nodes)
     }
 
-    pub fn get_proof(&self, node_hash: B256) -> TrieProof {
-        // Build path and proof from the node to the root and reverse it at the end.
-        let mut reverse_path = vec![];
+    fn collect_reversed_proof(&self, node_hash: B256) -> (Vec<Vec<u8>>, Vec<Bytes>) {
+        let mut reverse_path_parts = vec![];
         let mut reverse_proof = vec![];
         let mut next_node: Option<B256> = Some(node_hash);
         while let Some(current_node) = next_node {
             let Some(node) = self.nodes.get(&current_node) else {
                 panic!("Node not found in trie walker nodes. This should never happen.");
             };
-            for nibble in node.path_nibbles.iter().rev() {
-                reverse_path.push(*nibble);
-            }
+            reverse_path_parts.push(node.path_nibbles.clone());
             reverse_proof.push(Bytes(node.encoded_node.clone().into()));
             next_node = node.parent_hash;
         }
+        (reverse_path_parts, reverse_proof)
+    }
 
-        reverse_path.reverse();
+    pub fn get_proof(&self, node_hash: B256) -> TrieProof {
+        // Build path and proof from the node to the root and reverse it at the end.
+        let (reverse_path_parts, mut reverse_proof) = self.collect_reversed_proof(node_hash);
+        let mut path = vec![];
+        for path_part in reverse_path_parts.iter().rev() {
+            for nibble in path_part.iter().rev() {
+                path.push(*nibble);
+            }
+        }
+
         reverse_proof.reverse();
         TrieProof {
-            path: reverse_path,
+            path,
             proof: reverse_proof,
         }
+    }
+
+    /// Used for gossipping a root to x trie node proof for the state network
+    pub fn iter_proof(&self, node_hash: B256) -> impl Iterator<Item = TrieProof> {
+        let (reverse_path_parts, mut reverse_proof) = self.collect_reversed_proof(node_hash);
+        reverse_proof.reverse();
+        let mut path_parts = vec![];
+        for reverse_path_part in reverse_path_parts.iter().rev() {
+            if reverse_path_part.is_empty() {
+                continue;
+            }
+            let path_part: Vec<u8> = reverse_path_part.iter().rev().copied().collect();
+            path_parts.push(path_part);
+        }
+        (0..reverse_proof.len()).map(move |i| TrieProof {
+            path: path_parts[0..i].concat(),
+            proof: reverse_proof[0..=i].to_vec(),
+        })
     }
 }
 
@@ -197,5 +223,46 @@ mod tests {
             .unwrap();
         let account_proof = walk_diff.get_proof(keccak256(last_node));
         assert_eq!(valid_proof, account_proof);
+    }
+
+    #[test]
+    fn test_trie_proof_iter_proof() -> anyhow::Result<()> {
+        let temp_directory = setup_temp_dir()?;
+        let mut state = State::new(
+            Some(temp_directory.path().to_path_buf()),
+            StateConfig::default(),
+        )?;
+        let address = Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b")?;
+        let RootWithTrieDiff { trie_diff, .. } = state.initialize_genesis()?;
+        let valid_proof = state.get_proof(address)?;
+        let root_hash = state.get_root().unwrap();
+        let walk_diff = TrieWalker::new(root_hash, trie_diff);
+        let last_node = valid_proof.proof.last().ok_or(anyhow!("Missing proof!"))?;
+
+        let mut proof_iter = walk_diff.iter_proof(keccak256(last_node));
+
+        let first_proof = proof_iter.next().ok_or(anyhow!("Missing proof!"))?;
+        assert_eq!(first_proof.path, valid_proof.path[0..0]);
+        assert_eq!(first_proof.proof, valid_proof.proof[0..1]);
+
+        let second_proof = proof_iter.next().ok_or(anyhow!("Missing proof!"))?;
+        assert_eq!(second_proof.path, valid_proof.path[0..1]);
+        assert_eq!(second_proof.proof, valid_proof.proof[0..2]);
+
+        let third_proof = proof_iter.next().ok_or(anyhow!("Missing proof!"))?;
+        assert_eq!(third_proof.path, valid_proof.path[0..2]);
+        assert_eq!(third_proof.proof, valid_proof.proof[0..3]);
+
+        let fourth_proof = proof_iter.next().ok_or(anyhow!("Missing proof!"))?;
+        assert_eq!(fourth_proof.path, valid_proof.path[0..3]);
+        assert_eq!(fourth_proof.proof, valid_proof.proof[0..4]);
+
+        let fifth_proof = proof_iter.next().ok_or(anyhow!("Missing proof!"))?;
+        assert_eq!(fifth_proof.path, valid_proof.path[0..4]);
+        assert_eq!(fifth_proof.proof, valid_proof.proof[0..5]);
+
+        assert!(proof_iter.next().is_none());
+
+        Ok(())
     }
 }
