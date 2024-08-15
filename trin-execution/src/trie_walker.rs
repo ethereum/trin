@@ -1,7 +1,9 @@
 use alloy_primitives::{Bytes, B256};
+use alloy_rlp::EMPTY_STRING_CODE;
 use anyhow::ensure;
 use eth_trie::{decode_node, node::Node};
 use hashbrown::HashMap as BrownHashMap;
+use revm_primitives::keccak256;
 use serde::{Deserialize, Serialize};
 
 use super::types::trie_proof::TrieProof;
@@ -34,6 +36,17 @@ pub struct TrieWalker {
 
 impl TrieWalker {
     pub fn new(root_hash: B256, nodes: BrownHashMap<B256, Vec<u8>>) -> Self {
+        // if the storage root is empty then there is no storage to gossip
+        if root_hash == keccak256([EMPTY_STRING_CODE]) && !nodes.is_empty() {
+            panic!("Root hash is empty but there are nodes to gossip. This should never happen.");
+        }
+
+        if nodes.is_empty() {
+            return Self {
+                nodes: BrownHashMap::new(),
+            };
+        }
+
         let processed_nodes = Self::process_trie(root_hash, &nodes)
             .expect("This shouldn't fail as we only pass valid tries");
         Self {
