@@ -1,15 +1,14 @@
-use std::{
-    cmp::Ordering,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    time::SystemTime,
-};
+use std::sync::Mutex as StdMutex;
 
-use anyhow::bail;
+use anyhow::{bail, ensure};
 use jsonrpsee::http_client::HttpClient;
 use serde_json::Value;
 use ssz_types::VariableList;
-use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
+use std::{cmp::Ordering, path::PathBuf, sync::Arc, time::SystemTime};
+use tokio::{
+    sync::Mutex,
+    time::{interval, sleep, Duration, MissedTickBehavior},
+};
 use tracing::{info, warn, Instrument};
 use trin_metrics::bridge::BridgeMetricsReporter;
 
@@ -24,6 +23,10 @@ use crate::{
     },
 };
 use ethportal_api::{
+    consensus::{
+        beacon_state::BeaconStateDeneb,
+        historical_summaries::{HistoricalSummariesStateProof, HistoricalSummariesWithProof},
+    },
     light_client::{
         bootstrap::LightClientBootstrapDeneb,
         finality_update::LightClientFinalityUpdateDeneb,
@@ -32,15 +35,40 @@ use ethportal_api::{
     },
     types::{
         consensus::fork::ForkName,
-        content_key::beacon::{LightClientFinalityUpdateKey, LightClientOptimisticUpdateKey},
-        content_value::beacon::{ForkVersionedLightClientUpdate, LightClientUpdatesByRange},
+        content_key::beacon::{
+            HistoricalSummariesWithProofKey, LightClientFinalityUpdateKey,
+            LightClientOptimisticUpdateKey,
+        },
+        content_value::beacon::{
+            ForkVersionedHistoricalSummariesWithProof, ForkVersionedLightClientUpdate,
+            LightClientUpdatesByRange,
+        },
     },
     utils::bytes::hex_decode,
     BeaconContentKey, BeaconContentValue, LightClientBootstrapKey, LightClientUpdatesByRangeKey,
 };
 
+/// The number of slots in an epoch.
+const SLOTS_PER_EPOCH: u64 = 32;
 /// The number of slots in a sync committee period.
-const SLOTS_PER_PERIOD: u64 = 32 * 256;
+const SLOTS_PER_PERIOD: u64 = SLOTS_PER_EPOCH * 256;
+/// The historical summaries proof always has a length of 5 hashes.
+const HISTORICAL_SUMMARIES_PROOF_LENGTH: usize = 5;
+
+/// A helper struct to hold the finalized beacon state metadata.
+#[derive(Clone, Debug, Default)]
+pub struct FinalizedBeaconState {
+    /// THe root of the finalized state
+    pub state_root: String,
+    /// True if the beacon state download is in progress
+    pub in_progress: bool,
+}
+
+impl FinalizedBeaconState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 
 pub struct BeaconBridge {
     pub api: ConsensusApi,
@@ -79,7 +107,7 @@ impl BeaconBridge {
             .expect("Error parsing beacon test assets.");
 
         // test files have no slot number data, so report all gossiped content at height 0.
-        let slot_stats = Arc::new(Mutex::new(BeaconSlotStats::new(0)));
+        let slot_stats = Arc::new(StdMutex::new(BeaconSlotStats::new(0)));
         for asset in assets.0.into_iter() {
             gossip_beacon_content(
                 self.portal_client.clone(),
@@ -94,16 +122,10 @@ impl BeaconBridge {
 
     ///  Get and serve the latest beacon data.
     async fn launch_latest(&self) {
-        // Current sync committee period known by the bridge
-        let (mut current_period, mut finalized_block_root, mut finalized_slot) =
-            Self::serve_latest(
-                self.api.clone(),
-                self.portal_client.clone(),
-                0,
-                String::new(),
-                0,
-            )
-            .await;
+        let current_period = Arc::new(Mutex::new(0));
+        let finalized_block_root = Arc::new(Mutex::new(String::new()));
+        let finalized_slot = Arc::new(Mutex::new(0));
+        let finalized_state_root = Arc::new(Mutex::new(FinalizedBeaconState::new()));
 
         // Sleep until next update becomes available. This sets up the interval to update as soon as
         // the following slot becomes available.
@@ -120,19 +142,20 @@ impl BeaconBridge {
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
+            interval.tick().await;
+
             let consensus_api = self.api.clone();
             let portal_client = self.portal_client.clone();
 
-            (current_period, finalized_block_root, finalized_slot) = Self::serve_latest(
+            Self::serve_latest(
                 consensus_api,
                 portal_client,
-                current_period,
-                finalized_block_root,
-                finalized_slot,
+                current_period.clone(),
+                finalized_block_root.clone(),
+                finalized_slot.clone(),
+                finalized_state_root.clone(),
             )
             .await;
-
-            interval.tick().await;
         }
     }
 
@@ -142,18 +165,22 @@ impl BeaconBridge {
     async fn serve_latest(
         api: ConsensusApi,
         portal_client: HttpClient,
-        current_period: u64,
-        finalized_block_root: String,
-        finalized_slot: u64,
-    ) -> (u64, String, u64) {
+        current_period: Arc<Mutex<u64>>,
+        finalized_block_root: Arc<Mutex<String>>,
+        finalized_slot: Arc<Mutex<u64>>,
+        finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
+    ) {
         // Serve LightClientBootstrap data
         let api_clone = api.clone();
-        let slot_stats = Arc::new(Mutex::new(BeaconSlotStats::new(finalized_slot)));
+        let slot_stats = Arc::new(StdMutex::new(BeaconSlotStats::new(
+            *finalized_slot.lock().await,
+        )));
 
         let slot_stats_clone = slot_stats.clone();
         let portal_client_clone = portal_client.clone();
-        let bootstrap_result = tokio::spawn(async move {
-            Self::serve_light_client_bootstrap(
+
+        tokio::spawn(async move {
+            if let Err(err) = Self::serve_light_client_bootstrap(
                 api_clone,
                 portal_client_clone,
                 &finalized_block_root,
@@ -161,11 +188,9 @@ impl BeaconBridge {
             )
             .in_current_span()
             .await
-            .or_else(|err| {
-                warn!("Failed to serve light client bootstrap: {err}");
-                Ok::<String, ()>(finalized_block_root)
-            })
-            .expect("always return the original or new finalized block root")
+            {
+                warn!("Failed to serve LightClientBootstrap: {err}");
+            }
         });
 
         // Serve `LightClientUpdate` data
@@ -173,8 +198,8 @@ impl BeaconBridge {
 
         let slot_stats_clone = slot_stats.clone();
         let portal_client_clone = portal_client.clone();
-        let update_result = tokio::spawn(async move {
-            Self::serve_light_client_update(
+        tokio::spawn(async move {
+            if let Err(err) = Self::serve_light_client_update(
                 api_clone,
                 portal_client_clone,
                 current_period,
@@ -182,19 +207,17 @@ impl BeaconBridge {
             )
             .in_current_span()
             .await
-            .or_else(|err| {
-                warn!("Failed to serve light client update: {err}");
-                Ok::<u64, ()>(current_period)
-            })
-            .expect("always return the original or new period")
+            {
+                warn!("Failed to serve LightClientUpdate: {err}");
+            }
         });
 
         // Serve `LightClientFinalityUpdate` data
         let api_clone = api.clone();
         let slot_stats_clone = slot_stats.clone();
         let portal_client_clone = portal_client.clone();
-        let finalized_slot = tokio::spawn(async move {
-            Self::serve_light_client_finality_update(
+        tokio::spawn(async move {
+            if let Err(err) = Self::serve_light_client_finality_update(
                 api_clone,
                 portal_client_clone,
                 finalized_slot,
@@ -202,62 +225,67 @@ impl BeaconBridge {
             )
             .in_current_span()
             .await
-            .or_else(|err| {
-                warn!("Failed to serve light client finality update: {err}");
-                Ok::<u64, ()>(finalized_slot)
-            })
-            .expect("always return the original or new finalized slot")
+            {
+                warn!("Failed to serve LightClientFinalityUpdate: {err}");
+            }
         });
 
         // Serve `LightClientOptimisticUpdate` data
+        let api_clone = api.clone();
         let slot_stats_clone = slot_stats.clone();
         let portal_client_clone = portal_client.clone();
-        let optimistic_update = tokio::spawn(async move {
+        tokio::spawn(async move {
             if let Err(err) = Self::serve_light_client_optimistic_update(
-                api,
+                api_clone,
                 portal_client_clone,
                 slot_stats_clone,
             )
             .in_current_span()
             .await
             {
-                warn!("Failed to serve light client optimistic update: {err}");
+                warn!("Failed to serve LightClientOptimisticUpdate: {err}");
             }
         });
 
-        let new_period = update_result.await.expect("update task is never cancelled");
-        let new_finalized_block_root = bootstrap_result
+        // Serve `HistoricalSummariesWithProof` data
+        let slot_stats_clone = slot_stats.clone();
+        tokio::spawn(async move {
+            if let Err(err) = Self::serve_historical_summaries_with_proof(
+                api,
+                portal_client,
+                slot_stats_clone,
+                finalized_state_root.clone(),
+            )
+            .in_current_span()
             .await
-            .expect("bootstrap task is never cancelled");
-        let finalized_slot = finalized_slot
-            .await
-            .expect("finality update task is never cancelled");
-        optimistic_update
-            .await
-            .expect("optimistic update task is never cancelled");
+            {
+                finalized_state_root.lock().await.in_progress = false;
+                warn!("Failed to serve HistoricalSummariesWithProof: {err}");
+            }
+        });
+
         if let Ok(stats) = slot_stats.lock() {
             stats.report();
         } else {
             warn!("Error displaying beacon gossip stats. Unable to acquire lock.");
         };
-        (new_period, new_finalized_block_root, finalized_slot)
     }
 
     /// Serve `LightClientBootstrap` data
     async fn serve_light_client_bootstrap(
         api: ConsensusApi,
         portal_client: HttpClient,
-        finalized_block_root: &str,
-        slot_stats: Arc<Mutex<BeaconSlotStats>>,
-    ) -> anyhow::Result<String> {
+        finalized_block_root: &Arc<Mutex<String>>,
+        slot_stats: Arc<StdMutex<BeaconSlotStats>>,
+    ) -> anyhow::Result<()> {
         let response = api.get_beacon_block_root("finalized".to_owned()).await?;
         let response: Value = serde_json::from_str(&response)?;
         let latest_finalized_block_root: String =
             serde_json::from_value(response["data"]["root"].clone())?;
 
-        // If the latest finalized block root is the same, return as unchanged
-        if finalized_block_root.eq(&latest_finalized_block_root) {
-            return Ok(latest_finalized_block_root);
+        // If the latest finalized block root is the same, do not serve a new bootstrap
+        if latest_finalized_block_root.eq(&*finalized_block_root.lock().await) {
+            return Ok(());
         }
 
         // finalized block root is different, so serve a new bootstrap
@@ -278,29 +306,30 @@ impl BeaconBridge {
         });
 
         // Return the latest finalized block root if we successfully gossiped the latest bootstrap.
-        gossip_beacon_content(portal_client, content_key, content_value, slot_stats)
-            .await
-            .map(|_| latest_finalized_block_root)
+        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        *finalized_block_root.lock().await = latest_finalized_block_root;
+
+        Ok(())
     }
 
     async fn serve_light_client_update(
         api: ConsensusApi,
         portal_client: HttpClient,
-        current_period: u64,
-        slot_stats: Arc<Mutex<BeaconSlotStats>>,
-    ) -> anyhow::Result<u64> {
+        current_period: Arc<Mutex<u64>>,
+        slot_stats: Arc<StdMutex<BeaconSlotStats>>,
+    ) -> anyhow::Result<()> {
         let now = SystemTime::now();
         let expected_current_period =
             expected_current_slot(BEACON_GENESIS_TIME, now) / SLOTS_PER_PERIOD;
-        match expected_current_period.cmp(&current_period) {
+        match expected_current_period.cmp(&*current_period.lock().await) {
             Ordering::Equal => {
                 // We already gossiped the latest data from the current period, no need to serve it
                 // again.
-                return Ok(current_period);
+                return Ok(());
             }
             Ordering::Less => {
                 // if we panic here, it is a bug
-                bail!("System clock went backwards: Expected current period is less than known period");
+                bail!("Expected current period is less than known period");
             }
             Ordering::Greater => {
                 // Continue
@@ -320,7 +349,7 @@ impl BeaconBridge {
                 expected_current_period = expected_current_period,
                 actual_period = finalized_header_period
             );
-            return Ok(current_period);
+            return Ok(());
         }
 
         let fork_versioned_update = ForkVersionedLightClientUpdate {
@@ -343,14 +372,15 @@ impl BeaconBridge {
 
         // Update the current known period if we successfully gossiped the latest data.
         gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        *current_period.lock().await = expected_current_period;
 
-        Ok(expected_current_period)
+        Ok(())
     }
 
     async fn serve_light_client_optimistic_update(
         api: ConsensusApi,
         portal_client: HttpClient,
-        slot_stats: Arc<Mutex<BeaconSlotStats>>,
+        slot_stats: Arc<StdMutex<BeaconSlotStats>>,
     ) -> anyhow::Result<()> {
         let data = api.get_lc_optimistic_update().await?;
         let update: Value = serde_json::from_str(&data)?;
@@ -371,9 +401,9 @@ impl BeaconBridge {
     async fn serve_light_client_finality_update(
         api: ConsensusApi,
         portal_client: HttpClient,
-        finalized_slot: u64,
-        slot_stats: Arc<Mutex<BeaconSlotStats>>,
-    ) -> anyhow::Result<u64> {
+        finalized_slot: Arc<Mutex<u64>>,
+        slot_stats: Arc<StdMutex<BeaconSlotStats>>,
+    ) -> anyhow::Result<()> {
         let data = api.get_lc_finality_update().await?;
         let update: Value = serde_json::from_str(&data)?;
         let update: LightClientFinalityUpdateDeneb =
@@ -382,14 +412,13 @@ impl BeaconBridge {
             finalized_slot = %update.finalized_header.beacon.slot,
             "Generated LightClientFinalityUpdate",
         );
-
         let new_finalized_slot = update.finalized_header.beacon.slot;
 
-        match new_finalized_slot.cmp(&finalized_slot) {
+        match new_finalized_slot.cmp(&*finalized_slot.lock().await) {
             Ordering::Equal => {
                 // We already gossiped the latest finality updated with the same finalized slot, no
                 // need to serve it again.
-                return Ok(finalized_slot);
+                return Ok(());
             }
             Ordering::Less => {
                 // if we panic here, it is a bug
@@ -406,7 +435,75 @@ impl BeaconBridge {
         let content_value = BeaconContentValue::LightClientFinalityUpdate(update.into());
 
         gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        *finalized_slot.lock().await = new_finalized_slot;
 
-        Ok(new_finalized_slot)
+        Ok(())
+    }
+
+    async fn serve_historical_summaries_with_proof(
+        api: ConsensusApi,
+        portal_client: HttpClient,
+        slot_stats: Arc<StdMutex<BeaconSlotStats>>,
+        finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
+    ) -> anyhow::Result<()> {
+        if finalized_state_root.lock().await.in_progress {
+            // If the beacon state download is in progress, do not serve a new historical summary.
+            info!("Beacon state download is in progress, skipping HistoricalSummariesWithProof generation.");
+            return Ok(());
+        }
+
+        let finalized_state_root_data = api.get_beacon_state_finalized_root().await?;
+        let finalized_state_root_data: Value = serde_json::from_str(&finalized_state_root_data)?;
+        let latest_finalized_state_root: String =
+            serde_json::from_value(finalized_state_root_data["data"]["root"].clone())?;
+
+        if latest_finalized_state_root.eq(&finalized_state_root.lock().await.state_root) {
+            // We already gossiped the latest historical summaries from the current finalized root,
+            // no need to serve it again.
+            info!(
+                epoch = %latest_finalized_state_root,
+                "No new HistoricalSummariesWithProof to serve",
+            );
+            return Ok(());
+        }
+
+        // Serve the latest historical summaries from the new finalized beacon state
+        info!("Downloading beacon state for HistoricalSummariesWithProof generation...");
+        finalized_state_root.lock().await.in_progress = true;
+        let beacon_state = api.get_beacon_state().await?;
+        let beacon_state: Value = serde_json::from_str(&beacon_state)?;
+        let beacon_state: BeaconStateDeneb = serde_json::from_value(beacon_state["data"].clone())?;
+        let state_epoch = beacon_state.slot / SLOTS_PER_EPOCH;
+        let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
+        // Ensure the historical summaries proof is of the correct length
+        ensure!(
+            historical_summaries_proof.len() == HISTORICAL_SUMMARIES_PROOF_LENGTH,
+            "Historical summaries proof length is not 5"
+        );
+        let historical_summaries = beacon_state.historical_summaries;
+        let historical_summaries_with_proof = ForkVersionedHistoricalSummariesWithProof {
+            fork_name: ForkName::Deneb,
+            historical_summaries_with_proof: HistoricalSummariesWithProof {
+                epoch: state_epoch,
+                historical_summaries,
+                proof: HistoricalSummariesStateProof::from(historical_summaries_proof),
+            },
+        };
+        info!(
+            epoch = %state_epoch,
+            "Generated HistoricalSummariesWithProof",
+        );
+        let content_key =
+            BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
+                epoch: state_epoch,
+            });
+        let content_value =
+            BeaconContentValue::HistoricalSummariesWithProof(historical_summaries_with_proof);
+
+        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        finalized_state_root.lock().await.state_root = latest_finalized_state_root;
+        finalized_state_root.lock().await.in_progress = false;
+
+        Ok(())
     }
 }

@@ -51,6 +51,12 @@ impl StatsReporter<BeaconContentKey> for BeaconSlotStats {
             info!("GossipReport: slot#{slot_number} - optimistic_update - {stats}");
             debug!("GossipReport: slot#{slot_number} - optimistic_update - {stats:?}");
         }
+        if let Some(stats) = &self.historical_summaries_with_proof {
+            info!("GossipReport: slot#{slot_number} - historical_summaries_with_proof - {stats}");
+            debug!(
+                "GossipReport: slot#{slot_number} - historical_summaries_with_proof - {stats:?}"
+            );
+        }
     }
 
     fn update(&mut self, content_key: BeaconContentKey, results: ContentStats) {

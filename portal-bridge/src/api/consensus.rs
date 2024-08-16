@@ -30,6 +30,18 @@ impl ConsensusApi {
         Ok(Self { primary, fallback })
     }
 
+    /// Requests the `BeaconState` structure corresponding to the current head of the beacon chain.
+    pub async fn get_beacon_state(&self) -> anyhow::Result<String> {
+        let endpoint = "/eth/v2/debug/beacon/states/finalized".to_string();
+        self.request(endpoint).await
+    }
+
+    /// Request the finalized root of the beacon state.
+    pub async fn get_beacon_state_finalized_root(&self) -> anyhow::Result<String> {
+        let endpoint = "/eth/v1/beacon/states/finalized/root".to_string();
+        self.request(endpoint).await
+    }
+
     /// Requests the `LightClientBootstrap` structure corresponding to a given post-Altair beacon
     /// block root.
     pub async fn get_lc_bootstrap<S: AsRef<str> + Display>(
