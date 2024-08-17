@@ -1,4 +1,6 @@
-use alloy_primitives::{Bytes, B256};
+use std::collections::VecDeque;
+
+use alloy_primitives::B256;
 use alloy_rlp::EMPTY_STRING_CODE;
 use anyhow::ensure;
 use eth_trie::{decode_node, node::Node};
@@ -139,26 +141,21 @@ impl TrieWalker {
     }
 
     pub fn get_proof(&self, node_hash: B256) -> TrieProof {
-        // Build path and proof from the node to the root and reverse it at the end.
-        let mut reverse_path = vec![];
-        let mut reverse_proof = vec![];
+        let mut path_parts = VecDeque::new();
+        let mut proof = VecDeque::new();
         let mut next_node: Option<B256> = Some(node_hash);
         while let Some(current_node) = next_node {
             let Some(node) = self.nodes.get(&current_node) else {
                 panic!("Node not found in trie walker nodes. This should never happen.");
             };
-            for nibble in node.path_nibbles.iter().rev() {
-                reverse_path.push(*nibble);
-            }
-            reverse_proof.push(Bytes(node.encoded_node.clone().into()));
+            path_parts.push_front(node.path_nibbles.clone());
+            proof.push_front(node.encoded_node.clone().into());
             next_node = node.parent_hash;
         }
 
-        reverse_path.reverse();
-        reverse_proof.reverse();
         TrieProof {
-            path: reverse_path,
-            proof: reverse_proof,
+            path: Vec::from(path_parts).concat(),
+            proof: Vec::from(proof),
         }
     }
 }
