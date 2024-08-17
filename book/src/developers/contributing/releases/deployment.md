@@ -53,21 +53,25 @@ This step directs Ansible to use the current master version of trin. Read [about
 - Activate the virtual environment in the cluster repo: `. venv/bin/activate`
 - Make sure you've pulled the latest master branch of the deployment scripts, to include any recent changes: `git pull origin master`
 - Go into the Portal section of Ansible: `cd portal-network/trin/ansible/`
-- Run the deployment: `ansible-playbook playbook.yml --tags trin`
+- Run the deployment:
+    - Trin nodes:
+        - `ansible-playbook playbook.yml --tags trin`
+    - Testnet nodes (check with the team if there is a reason not to update them):
+        - `ansible-playbook playbook.yml --tags testnet`
 - Run Glados deployment: updates glados + portal client (currently configured as trin, but this could change)
-  - `cd ../../glados/ansible`
-  - `ansible-playbook playbook.yml --tags glados`
+    - `cd ../../glados/ansible`
+    - `ansible-playbook playbook.yml --tags glados`
 - Wait for completion
 - Launch a fresh trin node, check it against the bootnodes
 - ssh into random nodes, one of each kind, to check the logs:
-	- [find an IP address](https://github.com/ethereum/cluster/blob/master/portal-network/trin/ansible/inventories/dev/inventory.yml)
-	- `ssh ubuntu@$IP_ADDR`
-	- node types
-		- bootnode: `trin-*-1`
-		- bridge node: `trin-*-2`
-		- backfill node: `trin-*-3`
-		- regular nodes: all remaining ips
-  - check logs, ignoring DEBUG: `sudo docker logs trin -n 1000 | grep -v DEBUG`
+    - [find an IP address](https://github.com/ethereum/cluster/blob/master/portal-network/trin/ansible/inventories/dev/inventory.yml)
+    - node types
+        - bootnode: `trin-*-1`
+        - bridge node: `trin-*-2`
+        - backfill node: `trin-*-3`
+        - regular nodes: all remaining ips
+    - `ssh ubuntu@$IP_ADDR`
+    - check logs, ignoring DEBUG: `sudo docker logs trin -n 1000 | grep -v DEBUG`
 - Check monitoring tools to see if network health is the same or better as before deployment. Glados might lag for 10-15 minutes, so keep checking back.
 
 ### Communicate
@@ -82,8 +86,7 @@ Immediately after a release is the best time to improve these docs:
 - add a warning about a common mistake
 - etc.
 
-For more about generally working with mdbook see the guide to [Contribute to
-the book](/developers/contributing/book.md).
+For more about generally working with mdbook see the guide to [Contribute to the book](/developers/contributing/book.md).
 
 ### Celebrate
 
