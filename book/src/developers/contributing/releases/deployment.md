@@ -56,8 +56,8 @@ This step directs Ansible to use the current master version of trin. Read [about
 - Run the deployment:
     - Trin nodes:
         - `ansible-playbook playbook.yml --tags trin`
-    - Testnet nodes (check with the team if there is a reason not to update them):
-        - `ansible-playbook playbook.yml --tags testnet`
+    - State network nodes (check with the team if there is a reason not to update them):
+        - `ansible-playbook playbook.yml --tags state-network`
 - Run Glados deployment: updates glados + portal client (currently configured as trin, but this could change)
     - `cd ../../glados/ansible`
     - `ansible-playbook playbook.yml --tags glados`
