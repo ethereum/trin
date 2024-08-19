@@ -1,10 +1,10 @@
+pub mod config;
 pub mod error;
 pub mod sql;
 pub mod test_utils;
 pub mod utils;
 pub mod versioned;
 
-use crate::utils::setup_sql;
 use alloy_primitives::B256;
 use discv5::enr::NodeId;
 use error::ContentStoreError;
@@ -12,10 +12,10 @@ use ethportal_api::types::{
     content_key::overlay::{IdentityContentKey, OverlayContentKey},
     distance::{Distance, Metric, XorMetric},
 };
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::types::{FromSql, FromSqlError, ValueRef};
-use std::{ops::Deref, path::PathBuf, str::FromStr};
+use std::{ops::Deref, str::FromStr};
+
+pub use config::{PortalStorageConfig, PortalStorageConfigFactory};
 
 pub const DATABASE_NAME: &str = "trin.sqlite";
 pub const BYTES_IN_MB_U64: u64 = 1000 * 1000;
@@ -150,33 +150,6 @@ impl ContentStore for MemoryContentStore {
 
     fn radius(&self) -> Distance {
         self.radius
-    }
-}
-
-/// Struct for configuring a `PortalStorage` instance.
-#[derive(Clone)]
-pub struct PortalStorageConfig {
-    pub storage_capacity_mb: u64,
-    pub node_id: NodeId,
-    pub node_data_dir: PathBuf,
-    pub distance_fn: DistanceFunction,
-    pub sql_connection_pool: Pool<SqliteConnectionManager>,
-}
-
-impl PortalStorageConfig {
-    pub fn new(
-        storage_capacity_mb: u64,
-        node_data_dir: PathBuf,
-        node_id: NodeId,
-    ) -> Result<Self, ContentStoreError> {
-        let sql_connection_pool = setup_sql(&node_data_dir)?;
-        Ok(Self {
-            storage_capacity_mb,
-            node_id,
-            node_data_dir,
-            distance_fn: DistanceFunction::Xor,
-            sql_connection_pool,
-        })
     }
 }
 

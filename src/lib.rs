@@ -22,7 +22,7 @@ use tree_hash::TreeHash;
 use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
-use trin_storage::PortalStorageConfig;
+use trin_storage::PortalStorageConfigFactory;
 use trin_utils::version::get_trin_version;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
@@ -93,10 +93,11 @@ pub async fn run_trin(
     let utp_socket = UtpSocket::with_socket(discv5_utp_socket);
     let utp_socket = Arc::new(utp_socket);
 
-    let storage_config = PortalStorageConfig::new(
-        trin_config.mb.into(),
-        node_data_dir,
+    let storage_config_factory = PortalStorageConfigFactory::new(
+        trin_config.mb as u64,
+        &trin_config.portal_subnetworks,
         discovery.local_enr().node_id(),
+        node_data_dir,
     )?;
 
     // Initialize state sub-network service and event handlers, if selected
@@ -109,7 +110,7 @@ pub async fn run_trin(
                 &discovery,
                 utp_socket.clone(),
                 portalnet_config.clone(),
-                storage_config.clone(),
+                storage_config_factory.create(STATE_NETWORK),
                 header_oracle.clone(),
             )
             .await?
@@ -132,7 +133,7 @@ pub async fn run_trin(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config.clone(),
+            storage_config_factory.create(BEACON_NETWORK),
             header_oracle.clone(),
         )
         .await?
@@ -155,7 +156,7 @@ pub async fn run_trin(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config.clone(),
+            storage_config_factory.create(HISTORY_NETWORK),
             header_oracle.clone(),
         )
         .await?
