@@ -48,7 +48,7 @@ This step directs Ansible to use the current master version of trin. Read [about
 
 ### Run ansible
 - Check monitoring tools to understand network health, and compare against post-deployment, eg~
-    - [Glados](http://glados.ethportal.net/content/)
+    - [Glados](https://glados.ethdevops.io/)
     - [Grafana](https://trin-bench.ethdevops.io/d/e23mBdEVk/trin-metrics?orgId=1)
 - Activate the virtual environment in the cluster repo: `. venv/bin/activate`
 - Make sure you've pulled the latest master branch of the deployment scripts, to include any recent changes: `git pull origin master`

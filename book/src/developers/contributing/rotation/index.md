@@ -39,7 +39,7 @@ Every day, go down the daily and items for that day of the week. If you think of
 
 - **Daily**
   - Read Discord, especially for help requests or signs of network issues
-  - Monitor [Glados](http://glados.ethportal.net/) changes, and correlate with releases (trin, glados, other clients?)
+  - Monitor [Glados](https://glados.ethdevops.io/) changes, and correlate with releases (trin, glados, other clients?)
   - Monitor [portal-hive](https://portal-hive.ethdevops.io/) changes
     - Check the dates, did all test suites run on the previous cycle?
     - For each suite, did the expected number of tests run?
