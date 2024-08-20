@@ -3,10 +3,12 @@
 
 pub mod api;
 pub mod bridge;
+pub mod census;
 pub mod cli;
 pub mod client_handles;
 pub mod constants;
 pub mod gossip;
+pub mod gossip_engine;
 pub mod stats;
 pub mod types;
 pub mod utils;

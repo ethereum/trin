@@ -1,23 +1,23 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
-use e2store::utils::get_shuffled_era1_files;
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
-use ethportal_api::{
-    jsonrpsee::http_client::HttpClient,
-    types::state_trie::account_state::AccountState as AccountStateInfo, StateContentKey,
-    StateContentValue,
-};
 use revm::DatabaseRef;
 use revm_primitives::{keccak256, Bytecode, SpecId, B256};
 use surf::{Client, Config};
-use tokio::{
-    sync::{OwnedSemaphorePermit, Semaphore},
-    task::JoinHandle,
-    time::timeout,
+use tokio::sync::mpsc::UnboundedSender;
+use tracing::{error, info};
+
+use crate::{
+    gossip_engine::GossipRequest,
+    types::mode::{BridgeMode, ModeType},
 };
-use tracing::{debug, error, info, warn};
+use e2store::utils::get_shuffled_era1_files;
+use ethportal_api::{
+    types::state_trie::account_state::AccountState as AccountStateInfo, StateContentKey,
+    StateContentValue,
+};
 use trin_execution::{
     config::StateConfig,
     content::{
@@ -35,30 +35,22 @@ use trin_execution::{
 use trin_metrics::bridge::BridgeMetricsReporter;
 use trin_validation::oracle::HeaderOracle;
 
-use crate::{
-    bridge::history::SERVE_BLOCK_TIMEOUT,
-    gossip::gossip_state_content,
-    types::mode::{BridgeMode, ModeType},
-};
-
 pub struct StateBridge {
     pub mode: BridgeMode,
-    pub portal_client: HttpClient,
+    pub gossip_tx: UnboundedSender<GossipRequest>,
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
     pub era1_files: Vec<String>,
     pub http_client: Client,
     pub metrics: BridgeMetricsReporter,
-    pub gossip_limit_semaphore: Arc<Semaphore>,
 }
 
 impl StateBridge {
     pub async fn new(
         mode: BridgeMode,
-        portal_client: HttpClient,
+        gossip_tx: UnboundedSender<GossipRequest>,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
-        gossip_limit: usize,
     ) -> anyhow::Result<Self> {
         let http_client: Client = Config::new()
             .add_header("Content-Type", "application/xml")
@@ -67,18 +59,14 @@ impl StateBridge {
         let era1_files = get_shuffled_era1_files(&http_client).await?;
         let metrics = BridgeMetricsReporter::new("state".to_string(), &format!("{mode:?}"));
 
-        // We are using a semaphore to limit the amount of active gossip transfers to make sure
-        // we don't overwhelm the trin client
-        let gossip_limit_semaphore = Arc::new(Semaphore::new(gossip_limit));
         Ok(Self {
             mode,
-            portal_client,
+            gossip_tx,
             header_oracle,
             epoch_acc_path,
             era1_files,
             http_client,
             metrics,
-            gossip_limit_semaphore,
         })
     }
 
@@ -203,22 +191,9 @@ impl StateBridge {
         account_proof: &TrieProof,
         block_hash: B256,
     ) -> anyhow::Result<()> {
-        let permit = self
-            .gossip_limit_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore");
         let content_key = create_account_content_key(account_proof)?;
         let content_value = create_account_content_value(block_hash, account_proof)?;
-        Self::spawn_serve_state_proof(
-            self.portal_client.clone(),
-            content_key,
-            content_value,
-            permit,
-            self.metrics.clone(),
-        );
-        Ok(())
+        Self::serve_state_content(self.gossip_tx.clone(), content_key, content_value)
     }
 
     async fn gossip_contract_bytecode(
@@ -229,22 +204,9 @@ impl StateBridge {
         code_hash: B256,
         code: Bytecode,
     ) -> anyhow::Result<()> {
-        let permit = self
-            .gossip_limit_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore");
         let code_content_key = create_contract_content_key(address_hash, code_hash)?;
         let code_content_value = create_contract_content_value(block_hash, account_proof, code)?;
-        Self::spawn_serve_state_proof(
-            self.portal_client.clone(),
-            code_content_key,
-            code_content_value,
-            permit,
-            self.metrics.clone(),
-        );
-        Ok(())
+        Self::serve_state_content(self.gossip_tx.clone(), code_content_key, code_content_value)
     }
 
     async fn gossip_storage(
@@ -254,73 +216,25 @@ impl StateBridge {
         address_hash: B256,
         block_hash: B256,
     ) -> anyhow::Result<()> {
-        let permit = self
-            .gossip_limit_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore");
         let storage_content_key = create_storage_content_key(storage_proof, address_hash)?;
         let storage_content_value =
             create_storage_content_value(block_hash, account_proof, storage_proof)?;
-        Self::spawn_serve_state_proof(
-            self.portal_client.clone(),
+        Self::serve_state_content(
+            self.gossip_tx.clone(),
             storage_content_key,
             storage_content_value,
-            permit,
-            self.metrics.clone(),
-        );
-        Ok(())
+        )
     }
 
-    fn spawn_serve_state_proof(
-        portal_client: HttpClient,
+    fn serve_state_content(
+        gossip_tx: UnboundedSender<GossipRequest>,
         content_key: StateContentKey,
         content_value: StateContentValue,
-        permit: OwnedSemaphorePermit,
-        metrics: BridgeMetricsReporter,
-    ) -> JoinHandle<()> {
-        info!("Spawning serve_state_proof for content key: {content_key}");
-        tokio::spawn(async move {
-            let timer = metrics.start_process_timer("spawn_serve_state_proof");
-            match timeout(
-                SERVE_BLOCK_TIMEOUT,
-                Self::serve_state_proof(
-                    portal_client,
-                    content_key.clone(),
-                    content_value,
-                    metrics.clone()
-                )).await
-                {
-                Ok(result) => match result {
-                    Ok(_) => {
-                        debug!("Done serving state proof: {content_key}");
-                    }
-                    Err(msg) => warn!("Error serving state proof: {content_key}: {msg:?}"),
-                },
-                Err(_) => error!("serve_state_proof() timed out on state proof {content_key}: this is an indication a bug is present")
-            };
-            drop(permit);
-            metrics.stop_process_timer(timer);
-        })
-    }
-
-    async fn serve_state_proof(
-        portal_client: HttpClient,
-        content_key: StateContentKey,
-        content_value: StateContentValue,
-        metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
-        let timer = metrics.start_process_timer("gossip_state_content");
-        match gossip_state_content(portal_client, content_key.clone(), content_value).await {
-            Ok(_) => {
-                debug!("Successfully gossiped state proof: {content_key}")
-            }
-            Err(msg) => {
-                warn!("Error gossiping state proof: {content_key} {msg}",);
-            }
-        }
-        metrics.stop_process_timer(timer);
-        Ok(())
+        info!("Serving state content for content key: {content_key}");
+        let gossip_request = GossipRequest::from((content_key, content_value));
+        gossip_tx
+            .send(gossip_request)
+            .map_err(|e| anyhow!("unable to send state content gossip request: {e}"))
     }
 }

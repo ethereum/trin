@@ -1,22 +1,18 @@
-use std::sync::Mutex as StdMutex;
+use std::{cmp::Ordering, path::PathBuf, sync::Arc, time::SystemTime};
 
-use anyhow::{bail, ensure};
-use jsonrpsee::http_client::HttpClient;
+use anyhow::{anyhow, bail, ensure};
 use serde_json::Value;
 use ssz_types::VariableList;
-use std::{cmp::Ordering, path::PathBuf, sync::Arc, time::SystemTime};
 use tokio::{
-    sync::Mutex,
+    sync::{mpsc::UnboundedSender, Mutex},
     time::{interval, sleep, Duration, MissedTickBehavior},
 };
 use tracing::{info, warn, Instrument};
-use trin_metrics::bridge::BridgeMetricsReporter;
 
 use crate::{
     api::consensus::ConsensusApi,
     constants::BEACON_GENESIS_TIME,
-    gossip::gossip_beacon_content,
-    stats::{BeaconSlotStats, StatsReporter},
+    gossip_engine::GossipRequest,
     types::mode::BridgeMode,
     utils::{
         duration_until_next_update, expected_current_slot, read_test_assets_from_file, TestAssets,
@@ -47,6 +43,7 @@ use ethportal_api::{
     utils::bytes::hex_decode,
     BeaconContentKey, BeaconContentValue, LightClientBootstrapKey, LightClientUpdatesByRangeKey,
 };
+use trin_metrics::bridge::BridgeMetricsReporter;
 
 /// The number of slots in an epoch.
 const SLOTS_PER_EPOCH: u64 = 32;
@@ -73,17 +70,21 @@ impl FinalizedBeaconState {
 pub struct BeaconBridge {
     pub api: ConsensusApi,
     mode: BridgeMode,
-    portal_client: HttpClient,
+    gossip_tx: UnboundedSender<GossipRequest>,
     pub metrics: BridgeMetricsReporter,
 }
 
 impl BeaconBridge {
-    pub fn new(api: ConsensusApi, mode: BridgeMode, portal_client: HttpClient) -> Self {
+    pub fn new(
+        api: ConsensusApi,
+        mode: BridgeMode,
+        gossip_tx: UnboundedSender<GossipRequest>,
+    ) -> Self {
         let metrics = BridgeMetricsReporter::new("beacon".to_string(), &format!("{mode:?}"));
         Self {
             api,
             mode,
-            portal_client,
+            gossip_tx,
             metrics,
         }
     }
@@ -107,16 +108,14 @@ impl BeaconBridge {
             .expect("Error parsing beacon test assets.");
 
         // test files have no slot number data, so report all gossiped content at height 0.
-        let slot_stats = Arc::new(StdMutex::new(BeaconSlotStats::new(0)));
         for asset in assets.0.into_iter() {
-            gossip_beacon_content(
-                self.portal_client.clone(),
+            let gossip_request = GossipRequest::from((
                 asset.content_key.clone(),
                 asset.content_value().expect("Error getting content value"),
-                slot_stats.clone(),
-            )
-            .await
-            .expect("Error serving beacon data in test mode.");
+            ));
+            self.gossip_tx
+                .send(gossip_request)
+                .expect("Error sending beacon gossip request in test mode.");
         }
     }
 
@@ -145,11 +144,9 @@ impl BeaconBridge {
             interval.tick().await;
 
             let consensus_api = self.api.clone();
-            let portal_client = self.portal_client.clone();
-
             Self::serve_latest(
                 consensus_api,
-                portal_client,
+                self.gossip_tx.clone(),
                 current_period.clone(),
                 finalized_block_root.clone(),
                 finalized_slot.clone(),
@@ -164,7 +161,7 @@ impl BeaconBridge {
     /// Returns the new current period and finalized block root
     async fn serve_latest(
         api: ConsensusApi,
-        portal_client: HttpClient,
+        gossip_tx: UnboundedSender<GossipRequest>,
         current_period: Arc<Mutex<u64>>,
         finalized_block_root: Arc<Mutex<String>>,
         finalized_slot: Arc<Mutex<u64>>,
@@ -172,19 +169,12 @@ impl BeaconBridge {
     ) {
         // Serve LightClientBootstrap data
         let api_clone = api.clone();
-        let slot_stats = Arc::new(StdMutex::new(BeaconSlotStats::new(
-            *finalized_slot.lock().await,
-        )));
-
-        let slot_stats_clone = slot_stats.clone();
-        let portal_client_clone = portal_client.clone();
-
+        let gossip_tx_clone = gossip_tx.clone();
         tokio::spawn(async move {
             if let Err(err) = Self::serve_light_client_bootstrap(
                 api_clone,
-                portal_client_clone,
+                gossip_tx_clone,
                 &finalized_block_root,
-                slot_stats_clone,
             )
             .in_current_span()
             .await
@@ -195,18 +185,12 @@ impl BeaconBridge {
 
         // Serve `LightClientUpdate` data
         let api_clone = api.clone();
-
-        let slot_stats_clone = slot_stats.clone();
-        let portal_client_clone = portal_client.clone();
+        let gossip_tx_clone = gossip_tx.clone();
         tokio::spawn(async move {
-            if let Err(err) = Self::serve_light_client_update(
-                api_clone,
-                portal_client_clone,
-                current_period,
-                slot_stats_clone,
-            )
-            .in_current_span()
-            .await
+            if let Err(err) =
+                Self::serve_light_client_update(api_clone, gossip_tx_clone, current_period)
+                    .in_current_span()
+                    .await
             {
                 warn!("Failed to serve LightClientUpdate: {err}");
             }
@@ -214,17 +198,12 @@ impl BeaconBridge {
 
         // Serve `LightClientFinalityUpdate` data
         let api_clone = api.clone();
-        let slot_stats_clone = slot_stats.clone();
-        let portal_client_clone = portal_client.clone();
+        let gossip_tx_clone = gossip_tx.clone();
         tokio::spawn(async move {
-            if let Err(err) = Self::serve_light_client_finality_update(
-                api_clone,
-                portal_client_clone,
-                finalized_slot,
-                slot_stats_clone,
-            )
-            .in_current_span()
-            .await
+            if let Err(err) =
+                Self::serve_light_client_finality_update(api_clone, gossip_tx_clone, finalized_slot)
+                    .in_current_span()
+                    .await
             {
                 warn!("Failed to serve LightClientFinalityUpdate: {err}");
             }
@@ -232,28 +211,22 @@ impl BeaconBridge {
 
         // Serve `LightClientOptimisticUpdate` data
         let api_clone = api.clone();
-        let slot_stats_clone = slot_stats.clone();
-        let portal_client_clone = portal_client.clone();
+        let gossip_tx_clone = gossip_tx.clone();
         tokio::spawn(async move {
-            if let Err(err) = Self::serve_light_client_optimistic_update(
-                api_clone,
-                portal_client_clone,
-                slot_stats_clone,
-            )
-            .in_current_span()
-            .await
+            if let Err(err) = Self::serve_light_client_optimistic_update(api_clone, gossip_tx_clone)
+                .in_current_span()
+                .await
             {
                 warn!("Failed to serve LightClientOptimisticUpdate: {err}");
             }
         });
 
         // Serve `HistoricalSummariesWithProof` data
-        let slot_stats_clone = slot_stats.clone();
+        let gossip_tx_clone = gossip_tx.clone();
         tokio::spawn(async move {
             if let Err(err) = Self::serve_historical_summaries_with_proof(
                 api,
-                portal_client,
-                slot_stats_clone,
+                gossip_tx_clone,
                 finalized_state_root.clone(),
             )
             .in_current_span()
@@ -263,20 +236,13 @@ impl BeaconBridge {
                 warn!("Failed to serve HistoricalSummariesWithProof: {err}");
             }
         });
-
-        if let Ok(stats) = slot_stats.lock() {
-            stats.report();
-        } else {
-            warn!("Error displaying beacon gossip stats. Unable to acquire lock.");
-        };
     }
 
     /// Serve `LightClientBootstrap` data
     async fn serve_light_client_bootstrap(
         api: ConsensusApi,
-        portal_client: HttpClient,
+        gossip_tx: UnboundedSender<GossipRequest>,
         finalized_block_root: &Arc<Mutex<String>>,
-        slot_stats: Arc<StdMutex<BeaconSlotStats>>,
     ) -> anyhow::Result<()> {
         let response = api.get_beacon_block_root("finalized".to_owned()).await?;
         let response: Value = serde_json::from_str(&response)?;
@@ -306,17 +272,19 @@ impl BeaconBridge {
         });
 
         // Return the latest finalized block root if we successfully gossiped the latest bootstrap.
-        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        // @ogi is this a problem? if the gossip fails, we still update the finalized block root
+        let gossip_request = GossipRequest::from((content_key, content_value));
+        if let Err(err) = gossip_tx.send(gossip_request) {
+            bail!("Error sending beacon light client bootstrap gossip request: {err}");
+        }
         *finalized_block_root.lock().await = latest_finalized_block_root;
-
         Ok(())
     }
 
     async fn serve_light_client_update(
         api: ConsensusApi,
-        portal_client: HttpClient,
+        gossip_tx: UnboundedSender<GossipRequest>,
         current_period: Arc<Mutex<u64>>,
-        slot_stats: Arc<StdMutex<BeaconSlotStats>>,
     ) -> anyhow::Result<()> {
         let now = SystemTime::now();
         let expected_current_period =
@@ -371,16 +339,18 @@ impl BeaconBridge {
         );
 
         // Update the current known period if we successfully gossiped the latest data.
-        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        // @ogi is this a problem? if the gossip fails, we still update the current period
+        let gossip_request = GossipRequest::from((content_key, content_value));
+        if let Err(err) = gossip_tx.send(gossip_request) {
+            bail!("Error sending beacon light client update gossip request: {err}");
+        }
         *current_period.lock().await = expected_current_period;
-
         Ok(())
     }
 
     async fn serve_light_client_optimistic_update(
         api: ConsensusApi,
-        portal_client: HttpClient,
-        slot_stats: Arc<StdMutex<BeaconSlotStats>>,
+        gossip_tx: UnboundedSender<GossipRequest>,
     ) -> anyhow::Result<()> {
         let data = api.get_lc_optimistic_update().await?;
         let update: Value = serde_json::from_str(&data)?;
@@ -395,14 +365,16 @@ impl BeaconBridge {
             LightClientOptimisticUpdateKey::new(update.signature_slot),
         );
         let content_value = BeaconContentValue::LightClientOptimisticUpdate(update.into());
-        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await
+        let gossip_request = GossipRequest::from((content_key, content_value));
+        gossip_tx.send(gossip_request).map_err(|e| {
+            anyhow!("Error sending beacon light client optimistic update gossip request: {e}")
+        })
     }
 
     async fn serve_light_client_finality_update(
         api: ConsensusApi,
-        portal_client: HttpClient,
+        gossip_tx: UnboundedSender<GossipRequest>,
         finalized_slot: Arc<Mutex<u64>>,
-        slot_stats: Arc<StdMutex<BeaconSlotStats>>,
     ) -> anyhow::Result<()> {
         let data = api.get_lc_finality_update().await?;
         let update: Value = serde_json::from_str(&data)?;
@@ -434,16 +406,17 @@ impl BeaconBridge {
         );
         let content_value = BeaconContentValue::LightClientFinalityUpdate(update.into());
 
-        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        let gossip_request = GossipRequest::from((content_key, content_value));
+        if let Err(err) = gossip_tx.send(gossip_request) {
+            bail!("Error sending beacon light client finality update gossip request: {err}");
+        }
         *finalized_slot.lock().await = new_finalized_slot;
-
         Ok(())
     }
 
     async fn serve_historical_summaries_with_proof(
         api: ConsensusApi,
-        portal_client: HttpClient,
-        slot_stats: Arc<StdMutex<BeaconSlotStats>>,
+        gossip_tx: UnboundedSender<GossipRequest>,
         finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
     ) -> anyhow::Result<()> {
         if finalized_state_root.lock().await.in_progress {
@@ -500,10 +473,12 @@ impl BeaconBridge {
         let content_value =
             BeaconContentValue::HistoricalSummariesWithProof(historical_summaries_with_proof);
 
-        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        let gossip_request = GossipRequest::from((content_key, content_value));
+        if let Err(err) = gossip_tx.send(gossip_request) {
+            bail!("Error sending beacon historical summaries with proof gossip request: {err}");
+        }
         finalized_state_root.lock().await.state_root = latest_finalized_state_root;
         finalized_state_root.lock().await.in_progress = false;
-
         Ok(())
     }
 }

@@ -9,17 +9,20 @@ use ethportal_api::{
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, history::HistoryBridge},
+    cli::GossipMode,
     constants::DEFAULT_GOSSIP_LIMIT,
-    types::mode::BridgeMode,
+    gossip_engine::run_gossip_engine,
+    types::{mode::BridgeMode, network::NetworkKind},
 };
 use serde::Deserialize;
 use serde_json::Value;
-use tokio::time::{sleep, Duration};
-use trin_validation::oracle::HeaderOracle;
+use tokio::{
+    sync::mpsc,
+    time::{sleep, Duration},
+};
 use url::Url;
 
 pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient) {
-    let header_oracle = HeaderOracle::default();
     let epoch_acc_path = "validation_assets/epoch_acc.bin".into();
     let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());
     // url doesn't matter, we're not making any requests
@@ -29,14 +32,16 @@ pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient
         .unwrap();
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
-    let bridge = HistoryBridge::new(
-        mode,
-        execution_api,
+    let (gossip_tx, gossip_rx) = mpsc::unbounded_channel();
+    let _gossip_engine = run_gossip_engine(
+        gossip_rx,
         portal_client.clone(),
-        header_oracle,
-        epoch_acc_path,
+        vec![NetworkKind::History],
+        GossipMode::Gossip,
         DEFAULT_GOSSIP_LIMIT,
-    );
+    )
+    .await;
+    let bridge = HistoryBridge::new(mode, execution_api, gossip_tx, epoch_acc_path);
     bridge.launch().await;
     let (content_key, content_value) = fixture_header_with_proof_1000010();
     // Check if the stored content value in bootnode's DB matches the offered
@@ -57,7 +62,16 @@ pub async fn test_beacon_bridge(peertest: &Peertest, portal_client: &HttpClient)
     let consensus_api = ConsensusApi::new(client_url.clone(), client_url)
         .await
         .unwrap();
-    let bridge = BeaconBridge::new(consensus_api, mode, portal_client.clone());
+    let (gossip_tx, gossip_rx) = mpsc::unbounded_channel();
+    let _gossip_engine = run_gossip_engine(
+        gossip_rx,
+        portal_client.clone(),
+        vec![NetworkKind::Beacon],
+        GossipMode::Gossip,
+        DEFAULT_GOSSIP_LIMIT,
+    )
+    .await;
+    let bridge = BeaconBridge::new(consensus_api, mode, gossip_tx);
     bridge.launch().await;
 
     let value = std::fs::read_to_string("./test_assets/portalnet/beacon_bridge_data.yaml")

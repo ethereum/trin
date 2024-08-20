@@ -1,10 +1,7 @@
-use std::sync::{Arc, Mutex};
-
 use jsonrpsee::http_client::HttpClient;
 use tokio::time::{sleep, Duration};
-use tracing::{debug, warn, Instrument};
+use tracing::{debug, warn};
 
-use crate::stats::{BeaconSlotStats, HistoryBlockStats, StatsReporter};
 use ethportal_api::{
     jsonrpsee::core::Error,
     types::portal::{ContentInfo, TraceGossipInfo},
@@ -16,26 +13,8 @@ use ethportal_api::{
 const GOSSIP_RETRY_COUNT: u64 = 3;
 const RETRY_AFTER: Duration = Duration::from_secs(15);
 
-/// Gossip any given content key / value to the history network.
-pub async fn gossip_beacon_content(
-    portal_client: HttpClient,
-    content_key: BeaconContentKey,
-    content_value: BeaconContentValue,
-    slot_stats: Arc<Mutex<BeaconSlotStats>>,
-) -> anyhow::Result<()> {
-    let result = tokio::spawn(
-        beacon_trace_gossip(portal_client, content_key.clone(), content_value).in_current_span(),
-    )
-    .await?;
-    if let Ok(mut data) = slot_stats.lock() {
-        data.update(content_key, result.into());
-    } else {
-        warn!("Error updating beacon gossip stats. Unable to acquire lock.");
-    }
-    Ok(())
-}
-
-async fn beacon_trace_gossip(
+/// Gossip (with trace) any given beacon content key / value to the beacon network
+pub async fn beacon_trace_gossip(
     client: HttpClient,
     content_key: BeaconContentKey,
     content_value: BeaconContentValue,
@@ -89,26 +68,8 @@ async fn beacon_trace_gossip(
     })
 }
 
-/// Gossip any given content key / value to the history network.
-pub async fn gossip_history_content(
-    portal_client: HttpClient,
-    content_key: HistoryContentKey,
-    content_value: HistoryContentValue,
-    block_stats: Arc<Mutex<HistoryBlockStats>>,
-) -> anyhow::Result<()> {
-    let result = tokio::spawn(
-        history_trace_gossip(portal_client, content_key.clone(), content_value).in_current_span(),
-    )
-    .await?;
-    if let Ok(mut data) = block_stats.lock() {
-        data.update(content_key, result.into());
-    } else {
-        warn!("Error updating history gossip stats. Unable to acquire lock.");
-    }
-    Ok(())
-}
-
-async fn history_trace_gossip(
+/// Gossip (with trace) any given history content key / value to the history network
+pub async fn history_trace_gossip(
     client: HttpClient,
     content_key: HistoryContentKey,
     content_value: HistoryContentValue,
@@ -162,25 +123,13 @@ async fn history_trace_gossip(
     })
 }
 
-/// Gossip any given content key / value to the state network.
-pub async fn gossip_state_content(
-    portal_client: HttpClient,
-    content_key: StateContentKey,
-    content_value: StateContentValue,
-) -> anyhow::Result<()> {
-    // stats are not currently being reported for state content
-    let _result = tokio::spawn(
-        state_trace_gossip(portal_client, content_key, content_value).in_current_span(),
-    )
-    .await?;
-    Ok(())
-}
-
-async fn state_trace_gossip(
+/// Gossip (with trace) any given state content key / value to the state network
+pub async fn state_trace_gossip(
     client: HttpClient,
     content_key: StateContentKey,
     content_value: StateContentValue,
 ) -> Result<GossipReport, Error> {
+    // stats are not currently being reported for state content
     let mut retries = 0;
     let mut traces = vec![];
     let mut found = false;

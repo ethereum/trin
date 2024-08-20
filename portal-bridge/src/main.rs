@@ -1,5 +1,8 @@
 use clap::Parser;
-use tokio::time::{sleep, Duration};
+use tokio::{
+    sync::mpsc,
+    time::{sleep, Duration},
+};
 use tracing::Instrument;
 
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
@@ -7,6 +10,7 @@ use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, era1::Era1Bridge, history::HistoryBridge, state::StateBridge},
     cli::BridgeConfig,
+    gossip_engine::run_gossip_engine,
     types::{mode::BridgeMode, network::NetworkKind},
 };
 use trin_utils::log::init_tracing_logger;
@@ -41,6 +45,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bridge_tasks = Vec::new();
 
+    let (gossip_tx, gossip_rx) = mpsc::unbounded_channel();
+    let gossip_tasks = run_gossip_engine(
+        gossip_rx,
+        portal_client.clone(),
+        bridge_config.portal_subnetworks.clone(),
+        bridge_config.gossip_mode,
+        bridge_config.gossip_limit,
+    )
+    .await;
+    for task in gossip_tasks {
+        bridge_tasks.push(task);
+    }
+
     // Launch Beacon Network portal bridge
     if bridge_config
         .portal_subnetworks
@@ -52,9 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             bridge_config.cl_provider_fallback,
         )
         .await?;
-        let portal_client_clone = portal_client.clone();
+        let gossip_tx_clone = gossip_tx.clone();
         let bridge_handle = tokio::spawn(async move {
-            let beacon_bridge = BeaconBridge::new(consensus_api, bridge_mode, portal_client_clone);
+            let beacon_bridge = BeaconBridge::new(consensus_api, bridge_mode, gossip_tx_clone);
 
             beacon_bridge
                 .launch()
@@ -71,17 +88,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .contains(&NetworkKind::State)
     {
         let bridge_mode = bridge_config.mode.clone();
-        let portal_client_clone = portal_client.clone();
+        let gossip_tx_clone = gossip_tx.clone();
         let epoch_acc_path = bridge_config.epoch_acc_path.clone();
         let header_oracle = HeaderOracle::default();
-        let state_bridge = StateBridge::new(
-            bridge_mode,
-            portal_client_clone,
-            header_oracle,
-            epoch_acc_path,
-            bridge_config.gossip_limit,
-        )
-        .await?;
+        let state_bridge =
+            StateBridge::new(bridge_mode, gossip_tx_clone, header_oracle, epoch_acc_path).await?;
         let bridge_handle = tokio::spawn(async move {
             state_bridge
                 .launch()
@@ -103,13 +114,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
         match bridge_config.mode {
             BridgeMode::FourFours(_) => {
-                let header_oracle = HeaderOracle::default();
                 let era1_bridge = Era1Bridge::new(
                     bridge_config.mode,
                     portal_client,
-                    header_oracle,
                     bridge_config.epoch_acc_path,
-                    bridge_config.gossip_limit,
+                    gossip_tx.clone(),
                     execution_api,
                 )
                 .await?;
@@ -123,15 +132,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             _ => {
                 let bridge_handle = tokio::spawn(async move {
-                    let header_oracle = HeaderOracle::default();
-
                     let bridge = HistoryBridge::new(
                         bridge_config.mode,
                         execution_api,
-                        portal_client,
-                        header_oracle,
+                        gossip_tx.clone(),
                         bridge_config.epoch_acc_path,
-                        bridge_config.gossip_limit,
                     );
 
                     bridge

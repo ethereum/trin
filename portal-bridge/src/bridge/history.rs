@@ -1,29 +1,26 @@
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::{path::PathBuf, sync::Arc};
 
+use anyhow::bail;
 use futures::future::join_all;
 use tokio::{
-    sync::{OwnedSemaphorePermit, Semaphore},
+    sync::mpsc::UnboundedSender,
     task::JoinHandle,
     time::{sleep, timeout, Duration},
 };
 use tracing::{debug, error, info, warn, Instrument};
-use trin_metrics::bridge::BridgeMetricsReporter;
 
 use crate::{
     api::execution::ExecutionApi,
     bridge::utils::lookup_epoch_acc,
-    gossip::gossip_history_content,
-    stats::{HistoryBlockStats, StatsReporter},
+    gossip_engine::GossipRequest,
     types::{full_header::FullHeader, mode::BridgeMode},
     utils::{read_test_assets_from_file, TestAssets},
 };
 use ethportal_api::{
-    jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
-    EpochAccumulatorKey, HistoryContentKey, HistoryContentValue,
+    types::execution::accumulator::EpochAccumulator, EpochAccumulatorKey, HistoryContentKey,
+    HistoryContentValue,
 };
+use trin_metrics::bridge::BridgeMetricsReporter;
 use trin_validation::{
     constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
     oracle::HeaderOracle,
@@ -37,32 +34,29 @@ pub const SERVE_CONTENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct HistoryBridge {
     pub mode: BridgeMode,
-    pub portal_client: HttpClient,
+    pub gossip_tx: UnboundedSender<GossipRequest>,
     pub execution_api: ExecutionApi,
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
     pub metrics: BridgeMetricsReporter,
-    pub gossip_limit: usize,
 }
 
 impl HistoryBridge {
     pub fn new(
         mode: BridgeMode,
         execution_api: ExecutionApi,
-        portal_client: HttpClient,
-        header_oracle: HeaderOracle,
+        gossip_tx: UnboundedSender<GossipRequest>,
         epoch_acc_path: PathBuf,
-        gossip_limit: usize,
     ) -> Self {
+        let header_oracle = HeaderOracle::default();
         let metrics = BridgeMetricsReporter::new("history".to_string(), &format!("{mode:?}"));
         Self {
             mode,
-            portal_client,
+            gossip_tx,
             execution_api,
             header_oracle,
             epoch_acc_path,
             metrics,
-            gossip_limit,
         }
     }
 }
@@ -86,15 +80,14 @@ impl HistoryBridge {
             .expect("Error parsing history test assets.");
 
         // test files have no block number data, so we report all gossiped content at height 0.
-        let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(0)));
         for asset in assets.0.into_iter() {
-            let _ = gossip_history_content(
-                self.portal_client.clone(),
+            let gossip_request = GossipRequest::from((
                 asset.content_key.clone(),
                 asset.content_value().expect("Error getting content value"),
-                block_stats.clone(),
-            )
-            .await;
+            ));
+            if let Err(err) = self.gossip_tx.send(gossip_request) {
+                error!("Error sending test history gossip request to gossip engine: {err:?}");
+            }
             if let HistoryContentKey::BlockHeaderWithProof(_) = asset.content_key {
                 sleep(Duration::from_millis(50)).await;
             }
@@ -150,9 +143,8 @@ impl HistoryBridge {
                 Self::spawn_serve_full_block(
                     height,
                     None,
-                    self.portal_client.clone(),
+                    self.gossip_tx.clone(),
                     self.execution_api.clone(),
-                    None,
                     self.metrics.clone(),
                 );
             }
@@ -177,10 +169,6 @@ impl HistoryBridge {
         // epoch_acc gets set on the first iteration of the loop
         let mut current_epoch_index = u64::MAX;
 
-        // We are using a semaphore to limit the amount of active gossip transfers to make sure we
-        // don't overwhelm the trin client
-        let gossip_send_semaphore = Arc::new(Semaphore::new(self.gossip_limit));
-
         info!("fetching headers in range: {gossip_range:?}");
         let mut epoch_acc = None;
         let mut serve_full_block_handles = vec![];
@@ -203,16 +191,12 @@ impl HistoryBridge {
             } else if height > MERGE_BLOCK_NUMBER {
                 epoch_acc = None;
             }
-            let permit = gossip_send_semaphore.clone().acquire_owned().await.expect(
-                "acquire_owned() can only error on semaphore close, this should be impossible",
-            );
             self.metrics.report_current_block(height as i64);
             serve_full_block_handles.push(Self::spawn_serve_full_block(
                 height,
                 epoch_acc.clone(),
-                self.portal_client.clone(),
+                self.gossip_tx.clone(),
                 self.execution_api.clone(),
-                Some(permit),
                 self.metrics.clone(),
             ));
         }
@@ -225,16 +209,15 @@ impl HistoryBridge {
     fn spawn_serve_full_block(
         height: u64,
         epoch_acc: Option<Arc<EpochAccumulator>>,
-        portal_client: HttpClient,
+        gossip_tx: UnboundedSender<GossipRequest>,
         execution_api: ExecutionApi,
-        permit: Option<OwnedSemaphorePermit>,
         metrics: BridgeMetricsReporter,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let timer = metrics.start_process_timer("spawn_serve_full_block");
             match timeout(
                 SERVE_BLOCK_TIMEOUT,
-                Self::serve_full_block(height, epoch_acc, portal_client, execution_api, metrics.clone())
+                Self::serve_full_block(height, epoch_acc, gossip_tx, execution_api, metrics.clone())
                     .in_current_span(),
             )
             .await {
@@ -244,9 +227,6 @@ impl HistoryBridge {
                 },
                 Err(_) => error!("serve_full_block() timed out on height {height}: this is an indication a bug is present")
             };
-            if let Some(permit) = permit {
-                drop(permit);
-            }
             metrics.stop_process_timer(timer);
         })
     }
@@ -254,7 +234,7 @@ impl HistoryBridge {
     async fn serve_full_block(
         height: u64,
         epoch_acc: Option<Arc<EpochAccumulator>>,
-        portal_client: HttpClient,
+        gossip_tx: UnboundedSender<GossipRequest>,
         execution_api: ExecutionApi,
         metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
@@ -262,20 +242,11 @@ impl HistoryBridge {
         let timer = metrics.start_process_timer("construct_and_gossip_header");
         let (full_header, header_content_key, header_content_value) =
             execution_api.get_header(height, epoch_acc).await?;
-        let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(
-            full_header.header.number,
-        )));
-
         debug!("Built and validated HeaderWithProof for Block #{height:?}: now gossiping.");
-        if let Err(msg) = gossip_history_content(
-            portal_client.clone(),
-            header_content_key,
-            header_content_value,
-            block_stats.clone(),
-        )
-        .await
-        {
-            warn!("Error gossiping HeaderWithProof #{height:?}: {msg:?}");
+        let gossip_request =
+            GossipRequest::from((header_content_key.clone(), header_content_value));
+        if let Err(err) = gossip_tx.send(gossip_request) {
+            bail!("Error sending HeaderWithProof gossip request to gossip engine: {err:?}");
         };
         metrics.stop_process_timer(timer);
 
@@ -284,38 +255,36 @@ impl HistoryBridge {
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
 
         let block_body_full_header = full_header.clone();
-        let block_body_portal_client = portal_client.clone();
         let block_body_execution_api = execution_api.clone();
-        let block_body_block_stats = block_stats.clone();
         let block_body_metrics = metrics.clone();
+        let gossip_tx_clone = gossip_tx.clone();
         let serve_block_body_task = tokio::spawn(async move {
             match timeout(
                 SERVE_CONTENT_TIMEOUT,
                 HistoryBridge::construct_and_gossip_block_body(
                     &block_body_full_header,
-                    block_body_portal_client,
+                    gossip_tx_clone,
                     &block_body_execution_api,
-                    block_body_block_stats,
                     block_body_metrics,
                 ).in_current_span(),
             )
             .await {
-                Ok(result) => match result {
-                    Ok(_) => (),
-                    Err(msg) => warn!("Error gossiping block body #{height:?}: {msg:?}"),
+                Ok(result) => {
+                    if let Err(msg) = result {
+                        warn!("Error gossiping block body #{height:?}: {msg:?}");
+                    }
                 },
                 Err(_) => error!("construct_and_gossip_block_body() timed out on height {height}: this is an indication a bug is present")
             };
         });
-        let receipt_block_stats = block_stats.clone();
+        let gossip_tx_clone = gossip_tx.clone();
         let serve_receipt_task = tokio::spawn(async move {
             match timeout(
                 SERVE_CONTENT_TIMEOUT,
                 HistoryBridge::construct_and_gossip_receipt(
                     &full_header,
-                    &portal_client,
+                    gossip_tx_clone,
                     &execution_api,
-                    receipt_block_stats,
                     metrics,
                 ).in_current_span(),
             )
@@ -330,11 +299,6 @@ impl HistoryBridge {
 
         serve_block_body_task.await?;
         serve_receipt_task.await?;
-        if let Ok(stats) = block_stats.lock() {
-            stats.report();
-        } else {
-            warn!("Error displaying history gossip stats. Unable to acquire lock.");
-        }
         Ok(())
     }
 
@@ -353,24 +317,18 @@ impl HistoryBridge {
         // Gossip epoch acc to network if found locally
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
         let content_value = HistoryContentValue::EpochAccumulator(epoch_acc.clone());
-        // create unique stats for epoch accumulator, since it's rarely gossiped
-        let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(epoch_index * EPOCH_SIZE)));
         debug!("Built EpochAccumulator for Epoch #{epoch_index:?}: now gossiping.");
-        let _ = gossip_history_content(
-            self.portal_client.clone(),
-            content_key,
-            content_value,
-            block_stats,
-        )
-        .await;
+        let gossip_request = GossipRequest::from((content_key, content_value));
+        if let Err(err) = self.gossip_tx.send(gossip_request) {
+            bail!("Error sending EpochAccumulator gossip request to gossip engine: {err:?}");
+        };
         Ok(Arc::new(epoch_acc))
     }
 
     async fn construct_and_gossip_receipt(
         full_header: &FullHeader,
-        portal_client: &HttpClient,
+        gossip_tx: UnboundedSender<GossipRequest>,
         execution_api: &ExecutionApi,
-        block_stats: Arc<Mutex<HistoryBlockStats>>,
         metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
         let timer = metrics.start_process_timer("construct_and_gossip_receipt");
@@ -379,22 +337,18 @@ impl HistoryBridge {
             "Built and validated Receipts for Block #{:?}: now gossiping.",
             full_header.header.number
         );
-        let result = gossip_history_content(
-            portal_client.clone(),
-            content_key,
-            content_value,
-            block_stats,
-        )
-        .await;
+        let gossip_request = GossipRequest::from((content_key, content_value));
+        if let Err(err) = gossip_tx.send(gossip_request) {
+            bail!("Error sending Receipts gossip request to gossip engine: {err:?}");
+        };
         metrics.stop_process_timer(timer);
-        result
+        Ok(())
     }
 
     async fn construct_and_gossip_block_body(
         full_header: &FullHeader,
-        portal_client: HttpClient,
+        gossip_tx: UnboundedSender<GossipRequest>,
         execution_api: &ExecutionApi,
-        block_stats: Arc<Mutex<HistoryBlockStats>>,
         metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
         let timer = metrics.start_process_timer("construct_and_gossip_block_body");
@@ -403,9 +357,11 @@ impl HistoryBridge {
             "Built and validated BlockBody for Block #{:?}: now gossiping.",
             full_header.header.number
         );
-        let result =
-            gossip_history_content(portal_client, content_key, content_value, block_stats).await;
+        let gossip_request = GossipRequest::from((content_key, content_value));
+        if let Err(err) = gossip_tx.send(gossip_request) {
+            bail!("Error sending BlockBody gossip request to gossip engine: {err:?}");
+        };
         metrics.stop_process_timer(timer);
-        result
+        Ok(())
     }
 }
