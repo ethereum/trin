@@ -5,7 +5,7 @@ use ethportal_api::types::portal_wire::ProtocolId;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 
-use crate::{versioned::ContentType, DistanceFunction, PortalStorageConfig, BYTES_IN_MB_U64};
+use crate::{versioned::ContentType, DistanceFunction, PortalStorageConfig};
 
 use super::pruning_strategy::PruningConfig;
 
@@ -33,7 +33,7 @@ impl IdIndexedV1StoreConfig {
             network,
             node_id: config.node_id,
             node_data_dir: config.node_data_dir,
-            storage_capacity_bytes: config.storage_capacity_mb * BYTES_IN_MB_U64,
+            storage_capacity_bytes: config.storage_capacity_bytes,
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
             // consider making this a parameter if we start using non-default value

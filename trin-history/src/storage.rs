@@ -80,34 +80,22 @@ impl HistoryStorage {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod test {
-    use std::path::PathBuf;
-
-    use discv5::enr::{CombinedKey, Enr as Discv5Enr, NodeId};
     use ethportal_api::{BlockHeaderKey, HistoryContentKey};
-    use portalnet::utils::db::{configure_node_data_dir, setup_temp_dir};
     use quickcheck::{QuickCheck, TestResult};
     use rand::RngCore;
     use serial_test::serial;
+    use trin_storage::test_utils::create_test_portal_storage_config_with_capacity;
 
     use super::*;
 
     const CAPACITY_MB: u64 = 2;
 
-    fn get_active_node_id(temp_dir: PathBuf) -> NodeId {
-        let (_, mut pk) = configure_node_data_dir(temp_dir, None, "test".to_string()).unwrap();
-        let pk = CombinedKey::secp256k1_from_bytes(pk.0.as_mut_slice()).unwrap();
-        Discv5Enr::empty(&pk).unwrap().node_id()
-    }
-
     #[test_log::test(tokio::test)]
     #[serial]
     async fn test_store() {
         fn test_store_random_bytes() -> TestResult {
-            let temp_dir = setup_temp_dir().unwrap();
-            let node_id = get_active_node_id(temp_dir.path().to_path_buf());
-            let storage_config =
-                PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id)
-                    .unwrap();
+            let (temp_dir, storage_config) =
+                create_test_portal_storage_config_with_capacity(CAPACITY_MB).unwrap();
             let mut storage = HistoryStorage::new(storage_config).unwrap();
             let content_key = HistoryContentKey::random().unwrap();
             let mut value = [0u8; 32];
@@ -127,10 +115,8 @@ pub mod test {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn test_get_data() -> Result<(), ContentStoreError> {
-        let temp_dir = setup_temp_dir().unwrap();
-        let node_id = get_active_node_id(temp_dir.path().to_path_buf());
-        let storage_config =
-            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
+        let (temp_dir, storage_config) =
+            create_test_portal_storage_config_with_capacity(CAPACITY_MB).unwrap();
         let mut storage = HistoryStorage::new(storage_config)?;
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey::default());
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();

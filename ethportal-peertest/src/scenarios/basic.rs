@@ -1,4 +1,4 @@
-use crate::{utils::fixture_header_with_proof, Peertest};
+use crate::{utils::fixture_header_with_proof, Peertest, PeertestNode};
 use alloy_primitives::{B256, U256};
 use ethportal_api::{
     types::{distance::Distance, portal_wire::ProtocolId},
@@ -133,10 +133,10 @@ pub async fn test_ping(protocol: ProtocolId, target: &Client, peertest: &Peertes
     assert_eq!(result.enr_seq, 1);
 }
 
-pub async fn test_ping_cross_network(target: &Client, peertest: &Peertest) {
+pub async fn test_ping_cross_network(mainnet_target: &Client, angelfood_node: &PeertestNode) {
     info!("Testing ping for history cross mainnet and angelfood discv5 protocol id");
-    let bootnode_enr = peertest.bootnode.enr.clone();
-    if let Ok(pong) = HistoryNetworkApiClient::ping(target, bootnode_enr).await {
+    let angelfood_enr = angelfood_node.enr.clone();
+    if let Ok(pong) = HistoryNetworkApiClient::ping(mainnet_target, angelfood_enr).await {
         panic!("Expected ping to fail as mainnet/angelfood history nodes shouldn't be able to communicate {pong:?}");
     };
 }
