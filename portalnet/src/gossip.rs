@@ -56,6 +56,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
         .map(|(key, _)| hex_encode_compact(key.content_id()))
         .collect();
     debug!(ids = ?ids_to_propagate, "propagating validated content");
+
     // Get all connected nodes from overlay routing table
     let kbuckets = kbuckets.read();
     let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
@@ -68,6 +69,10 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
         })
         .collect();
 
+    debug!(
+        "propagating validated content: found {} nodes",
+        all_nodes.len()
+    );
     if all_nodes.is_empty() {
         // If there are no nodes whatsoever in the routing table the gossip cannot proceed.
         warn!("No nodes in routing table, gossip cannot proceed.");
@@ -92,6 +97,8 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
     }
 
     let num_propagated_peers = enrs_and_content.len();
+    debug!("propagating validated content to {num_propagated_peers} peers");
+
     // Create and send OFFER overlay request to the interested nodes
     for (enr_string, mut interested_content) in enrs_and_content.into_iter() {
         let permit = match utp_controller {
@@ -147,6 +154,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
         }
     }
 
+    debug!("finished propagating validated content");
     num_propagated_peers
 }
 
@@ -240,6 +248,7 @@ fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
     content_key: &TContentKey,
     all_nodes: &[&kbucket::Node<NodeId, Node>],
 ) -> Vec<Enr> {
+    let content_id = content_key.content_id();
     // HashMap to temporarily store all interested ENRs and the content.
     // Key is base64 string of node's ENR.
 
@@ -248,8 +257,7 @@ fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
     let mut interested_enrs: Vec<Enr> = all_nodes
         .iter()
         .filter(|node| {
-            XorMetric::distance(&content_key.content_id(), &node.key.preimage().raw())
-                < node.value.data_radius()
+            XorMetric::distance(&content_id, &node.key.preimage().raw()) < node.value.data_radius()
         })
         .map(|node| node.value.enr())
         .collect();
@@ -257,7 +265,7 @@ fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
     // Continue if no nodes are interested in the content
     if interested_enrs.is_empty() {
         debug!(
-            content.id = %hex_encode(content_key.content_id()),
+            content.id = %hex_encode(content_id),
             kbuckets.len = all_nodes.len(),
             "No peers eligible for neighborhood gossip"
         );
@@ -265,14 +273,8 @@ fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
     }
 
     // Sort all eligible nodes by proximity to the content.
-    interested_enrs.sort_by(|a, b| {
-        let distance_a = XorMetric::distance(&content_key.content_id(), &a.node_id().raw());
-        let distance_b = XorMetric::distance(&content_key.content_id(), &b.node_id().raw());
-        distance_a.partial_cmp(&distance_b).unwrap_or_else(|| {
-            warn!(a = %distance_a, b = %distance_b, "Error comparing two distances");
-            std::cmp::Ordering::Less
-        })
-    });
+    interested_enrs
+        .sort_by_cached_key(|enr| XorMetric::distance(&content_id, &enr.node_id().raw()));
 
     select_gossip_recipients(interested_enrs)
 }
