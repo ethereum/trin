@@ -7,6 +7,8 @@ use r2d2_sqlite::SqliteConnectionManager;
 
 use crate::{error::ContentStoreError, utils::setup_sql, DistanceFunction};
 
+const BYTES_IN_MB_U64: u64 = 1000 * 1000;
+
 /// Factory for creating [PortalStorageConfig] instances
 pub struct PortalStorageConfigFactory {
     node_id: NodeId,
@@ -18,7 +20,7 @@ pub struct PortalStorageConfigFactory {
 
 impl PortalStorageConfigFactory {
     const HISTORY_CAPACITY_WEIGHT: u64 = 1;
-    const STATE_CAPACITY_WEIGHT: u64 = 100;
+    const STATE_CAPACITY_WEIGHT: u64 = 99;
     const BEACON_CAPACITY_WEIGHT: u64 = 0; // Beacon doesn't care about given capacity
 
     pub fn new(
@@ -45,13 +47,13 @@ impl PortalStorageConfigFactory {
 
     pub fn create(&self, subnetwork: &str) -> PortalStorageConfig {
         let capacity_weight = Self::get_capacity_weight(subnetwork);
-        let capacity_mb = if self.total_capacity_weight == 0 {
+        let capacity_bytes = if self.total_capacity_weight == 0 {
             0
         } else {
-            self.total_capacity_mb * capacity_weight / self.total_capacity_weight
+            BYTES_IN_MB_U64 * self.total_capacity_mb * capacity_weight / self.total_capacity_weight
         };
         PortalStorageConfig {
-            storage_capacity_mb: capacity_mb,
+            storage_capacity_bytes: capacity_bytes,
             node_id: self.node_id,
             node_data_dir: self.node_data_dir.clone(),
             distance_fn: DistanceFunction::Xor,
@@ -71,7 +73,7 @@ impl PortalStorageConfigFactory {
 
 #[derive(Clone)]
 pub struct PortalStorageConfig {
-    pub storage_capacity_mb: u64,
+    pub storage_capacity_bytes: u64,
     pub node_id: NodeId,
     pub node_data_dir: PathBuf,
     pub distance_fn: DistanceFunction,

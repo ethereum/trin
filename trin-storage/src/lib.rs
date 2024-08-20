@@ -18,7 +18,6 @@ use std::{ops::Deref, str::FromStr};
 pub use config::{PortalStorageConfig, PortalStorageConfigFactory};
 
 pub const DATABASE_NAME: &str = "trin.sqlite";
-pub const BYTES_IN_MB_U64: u64 = 1000 * 1000;
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to
 // associate a "find farthest" query with the generic Metric.

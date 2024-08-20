@@ -31,7 +31,7 @@ use trin_storage::{
         LC_UPDATE_TOTAL_SIZE_QUERY, TOTAL_DATA_SIZE_QUERY_BEACON,
     },
     utils::get_total_size_of_directory_in_bytes,
-    ContentStore, DataSize, PortalStorageConfig, ShouldWeStoreContent, BYTES_IN_MB_U64,
+    ContentStore, DataSize, PortalStorageConfig, ShouldWeStoreContent,
 };
 
 /// Store ephemeral light client data in memory
@@ -137,7 +137,6 @@ impl BeaconStorageCache {
 pub struct BeaconStorage {
     node_data_dir: PathBuf,
     sql_connection_pool: Pool<SqliteConnectionManager>,
-    storage_capacity_in_bytes: u64,
     metrics: StorageMetricsReporter,
     cache: BeaconStorageCache,
 }
@@ -329,15 +328,9 @@ impl BeaconStorage {
         let storage = Self {
             node_data_dir: config.node_data_dir,
             sql_connection_pool: config.sql_connection_pool,
-            storage_capacity_in_bytes: config.storage_capacity_mb * BYTES_IN_MB_U64,
             metrics: StorageMetricsReporter::new(ProtocolId::Beacon),
             cache: BeaconStorageCache::new(),
         };
-
-        // Report current storage capacity.
-        storage
-            .metrics
-            .report_storage_capacity_bytes(storage.storage_capacity_in_bytes as f64);
 
         // Report current total storage usage.
         let total_storage_usage = storage.get_total_storage_usage_in_bytes_on_disk()?;
