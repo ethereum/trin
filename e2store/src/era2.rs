@@ -1,12 +1,12 @@
 use std::{
     io::{Read, Write},
-    path::PathBuf,
+    ops::Deref,
+    path::{Path, PathBuf},
 };
 
 use alloy_primitives::{hex, B256, U256};
 use alloy_rlp::{Decodable, RlpDecodable, RlpEncodable};
-use anyhow::ensure;
-use core::panic;
+use anyhow::{bail, ensure};
 use ethportal_api::types::{execution::header::Header, state_trie::account_state::AccountState};
 
 use crate::{
@@ -14,7 +14,7 @@ use crate::{
         stream::E2StoreStream,
         types::{Entry, VersionEntry},
     },
-    era1::HeaderEntry,
+    types::HeaderEntry,
 };
 
 // <network-name>-<block-number>-<short-state-root>.era2
@@ -25,12 +25,12 @@ use crate::{
 // Version                     = { type: 0x3265, data: nil }
 // CompressedHeader            = { type: 0x03,   data: snappyFramed(rlp(header)) }
 // CompressedAccount           = { type: 0x08,   data: snappyFramed(rlp(address_hash, rlp(nonce,
-// balance, storage_root, code_hash), raw_bytecode, storage_entry_count) }
+// balance, storage_root, code_hash), raw_bytecode, storage_entry_count)) }
 // CompressedStorage           = { type: 0x09,   data: snappyFramed(rlp(Vec<StorageItem {
 // storage_index_hash, value }>)) }
 // -----
-// CompressedStorage can have a max of 10k storage items, records must be filled before
-// creating a new one
+// CompressedStorage can have a max of 10 million storage items, records must be filled before
+// creating a new one, and must be sorted by storage_index_hash across all entries.
 
 /// Represents an era2 `Era2` state snapshot.
 /// Unlike era1, not all fields will be stored in the struct, account's will be streamed from an
@@ -41,12 +41,13 @@ pub struct Era2 {
 
     /// e2store_stream, manages the interactions between the era2 state snapshot
     e2store_stream: E2StoreStream,
-    storage_entries_left_to_decode: u16,
+    pending_storage_entries: u32,
+    path: PathBuf,
 }
 
 impl Era2 {
-    pub fn open(era2_path: &PathBuf) -> anyhow::Result<Self> {
-        let mut e2store_stream = E2StoreStream::open(era2_path)?;
+    pub fn open(path: PathBuf) -> anyhow::Result<Self> {
+        let mut e2store_stream = E2StoreStream::open(&path)?;
 
         let version = VersionEntry::try_from(&e2store_stream.next_entry()?)?;
         let header = HeaderEntry::try_from(&e2store_stream.next_entry()?)?;
@@ -55,26 +56,20 @@ impl Era2 {
             version,
             header,
             e2store_stream,
-            storage_entries_left_to_decode: 0,
+            pending_storage_entries: 0,
+            path,
         })
     }
 
-    pub fn create(era2_path: PathBuf, header: Header) -> anyhow::Result<Self> {
-        if era2_path.is_file() {
-            panic!(
-                "era2_path is not a directory, it is a file: {:?}",
-                era2_path
-            );
-        }
-        let era2_path = era2_path.join(format!(
+    pub fn create(path: PathBuf, header: Header) -> anyhow::Result<Self> {
+        ensure!(path.is_dir(), "era2 path is not a directory: {:?}", path);
+        let path = path.join(format!(
             "mainnet-{:010}-{}.era2",
             header.number,
             hex::encode(&header.state_root.as_slice()[..4])
         ));
-        if era2_path.exists() {
-            panic!("era2 file already exists: {:?}", era2_path);
-        }
-        let mut e2store_stream = E2StoreStream::create(&era2_path)?;
+        ensure!(!path.exists(), "era2 file already exists: {:?}", path);
+        let mut e2store_stream = E2StoreStream::create(&path)?;
 
         let version = VersionEntry::default();
         e2store_stream.append_entry(&version.clone().into())?;
@@ -86,41 +81,55 @@ impl Era2 {
             version,
             header,
             e2store_stream,
-            storage_entries_left_to_decode: 0,
+            pending_storage_entries: 0,
+            path,
         })
     }
 
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
+    }
+
     #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> anyhow::Result<Era2StreamEntry> {
-        if self.storage_entries_left_to_decode > 0 {
-            self.storage_entries_left_to_decode -= 1;
-            return Ok(Era2StreamEntry::Storage(StorageEntry::try_from(
+    pub fn next(&mut self) -> anyhow::Result<StreamEntry> {
+        if self.pending_storage_entries > 0 {
+            self.pending_storage_entries -= 1;
+            return Ok(StreamEntry::Storage(StorageEntry::try_from(
                 &self.e2store_stream.next_entry()?,
             )?));
         }
         let account = AccountEntry::try_from(&self.e2store_stream.next_entry()?)?;
-        self.storage_entries_left_to_decode = account.storage_count;
-        Ok(Era2StreamEntry::Account(account))
+        self.pending_storage_entries = account.storage_count;
+        Ok(StreamEntry::Account(account))
     }
 
-    pub fn append_entry(&mut self, entry: &Era2StreamEntry) -> anyhow::Result<usize> {
+    pub fn append_entry(&mut self, entry: &StreamEntry) -> anyhow::Result<usize> {
         let size = match entry {
-            Era2StreamEntry::Account(account) => {
-                if self.storage_entries_left_to_decode != 0 {
-                    panic!("Invalid append entry state: expected a storage entry, got an account entry. Still have {} storage entries left to append", self.storage_entries_left_to_decode);
-                }
+            StreamEntry::Account(account) => {
+                ensure!(
+                    self.pending_storage_entries == 0,
+                    "Invalid append entry state: expected a storage entry, got an account entry. Still have {} storage entries left to append", self.pending_storage_entries                
+                );
 
-                self.storage_entries_left_to_decode = account.storage_count;
+                self.pending_storage_entries = account.storage_count;
                 let entry: Entry = account.clone().try_into()?;
                 self.e2store_stream.append_entry(&entry)?;
                 entry.value.len()
             }
-            Era2StreamEntry::Storage(storage) => {
-                if self.storage_entries_left_to_decode == 0 {
-                    panic!("Invalid append entry state: expected an account entry, got a storage entry. No storage entries left to append for the account");
+            StreamEntry::Storage(storage) => {
+                match self.pending_storage_entries {
+                    0 => bail!("Invalid append entry state: expected an account entry, got a storage entry. No storage entries left to append for the account"),
+                    1 => ensure!(
+                        storage.len() <= 10_000_000,
+                        "Storage entry can't have more than 10 million items",
+                    ),
+                    _ => ensure!(
+                        storage.len() == 10_000_000,
+                        "Only last storage entry can have less than 10 million items",
+                    ),
                 }
 
-                self.storage_entries_left_to_decode -= 1;
+                self.pending_storage_entries -= 1;
                 let entry: Entry = storage.clone().try_into()?;
                 self.e2store_stream.append_entry(&entry)?;
                 entry.value.len()
@@ -131,7 +140,7 @@ impl Era2 {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub enum Era2StreamEntry {
+pub enum StreamEntry {
     Account(AccountEntry),
     Storage(StorageEntry),
 }
@@ -141,7 +150,7 @@ pub struct AccountEntry {
     pub address_hash: B256,
     pub account_state: AccountState,
     pub bytecode: Vec<u8>,
-    pub storage_count: u16,
+    pub storage_count: u32,
 }
 
 impl TryFrom<&Entry> for AccountEntry {
@@ -164,13 +173,12 @@ impl TryFrom<&Entry> for AccountEntry {
     }
 }
 
-impl TryInto<Entry> for AccountEntry {
+impl TryFrom<AccountEntry> for Entry {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> anyhow::Result<Entry> {
-        let rlp_encoded = alloy_rlp::encode(self);
-        let buf: Vec<u8> = vec![];
-        let mut encoder = snap::write::FrameEncoder::new(buf);
+    fn try_from(value: AccountEntry) -> Result<Self, Self::Error> {
+        let rlp_encoded = alloy_rlp::encode(value);
+        let mut encoder = snap::write::FrameEncoder::new(vec![]);
         let _ = encoder.write(&rlp_encoded)?;
         let encoded = encoder.into_inner()?;
         Ok(Entry::new(0x08, encoded))
@@ -178,8 +186,14 @@ impl TryInto<Entry> for AccountEntry {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct StorageEntry {
-    pub storage: Vec<StorageItem>,
+pub struct StorageEntry(Vec<StorageItem>);
+
+impl Deref for StorageEntry {
+    type Target = Vec<StorageItem>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, RlpEncodable, RlpDecodable)]
@@ -204,7 +218,7 @@ impl TryFrom<&Entry> for StorageEntry {
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf)?;
         let storage = Decodable::decode(&mut buf.as_slice())?;
-        Ok(Self { storage })
+        Ok(Self(storage))
     }
 }
 
@@ -212,9 +226,8 @@ impl TryInto<Entry> for StorageEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        let rlp_encoded = alloy_rlp::encode(self.storage);
-        let buf: Vec<u8> = vec![];
-        let mut encoder = snap::write::FrameEncoder::new(buf);
+        let rlp_encoded = alloy_rlp::encode(self.0);
+        let mut encoder = snap::write::FrameEncoder::new(vec![]);
         let _ = encoder.write(&rlp_encoded)?;
         let encoded = encoder.into_inner()?;
         Ok(Entry::new(0x09, encoded))
@@ -231,7 +244,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_e2store_stream_write_and_read() -> anyhow::Result<()> {
+    fn test_era2_stream_write_and_read() -> anyhow::Result<()> {
         // setup
         let tmp_dir = TempDir::new()?;
         let tmp_path = tmp_dir.as_ref().to_path_buf();
@@ -263,48 +276,49 @@ mod tests {
         // create a new e2store file and write some data to it
         let mut era2_write_file = Era2::create(tmp_path.clone(), header.clone())?;
 
-        let account = Era2StreamEntry::Account(AccountEntry {
+        let tmp_path = tmp_path.join(format!(
+            "mainnet-{:010}-{}.era2",
+            header.number,
+            hex::encode(&header.state_root.as_slice()[..4])
+        ));
+        assert_eq!(era2_write_file.path(), tmp_path.as_path());
+
+        let account = StreamEntry::Account(AccountEntry {
             address_hash: B256::default(),
             account_state: AccountState::default(),
             bytecode: vec![],
             storage_count: 1,
         });
 
-        assert_eq!(era2_write_file.storage_entries_left_to_decode, 0);
+        assert_eq!(era2_write_file.pending_storage_entries, 0);
         let size = era2_write_file.append_entry(&account)?;
         assert_eq!(size, 101);
-        assert_eq!(era2_write_file.storage_entries_left_to_decode, 1);
+        assert_eq!(era2_write_file.pending_storage_entries, 1);
 
-        let storage = Era2StreamEntry::Storage(StorageEntry {
-            storage: vec![StorageItem {
-                storage_index_hash: B256::default(),
-                value: U256::default(),
-            }],
-        });
+        let storage = StreamEntry::Storage(StorageEntry(vec![StorageItem {
+            storage_index_hash: B256::default(),
+            value: U256::default(),
+        }]));
 
         let size = era2_write_file.append_entry(&storage)?;
         assert_eq!(size, 29);
-        assert_eq!(era2_write_file.storage_entries_left_to_decode, 0);
+        assert_eq!(era2_write_file.pending_storage_entries, 0);
 
         // read results and see if they match
-        let tmp_path = tmp_path.join(format!(
-            "mainnet-{:010}-{}.era2",
-            header.number,
-            hex::encode(&header.state_root.as_slice()[..4])
-        ));
-        let mut era2_read_file = Era2::open(&tmp_path)?;
+        let mut era2_read_file = Era2::open(tmp_path.clone())?;
+        assert_eq!(era2_read_file.path(), tmp_path.as_path());
 
         let default_version_entry = VersionEntry::default();
         assert_eq!(era2_read_file.version, default_version_entry);
         assert_eq!(era2_read_file.header, HeaderEntry { header });
-        assert_eq!(era2_read_file.storage_entries_left_to_decode, 0);
+        assert_eq!(era2_read_file.pending_storage_entries, 0);
         let read_account_tuple = era2_read_file.next()?;
         assert_eq!(account, read_account_tuple);
-        assert_eq!(era2_read_file.storage_entries_left_to_decode, 1);
+        assert_eq!(era2_read_file.pending_storage_entries, 1);
 
         let read_storage_tuple = era2_read_file.next()?;
         assert_eq!(storage, read_storage_tuple);
-        assert_eq!(era2_read_file.storage_entries_left_to_decode, 0);
+        assert_eq!(era2_read_file.pending_storage_entries, 0);
 
         // cleanup
         tmp_dir.close()?;
