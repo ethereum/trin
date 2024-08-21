@@ -4,7 +4,7 @@ use crate::{config::StateConfig, storage::error::EVMError};
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{Address, B256, U256};
 use alloy_rlp::{Decodable, EMPTY_STRING_CODE};
-use eth_trie::{EthTrie, RootWithTrieDiff, Trie};
+use eth_trie::{EthTrie, RootWithTrieDiff, Trie, DB};
 use ethportal_api::{
     types::state_trie::account_state::AccountState as AccountStateInfo, utils::bytes::hex_encode,
 };
@@ -86,17 +86,29 @@ impl EvmDB {
         }
     }
 
-    pub fn get_storage_trie_diff(&self, address_hash: B256) -> BrownHashMap<B256, Vec<u8>> {
+    pub fn get_storage_trie_diff(
+        &self,
+        storage_root: B256,
+        address_hash: B256,
+    ) -> BrownHashMap<B256, Vec<u8>> {
         let mut trie_diff = BrownHashMap::new();
+
+        let account_db = AccountDB::new(address_hash, self.db.clone());
+        let trie = if storage_root == keccak256([EMPTY_STRING_CODE]) {
+            EthTrie::new(Arc::new(account_db))
+        } else {
+            EthTrie::from(Arc::new(account_db), storage_root)
+                .expect("Creating trie should never fail")
+        };
 
         for key in self
             .storage_cache
             .get(&address_hash)
             .unwrap_or(&HashSet::new())
         {
-            let value = self
+            let value = trie
                 .db
-                .get(key)
+                .get(key.as_slice())
                 .expect("Getting storage value should never fail");
 
             if let Some(raw_value) = value {
@@ -125,7 +137,7 @@ impl DatabaseCommit for EvmDB {
                     None => RocksAccount::default(),
                 };
                 if rocks_account.storage_root != keccak256([EMPTY_STRING_CODE]) {
-                    let account_db = AccountDB::new(address, self.db.clone());
+                    let account_db = AccountDB::new(address_hash, self.db.clone());
                     let mut trie = EthTrie::from(Arc::new(account_db), rocks_account.storage_root)
                         .expect("Creating trie should never fail");
                     trie.clear_trie_from_db()
@@ -167,7 +179,7 @@ impl DatabaseCommit for EvmDB {
             rocks_account.nonce = account.info.nonce;
             rocks_account.code_hash = account.info.code_hash;
 
-            let account_db = AccountDB::new(address, self.db.clone());
+            let account_db = AccountDB::new(address_hash, self.db.clone());
 
             let mut trie = if rocks_account.storage_root == keccak256([EMPTY_STRING_CODE]) {
                 EthTrie::new(Arc::new(account_db))
@@ -268,11 +280,12 @@ impl DatabaseRef for EvmDB {
     }
 
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        let account: RocksAccount = match self.db.get(keccak256(address))? {
+        let address_hash = keccak256(address);
+        let account: RocksAccount = match self.db.get(address_hash)? {
             Some(raw_account) => Decodable::decode(&mut raw_account.as_slice())?,
             None => return Err(Self::Error::NotFound),
         };
-        let account_db = AccountDB::new(address, self.db.clone());
+        let account_db = AccountDB::new(address_hash, self.db.clone());
         let trie = if account.storage_root == keccak256([EMPTY_STRING_CODE]) {
             EthTrie::new(Arc::new(account_db))
         } else {

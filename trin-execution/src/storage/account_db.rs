@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy_primitives::{keccak256, Address, B256};
+use alloy_primitives::{keccak256, B256};
 use eth_trie::DB;
 use rocksdb::DB as RocksDB;
 
@@ -16,11 +16,8 @@ pub struct AccountDB {
 }
 
 impl AccountDB {
-    pub fn new(address: Address, db: Arc<RocksDB>) -> Self {
-        Self {
-            address_hash: keccak256(address),
-            db,
-        }
+    pub fn new(address_hash: B256, db: Arc<RocksDB>) -> Self {
+        Self { address_hash, db }
     }
 
     fn get_db_key(&self, key: &[u8]) -> Vec<u8> {
@@ -72,7 +69,7 @@ mod test_account_db {
     #[test]
     fn test_account_db_get() {
         let rocksdb = setup_rocksdb(setup_temp_dir().unwrap().into_path()).unwrap();
-        let accdb = AccountDB::new(Address::ZERO, Arc::new(rocksdb));
+        let accdb = AccountDB::new(B256::ZERO, Arc::new(rocksdb));
         accdb
             .insert(keccak256(b"test-key").as_slice(), b"test-value".to_vec())
             .unwrap();
@@ -86,7 +83,7 @@ mod test_account_db {
     #[test]
     fn test_account_db_remove() {
         let rocksdb = setup_rocksdb(setup_temp_dir().unwrap().into_path()).unwrap();
-        let accdb = AccountDB::new(Address::ZERO, Arc::new(rocksdb));
+        let accdb = AccountDB::new(B256::ZERO, Arc::new(rocksdb));
         accdb
             .insert(keccak256(b"test").as_slice(), b"test".to_vec())
             .unwrap();

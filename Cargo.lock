@@ -2389,7 +2389,7 @@ dependencies = [
 [[package]]
 name = "eth_trie"
 version = "0.4.0"
-source = "git+https://github.com/kolbyml/eth-trie.rs.git?rev=7e57d3dfadee126cc9fda2696fb039bf7b6ed688#7e57d3dfadee126cc9fda2696fb039bf7b6ed688"
+source = "git+https://github.com/kolbyml/eth-trie.rs.git?rev=7947a83091192a7988f359b750b05121d5d7ba8c#7947a83091192a7988f359b750b05121d5d7ba8c"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
