@@ -258,6 +258,7 @@ impl TrinConfig {
     pub fn from_cli() -> Self {
         Self::new_from(env::args_os()).unwrap_or_else(|e| e.exit())
     }
+
     pub fn new_from<I, T>(args: I) -> Result<Self, clap::Error>
     where
         I: Iterator<Item = T>,
@@ -288,13 +289,38 @@ impl TrinConfig {
             Web3TransportType::IPC => {
                 match config.web3_http_address.as_str() {
                     DEFAULT_WEB3_HTTP_ADDRESS => {}
-                    web3_http_address => return Err(Error::raw(ErrorKind::ArgumentConflict,format!("Must not supply an http address when using ipc protocol for json-rpc (received: {web3_http_address})"))),
+                    web3_http_address => {
+                        return Err(Error::raw(
+                            ErrorKind::ArgumentConflict,
+                            format!("Must not supply an http address when using ipc protocol for json-rpc (received: {web3_http_address})"),
+                        ))
+                    },
                 }
                 if config.ws {
-                    return Err(Error::raw(ErrorKind::ArgumentConflict,format!("Must not enable ws when using ipc protocol for json-rpc (received: {})", config.web3_http_address.as_str())));
+                    return Err(Error::raw(
+                        ErrorKind::ArgumentConflict,
+                        format!(
+                            "Must not enable ws when using ipc protocol for json-rpc (received: {})",
+                            config.web3_http_address.as_str(),
+                        ),
+                    ));
                 }
             }
         }
+
+        if config
+            .portal_subnetworks
+            .contains(&STATE_NETWORK.to_string())
+            && !config
+                .portal_subnetworks
+                .contains(&HISTORY_NETWORK.to_string())
+        {
+            return Err(Error::raw(
+                ErrorKind::ValueValidation,
+                "State subnetwork can only be enabled together with history.",
+            ));
+        }
+
         Ok(config)
     }
 }

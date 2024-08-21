@@ -1,7 +1,9 @@
 use std::fs;
 
-use alloy_primitives::B256;
+use alloy_primitives::Bytes;
+use alloy_rlp::Decodable;
 use futures::{Future, TryFutureExt};
+use serde::Deserializer;
 use tracing::error;
 
 use anyhow::Result;
@@ -9,9 +11,9 @@ use serde_yaml::Value;
 use ureq::serde::Deserialize;
 
 use ethportal_api::{
-    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, ContentValue, HistoryContentKey,
-    HistoryContentValue, HistoryNetworkApiClient, StateContentKey, StateContentValue,
-    StateNetworkApiClient,
+    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, ContentValue, Header,
+    HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient, StateContentKey,
+    StateContentValue, StateNetworkApiClient,
 };
 
 pub async fn wait_for_successful_result<Fut, O>(f: impl Fn() -> Fut) -> O
@@ -145,7 +147,9 @@ fn read_epoch_acc(hash: &str) -> (HistoryContentKey, HistoryContentValue) {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct StateContentData {
+pub struct StateFixture {
+    #[serde(deserialize_with = "de_header")]
+    pub block_header: Header,
     #[serde(rename = "content_key")]
     pub key: StateContentKey,
     #[serde(rename = "content_value_offer")]
@@ -154,12 +158,13 @@ pub struct StateContentData {
     pub lookup_value: StateContentValue,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct StateFixture {
-    pub state_root: B256,
-    #[serde(flatten)]
-    pub content_data: StateContentData,
-    pub recursive_gossip: Option<StateContentData>,
+fn de_header<'de, D>(deserializer: D) -> Result<Header, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let bytes = Bytes::deserialize(deserializer)?;
+    Header::decode(&mut bytes.as_ref())
+        .map_err(|err| serde::de::Error::custom(format!("Error decoding header: {err}")))
 }
 
 fn read_state_fixture_from_file(file_name: &str) -> Result<Vec<StateFixture>> {

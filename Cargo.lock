@@ -2805,6 +2805,7 @@ name = "ethportal-peertest"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
+ "alloy-rlp",
  "anyhow",
  "discv5",
  "ethereum_ssz",

@@ -9,7 +9,6 @@ use ethportal_api::{
     ContentValue, StateContentKey, StateContentValue,
 };
 use tokio::sync::RwLock;
-use tracing::debug;
 use trin_validation::{
     oracle::HeaderOracle,
     validator::{ValidationResult, Validator},
@@ -59,7 +58,7 @@ impl StateValidator {
                 Ok(ValidationResult::new(/* valid_for_storing= */ false))
             }
             StateContentValue::AccountTrieNodeWithProof(value) => {
-                let state_root = self.get_state_root(value.block_hash).await;
+                let state_root = self.get_state_root(value.block_hash).await?;
                 validate_node_trie_proof(state_root, key.node_hash, &key.path, &value.proof)?;
 
                 Ok(ValidationResult::new(/* valid_for_storing= */ true))
@@ -81,11 +80,11 @@ impl StateValidator {
                 Ok(ValidationResult::new(/* valid_for_storing= */ false))
             }
             StateContentValue::ContractStorageTrieNodeWithProof(value) => {
-                let state_root = self.get_state_root(value.block_hash).await;
+                let state_root = self.get_state_root(value.block_hash).await?;
                 let account_state =
                     validate_account_state(state_root, &key.address_hash, &value.account_proof)?;
                 validate_node_trie_proof(
-                    Some(account_state.storage_root),
+                    account_state.storage_root,
                     key.node_hash,
                     &key.path,
                     &value.storage_proof,
@@ -125,7 +124,7 @@ impl StateValidator {
                     });
                 }
 
-                let state_root = self.get_state_root(value.block_hash).await;
+                let state_root = self.get_state_root(value.block_hash).await?;
                 let account_state =
                     validate_account_state(state_root, &key.address_hash, &value.account_proof)?;
                 if account_state.code_hash == key.code_hash {
@@ -143,10 +142,12 @@ impl StateValidator {
         }
     }
 
-    async fn get_state_root(&self, _block_hash: B256) -> Option<B256> {
-        // Currently not implemented as history network is not reliable
-        debug!("Fetching state root is not yet implemented");
-        None
+    async fn get_state_root(&self, block_hash: B256) -> Result<B256, StateValidationError> {
+        let header_oracle = self.header_oracle.read().await;
+        let header = header_oracle
+            .recursive_find_header_with_proof(block_hash)
+            .await?;
+        Ok(header.header.state_root)
     }
 }
 
@@ -154,8 +155,17 @@ impl StateValidator {
 mod tests {
     use std::path::PathBuf;
 
+    use alloy_primitives::Bytes;
+    use alloy_rlp::Decodable;
     use anyhow::Result;
-    use ethportal_api::{utils::bytes::hex_decode, OverlayContentKey};
+    use ethportal_api::{
+        types::{
+            execution::header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
+            history::ContentInfo,
+            jsonrpc::{endpoints::HistoryEndpoint, json_rpc_mock::MockJsonRpcBuilder},
+        },
+        Header, HistoryContentKey, HistoryContentValue, OverlayContentKey,
+    };
     use serde::Deserialize;
     use serde_yaml::Value;
     use trin_utils::submodules::read_portal_spec_tests_file;
@@ -167,6 +177,32 @@ mod tests {
     fn create_validator() -> StateValidator {
         let header_oracle = Arc::new(RwLock::new(HeaderOracle::default()));
         StateValidator { header_oracle }
+    }
+
+    fn create_validator_with_header(header: Header) -> StateValidator {
+        let history_jsonrpc_tx = MockJsonRpcBuilder::new()
+            .with_response(
+                HistoryEndpoint::RecursiveFindContent(HistoryContentKey::BlockHeaderWithProof(
+                    header.hash().into(),
+                )),
+                ContentInfo::Content {
+                    content: HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
+                        header,
+                        proof: BlockHeaderProof::None(SszNone::default()),
+                    }),
+                    utp_transfer: false,
+                },
+            )
+            .or_fail();
+
+        let header_oracle = HeaderOracle {
+            history_jsonrpc_tx: Some(history_jsonrpc_tx),
+            ..Default::default()
+        };
+
+        StateValidator {
+            header_oracle: Arc::new(RwLock::new(header_oracle)),
+        }
     }
 
     fn read_yaml_file_as_sequence(filename: &str) -> Vec<Value> {
@@ -182,15 +218,13 @@ mod tests {
 
     #[tokio::test]
     async fn account_trie_node_retrieval() -> Result<()> {
-        let validator = create_validator();
-
         let test_cases = read_yaml_file_as_sequence("account_trie_node.yaml");
         for test_case in test_cases {
             let content_key = StateContentKey::deserialize(&test_case["content_key"])?;
-            let content_value = String::deserialize(&test_case["content_value_retrieval"])?;
+            let content_value = Bytes::deserialize(&test_case["content_value_retrieval"])?;
 
-            let validation_result = validator
-                .validate_content(&content_key, &hex_decode(&content_value)?)
+            let validation_result = create_validator()
+                .validate_content(&content_key, content_value.as_ref())
                 .await?;
             assert_eq!(
                 validation_result,
@@ -205,16 +239,16 @@ mod tests {
 
     #[tokio::test]
     async fn account_trie_node_offer() -> Result<()> {
-        let validator = create_validator();
-
         let test_cases = read_yaml_file_as_sequence("account_trie_node.yaml");
         for test_case in test_cases {
             let content_key = StateContentKey::deserialize(&test_case["content_key"])?;
-            let content_value = String::deserialize(&test_case["content_value_offer"])?;
+            let content_value = Bytes::deserialize(&test_case["content_value_offer"])?;
+            let header = Bytes::deserialize(&test_case["block_header"])?;
 
-            let validation_result = validator
-                .validate_content(&content_key, &hex_decode(&content_value)?)
-                .await?;
+            let validation_result =
+                create_validator_with_header(Header::decode(&mut header.as_ref())?)
+                    .validate_content(&content_key, content_value.as_ref())
+                    .await?;
 
             assert_eq!(
                 validation_result,
@@ -229,15 +263,13 @@ mod tests {
 
     #[tokio::test]
     async fn contract_storage_trie_node_retrieval() -> Result<()> {
-        let validator = create_validator();
-
         let test_cases = read_yaml_file_as_sequence("contract_storage_trie_node.yaml");
         for test_case in test_cases {
             let content_key = StateContentKey::deserialize(&test_case["content_key"])?;
-            let content_value = String::deserialize(&test_case["content_value_retrieval"])?;
+            let content_value = Bytes::deserialize(&test_case["content_value_retrieval"])?;
 
-            let validation_result = validator
-                .validate_content(&content_key, &hex_decode(&content_value)?)
+            let validation_result = create_validator()
+                .validate_content(&content_key, content_value.as_ref())
                 .await?;
             assert_eq!(
                 validation_result,
@@ -252,16 +284,16 @@ mod tests {
 
     #[tokio::test]
     async fn contract_storage_trie_node_offer() -> Result<()> {
-        let validator = create_validator();
-
         let test_cases = read_yaml_file_as_sequence("contract_storage_trie_node.yaml");
         for test_case in test_cases {
             let content_key = StateContentKey::deserialize(&test_case["content_key"])?;
-            let content_value = String::deserialize(&test_case["content_value_offer"])?;
+            let content_value = Bytes::deserialize(&test_case["content_value_offer"])?;
+            let header = Bytes::deserialize(&test_case["block_header"])?;
 
-            let validation_result = validator
-                .validate_content(&content_key, &hex_decode(&content_value)?)
-                .await?;
+            let validation_result =
+                create_validator_with_header(Header::decode(&mut header.as_ref())?)
+                    .validate_content(&content_key, content_value.as_ref())
+                    .await?;
 
             assert_eq!(
                 validation_result,
@@ -276,15 +308,13 @@ mod tests {
 
     #[tokio::test]
     async fn contract_bytecode_retrieval() -> Result<()> {
-        let validator = create_validator();
-
         let test_cases = read_yaml_file_as_sequence("contract_bytecode.yaml");
         for test_case in test_cases {
             let content_key = StateContentKey::deserialize(&test_case["content_key"])?;
-            let content_value = String::deserialize(&test_case["content_value_retrieval"])?;
+            let content_value = Bytes::deserialize(&test_case["content_value_retrieval"])?;
 
-            let validation_result = validator
-                .validate_content(&content_key, &hex_decode(&content_value)?)
+            let validation_result = create_validator()
+                .validate_content(&content_key, content_value.as_ref())
                 .await?;
             assert_eq!(
                 validation_result,
@@ -299,16 +329,16 @@ mod tests {
 
     #[tokio::test]
     async fn contract_bytecode_offer() -> Result<()> {
-        let validator = create_validator();
-
         let test_cases = read_yaml_file_as_sequence("contract_bytecode.yaml");
         for test_case in test_cases {
             let content_key = StateContentKey::deserialize(&test_case["content_key"])?;
-            let content_value = String::deserialize(&test_case["content_value_offer"])?;
+            let content_value = Bytes::deserialize(&test_case["content_value_offer"])?;
+            let header = Bytes::deserialize(&test_case["block_header"])?;
 
-            let validation_result = validator
-                .validate_content(&content_key, &hex_decode(&content_value)?)
-                .await?;
+            let validation_result =
+                create_validator_with_header(Header::decode(&mut header.as_ref())?)
+                    .validate_content(&content_key, content_value.as_ref())
+                    .await?;
             assert_eq!(
                 validation_result,
                 ValidationResult::new(true),
