@@ -1,4 +1,6 @@
-use anyhow::{anyhow, ensure};
+use std::io;
+
+use anyhow::{anyhow, ensure, Error};
 use rand::{seq::SliceRandom, thread_rng};
 use scraper::{Html, Selector};
 use surf::Client;
@@ -35,4 +37,13 @@ pub async fn get_shuffled_era1_files(http_client: &Client) -> anyhow::Result<Vec
     );
     era1_files.shuffle(&mut thread_rng());
     Ok(era1_files)
+}
+
+pub fn underlying_io_error_kind(error: &Error) -> Option<io::ErrorKind> {
+    for cause in error.chain() {
+        if let Some(io_error) = cause.downcast_ref::<io::Error>() {
+            return Some(io_error.kind());
+        }
+    }
+    None
 }
