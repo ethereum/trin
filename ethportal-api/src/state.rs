@@ -103,6 +103,18 @@ pub trait StateNetworkApi {
         content_value: StateContentValue,
     ) -> RpcResult<AcceptInfo>;
 
+    /// Send an OFFER request with given ContentKey, to the designated peer.
+    /// Does not store the content locally.
+    /// Returns true if the content was accepted and successfully transferred,
+    /// returns false if the content was not accepted or the transfer failed.
+    #[method(name = "stateTraceOffer")]
+    async fn trace_offer(
+        &self,
+        enr: Enr,
+        content_key: StateContentKey,
+        content_value: StateContentValue,
+    ) -> RpcResult<bool>;
+
     /// Store content key with a content data to the local database.
     #[method(name = "stateStore")]
     async fn store(

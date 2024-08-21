@@ -114,6 +114,18 @@ pub trait BeaconNetworkApi {
         content_value: BeaconContentValue,
     ) -> RpcResult<AcceptInfo>;
 
+    /// Send an OFFER request with given ContentKey, to the designated peer.
+    /// Does not store the content locally.
+    /// Returns true if the content was accepted and successfully transferred,
+    /// returns false if the content was not accepted or the transfer failed.
+    #[method(name = "beaconTraceOffer")]
+    async fn trace_offer(
+        &self,
+        enr: Enr,
+        content_key: BeaconContentKey,
+        content_value: BeaconContentValue,
+    ) -> RpcResult<bool>;
+
     /// Send an OFFER request with given ContentKeys, to the designated peer and wait for a
     /// response. Requires the content keys to be stored locally.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist

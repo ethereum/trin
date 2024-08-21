@@ -150,6 +150,20 @@ impl StateNetworkApiServer for StateNetworkApi {
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
+    /// Send an OFFER request with given ContentKey, to the designated peer.
+    /// Does not store the content locally.
+    /// Returns true if the content was accepted and successfully transferred,
+    /// returns false if the content was not accepted or the transfer failed.
+    async fn trace_offer(
+        &self,
+        enr: Enr,
+        content_key: StateContentKey,
+        content_value: StateContentValue,
+    ) -> RpcResult<bool> {
+        let endpoint = StateEndpoint::TraceOffer(enr, content_key, content_value);
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
+    }
+
     /// Store content key with a content data to the local database.
     async fn store(
         &self,

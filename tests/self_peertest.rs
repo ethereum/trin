@@ -71,6 +71,15 @@ async fn peertest_populated_offer() {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
+async fn peertest_populated_offer_with_trace() {
+    let (peertest, target, handle) = setup_peertest("mainnet", &[HISTORY_NETWORK]).await;
+    peertest::scenarios::offer_accept::test_populated_offer_with_trace(&peertest, &target).await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
 async fn peertest_unpopulated_offer() {
     let (peertest, target, handle) = setup_peertest("mainnet", &[HISTORY_NETWORK]).await;
     peertest::scenarios::offer_accept::test_unpopulated_offer(&peertest, &target).await;

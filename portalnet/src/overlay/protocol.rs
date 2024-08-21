@@ -43,7 +43,7 @@ use ethportal_api::{
         enr::Enr,
         portal_wire::{
             Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping, Pong,
-            PopulatedOffer, ProtocolId, Request, Response,
+            PopulatedOffer, PopulatedOfferWithResult, ProtocolId, Request, Response,
         },
     },
     utils::bytes::hex_encode,
@@ -573,6 +573,43 @@ where
             Ok(Response::Accept(accept)) => Ok(accept),
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
+        }
+    }
+
+    /// Send Offer request with trace, without storing the content into db
+    pub async fn send_offer_trace(
+        &self,
+        enr: Enr,
+        content_key: RawContentKey,
+        content_value: Vec<u8>,
+    ) -> Result<bool, OverlayRequestError> {
+        // Construct the request.
+        let (result_tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let request = Request::PopulatedOfferWithResult(PopulatedOfferWithResult {
+            content_item: (content_key, content_value),
+            result_tx,
+        });
+
+        let direction = RequestDirection::Outgoing {
+            destination: enr.clone(),
+        };
+
+        // Send the offer request and wait on the response.
+        // Ignore the accept message, since we only care about the trace.
+        self.send_overlay_request(request, direction).await?;
+
+        // Wait for the trace response.
+        match rx.recv().await {
+            Some(accept) => Ok(accept),
+            None => {
+                warn!(
+                    protocol = %self.protocol,
+                    "Error receiving TraceOffer query response"
+                );
+                Err(OverlayRequestError::ChannelFailure(
+                    "Error receiving TraceOffer query response".to_string(),
+                ))
+            }
         }
     }
 

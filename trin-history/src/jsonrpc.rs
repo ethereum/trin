@@ -68,11 +68,14 @@ async fn complete_request(network: Arc<HistoryNetwork>, request: HistoryJsonRpcR
             gossip(network, content_key, content_value).await
         }
         HistoryEndpoint::TraceGossip(content_key, content_value) => {
-            gossip_trace(network, content_key, content_value).await
+            trace_gossip(network, content_key, content_value).await
         }
         HistoryEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
         HistoryEndpoint::Offer(enr, content_key, content_value) => {
             offer(network, enr, content_key, content_value).await
+        }
+        HistoryEndpoint::TraceOffer(enr, content_key, content_value) => {
+            trace_offer(network, enr, content_key, content_value).await
         }
         HistoryEndpoint::WireOffer(enr, content_keys) => {
             wire_offer(network, enr, content_keys).await
@@ -314,7 +317,7 @@ async fn gossip(
 }
 
 /// Constructs a JSON call for the Gossip method, with tracing enabled.
-async fn gossip_trace(
+async fn trace_gossip(
     network: Arc<HistoryNetwork>,
     content_key: HistoryContentKey,
     content_value: ethportal_api::HistoryContentValue,
@@ -343,6 +346,23 @@ async fn offer(
         Ok(accept) => Ok(json!(AcceptInfo {
             content_keys: accept.content_keys,
         })),
+        Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
+    }
+}
+
+/// Constructs a JSON call for the Offer method with trace.
+async fn trace_offer(
+    network: Arc<HistoryNetwork>,
+    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+    content_key: HistoryContentKey,
+    content_value: HistoryContentValue,
+) -> Result<Value, String> {
+    match network
+        .overlay
+        .send_offer_trace(enr, content_key.into(), content_value.encode())
+        .await
+    {
+        Ok(accept) => Ok(json!(accept)),
         Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
     }
 }
