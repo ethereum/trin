@@ -1,5 +1,5 @@
 use std::{
-    io::{Read, Write},
+    io::{ErrorKind, Read, Write},
     ops::Deref,
     path::{Path, PathBuf},
 };
@@ -15,6 +15,7 @@ use crate::{
         types::{Entry, VersionEntry},
     },
     types::HeaderEntry,
+    utils::underlying_io_error_kind,
 };
 
 // <network-name>-<block-number>-<short-state-root>.era2
@@ -90,22 +91,9 @@ impl Era2 {
         self.path.as_path()
     }
 
-    #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> anyhow::Result<StreamEntry> {
-        if self.pending_storage_entries > 0 {
-            self.pending_storage_entries -= 1;
-            return Ok(StreamEntry::Storage(StorageEntry::try_from(
-                &self.e2store_stream.next_entry()?,
-            )?));
-        }
-        let account = AccountEntry::try_from(&self.e2store_stream.next_entry()?)?;
-        self.pending_storage_entries = account.storage_count;
-        Ok(StreamEntry::Account(account))
-    }
-
-    pub fn append_entry(&mut self, entry: &StreamEntry) -> anyhow::Result<usize> {
+    pub fn append_entry(&mut self, entry: &AccountOrStorageEntry) -> anyhow::Result<usize> {
         let size = match entry {
-            StreamEntry::Account(account) => {
+            AccountOrStorageEntry::Account(account) => {
                 ensure!(
                     self.pending_storage_entries == 0,
                     "Invalid append entry state: expected a storage entry, got an account entry. Still have {} storage entries left to append", self.pending_storage_entries                
@@ -116,7 +104,7 @@ impl Era2 {
                 self.e2store_stream.append_entry(&entry)?;
                 entry.value.len()
             }
-            StreamEntry::Storage(storage) => {
+            AccountOrStorageEntry::Storage(storage) => {
                 match self.pending_storage_entries {
                     0 => bail!("Invalid append entry state: expected an account entry, got a storage entry. No storage entries left to append for the account"),
                     1 => ensure!(
@@ -139,8 +127,51 @@ impl Era2 {
     }
 }
 
+impl Iterator for Era2 {
+    type Item = AccountOrStorageEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pending_storage_entries > 0 {
+            self.pending_storage_entries -= 1;
+
+            let raw_storage_entry = match self.e2store_stream.next_entry() {
+                Ok(raw_storage_entry) => raw_storage_entry,
+                Err(err) => panic!("Failed to read next storage entry: {:?}", err),
+            };
+
+            let storage_entry = match StorageEntry::try_from(&raw_storage_entry) {
+                Ok(storage_entry) => storage_entry,
+                Err(err) => panic!("Failed to decode next storage entry: {:?}", err),
+            };
+            return Some(AccountOrStorageEntry::Storage(storage_entry));
+        }
+
+        let raw_account_entry = match self.e2store_stream.next_entry() {
+            Ok(raw_account_entry) => raw_account_entry,
+            Err(err) => match err {
+                // If we read to the end of the error file we should get this
+                err if underlying_io_error_kind(&err).is_some()
+                    && underlying_io_error_kind(&err)
+                        .expect("We already checked there is some")
+                        == ErrorKind::UnexpectedEof =>
+                {
+                    return None
+                }
+                err => panic!("Failed reading next account entry: {:?}", err),
+            },
+        };
+
+        let account_entry = match AccountEntry::try_from(&raw_account_entry) {
+            Ok(account_entry) => account_entry,
+            Err(err) => panic!("Failed decoding next account entry: {:?}", err),
+        };
+        self.pending_storage_entries = account_entry.storage_count;
+        Some(AccountOrStorageEntry::Account(account_entry))
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub enum StreamEntry {
+pub enum AccountOrStorageEntry {
     Account(AccountEntry),
     Storage(StorageEntry),
 }
@@ -179,7 +210,11 @@ impl TryFrom<AccountEntry> for Entry {
     fn try_from(value: AccountEntry) -> Result<Self, Self::Error> {
         let rlp_encoded = alloy_rlp::encode(value);
         let mut encoder = snap::write::FrameEncoder::new(vec![]);
-        let _ = encoder.write(&rlp_encoded)?;
+        let bytes_written = encoder.write(&rlp_encoded)?;
+        ensure!(
+            bytes_written == rlp_encoded.len(),
+            "FrameEncoder should write whole rlp encoding"
+        );
         let encoded = encoder.into_inner()?;
         Ok(Entry::new(0x08, encoded))
     }
@@ -222,13 +257,17 @@ impl TryFrom<&Entry> for StorageEntry {
     }
 }
 
-impl TryInto<Entry> for StorageEntry {
+impl TryFrom<StorageEntry> for Entry {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> Result<Entry, Self::Error> {
-        let rlp_encoded = alloy_rlp::encode(self.0);
+    fn try_from(value: StorageEntry) -> Result<Self, Self::Error> {
+        let rlp_encoded = alloy_rlp::encode(value.0);
         let mut encoder = snap::write::FrameEncoder::new(vec![]);
-        let _ = encoder.write(&rlp_encoded)?;
+        let bytes_written = encoder.write(&rlp_encoded)?;
+        ensure!(
+            bytes_written == rlp_encoded.len(),
+            "FrameEncoder should write whole rlp encoding"
+        );
         let encoded = encoder.into_inner()?;
         Ok(Entry::new(0x09, encoded))
     }
@@ -283,7 +322,7 @@ mod tests {
         ));
         assert_eq!(era2_write_file.path(), tmp_path.as_path());
 
-        let account = StreamEntry::Account(AccountEntry {
+        let account = AccountOrStorageEntry::Account(AccountEntry {
             address_hash: B256::default(),
             account_state: AccountState::default(),
             bytecode: vec![],
@@ -295,7 +334,7 @@ mod tests {
         assert_eq!(size, 101);
         assert_eq!(era2_write_file.pending_storage_entries, 1);
 
-        let storage = StreamEntry::Storage(StorageEntry(vec![StorageItem {
+        let storage = AccountOrStorageEntry::Storage(StorageEntry(vec![StorageItem {
             storage_index_hash: B256::default(),
             value: U256::default(),
         }]));
@@ -312,11 +351,11 @@ mod tests {
         assert_eq!(era2_read_file.version, default_version_entry);
         assert_eq!(era2_read_file.header, HeaderEntry { header });
         assert_eq!(era2_read_file.pending_storage_entries, 0);
-        let read_account_tuple = era2_read_file.next()?;
+        let read_account_tuple = era2_read_file.next().unwrap();
         assert_eq!(account, read_account_tuple);
         assert_eq!(era2_read_file.pending_storage_entries, 1);
 
-        let read_storage_tuple = era2_read_file.next()?;
+        let read_storage_tuple = era2_read_file.next().unwrap();
         assert_eq!(storage, read_storage_tuple);
         assert_eq!(era2_read_file.pending_storage_entries, 0);
 

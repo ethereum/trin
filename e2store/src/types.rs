@@ -31,11 +31,11 @@ impl TryFrom<&Entry> for HeaderEntry {
     }
 }
 
-impl TryInto<Entry> for HeaderEntry {
+impl TryFrom<HeaderEntry> for Entry {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> Result<Entry, Self::Error> {
-        let rlp_encoded = alloy_rlp::encode(self.header);
+    fn try_from(value: HeaderEntry) -> Result<Self, Self::Error> {
+        let rlp_encoded = alloy_rlp::encode(value.header);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
