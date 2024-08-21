@@ -191,9 +191,7 @@ impl StateBridge {
                 }
 
                 // gossip contract storage
-                let storage_changed_nodes = state
-                    .database
-                    .get_storage_trie_diff(account.storage_root, address_hash);
+                let storage_changed_nodes = state.database.get_storage_trie_diff(address_hash);
 
                 let storage_walk_diff =
                     TrieWalker::new(account.storage_root, storage_changed_nodes);
