@@ -94,9 +94,14 @@ impl EvmDB {
             .get(&address_hash)
             .unwrap_or(&HashSet::new())
         {
+            // storage trie keys are prefixed with the address hash in the database
             let value = self
                 .db
-                .get(key)
+                .get(
+                    [address_hash.as_slice(), key.as_slice()]
+                        .concat()
+                        .as_slice(),
+                )
                 .expect("Getting storage value should never fail");
 
             if let Some(raw_value) = value {
@@ -125,7 +130,7 @@ impl DatabaseCommit for EvmDB {
                     None => RocksAccount::default(),
                 };
                 if rocks_account.storage_root != keccak256([EMPTY_STRING_CODE]) {
-                    let account_db = AccountDB::new(address, self.db.clone());
+                    let account_db = AccountDB::new(address_hash, self.db.clone());
                     let mut trie = EthTrie::from(Arc::new(account_db), rocks_account.storage_root)
                         .expect("Creating trie should never fail");
                     trie.clear_trie_from_db()
@@ -167,7 +172,7 @@ impl DatabaseCommit for EvmDB {
             rocks_account.nonce = account.info.nonce;
             rocks_account.code_hash = account.info.code_hash;
 
-            let account_db = AccountDB::new(address, self.db.clone());
+            let account_db = AccountDB::new(address_hash, self.db.clone());
 
             let mut trie = if rocks_account.storage_root == keccak256([EMPTY_STRING_CODE]) {
                 EthTrie::new(Arc::new(account_db))
@@ -268,11 +273,12 @@ impl DatabaseRef for EvmDB {
     }
 
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        let account: RocksAccount = match self.db.get(keccak256(address))? {
+        let address_hash = keccak256(address);
+        let account: RocksAccount = match self.db.get(address_hash)? {
             Some(raw_account) => Decodable::decode(&mut raw_account.as_slice())?,
             None => return Err(Self::Error::NotFound),
         };
-        let account_db = AccountDB::new(address, self.db.clone());
+        let account_db = AccountDB::new(address_hash, self.db.clone());
         let trie = if account.storage_root == keccak256([EMPTY_STRING_CODE]) {
             EthTrie::new(Arc::new(account_db))
         } else {

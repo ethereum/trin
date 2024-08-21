@@ -168,11 +168,6 @@ impl StateBridge {
                 };
                 let account: AccountStateInfo = Decodable::decode(&mut leaf.value.as_slice())?;
 
-                // if the code_hash is empty then it isn't a contract so we can skip it
-                if account.code_hash == keccak256([]) {
-                    continue;
-                }
-
                 // reconstruct the address hash from the path so that we can fetch the
                 // address from the database
                 let mut partial_key_path = leaf.key.get_data().to_vec();
@@ -181,16 +176,19 @@ impl StateBridge {
                     [&account_proof.path.clone(), partial_key_path.as_slice()].concat();
                 let address_hash = full_nibble_path_to_address_hash(&full_key_path);
 
-                // gossip contract bytecode
-                let code = state.database.code_by_hash_ref(account.code_hash)?;
-                self.gossip_contract_bytecode(
-                    address_hash,
-                    &account_proof,
-                    block_tuple.header.header.hash(),
-                    account.code_hash,
-                    code,
-                )
-                .await?;
+                // if the code_hash is empty then then don't try to gossip the contract bytecode
+                if account.code_hash != keccak256([]) {
+                    // gossip contract bytecode
+                    let code = state.database.code_by_hash_ref(account.code_hash)?;
+                    self.gossip_contract_bytecode(
+                        address_hash,
+                        &account_proof,
+                        block_tuple.header.header.hash(),
+                        account.code_hash,
+                        code,
+                    )
+                    .await?;
+                }
 
                 // gossip contract storage
                 let storage_changed_nodes = state.database.get_storage_trie_diff(address_hash);
@@ -209,6 +207,7 @@ impl StateBridge {
                     .await?;
                 }
             }
+
             // flush the database cache
             // This is used for gossiping storage trie diffs
             state.database.storage_cache.clear();

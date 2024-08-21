@@ -56,7 +56,7 @@ pub fn create_contract_content_value(
     Ok(StateContentValue::ContractBytecodeWithProof(
         ContractBytecodeWithProof {
             block_hash,
-            code: code.bytecode.to_vec().into(),
+            code: code.original_bytes().to_vec().into(),
             account_proof: account_proof.into(),
         },
     ))
