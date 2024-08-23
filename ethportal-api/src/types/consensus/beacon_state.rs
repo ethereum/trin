@@ -64,6 +64,7 @@ pub struct BeaconState {
     #[superstruct(getter(copy))]
     pub genesis_validators_root: B256,
     #[superstruct(getter(copy))]
+    #[serde(deserialize_with = "as_u64")]
     pub slot: u64,
     #[superstruct(getter(copy))]
     pub fork: Fork,
@@ -84,12 +85,14 @@ pub struct BeaconState {
 
     // Registry
     pub validators: VariableList<Validator, ValidatorRegistryLimit>,
+    #[serde(deserialize_with = "ssz_types::serde_utils::quoted_u64_var_list::deserialize")]
     pub balances: VariableList<u64, ValidatorRegistryLimit>,
 
     // Randomness
     pub randao_mixes: FixedVector<B256, EpochsPerHistoricalVector>,
 
     // Slashings
+    #[serde(deserialize_with = "ssz_types::serde_utils::quoted_u64_fixed_vec::deserialize")]
     pub slashings: FixedVector<u64, EpochsPerSlashingsVector>,
 
     // Participation (Altair and later)
@@ -109,6 +112,7 @@ pub struct BeaconState {
 
     // Inactivity
     #[superstruct(only(Bellatrix, Capella, Deneb))]
+    #[serde(deserialize_with = "ssz_types::serde_utils::quoted_u64_var_list::deserialize")]
     pub inactivity_scores: VariableList<u64, ValidatorRegistryLimit>,
 
     // Light-client sync committees
@@ -366,9 +370,7 @@ mod test {
             "../test_assets/beacon/bellatrix/BeaconState/ssz_random/{case}/value.yaml"
         ))
         .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: BeaconStateBellatrix = serde_json::from_value(value).unwrap();
-
+        let content: BeaconStateBellatrix = serde_yaml::from_str(&value).unwrap();
         let compressed = std::fs::read(format!(
             "../test_assets/beacon/bellatrix/BeaconState/ssz_random/{case}/serialized.ssz_snappy"
         ))
@@ -401,9 +403,7 @@ mod test {
             "../test_assets/beacon/capella/BeaconState/ssz_random/{case}/value.yaml"
         ))
         .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: BeaconStateCapella = serde_json::from_value(value).unwrap();
-
+        let content: BeaconStateCapella = serde_yaml::from_str(&value).unwrap();
         let compressed = std::fs::read(format!(
             "../test_assets/beacon/capella/BeaconState/ssz_random/{case}/serialized.ssz_snappy"
         ))
@@ -432,8 +432,13 @@ mod test {
             "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/value.yaml",
         )
         .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: BeaconStateDeneb = serde_json::from_value(value).unwrap();
+        let content: BeaconStateDeneb = serde_yaml::from_str(&value).unwrap();
+        let pandaops_value = std::fs::read_to_string(
+            "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/pandaops_value.yaml",
+        )
+        .expect("cannot find test asset");
+        let pandaops_content: BeaconStateDeneb = serde_yaml::from_str(&pandaops_value).unwrap();
+        assert_eq!(content, pandaops_content);
 
         let compressed = std::fs::read(
             "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/serialized.ssz_snappy",
@@ -467,9 +472,7 @@ mod test {
             "../test_assets/beacon/bellatrix/HistoricalBatch/ssz_random/{case}/value.yaml"
         ))
         .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: HistoricalBatch = serde_json::from_value(value).unwrap();
-
+        let content: HistoricalBatch = serde_yaml::from_str(&value).unwrap();
         let compressed = std::fs::read(format!(
             "../test_assets/beacon/bellatrix/HistoricalBatch/ssz_random/{case}/serialized.ssz_snappy"
         ))
@@ -486,9 +489,7 @@ mod test {
             "../test_assets/beacon/bellatrix/HistoricalBatch/ssz_random/case_0/value.yaml",
         )
         .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: HistoricalBatch = serde_json::from_value(value).unwrap();
-
+        let content: HistoricalBatch = serde_yaml::from_str(&value).unwrap();
         let expected_proof = [
             "0xad500369fa624b7bb451bf1c5119bb6e5e623bab76a0d06948d04a38f35a740d",
             "0x222151dcdfbace03dd6f2428ee1a12acffaa1ce03e6966aefd4a48282a776e8e",
@@ -519,8 +520,7 @@ mod test {
             "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/value.yaml",
         )
         .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let beacon_state: BeaconStateDeneb = serde_json::from_value(value).unwrap();
+        let beacon_state: BeaconStateDeneb = serde_yaml::from_str(&value).unwrap();
         let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
         assert_eq!(historical_summaries_proof.len(), 5);
     }

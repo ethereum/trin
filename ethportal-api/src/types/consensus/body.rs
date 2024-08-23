@@ -213,6 +213,7 @@ pub struct VoluntaryExit {
 #[derive(Debug, PartialEq, Clone, Default, Deserialize, Serialize, Decode, Encode, TreeHash)]
 pub struct Eth1Data {
     pub deposit_root: B256,
+    #[serde(deserialize_with = "as_u64")]
     pub deposit_count: u64,
     pub block_hash: B256,
 }

@@ -6,6 +6,7 @@ use tree_hash::{Hash256, PackedEncoding, TreeHash, TreeHashType};
 #[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct ParticipationFlags {
+    #[serde(deserialize_with = "serde_utils::quoted_u8::deserialize")]
     bits: u8,
 }
 

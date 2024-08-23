@@ -23,5 +23,5 @@ pub const DEFAULT_BASE_EL_ENDPOINT: &str = "https://geth-lighthouse.mainnet.eu1.
 pub const FALLBACK_BASE_EL_ENDPOINT: &str = "https://geth-lighthouse.mainnet.eu1.ethpandaops.io/";
 /// Consensus layer PandaOps endpoint
 /// We use Nimbus as the CL client, because it supports light client data by default.
-pub const DEFAULT_BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.eu1.ethpandaops.io/";
-pub const FALLBACK_BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.eu1.ethpandaops.io/";
+pub const DEFAULT_BASE_CL_ENDPOINT: &str = "https://nimbus-geth.mainnet.eu1.ethpandaops.io/";
+pub const FALLBACK_BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.na1.ethpandaops.io/";
