@@ -78,6 +78,9 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
         BeaconEndpoint::WireOffer(enr, content_keys) => {
             wire_offer(network, enr, content_keys).await
         }
+        BeaconEndpoint::TraceOffer(enr, content_key, content_value) => {
+            trace_offer(network, enr, content_key, content_value).await
+        }
         BeaconEndpoint::Ping(enr) => ping(network, enr).await,
         BeaconEndpoint::RoutingTableInfo => {
             serde_json::to_value(network.overlay.routing_table_info())
@@ -357,6 +360,23 @@ async fn offer(
         Ok(accept) => Ok(json!(AcceptInfo {
             content_keys: accept.content_keys,
         })),
+        Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
+    }
+}
+
+/// Constructs a JSON call for the Offer method with trace.
+async fn trace_offer(
+    network: Arc<BeaconNetwork>,
+    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+    content_key: BeaconContentKey,
+    content_value: BeaconContentValue,
+) -> Result<Value, String> {
+    match network
+        .overlay
+        .send_offer_trace(enr, content_key.into(), content_value.encode())
+        .await
+    {
+        Ok(accept) => Ok(json!(accept)),
         Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
     }
 }

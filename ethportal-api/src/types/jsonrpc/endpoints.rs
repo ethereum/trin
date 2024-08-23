@@ -47,6 +47,8 @@ pub enum StateEndpoint {
     /// params: [enr, content_key, content_value]
     Offer(Enr, StateContentKey, StateContentValue),
     /// params: [enr, content_key, content_value]
+    TraceOffer(Enr, StateContentKey, StateContentValue),
+    /// params: [enr, content_key, content_value]
     Gossip(StateContentKey, StateContentValue),
     /// params: [content_key, content_value]
     TraceGossip(StateContentKey, StateContentValue),
@@ -79,6 +81,8 @@ pub enum HistoryEndpoint {
     TraceGossip(HistoryContentKey, HistoryContentValue),
     /// params: [enr, content_key, content_value]
     Offer(Enr, HistoryContentKey, HistoryContentValue),
+    /// params: [enr, content_key, content_value]
+    TraceOffer(Enr, HistoryContentKey, HistoryContentValue),
     /// params: [enr, [content_key]]
     WireOffer(Enr, Vec<HistoryContentKey>),
     /// params: [enr]
@@ -127,6 +131,8 @@ pub enum BeaconEndpoint {
     TraceGossip(BeaconContentKey, BeaconContentValue),
     /// params: [enr, content_key, content_value]
     Offer(Enr, BeaconContentKey, BeaconContentValue),
+    /// params: [enr, content_key, content_value]
+    TraceOffer(Enr, BeaconContentKey, BeaconContentValue),
     /// params: [enr, [content_key]]
     WireOffer(Enr, Vec<BeaconContentKey>),
     /// params: enr

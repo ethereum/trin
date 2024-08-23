@@ -65,6 +65,9 @@ impl StateRequestHandler {
             StateEndpoint::Offer(enr, content_key, content_value) => {
                 offer(network, enr, content_key, content_value).await
             }
+            StateEndpoint::TraceOffer(enr, content_key, content_value) => {
+                trace_offer(network, enr, content_key, content_value).await
+            }
             StateEndpoint::Gossip(content_key, content_value) => {
                 gossip(
                     network,
@@ -315,6 +318,21 @@ async fn offer(
             .map(|accept| AcceptInfo {
                 content_keys: accept.content_keys,
             }),
+    )
+}
+
+async fn trace_offer(
+    network: Arc<StateNetwork>,
+    enr: Enr,
+    content_key: StateContentKey,
+    content_value: StateContentValue,
+) -> Result<Value, String> {
+    to_json_result(
+        "TraceOffer",
+        network
+            .overlay
+            .send_offer_trace(enr, content_key.into(), content_value.encode())
+            .await,
     )
 }
 

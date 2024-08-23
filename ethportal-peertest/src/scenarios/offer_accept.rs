@@ -93,6 +93,40 @@ pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     );
 }
 
+pub async fn test_populated_offer_with_trace(peertest: &Peertest, target: &Client) {
+    info!("Testing Populated Offer/ACCEPT flow with trace");
+
+    // store header for validation
+    let (content_key, content_value) = fixture_header_with_proof();
+    let store_result = peertest
+        .bootnode
+        .ipc_client
+        .store(content_key.clone(), content_value.clone())
+        .await
+        .unwrap();
+    assert!(store_result);
+
+    // use block body to test transfer of large content over utp
+    let (content_key, content_value) = fixture_block_body();
+    let result = target
+        .trace_offer(
+            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
+            content_key.clone(),
+            content_value.clone(),
+        )
+        .await
+        .unwrap();
+
+    // check that the result of the offer is true for a valid transfer
+    assert!(result);
+
+    // Check if the stored content value in bootnode's DB matches the offered
+    assert_eq!(
+        content_value,
+        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await,
+    );
+}
+
 pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) {
     info!("Testing populated offer propagates gossip");
 
