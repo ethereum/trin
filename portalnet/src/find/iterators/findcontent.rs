@@ -22,11 +22,16 @@
 // https://github.com/libp2p/rust-libp2p
 
 use std::{
-    collections::btree_map::{BTreeMap, Entry},
+    collections::{
+        btree_map::{BTreeMap, Entry},
+        HashMap, VecDeque,
+    },
     time::Instant,
 };
 
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use discv5::kbucket::{Distance, Key};
+use tracing::warn;
 
 use super::{
     super::query_pool::QueryState,
@@ -39,41 +44,56 @@ pub enum FindContentQueryResponse<TNodeId> {
     ConnectionId(u16),
 }
 
+/// An intermediate value, waiting to be validated. After validation, the content will become a
+/// FindContentQueryResult.
 #[derive(Debug)]
-pub enum FindContentQueryResult<TNodeId> {
-    ClosestNodes(Vec<TNodeId>),
-    Content {
+pub enum FindContentQueryPending<TNodeId> {
+    NonePending,
+    /// Content returned, but not yet validated.
+    PendingContent {
         content: Vec<u8>,
         nodes_to_poke: Vec<TNodeId>,
+        // peer that sent the content
+        peer: TNodeId,
+        // channel used to send back the validated content info
+        valid_content_tx: Sender<ValidatedContent<TNodeId>>,
     },
     Utp {
         connection_id: u16,
         nodes_to_poke: Vec<TNodeId>,
         // peer used to create utp stream
         peer: TNodeId,
+        // channel used to send back the validated content info
+        valid_content_tx: Sender<ValidatedContent<TNodeId>>,
     },
 }
 
+#[derive(Debug)]
+pub enum FindContentQueryResult<TNodeId> {
+    NoneFound,
+    /// Content returned, but not yet validated. Also includes a list of peers that were cancelled
+    ValidContent(ValidatedContent<TNodeId>, Vec<TNodeId>),
+}
+
+/// Content proposed by a peer, which has not been validated
 #[derive(Debug, Clone)]
-enum ContentAndPeer<TNodeId> {
-    Content(ContentAndPeerDetails<TNodeId>),
-    Utp(UtpAndPeerDetails<TNodeId>),
+enum UnvalidatedContent {
+    Content(Vec<u8>),
+    Connection(u16),
 }
 
 #[derive(Debug, Clone)]
-struct ContentAndPeerDetails<TNodeId> {
-    content: Vec<u8>,
-    peer: TNodeId,
+pub struct ValidatedContent<TNodeId> {
+    /// The body of the content
+    pub content: Vec<u8>,
+    /// Was the content transferred via uTP?
+    pub was_utp_transfer: bool,
+    /// Which peer sent the content that was validated?
+    pub sending_peer: TNodeId,
 }
 
 #[derive(Debug, Clone)]
-struct UtpAndPeerDetails<TNodeId> {
-    connection_id: u16,
-    peer: TNodeId,
-}
-
-#[derive(Debug, Clone)]
-pub struct FindContentQuery<TNodeId: std::fmt::Display> {
+pub struct FindContentQuery<TNodeId: std::fmt::Display + std::hash::Hash> {
     /// The target key we are looking for
     target_key: Key<TNodeId>,
 
@@ -87,11 +107,24 @@ pub struct FindContentQuery<TNodeId: std::fmt::Display> {
     /// Assumes that no two peers are equidistant.
     closest_peers: BTreeMap<Distance, QueryPeer<TNodeId>>,
 
-    /// The content possibly found by the query.
-    content: Option<ContentAndPeer<TNodeId>>,
+    /// Content returned by peers, in the process of being validated.
+    unchecked_content: HashMap<TNodeId, UnvalidatedContent>,
+
+    /// Peers that have returned content, but have not begun validation.
+    pending_validations: VecDeque<TNodeId>,
+
+    /// A channel to receive the final content after validation
+    content_rx: Receiver<ValidatedContent<TNodeId>>,
+    content_tx: Sender<ValidatedContent<TNodeId>>,
+
+    /// The received content, after validation.
+    validated_content: Option<ValidatedContent<TNodeId>>,
 
     /// The number of peers for which the query is currently waiting for results.
     num_waiting: usize,
+
+    /// The number of peers for which the query is currently validating results.
+    num_validating: usize,
 
     /// The configuration of the query.
     config: QueryConfig,
@@ -99,10 +132,11 @@ pub struct FindContentQuery<TNodeId: std::fmt::Display> {
 
 impl<TNodeId> Query<TNodeId> for FindContentQuery<TNodeId>
 where
-    TNodeId: Into<Key<TNodeId>> + Eq + Clone + std::fmt::Display,
+    TNodeId: Into<Key<TNodeId>> + Eq + Clone + std::fmt::Display + std::hash::Hash,
 {
     type Response = FindContentQueryResponse<TNodeId>;
     type Result = FindContentQueryResult<TNodeId>;
+    type PendingValidationResult = FindContentQueryPending<TNodeId>;
 
     fn target(&self) -> Key<TNodeId> {
         self.target_key.clone()
@@ -189,20 +223,14 @@ where
                 };
             }
             FindContentQueryResponse::Content(content) => {
-                if self.content.is_none() {
-                    self.content = Some(ContentAndPeer::Content(ContentAndPeerDetails {
-                        content,
-                        peer: peer.clone(),
-                    }));
-                }
+                self.unchecked_content
+                    .insert(peer.clone(), UnvalidatedContent::Content(content));
+                self.pending_validations.push_back(peer.clone());
             }
             FindContentQueryResponse::ConnectionId(connection_id) => {
-                if self.content.is_none() {
-                    self.content = Some(ContentAndPeer::Utp(UtpAndPeerDetails {
-                        connection_id: u16::from_be(connection_id),
-                        peer: peer.clone(),
-                    }));
-                }
+                self.unchecked_content
+                    .insert(peer.clone(), UnvalidatedContent::Connection(connection_id));
+                self.pending_validations.push_back(peer.clone());
             }
         }
     }
@@ -238,18 +266,25 @@ where
             return QueryState::Finished;
         }
 
-        // If the content was returned by a peer, then the query is finished.
-        if self.content.is_some() {
+        // If the content for this query has been marked as valid, then exit
+        if let Ok(valid_content) = self.content_rx.try_recv() {
             self.progress = QueryProgress::Finished;
+            self.validated_content = Some(valid_content);
             return QueryState::Finished;
         }
 
-        // Count the number of peers that returned a result. If there is a
-        // request in progress to one of the `num_results` closest peers, the
-        // counter is set to `None` as the query can only finish once
-        // `num_results` closest peers have responded (or there are no more
-        // peers to contact, see `active_counter`).
-        let mut result_counter = Some(0);
+        if self.num_validating > 0 {
+            // The query is working to validate content. Don't worry about contacting new peers or
+            // starting to validate new content until the current content is validated (or fails).
+            // Most importantly, don't iterate through all the peers and then conclude as Finished.
+            return QueryState::WaitingAtCapacity;
+        }
+
+        // Content is queued up to validate. Announce the next validation, keyed by the peer.
+        if let Some(peer) = self.pending_validations.pop_front() {
+            self.num_validating += 1;
+            return QueryState::Validating(peer);
+        }
 
         // Check if the query is at capacity w.r.t. the allowed parallelism.
         let at_capacity = self.at_capacity();
@@ -283,26 +318,10 @@ where
                         // The query is still waiting for a result from a peer and is
                         // at capacity w.r.t. the maximum number of peers being waited on.
                         return QueryState::WaitingAtCapacity;
-                    } else {
-                        // The query is still waiting for a result from a peer and the
-                        // `result_counter` did not yet reach `num_results`. Therefore
-                        // the query is not yet done, regardless of already successful
-                        // queries to peers farther from the target.
-                        result_counter = None;
                     }
                 }
 
-                QueryPeerState::Succeeded => {
-                    if let Some(ref mut count) = result_counter {
-                        *count += 1;
-                        // If `num_results` successful results have been delivered for the
-                        // closest peers, the query is done.
-                        if *count >= self.config.num_results {
-                            self.progress = QueryProgress::Finished;
-                            return QueryState::Finished;
-                        }
-                    }
-                }
+                QueryPeerState::Succeeded => {}
 
                 QueryPeerState::Failed | QueryPeerState::Unresponsive => {
                     // Skip over unresponsive or failed peers.
@@ -324,40 +343,39 @@ where
     }
 
     fn into_result(self) -> Self::Result {
-        match self.content.clone() {
-            Some(content) => match content {
-                ContentAndPeer::Content(val) => {
-                    let nodes_to_poke = self.get_nodes_to_poke(&val.peer);
-                    FindContentQueryResult::Content {
-                        content: val.content,
-                        nodes_to_poke,
-                    }
-                }
-                ContentAndPeer::Utp(val) => {
-                    let nodes_to_poke = self.get_nodes_to_poke(&val.peer);
-                    FindContentQueryResult::Utp {
-                        connection_id: val.connection_id,
-                        nodes_to_poke,
-                        peer: val.peer,
-                    }
-                }
+        let cancelled_peers = if let Some(ref validated_content) = self.validated_content {
+            self.pending_peers(validated_content.sending_peer.clone())
+        } else {
+            Vec::new()
+        };
+        match self.validated_content {
+            Some(validated_content) => {
+                FindContentQueryResult::ValidContent(validated_content, cancelled_peers)
+            }
+            None => FindContentQueryResult::NoneFound,
+        }
+    }
+
+    fn pending_validation_result(&self, source: TNodeId) -> Self::PendingValidationResult {
+        match self.unchecked_content.get(&source) {
+            Some(UnvalidatedContent::Content(content)) => FindContentQueryPending::PendingContent {
+                content: content.clone(),
+                nodes_to_poke: self.get_nodes_to_poke(&source),
+                peer: source,
+                valid_content_tx: self.content_tx.clone(),
+            },
+            Some(UnvalidatedContent::Connection(connection_id)) => FindContentQueryPending::Utp {
+                connection_id: *connection_id,
+                nodes_to_poke: self.get_nodes_to_poke(&source),
+                peer: source,
+                valid_content_tx: self.content_tx.clone(),
             },
             None => {
-                let closest_nodes = self
-                    .closest_peers
-                    .into_values()
-                    .filter_map(|peer| {
-                        // we don't filter out the source peer when returning the closest nodes
-                        if let QueryPeerState::Succeeded = peer.state() {
-                            Some(peer.key().clone().into_preimage())
-                        } else {
-                            None
-                        }
-                    })
-                    .take(self.config.num_results)
-                    .collect();
-
-                FindContentQueryResult::ClosestNodes(closest_nodes)
+                // No content has been found yet. Normally, this method [pending_result()] should
+                // not be called unless the caller believes there to be content
+                // waiting to be validated.
+                warn!("pending_result called, but no content is available for {source}");
+                FindContentQueryPending::NonePending
             }
         }
     }
@@ -365,7 +383,7 @@ where
 
 impl<TNodeId> FindContentQuery<TNodeId>
 where
-    TNodeId: Into<Key<TNodeId>> + Eq + Clone + std::fmt::Display,
+    TNodeId: Into<Key<TNodeId>> + Eq + Clone + std::fmt::Display + std::hash::Hash,
 {
     /// Creates a new query with the given configuration.
     pub fn with_config<I>(
@@ -391,13 +409,21 @@ where
         // The query initially makes progress by iterating towards the target.
         let progress = QueryProgress::Iterating { no_progress: 0 };
 
+        // The channel for receiving the final content after validation.
+        let (content_tx, content_rx) = unbounded();
+
         Self {
             target_key,
             started: None,
             progress,
             closest_peers,
-            content: None,
+            unchecked_content: HashMap::new(),
+            pending_validations: VecDeque::new(),
+            content_rx,
+            content_tx,
+            validated_content: None,
             num_waiting: 0,
+            num_validating: 0,
             config,
         }
     }
@@ -462,7 +488,7 @@ mod tests {
     use rand::{thread_rng, Rng};
     use std::{cmp::min, time::Duration};
     use test_log::test;
-    use tracing::debug;
+    use tracing::trace;
 
     type TestQuery = FindContentQuery<NodeId>;
 
@@ -522,10 +548,7 @@ mod tests {
 
         let result = query.into_result();
         match result {
-            FindContentQueryResult::ClosestNodes(closest_nodes) => assert!(
-                closest_nodes.is_empty(),
-                "Unexpected closest peers in new query"
-            ),
+            FindContentQueryResult::NoneFound => {}
             _ => panic!("Unexpected result variant from new query"),
         }
     }
@@ -541,19 +564,17 @@ mod tests {
                 .values()
                 .map(|e| e.key().clone())
                 .collect::<Vec<_>>();
-            let num_known = remaining.len();
-            let max_parallelism = usize::min(query.config.parallelism, num_known);
+            let max_parallelism = usize::min(query.config.parallelism, remaining.len());
 
             let target = query.target_key.clone();
             let mut expected: Vec<_>;
-            let mut num_failures = 0;
 
             let found_content: Vec<u8> = vec![0xef];
             let mut content_peer = None;
 
             'finished: loop {
                 if remaining.is_empty() {
-                    debug!("ending test: no more peers to pull from");
+                    trace!("ending test: no more peers to pull from");
                     break;
                 } else {
                     // Split off the next (up to) `parallelism` peers, who we expect to poll.
@@ -565,12 +586,13 @@ mod tests {
                 for k in expected.iter() {
                     match query.poll(now) {
                         QueryState::Finished => {
-                            debug!("Ending test loop: query state is finished");
+                            trace!("Ending test loop: query state is finished");
                             break 'finished;
                         }
                         QueryState::Waiting(Some(p)) => assert_eq!(&p, k.preimage()),
                         QueryState::Waiting(None) => panic!("Expected another peer."),
                         QueryState::WaitingAtCapacity => panic!("Unexpectedly reached capacity."),
+                        QueryState::Validating(p) => assert_eq!(&p, k.preimage()),
                     }
                 }
                 let num_waiting = query.num_waiting;
@@ -586,14 +608,32 @@ mod tests {
                         // With a small probability, return the desired content. Otherwise, return
                         // a list of random "closer" peers.
                         if rng.gen_bool(0.05) {
+                            let peer_node_id = k.preimage();
                             query.on_success(
-                                k.preimage(),
+                                peer_node_id,
                                 FindContentQueryResponse::Content(found_content.clone()),
                             );
                             // The first peer to return the content should be the one reported at
                             // the end.
                             if content_peer.is_none() {
                                 content_peer = Some(k.clone());
+                            }
+                            // Immediately validate the content
+                            match query.pending_validation_result(*peer_node_id) {
+                                FindContentQueryPending::PendingContent {
+                                    content,
+                                    nodes_to_poke: _,
+                                    peer,
+                                    valid_content_tx,
+                                } => {
+                                    let validated_content = ValidatedContent {
+                                        content,
+                                        was_utp_transfer: false,
+                                        sending_peer: peer,
+                                    };
+                                    valid_content_tx.send(validated_content).unwrap();
+                                }
+                                result => panic!("Unexpected result: {result:?}"),
                             }
                         } else {
                             let num_closer = rng.gen_range(0..query.config.num_results + 1);
@@ -605,7 +645,6 @@ mod tests {
                             );
                         }
                     } else {
-                        num_failures += 1;
                         query.on_failure(k.preimage());
                     }
                     assert_eq!(query.num_waiting, num_waiting - (i + 1));
@@ -633,48 +672,22 @@ mod tests {
                 })
                 .collect();
 
-            let target_key = query.target_key.clone();
-            let num_results = query.config.num_results;
-
             let result = query.into_result();
             match result {
-                FindContentQueryResult::Content {
-                    content,
-                    nodes_to_poke,
-                } => {
-                    let nodes_to_poke =
-                        nodes_to_poke.into_iter().map(Key::from).collect::<Vec<_>>();
-                    assert!(sorted(&target_key, &nodes_to_poke));
+                FindContentQueryResult::ValidContent(validated_content, _cancelled_peers) => {
+                    assert_eq!(validated_content.content, found_content);
 
                     let content_peer = content_peer.unwrap();
-
-                    // The peer who returned the content should not be included in the poke nodes
-                    assert!(!nodes_to_poke.contains(&content_peer));
-
-                    assert_eq!(content, found_content);
+                    assert_eq!(validated_content.sending_peer, content_peer.into_preimage());
                 }
-                FindContentQueryResult::ClosestNodes(closest_nodes) => {
-                    let closest_nodes =
-                        closest_nodes.into_iter().map(Key::from).collect::<Vec<_>>();
-                    assert!(sorted(&target_key, &closest_nodes));
-
-                    if closest_nodes.len() < num_results {
-                        // The query returned fewer results than requested. Therefore
-                        // either the initial number of known peers must have been
-                        // less than the desired number of results, or there must
-                        // have been failures.
-                        assert!(num_known < num_results || num_failures > 0);
-                        // All peers must have been contacted.
-                        assert_eq!(
-                            uncontacted.len(),
-                            0,
-                            "Not all peers have been contacted: {uncontacted:?}"
-                        );
-                    } else {
-                        assert_eq!(num_results, closest_nodes.len(), "Too  many results.");
-                    }
+                FindContentQueryResult::NoneFound => {
+                    // All peers must have been contacted.
+                    assert_eq!(
+                        uncontacted.len(),
+                        0,
+                        "Not all peers have been contacted: {uncontacted:?}"
+                    );
                 }
-                _ => panic!("Unexpected result."),
             }
         }
 
@@ -764,33 +777,16 @@ mod tests {
                 _ => panic!("Unexpected peer state: {:?}", first_peer.state()),
             }
 
-            let finished = query.progress == QueryProgress::Finished;
-
             // Deliver a result for the first peer. If the query is not marked finished, then the
             // first peer would be marked successful and included in the result.
             query.on_success(&peer, FindContentQueryResponse::ClosestNodes(vec![]));
-            let closest = query.into_result();
+            let result = query.into_result();
 
             // The query may be finished if the first peer was the only peer, because there would
             // not be any additional peers to contact.
-            if finished {
-                // Delivering results when the query already finished must have
-                // no effect.
-                match closest {
-                    FindContentQueryResult::ClosestNodes(closest) => {
-                        assert!(closest.is_empty());
-                    }
-                    _ => panic!("Unexpected query result variant"),
-                }
-            } else {
-                // Unresponsive peers can still deliver results while the iterator
-                // is not finished.
-                match closest {
-                    FindContentQueryResult::ClosestNodes(closest) => {
-                        assert_eq!(closest, vec![peer]);
-                    }
-                    _ => panic!("Unexpected query result variant"),
-                }
+            match result {
+                FindContentQueryResult::NoneFound => {}
+                r => panic!("Unexpected result: {r:?}"),
             }
             true
         }

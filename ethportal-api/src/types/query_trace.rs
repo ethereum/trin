@@ -15,7 +15,7 @@ type ContentId = [u8; 32];
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryTrace {
-    /// Node ID from which the content was received. None if the content was not found.
+    /// Node ID from which the content was received. None if the content was not found & verified.
     pub received_from: Option<NodeId>,
     /// The local node.
     pub origin: NodeId,
@@ -71,10 +71,13 @@ impl QueryTrace {
         self.add_metadata(enr, true);
     }
 
-    /// Mark the node that responded with the content, and when it was received.
+    /// Mark that a node responded with content, and when it was received.
+    /// Multiple nodes might respond, for a variety of reasons, including:
+    /// - they sent content that was later invalidated
+    /// - they claimed to have content for utp transfer, but disappeared before transmission
+    /// - they sent content too slowly, and we found it elsewhere
     pub fn node_responded_with_content(&mut self, enr: &Enr) {
         let node_id = enr.into();
-        self.received_from = Some(node_id);
         let timestamp_u64 = QueryTrace::timestamp_millis_u64(self.started_at_ms);
         self.responses.insert(
             node_id,
@@ -84,6 +87,13 @@ impl QueryTrace {
             },
         );
         self.add_metadata(enr, true);
+    }
+
+    /// Mark the node that sent the content that was finally verified.
+    pub fn content_validated(&mut self, node_id: NodeId) {
+        if self.received_from.is_none() {
+            self.received_from = Some(node_id);
+        }
     }
 
     /// Returns milliseconds since the time provided.
@@ -177,6 +187,7 @@ mod tests {
         tracer.node_responded_with(&enr_a, vec![]);
         tracer.node_responded_with(&enr_b, vec![&enr_d]);
         tracer.node_responded_with_content(&enr_c);
+        tracer.content_validated(*node_id_c);
 
         let origin_entry = tracer.responses.get(local_node_id).unwrap();
 

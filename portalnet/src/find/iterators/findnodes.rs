@@ -60,6 +60,7 @@ where
 {
     type Response = Vec<TNodeId>;
     type Result = Vec<TNodeId>;
+    type PendingValidationResult = ();
 
     fn target(&self) -> Key<TNodeId> {
         self.target_key.clone()
@@ -264,6 +265,13 @@ where
             .take(self.config.num_results)
             .collect()
     }
+
+    fn pending_validation_result(&self, _sending_peer: TNodeId) -> Self::PendingValidationResult {
+        // FindNodes queries don't need to provide access to the result until the query is finished.
+        // This is because the query doesn't run content validation, so as soon as the nodes are
+        // returned, the query is considered finished.
+        unimplemented!("Use `into_result` instead. FindNodes does not run content validation.")
+    }
 }
 
 impl<TNodeId> FindNodeQuery<TNodeId>
@@ -426,6 +434,7 @@ mod tests {
                         QueryState::Waiting(Some(p)) => assert_eq!(&p, k.preimage()),
                         QueryState::Waiting(None) => panic!("Expected another peer."),
                         QueryState::WaitingAtCapacity => panic!("Unexpectedly reached capacity."),
+                        QueryState::Validating(..) => panic!("Should not validate nodes."),
                     }
                 }
                 let num_waiting = query.num_waiting;

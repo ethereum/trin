@@ -15,6 +15,7 @@ alloy-primitives.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
+crossbeam-channel = "0.5.13"
 delay_map.workspace = true
 directories.workspace = true
 discv5.workspace = true

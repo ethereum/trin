@@ -70,6 +70,9 @@ pub trait Query<TNodeId> {
     /// The type of the result produced by the query.
     type Result;
 
+    /// The type of a pending result that is waiting for validation.
+    type PendingValidationResult;
+
     /// Returns the target of the query.
     fn target(&self) -> Key<TNodeId>;
 
@@ -110,6 +113,10 @@ pub trait Query<TNodeId> {
 
     /// Consumes the query, returning the result.
     fn into_result(self) -> Self::Result;
+
+    /// Returns a result that is waiting for validation. The attached peer is used to look up which
+    /// pending result to return.
+    fn pending_validation_result(&self, sending_peer: TNodeId) -> Self::PendingValidationResult;
 }
 
 /// Stage of the query.

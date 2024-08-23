@@ -62,6 +62,8 @@ pub enum QueryPoolState<'a, TNodeId, TQuery, TContentKey> {
             TNodeId,
         )>,
     ),
+    /// A query has received a result from the given peer. It may require validation
+    Validating(&'a mut QueryInfo<TContentKey>, &'a mut TQuery, TNodeId),
     /// A query has finished.
     Finished(QueryId, QueryInfo<TContentKey>, TQuery),
     /// A query has timed out.
@@ -106,6 +108,7 @@ where
     pub fn poll(&mut self) -> QueryPoolState<'_, TNodeId, TQuery, TContentKey> {
         let now = Instant::now();
         let mut finished = None;
+        let mut validating = None;
         let mut waiting = None;
         let mut timeout = None;
 
@@ -116,6 +119,10 @@ where
             match query.poll(now) {
                 QueryState::Finished => {
                     finished = Some(query_id);
+                    break;
+                }
+                QueryState::Validating(sending_peer) => {
+                    validating = Some((query_id, sending_peer));
                     break;
                 }
                 QueryState::Waiting(Some(return_peer)) => {
@@ -135,6 +142,11 @@ where
         if let Some((query_id, return_peer)) = waiting {
             let (query_info, query) = self.queries.get_mut(&query_id).expect("s.a.");
             return QueryPoolState::Waiting(Some((query_id, query_info, query, return_peer)));
+        }
+
+        if let Some((query_id, sending_peer)) = validating {
+            let (query_info, query) = self.queries.get_mut(&query_id).expect("s.a.");
+            return QueryPoolState::Validating(query_info, query, sending_peer);
         }
 
         if let Some(query_id) = finished {
@@ -189,6 +201,9 @@ pub enum QueryState<TNodeId> {
     /// The query is waiting for results and is at capacity w.r.t. the
     /// permitted parallelism.
     WaitingAtCapacity,
+
+    /// The query has received some result from the given peer, which needs to be validated.
+    Validating(TNodeId),
 
     /// The query finished.
     Finished,

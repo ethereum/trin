@@ -235,6 +235,7 @@ async fn recursive_find_content(
                 let local_enr = network.overlay.local_enr();
                 let mut trace = QueryTrace::new(&local_enr, content_key.content_id());
                 trace.node_responded_with_content(&local_enr);
+                trace.content_validated(local_enr.into());
                 Some(trace)
             } else {
                 None

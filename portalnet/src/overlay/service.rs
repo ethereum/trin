@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::anyhow;
 use bytes::Bytes;
+use crossbeam_channel::Sender;
 use delay_map::HashSetDelay;
 use discv5::{
     enr::NodeId,
@@ -41,7 +42,10 @@ use crate::{
     events::{EventEnvelope, OverlayEvent},
     find::{
         iterators::{
-            findcontent::{FindContentQuery, FindContentQueryResponse, FindContentQueryResult},
+            findcontent::{
+                FindContentQuery, FindContentQueryPending, FindContentQueryResponse,
+                FindContentQueryResult, ValidatedContent,
+            },
             findnodes::FindNodeQuery,
             query::{Query, QueryConfig},
         },
@@ -488,6 +492,24 @@ where
         queries: Arc<RwLock<QueryPool<NodeId, TQuery, TContentKey>>>,
     ) -> QueryEvent<TQuery, TContentKey> {
         future::poll_fn(move |_cx| match queries.write().poll() {
+            QueryPoolState::Validating(query_info, query, sending_peer) => {
+                // This only happens during a FindContent query.
+                let content_key = match &query_info.query_type {
+                    QueryType::FindContent { target, .. } => target.clone(),
+                    _ => {
+                        error!(
+                            "Received wrong QueryType when handling new content during FindContent. This is a: {:?}",
+                            query_info.query_type
+                        );
+                        return Poll::Pending;
+                    }
+                };
+                // Generate the query result here instead of in handle_find_content_query_event,
+                // because the query is only borrowed, and can't be moved to the query event.
+                let query_result = query.pending_validation_result(sending_peer);
+                Poll::Ready(QueryEvent::Validating(content_key, query_result))
+            }
+            // Note that some query pools skip over Validating, straight to Finished (like the FindNode query pool)
             QueryPoolState::Finished(query_id, query_info, query) => {
                 Poll::Ready(QueryEvent::Finished(query_id, query_info, query))
             }
@@ -543,6 +565,10 @@ where
                         query.on_failure(&node_id);
                     }
                 }
+            }
+            QueryEvent::Validating(..) => {
+                // This should be an unreachable path
+                unimplemented!("A FindNode query unexpectedly tried to validate content");
             }
             // Query has ended.
             QueryEvent::Finished(query_id, mut query_info, query)
@@ -624,32 +650,17 @@ where
                     }
                 }
             }
-            QueryEvent::Finished(_, query_info, query)
-            | QueryEvent::TimedOut(_, query_info, query) => {
-                let (callback, content_key) = match query_info.query_type {
-                    QueryType::FindContent { callback, target } => (callback, target),
-                    _ => {
-                        error!(
-                            "Only FindContent queries trigger a Finished or TimedOut event, but this is a {:?}",
-                            query_info.query_type
-                        );
-                        return;
+            QueryEvent::Validating(content_key, query_result) => {
+                match query_result {
+                    FindContentQueryPending::NonePending => {
+                        // This should be an unreachable path
+                        error!("A FindContent query claimed to have some new data to validate, but none was available");
                     }
-                };
-
-                match query.into_result() {
-                    FindContentQueryResult::ClosestNodes(_closest_nodes) => {
-                        if let Some(responder) = callback {
-                            let _ = responder.send(Err(OverlayRequestError::ContentNotFound {
-                                message: "Unable to locate content on the network".to_string(),
-                                utp: false,
-                                trace: query_info.trace,
-                            }));
-                        }
-                    }
-                    FindContentQueryResult::Content {
+                    FindContentQueryPending::PendingContent {
                         content,
                         nodes_to_poke,
+                        peer,
+                        valid_content_tx,
                     } => {
                         let utp_processing = UtpProcessing::from(&*self);
                         tokio::spawn(async move {
@@ -657,38 +668,29 @@ where
                                 content,
                                 false,
                                 content_key,
-                                callback,
-                                query_info.trace,
                                 nodes_to_poke,
                                 utp_processing,
+                                peer,
+                                valid_content_tx,
                             )
                             .await;
                         });
                     }
-                    FindContentQueryResult::Utp {
+                    FindContentQueryPending::Utp {
                         connection_id,
                         peer,
                         nodes_to_poke,
+                        valid_content_tx,
                     } => {
                         let source = match self.find_enr(&peer) {
                             Some(enr) => enr,
                             _ => {
                                 debug!("Received uTP payload from unknown {peer}");
-                                if let Some(responder) = callback {
-                                    let _ =
-                                        responder.send(Err(OverlayRequestError::ContentNotFound {
-                                            message: "Unable to locate content on the network: received utp payload from unknown peer"
-                                                .to_string(),
-                                            utp: true,
-                                            trace: query_info.trace,
-                                        }));
-                                };
                                 return;
                             }
                         };
                         let utp_processing = UtpProcessing::from(&*self);
                         tokio::spawn(async move {
-                            let trace = query_info.trace;
                             let cid = utp_rs::cid::ConnectionId {
                                 recv: connection_id,
                                 send: connection_id.wrapping_add(1),
@@ -701,17 +703,10 @@ where
                             {
                                 Ok(data) => data,
                                 Err(e) => {
-                                    if let Some(responder) = callback {
-                                        let _ = responder.send(Err(
-                                            OverlayRequestError::ContentNotFound {
-                                                message: format!(
-                                                    "Unable to locate content on the network: {e}"
-                                                ),
-                                                utp: true,
-                                                trace,
-                                            },
-                                        ));
-                                    }
+                                    debug!(
+                                        %e,
+                                        "Failed to connect to inbound uTP stream for FindContent"
+                                    );
                                     return;
                                 }
                             };
@@ -719,15 +714,66 @@ where
                                 data,
                                 true,
                                 content_key,
-                                callback,
-                                trace,
                                 nodes_to_poke,
                                 utp_processing,
+                                peer,
+                                valid_content_tx,
                             )
                             .await;
                         });
                     }
                 };
+            }
+            QueryEvent::Finished(_, query_info, query)
+            | QueryEvent::TimedOut(_, query_info, query) => {
+                let callback = match query_info.query_type {
+                    QueryType::FindContent { callback, .. } => callback,
+                    _ => {
+                        error!(
+                            "Received wrong QueryType when handling a FindContent Timeout. This is a: {:?}",
+                            query_info.query_type
+                        );
+                        return;
+                    }
+                };
+                match query.into_result() {
+                    FindContentQueryResult::ValidContent(valid_content, cancelled_peers) => {
+                        if let Some(responder) = callback {
+                            let ValidatedContent {
+                                content,
+                                was_utp_transfer,
+                                sending_peer,
+                            } = valid_content;
+
+                            let trace = if let Some(mut trace) = query_info.trace {
+                                trace.content_validated(sending_peer);
+                                trace.cancelled = cancelled_peers;
+                                Some(trace)
+                            } else {
+                                None
+                            };
+
+                            if responder
+                                .send(Ok((content, was_utp_transfer, trace)))
+                                .is_err()
+                            {
+                                error!(
+                                    "Failed to send RecursiveFindContent result to the initiator of the query"
+                                );
+                            }
+                        }
+                    }
+                    FindContentQueryResult::NoneFound => {
+                        if let Some(responder) = callback {
+                            let _ = responder.send(Err(OverlayRequestError::ContentNotFound {
+                                message: "Unable to locate content on the network before timeout"
+                                    .to_string(),
+                                utp: false,
+                                trace: query_info.trace,
+                            }));
+                        }
+                    }
+                }
             }
         }
     }
@@ -1798,6 +1844,7 @@ where
         match content {
             Content::ConnectionId(id) => {
                 if let Some(query_id) = query_id {
+                    let id = u16::from_be(id);
                     self.advance_find_content_query_with_connection_id(&query_id, source, id);
                 }
             }
@@ -1823,10 +1870,10 @@ where
         content: Vec<u8>,
         utp_transfer: bool,
         content_key: TContentKey,
-        responder: Option<oneshot::Sender<RecursiveFindContentResult>>,
-        trace: Option<QueryTrace>,
         nodes_to_poke: Vec<NodeId>,
         utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
+        sending_peer: NodeId,
+        valid_content_callback: Sender<ValidatedContent<NodeId>>,
     ) {
         let mut content = content;
         // Operate under assumption that all content in the store is valid
@@ -1853,15 +1900,6 @@ where
                         content.key = %content_key,
                         "Error validating content"
                     );
-                    if let Some(responder) = responder {
-                        let _ = responder.send(Err(OverlayRequestError::ContentNotFound {
-                            message:
-                                "Unable to locate content on the network: error validating content"
-                                    .to_string(),
-                            utp: utp_transfer,
-                            trace,
-                        }));
-                    }
                     return;
                 }
             };
@@ -1916,8 +1954,16 @@ where
                 }
             }
         }
-        if let Some(responder) = responder {
-            let _ = responder.send(Ok((content.clone(), utp_transfer, trace)));
+
+        if valid_content_callback
+            .send(ValidatedContent {
+                content: content.clone(),
+                was_utp_transfer: utp_transfer,
+                sending_peer,
+            })
+            .is_err()
+        {
+            warn!("The content query has exited before the returned content could be marked as valid. Perhaps a timeout, or a parallel copy of the content was validated first.");
         }
 
         if !utp_processing.disable_poke {
@@ -2142,7 +2188,6 @@ where
         if let Some((query_info, query)) = self.find_content_query_pool.write().get_mut(*query_id) {
             if let Some(trace) = &mut query_info.trace {
                 trace.node_responded_with_content(&source);
-                trace.cancelled = query.pending_peers(source.node_id()).into_iter().collect();
             }
             // Mark the query successful for the source of the response with the connection id.
             query.on_success(
@@ -2163,7 +2208,6 @@ where
         if let Some((query_info, query)) = pool.get_mut(*query_id) {
             if let Some(trace) = &mut query_info.trace {
                 trace.node_responded_with_content(&source);
-                trace.cancelled = query.pending_peers(source.node_id()).into_iter().collect();
             }
             // Mark the query successful for the source of the response with the content.
             query.on_success(
@@ -2591,13 +2635,16 @@ where
         }
     }
 }
+
 /// The result of the `query_event_poll` indicating an action is required to further progress an
 /// active query.
-pub enum QueryEvent<TQuery, TContentKey> {
+pub enum QueryEvent<TQuery: Query<NodeId>, TContentKey> {
     /// The query is waiting for a peer to be contacted.
     Waiting(QueryId, NodeId, Request),
     /// The query has timed out, possible returning peers.
     TimedOut(QueryId, QueryInfo<TContentKey>, TQuery),
+    /// The query is working to validate the response.
+    Validating(TContentKey, TQuery::PendingValidationResult),
     /// The query has completed successfully.
     Finished(QueryId, QueryInfo<TContentKey>, TQuery),
 }
@@ -2702,7 +2749,10 @@ mod tests {
     use discv5::kbucket::Entry;
     use rstest::*;
     use serial_test::serial;
-    use tokio::sync::{mpsc::unbounded_channel, RwLock as TokioRwLock};
+    use tokio::{
+        sync::{mpsc::unbounded_channel, RwLock as TokioRwLock},
+        time::timeout,
+    };
     use tokio_test::{assert_pending, assert_ready, task};
 
     use crate::{
@@ -3826,11 +3876,8 @@ mod tests {
         // Query info should contain the "discovered" ENR.
         assert!(query_info.untrusted_enrs.contains(&enr));
 
-        // Query result should contain bootnode who responded successfully.
         match query.clone().into_result() {
-            FindContentQueryResult::ClosestNodes(closest_nodes) => {
-                assert!(closest_nodes.contains(&bootnode_enr.node_id()));
-            }
+            FindContentQueryResult::NoneFound => {}
             _ => panic!("Unexpected find content query result"),
         }
     }
@@ -3889,14 +3936,16 @@ mod tests {
             .expect("Query pool does not contain query");
 
         // Query result should contain content.
-        match query.clone().into_result() {
-            FindContentQueryResult::Content {
-                content: result_content,
+        match query.pending_validation_result(bootnode_node_id) {
+            FindContentQueryPending::PendingContent {
+                content: pending_content,
+                peer,
                 ..
             } => {
-                assert_eq!(result_content, content);
+                assert_eq!(pending_content, content);
+                assert_eq!(peer, bootnode_node_id);
             }
-            _ => panic!("Unexpected find content query result"),
+            result => panic!("Unexpected find content query result: {result:?}"),
         }
     }
 
@@ -3956,16 +4005,21 @@ mod tests {
             .get_mut(query_id)
             .expect("Query pool does not contain query");
 
-        // Query result should contain content.
-        match query.clone().into_result() {
-            FindContentQueryResult::Utp { connection_id, .. } => {
-                assert_eq!(u16::from_be(connection_id), actual_connection_id);
+        // Query result should contain connection ID
+        match query.pending_validation_result(bootnode_node_id) {
+            FindContentQueryPending::Utp {
+                connection_id,
+                peer,
+                ..
+            } => {
+                assert_eq!(connection_id, actual_connection_id);
+                assert_eq!(peer, bootnode_node_id);
             }
-            _ => panic!("Unexpected find content query result"),
+            result => panic!("Unexpected find content query result: {result:?}"),
         }
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn handle_find_content_query_event() {
         let mut service = task::spawn(build_service());
 
@@ -4043,8 +4097,32 @@ mod tests {
             )
             .await;
 
+        // Query event should be `Validating` variant.
+        assert!(matches!(query_event, QueryEvent::Validating(..)));
+
+        service.handle_find_content_query_event(query_event);
+
+        // Poll until content is validated
+        let mut attempts_left = 5;
+        let query_event = loop {
+            let polled = timeout(
+                Duration::from_millis(10),
+                OverlayService::<_, XorMetric, MockValidator, MemoryContentStore>::query_event_poll(
+                    service.find_content_query_pool.clone(),
+                ),
+            )
+            .await;
+            if let Ok(query_event) = polled {
+                break query_event;
+            }
+            attempts_left -= 1;
+            if attempts_left == 0 {
+                panic!("Timeout waiting for Finished query event, after validation");
+            }
+        };
+
         // Query event should be `Finished` variant.
-        assert!(matches!(query_event, QueryEvent::Finished(_, _, _)));
+        assert!(matches!(query_event, QueryEvent::Finished(..)));
 
         service.handle_find_content_query_event(query_event);
 
