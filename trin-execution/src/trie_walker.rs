@@ -2,7 +2,6 @@ use std::collections::VecDeque;
 
 use alloy_primitives::B256;
 use alloy_rlp::EMPTY_STRING_CODE;
-use anyhow::ensure;
 use eth_trie::{decode_node, node::Node};
 use hashbrown::HashMap as BrownHashMap;
 use revm_primitives::keccak256;
@@ -135,9 +134,6 @@ impl TrieWalker {
                 _ => {}
             }
         }
-
-        // Ensure we discovered all nodes (root is not present in the trie_walker_nodes)
-        ensure!(nodes.len() == trie_walker_nodes.len(), "We expect the node length and trie_walker_nodes length to be the same, as we should have discovered all nodes in the trie. If this fails it implies an invalid trie was provided with an unnavigable path.");
 
         Ok(trie_walker_nodes)
     }
