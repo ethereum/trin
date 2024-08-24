@@ -23,8 +23,15 @@ use trin_execution::{
     utils::full_nibble_path_to_address_hash,
 };
 
-// This test is variable and configurable by settings `blocks`
-// The time the test takes to run is dependent on the value of `blocks`
+/// Tests that we can execute and generate content up to a specified block.
+///
+/// The block is specified manually by set `blocks` variable.
+///
+/// Following command should be used for running:
+///
+/// ```
+/// cargo test -p trin-execution --test content_generation -- --include-ignored --nocapture
+/// ```
 #[tokio::test]
 #[traced_test]
 #[ignore = "takes too long"]
