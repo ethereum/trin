@@ -650,7 +650,7 @@ where
                         let utp_processing = UtpProcessing::from(&*self);
                         tokio::spawn(async move {
                             Self::process_received_content(
-                                content.clone(),
+                                content,
                                 false,
                                 content_key,
                                 callback,
