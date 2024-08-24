@@ -1,6 +1,6 @@
 use e2store::{
     era1::Era1,
-    utils::{get_era_file_download_links, get_shuffled_era1_files},
+    utils::{get_era_file_download_links, get_shuffled_era1_files, ERA1_FILE_COUNT},
 };
 use surf::{Client, Config};
 use tokio::task::JoinHandle;
@@ -13,7 +13,7 @@ use crate::era::{
 
 use super::{
     binary_search::EraBinarySearch,
-    types::{get_era_type, EraType, ProcessedBlock, ProcessedEra},
+    types::{EraType, ProcessedBlock, ProcessedEra},
 };
 
 pub struct EraManager {
@@ -60,7 +60,7 @@ impl EraManager {
         block_number: u64,
         epoch_index: u64,
     ) -> anyhow::Result<String> {
-        match get_era_type(block_number) {
+        match EraType::for_block_number(block_number) {
             EraType::Era1 => {
                 let era1_file = self
                     .era1_files
@@ -72,11 +72,7 @@ impl EraManager {
             }
             EraType::Era => {
                 let era_files = get_era_file_download_links(&self.http_client).await?;
-                let era_file = era_files
-                    .iter()
-                    .find(|file| file.contains(&format!("mainnet-{epoch_index:05}-")))
-                    .expect("to be able to find era file")
-                    .clone();
+                let era_file = era_files[&(epoch_index)].clone();
                 Ok(era_file)
             }
         }
@@ -85,7 +81,7 @@ impl EraManager {
     async fn fetch_era_file(&mut self, block_number: u64) -> anyhow::Result<ProcessedEra> {
         info!("Fetching the next era file");
 
-        // If the current is already downloaded, return it, else download the current one
+        // If next_era is none we must initial EraManager, with the first era file
         let current_era = self.next_era.take();
         let current_era = match current_era {
             Some(block) => block
@@ -97,14 +93,14 @@ impl EraManager {
         // Download the next era file
         let mut next_epoch_index = current_era.epoch_index + 1;
         // Handle transition from era1 to era
-        if next_epoch_index == 1897 {
+        if next_epoch_index == ERA1_FILE_COUNT as u64 {
             next_epoch_index = FIRST_ERA_EPOCH_WITH_EXECUTION_PAYLOAD;
         }
         let next_block_number = current_era.first_block_number + current_era.len() as u64;
         let next_era_path = self
             .fetch_era_file_link(next_block_number, next_epoch_index)
             .await?;
-        let era_type = get_era_type(next_block_number);
+        let era_type = EraType::for_block_number(next_block_number);
         let http_client = self.http_client.clone();
         let join_handle = tokio::spawn(async move {
             let raw_era = download_raw_era(next_era_path, http_client.clone())
@@ -126,7 +122,7 @@ impl EraManager {
     /// If the block is from a era file we will need to binary search to find which era file
     /// contains the block we want
     async fn init_current_era(&mut self, block_number: u64) -> anyhow::Result<ProcessedEra> {
-        if let EraType::Era1 = get_era_type(block_number) {
+        if let EraType::Era1 = EraType::for_block_number(block_number) {
             let epoch_index = Era1::epoch_number_from_block_number(block_number);
             let era_path = self.fetch_era_file_link(block_number, epoch_index).await?;
             let raw_era1 = download_raw_era(era_path, self.http_client.clone()).await?;

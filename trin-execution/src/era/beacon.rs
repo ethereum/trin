@@ -3,7 +3,8 @@ use alloy_rlp::Decodable;
 use ethportal_api::{
     consensus::{
         beacon_block::{
-            SignedBeaconBlockBellatrix, SignedBeaconBlockCapella, SignedBeaconBlockDeneb,
+            SignedBeaconBlock, SignedBeaconBlockBellatrix, SignedBeaconBlockCapella,
+            SignedBeaconBlockDeneb,
         },
         body::Transactions,
     },
@@ -18,12 +19,22 @@ use super::types::{ProcessedBlock, TransactionsWithSender};
 const EMPTY_UNCLE_ROOT_HASH: B256 =
     b256!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347");
 
-pub trait BeaconBody {
-    fn process_beacon_block(&self) -> ProcessedBlock;
+pub trait ProcessBeaconBlock {
+    fn process_beacon_block(&self) -> anyhow::Result<ProcessedBlock>;
 }
 
-impl BeaconBody for SignedBeaconBlockBellatrix {
-    fn process_beacon_block(&self) -> ProcessedBlock {
+impl ProcessBeaconBlock for SignedBeaconBlock {
+    fn process_beacon_block(&self) -> anyhow::Result<ProcessedBlock> {
+        match self {
+            SignedBeaconBlock::Bellatrix(block) => block.process_beacon_block(),
+            SignedBeaconBlock::Capella(block) => block.process_beacon_block(),
+            SignedBeaconBlock::Deneb(block) => block.process_beacon_block(),
+        }
+    }
+}
+
+impl ProcessBeaconBlock for SignedBeaconBlockBellatrix {
+    fn process_beacon_block(&self) -> anyhow::Result<ProcessedBlock> {
         let payload = &self.message.body.execution_payload;
         let header = Header {
             parent_hash: payload.parent_hash,
@@ -49,16 +60,16 @@ impl BeaconBody for SignedBeaconBlockBellatrix {
             parent_beacon_block_root: None,
         };
 
-        ProcessedBlock {
+        Ok(ProcessedBlock {
             header: header.clone(),
             uncles: None,
-            transactions: process_transactions(&payload.transactions),
-        }
+            transactions: process_transactions(&payload.transactions)?,
+        })
     }
 }
 
-impl BeaconBody for SignedBeaconBlockCapella {
-    fn process_beacon_block(&self) -> ProcessedBlock {
+impl ProcessBeaconBlock for SignedBeaconBlockCapella {
+    fn process_beacon_block(&self) -> anyhow::Result<ProcessedBlock> {
         let payload = &self.message.body.execution_payload;
         let header = Header {
             parent_hash: payload.parent_hash,
@@ -84,16 +95,16 @@ impl BeaconBody for SignedBeaconBlockCapella {
             parent_beacon_block_root: None,
         };
 
-        ProcessedBlock {
+        Ok(ProcessedBlock {
             header: header.clone(),
             uncles: None,
-            transactions: process_transactions(&payload.transactions),
-        }
+            transactions: process_transactions(&payload.transactions)?,
+        })
     }
 }
 
-impl BeaconBody for SignedBeaconBlockDeneb {
-    fn process_beacon_block(&self) -> ProcessedBlock {
+impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
+    fn process_beacon_block(&self) -> anyhow::Result<ProcessedBlock> {
         let payload = &self.message.body.execution_payload;
         let header = Header {
             parent_hash: payload.parent_hash,
@@ -119,26 +130,29 @@ impl BeaconBody for SignedBeaconBlockDeneb {
             parent_beacon_block_root: None,
         };
 
-        ProcessedBlock {
+        Ok(ProcessedBlock {
             header: header.clone(),
             uncles: None,
-            transactions: process_transactions(&payload.transactions),
-        }
+            transactions: process_transactions(&payload.transactions)?,
+        })
     }
 }
 
-fn process_transactions(transactions: &Transactions) -> Vec<TransactionsWithSender> {
+fn process_transactions(
+    transactions: &Transactions,
+) -> anyhow::Result<Vec<TransactionsWithSender>> {
     transactions
         .into_par_iter()
         .map(|raw_tx| {
-            Transaction::decode_enveloped_transactions(&mut raw_tx.to_vec().as_slice())
-                .expect("We should always be able to decode the enveloped transactions of a block")
-        })
-        .map(|tx| TransactionsWithSender {
-            sender_address: tx
+            let transaction =
+                Transaction::decode_enveloped_transactions(&mut raw_tx.to_vec().as_slice())
+                    .map_err(|err| anyhow::anyhow!("Failed decoding transaction rlp: {err:?}"))?;
+            transaction
                 .get_transaction_sender_address()
-                .expect("We should always be able to get the sender address of a transaction"),
-            transaction: tx,
+                .map(|sender_address| TransactionsWithSender {
+                    sender_address,
+                    transaction,
+                })
         })
-        .collect()
+        .collect::<anyhow::Result<Vec<_>>>()
 }

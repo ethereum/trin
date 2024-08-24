@@ -49,12 +49,28 @@ impl Era {
         let slot_index_state = SlotIndexStateEntry::try_from(&file.entries[entries_length - 1])?;
 
         // Iterate over the block entries. Skip the first and last 3 entries.
-        let mut next_slot = slot_index_block.slot_index.starting_slot;
-        for idx in 1..entries_length - 3 {
-            let entry = &file.entries[idx];
-            let fork = get_beacon_fork(next_slot);
+        let slot_indexes = slot_index_block
+            .slot_index
+            .indices
+            .iter()
+            .enumerate()
+            .filter_map(|(i, index)| {
+                if *index != 0 {
+                    Some(slot_index_block.slot_index.starting_slot + i as u64)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<u64>>();
+
+        ensure!(
+            slot_indexes.len() == entries_length - 4,
+            "invalid slot index block: incorrect count"
+        );
+        for (index, slot) in slot_indexes.into_iter().enumerate() {
+            let entry = &file.entries[index + 1];
+            let fork = get_beacon_fork(slot);
             let beacon_block = CompressedSignedBeaconBlock::try_from(entry, fork)?;
-            next_slot = beacon_block.block.slot() + 1;
             blocks.push(beacon_block);
         }
         let fork = get_beacon_fork(slot_index_state.slot_index.starting_slot);
@@ -81,22 +97,41 @@ impl Era {
     }
 
     /// Iterate over beacon blocks.
-    pub fn iter_blocks(raw_era1: Vec<u8>) -> impl Iterator<Item = CompressedSignedBeaconBlock> {
-        let file = E2StoreMemory::deserialize(&raw_era1).expect("invalid era1 file");
+    pub fn iter_blocks(
+        raw_era: Vec<u8>,
+    ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<CompressedSignedBeaconBlock>>> {
+        let file = E2StoreMemory::deserialize(&raw_era)?;
         let entries_length = file.entries.len();
-        let block_index = SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])
-            .expect("missing block index entry")
-            .slot_index;
+        let block_index =
+            SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])?.slot_index;
 
-        let mut next_slot = block_index.starting_slot;
-        (1..entries_length - 3).map(move |idx| {
-            let entry: Entry = file.entries[idx].clone();
-            let fork = get_beacon_fork(next_slot);
-            let beacon_block =
-                CompressedSignedBeaconBlock::try_from(&entry, fork).expect("invalid block");
-            next_slot = beacon_block.block.slot() + 1;
-            beacon_block
-        })
+        let slot_indexes = block_index
+            .indices
+            .iter()
+            .enumerate()
+            .filter_map(|(i, index)| {
+                if *index != 0 {
+                    Some(block_index.starting_slot + i as u64)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<u64>>();
+
+        ensure!(
+            slot_indexes.len() == entries_length - 4,
+            "invalid slot index block: incorrect count"
+        );
+
+        Ok(slot_indexes
+            .into_iter()
+            .enumerate()
+            .map(move |(index, slot)| {
+                let entry: Entry = file.entries[index + 1].clone();
+                let fork = get_beacon_fork(slot);
+                let beacon_block = CompressedSignedBeaconBlock::try_from(&entry, fork)?;
+                Ok(beacon_block)
+            }))
     }
 
     #[allow(dead_code)]
@@ -120,6 +155,17 @@ impl Era {
         let mut buf = vec![0; file_length];
         file.write(&mut buf)?;
         Ok(buf)
+    }
+
+    pub fn contains(&self, block_number: u64) -> bool {
+        if self.blocks.is_empty() {
+            return false;
+        }
+        let first_block_number = self.blocks[0].block.execution_block_number();
+        let last_block_number = self.blocks[self.blocks.len() - 1]
+            .block
+            .execution_block_number();
+        (first_block_number..=last_block_number).contains(&block_number)
     }
 }
 

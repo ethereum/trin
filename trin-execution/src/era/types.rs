@@ -48,10 +48,12 @@ pub enum EraType {
     Era1,
 }
 
-pub fn get_era_type(block_number: u64) -> EraType {
-    if block_number < get_spec_block_number(SpecId::MERGE) {
-        EraType::Era1
-    } else {
-        EraType::Era
+impl EraType {
+    pub fn for_block_number(block_number: u64) -> Self {
+        if block_number < get_spec_block_number(SpecId::MERGE) {
+            Self::Era1
+        } else {
+            Self::Era
+        }
     }
 }
