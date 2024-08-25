@@ -22,10 +22,6 @@ pub trait EthApi {
     async fn get_code(&self, address: Address, block: BlockId) -> RpcResult<Bytes>;
 
     #[method(name = "getStorageAt")]
-    async fn get_storage_at(
-        &self,
-        address: Address,
-        slot: U256,
-        block: BlockId,
-    ) -> RpcResult<Bytes>;
+    async fn get_storage_at(&self, address: Address, slot: U256, block: BlockId)
+        -> RpcResult<B256>;
 }

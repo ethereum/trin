@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy_primitives::{Bytes, B256};
 use eth_trie::node::Node;
 use thiserror::Error;
 
@@ -43,7 +43,7 @@ pub enum TraversalResult<'path> {
     /// Path leads to empty node.
     Empty(EmptyNodeInfo),
     /// Path leads to value.
-    Value(Vec<u8>),
+    Value(Bytes),
     /// Path leads to a next node.
     Node(NextTraversalNode<'path>),
     /// Unexpected error happened, most likely malformed node or programmers error.
@@ -73,7 +73,7 @@ impl NodeTraversal for Node {
                 if nibbles != path {
                     TraversalResult::Empty(EmptyNodeInfo::DifferentLeafPrefix)
                 } else {
-                    TraversalResult::Value(leaf_node.value.clone())
+                    TraversalResult::Value(Bytes::from_iter(&leaf_node.value))
                 }
             }
             Node::Extension(extension_node) => {
@@ -98,7 +98,7 @@ impl NodeTraversal for Node {
                         branch_node.children[*first as usize].traverse(remaining_path)
                     }
                     None => match &branch_node.value {
-                        Some(value) => TraversalResult::Value(value.clone()),
+                        Some(value) => TraversalResult::Value(Bytes::from_iter(value)),
                         None => TraversalResult::Empty(EmptyNodeInfo::EmptyBranchValue),
                     },
                 }
@@ -279,7 +279,10 @@ mod tests {
         &[1, 2, 3, 4, 5],
     )]
     fn to_value(#[case] node: Node, #[case] path: &[u8]) {
-        assert_eq!(node.traverse(path), TraversalResult::Value(VALUE.to_vec()))
+        assert_eq!(
+            node.traverse(path),
+            TraversalResult::Value(Bytes::from_static(VALUE))
+        )
     }
 
     // Util functions for creating Trie nodes

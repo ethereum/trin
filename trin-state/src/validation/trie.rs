@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy_primitives::{Bytes, B256};
 use alloy_rlp::Decodable;
 
 use ethportal_api::types::state_trie::{
@@ -103,7 +103,7 @@ fn check_traversal_result_is_node(
 
 fn check_traversal_result_is_value(
     traversal_result: TraversalResult,
-) -> Result<Vec<u8>, StateValidationError> {
+) -> Result<Bytes, StateValidationError> {
     match traversal_result {
         TraversalResult::Empty(empty_node_info) => {
             Err(StateValidationError::UnexpectedEmptyNode(empty_node_info))

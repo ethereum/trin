@@ -12,7 +12,9 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
 alloy-primitives = "0.7.0"
+alloy-rlp = "0.3.4"
 discv5 = { version = "0.4.1", features = ["serde"] }
+eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "7947a83091192a7988f359b750b05121d5d7ba8c" }
 ethportal-api = { path = "../ethportal-api"}
 portalnet = { path = "../portalnet"}
 tracing = "0.1.27"
