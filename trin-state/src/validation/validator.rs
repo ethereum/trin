@@ -29,7 +29,7 @@ impl Validator<StateContentKey> for StateValidator {
         content_key: &StateContentKey,
         content_value: &[u8],
     ) -> anyhow::Result<ValidationResult<StateContentKey>> {
-        let content_value = StateContentValue::decode(content_value)
+        let content_value = StateContentValue::decode(content_key, content_value)
             .map_err(|err| anyhow!("Error decoding StateContentValue: {err}"))?;
 
         match content_key {
@@ -161,8 +161,8 @@ mod tests {
     use ethportal_api::{
         types::{
             execution::header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
-            history::ContentInfo,
             jsonrpc::{endpoints::HistoryEndpoint, json_rpc_mock::MockJsonRpcBuilder},
+            portal::ContentInfo,
         },
         Header, HistoryContentKey, HistoryContentValue, OverlayContentKey,
     };
@@ -189,7 +189,8 @@ mod tests {
                     content: HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
                         header,
                         proof: BlockHeaderProof::None(SszNone::default()),
-                    }),
+                    })
+                    .encode(),
                     utp_transfer: false,
                 },
             )

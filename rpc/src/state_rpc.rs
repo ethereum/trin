@@ -1,3 +1,4 @@
+use alloy_primitives::Bytes;
 use discv5::enr::NodeId;
 use tokio::sync::mpsc;
 
@@ -5,13 +6,16 @@ use ethportal_api::{
     types::{
         enr::Enr,
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
-        portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
-        state::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
+        portal::{
+            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+            TraceContentInfo, TraceGossipInfo,
+        },
     },
-    RoutingTableInfo, StateContentKey, StateContentValue, StateNetworkApiServer,
+    ContentValue, RoutingTableInfo, StateContentKey, StateContentValue, StateNetworkApiServer,
 };
 
 use crate::{
+    errors::RpcServeError,
     fetch::proxy_to_subnet,
     jsonrpsee::core::{async_trait, RpcResult},
 };
@@ -109,18 +113,16 @@ impl StateNetworkApiServer for StateNetworkApi {
         &self,
         offset: u64,
         limit: u64,
-    ) -> RpcResult<PaginateLocalContentInfo> {
+    ) -> RpcResult<PaginateLocalContentInfo<StateContentKey>> {
         let endpoint = StateEndpoint::PaginateLocalContentKeys(offset, limit);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Send the provided content to interested peers. Clients may choose to send to some or all
     /// peers. Return the number of peers that the content was gossiped to.
-    async fn gossip(
-        &self,
-        content_key: StateContentKey,
-        content_value: StateContentValue,
-    ) -> RpcResult<u32> {
+    async fn gossip(&self, content_key: StateContentKey, content_value: Bytes) -> RpcResult<u32> {
+        let content_value =
+            StateContentValue::decode(&content_key, &content_value).map_err(RpcServeError::from)?;
         let endpoint = StateEndpoint::Gossip(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -130,8 +132,10 @@ impl StateNetworkApiServer for StateNetworkApi {
     async fn trace_gossip(
         &self,
         content_key: StateContentKey,
-        content_value: StateContentValue,
+        content_value: Bytes,
     ) -> RpcResult<TraceGossipInfo> {
+        let content_value =
+            StateContentValue::decode(&content_key, &content_value).map_err(RpcServeError::from)?;
         let endpoint = StateEndpoint::TraceGossip(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -144,8 +148,10 @@ impl StateNetworkApiServer for StateNetworkApi {
         &self,
         enr: Enr,
         content_key: StateContentKey,
-        content_value: StateContentValue,
+        content_value: Bytes,
     ) -> RpcResult<AcceptInfo> {
+        let content_value =
+            StateContentValue::decode(&content_key, &content_value).map_err(RpcServeError::from)?;
         let endpoint = StateEndpoint::Offer(enr, content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -158,24 +164,24 @@ impl StateNetworkApiServer for StateNetworkApi {
         &self,
         enr: Enr,
         content_key: StateContentKey,
-        content_value: StateContentValue,
+        content_value: Bytes,
     ) -> RpcResult<bool> {
+        let content_value =
+            StateContentValue::decode(&content_key, &content_value).map_err(RpcServeError::from)?;
         let endpoint = StateEndpoint::TraceOffer(enr, content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Store content key with a content data to the local database.
-    async fn store(
-        &self,
-        content_key: StateContentKey,
-        content_value: StateContentValue,
-    ) -> RpcResult<bool> {
+    async fn store(&self, content_key: StateContentKey, content_value: Bytes) -> RpcResult<bool> {
+        let content_value =
+            StateContentValue::decode(&content_key, &content_value).map_err(RpcServeError::from)?;
         let endpoint = StateEndpoint::Store(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Get a content from the local database.
-    async fn local_content(&self, content_key: StateContentKey) -> RpcResult<StateContentValue> {
+    async fn local_content(&self, content_key: StateContentKey) -> RpcResult<Bytes> {
         let endpoint = StateEndpoint::LocalContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }

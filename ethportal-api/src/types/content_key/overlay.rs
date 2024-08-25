@@ -1,5 +1,6 @@
 use std::{fmt, hash::Hash, ops::Deref};
 
+use alloy_primitives::Bytes;
 use quickcheck::{Arbitrary, Gen};
 
 use crate::{
@@ -11,6 +12,7 @@ use crate::{
 /// Keys are serializable.
 pub trait OverlayContentKey:
     Into<Vec<u8>>
+    + Into<Bytes>
     + TryFrom<Vec<u8>, Error = ContentKeyError>
     + Clone
     + fmt::Debug
@@ -97,10 +99,15 @@ impl fmt::Display for IdentityContentKey {
     }
 }
 
-#[allow(clippy::from_over_into)]
-impl Into<Vec<u8>> for IdentityContentKey {
-    fn into(self) -> Vec<u8> {
-        self.value.into()
+impl From<IdentityContentKey> for Vec<u8> {
+    fn from(value: IdentityContentKey) -> Self {
+        value.to_vec()
+    }
+}
+
+impl From<IdentityContentKey> for Bytes {
+    fn from(value: IdentityContentKey) -> Self {
+        Self::from(value.to_bytes())
     }
 }
 

@@ -1,12 +1,13 @@
 use crate::{
     types::{
+        cli::HISTORY_NETWORK,
         content_value::ContentValue,
         execution::{accumulator::EpochAccumulator, header_with_proof::HeaderWithProof},
     },
     utils::bytes::hex_encode,
-    BlockBody, ContentValueError, Receipts,
+    BlockBody, ContentValueError, HistoryContentKey, RawContentValue, Receipts,
 };
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Serialize, Serializer};
 use ssz::{Decode, Encode};
 
 /// A Portal History content value.
@@ -20,34 +21,44 @@ pub enum HistoryContentValue {
 }
 
 impl ContentValue for HistoryContentValue {
-    fn encode(&self) -> Vec<u8> {
+    type TContentKey = HistoryContentKey;
+
+    fn encode(&self) -> RawContentValue {
         match self {
-            Self::BlockHeaderWithProof(value) => value.as_ssz_bytes(),
-            Self::BlockBody(value) => value.as_ssz_bytes(),
-            Self::Receipts(value) => value.as_ssz_bytes(),
-            Self::EpochAccumulator(value) => value.as_ssz_bytes(),
+            Self::BlockHeaderWithProof(value) => value.as_ssz_bytes().into(),
+            Self::BlockBody(value) => value.as_ssz_bytes().into(),
+            Self::Receipts(value) => value.as_ssz_bytes().into(),
+            Self::EpochAccumulator(value) => value.as_ssz_bytes().into(),
         }
     }
 
-    fn decode(buf: &[u8]) -> Result<Self, ContentValueError> {
-        if let Ok(value) = HeaderWithProof::from_ssz_bytes(buf) {
-            return Ok(Self::BlockHeaderWithProof(value));
+    fn decode(key: &Self::TContentKey, buf: &[u8]) -> Result<Self, ContentValueError> {
+        match key {
+            HistoryContentKey::BlockHeaderWithProof(_) => {
+                if let Ok(value) = HeaderWithProof::from_ssz_bytes(buf) {
+                    return Ok(Self::BlockHeaderWithProof(value));
+                }
+            }
+            HistoryContentKey::BlockBody(_) => {
+                if let Ok(value) = BlockBody::from_ssz_bytes(buf) {
+                    return Ok(Self::BlockBody(value));
+                }
+            }
+            HistoryContentKey::BlockReceipts(_) => {
+                if let Ok(value) = Receipts::from_ssz_bytes(buf) {
+                    return Ok(Self::Receipts(value));
+                }
+            }
+            HistoryContentKey::EpochAccumulator(_) => {
+                if let Ok(value) = EpochAccumulator::from_ssz_bytes(buf) {
+                    return Ok(Self::EpochAccumulator(value));
+                }
+            }
         }
 
-        if let Ok(value) = BlockBody::from_ssz_bytes(buf) {
-            return Ok(Self::BlockBody(value));
-        }
-
-        if let Ok(value) = Receipts::from_ssz_bytes(buf) {
-            return Ok(Self::Receipts(value));
-        }
-
-        if let Ok(value) = EpochAccumulator::from_ssz_bytes(buf) {
-            return Ok(Self::EpochAccumulator(value));
-        }
         Err(ContentValueError::UnknownContent {
             bytes: hex_encode(buf),
-            network: "history".to_string(),
+            network: HISTORY_NETWORK.to_string(),
         })
     }
 }
@@ -58,16 +69,6 @@ impl Serialize for HistoryContentValue {
         S: Serializer,
     {
         serializer.serialize_str(&self.to_hex())
-    }
-}
-
-impl<'de> Deserialize<'de> for HistoryContentValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Self::from_hex(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -115,8 +116,9 @@ mod test {
 
     #[test]
     fn content_value_deserialization_failure_displays_debuggable_data() {
+        let key = HistoryContentKey::random().unwrap();
         let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let item_result = HistoryContentValue::decode(&data);
+        let item_result = HistoryContentValue::decode(&key, &data);
         let error = item_result.unwrap_err();
         // Test the error Debug representation
         assert_eq!(

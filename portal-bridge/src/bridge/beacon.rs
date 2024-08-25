@@ -45,7 +45,8 @@ use ethportal_api::{
         },
     },
     utils::bytes::hex_decode,
-    BeaconContentKey, BeaconContentValue, LightClientBootstrapKey, LightClientUpdatesByRangeKey,
+    BeaconContentKey, BeaconContentValue, ContentValue, LightClientBootstrapKey,
+    LightClientUpdatesByRangeKey,
 };
 
 /// The number of slots in an epoch.
@@ -109,10 +110,13 @@ impl BeaconBridge {
         // test files have no slot number data, so report all gossiped content at height 0.
         let slot_stats = Arc::new(StdMutex::new(BeaconSlotStats::new(0)));
         for asset in assets.0.into_iter() {
+            let content_value =
+                BeaconContentValue::decode(&asset.content_key, &asset.content_value)
+                    .expect("Error parsing beacon content value test asset");
             gossip_beacon_content(
                 self.portal_client.clone(),
                 asset.content_key,
-                asset.content_value,
+                content_value,
                 slot_stats.clone(),
             )
             .await

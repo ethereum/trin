@@ -4,10 +4,10 @@ use ethportal_api::{
         content_key::state::{AccountTrieNodeKey, ContractBytecodeKey, ContractStorageTrieNodeKey},
         content_value::state::{ContractBytecode, TrieNode},
         distance::Distance,
+        portal::PaginateLocalContentInfo,
         portal_wire::ProtocolId,
-        state::PaginateLocalContentInfo,
     },
-    ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
+    ContentValue, OverlayContentKey, RawContentValue, StateContentKey, StateContentValue,
 };
 use trin_storage::{
     error::ContentStoreError,
@@ -24,7 +24,7 @@ pub struct StateStorage {
 impl ContentStore for StateStorage {
     type Key = StateContentKey;
 
-    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    fn get(&self, key: &Self::Key) -> Result<Option<RawContentValue>, ContentStoreError> {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
@@ -32,9 +32,9 @@ impl ContentStore for StateStorage {
         &mut self,
         key: Self::Key,
         value: V,
-    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(Self::Key, RawContentValue)>, ContentStoreError> {
         let key = StateContentKey::try_from(key.to_bytes())?;
-        let value = StateContentValue::decode(value.as_ref())?;
+        let value = StateContentValue::decode(&key, value.as_ref())?;
 
         match &key {
             StateContentKey::AccountTrieNode(account_trie_node_key) => self
@@ -84,7 +84,7 @@ impl StateStorage {
         &self,
         offset: u64,
         limit: u64,
-    ) -> Result<PaginateLocalContentInfo, ContentStoreError> {
+    ) -> Result<PaginateLocalContentInfo<StateContentKey>, ContentStoreError> {
         let paginate_result = self.store.paginate(offset, limit)?;
         Ok(PaginateLocalContentInfo {
             content_keys: paginate_result.content_keys,
@@ -102,7 +102,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &AccountTrieNodeKey,
         value: StateContentValue,
-    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, RawContentValue)>, ContentStoreError> {
         let StateContentValue::AccountTrieNodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(
@@ -138,7 +138,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &ContractStorageTrieNodeKey,
         value: StateContentValue,
-    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, RawContentValue)>, ContentStoreError> {
         let StateContentValue::ContractStorageTrieNodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(
@@ -174,7 +174,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &ContractBytecodeKey,
         value: StateContentValue,
-    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, RawContentValue)>, ContentStoreError> {
         let StateContentValue::ContractBytecodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(
@@ -208,7 +208,6 @@ pub mod test {
     use std::path::PathBuf;
 
     use anyhow::Result;
-    use ethportal_api::utils::bytes::hex_decode;
     use rstest::rstest;
     use serde::Deserialize;
     use tracing::info;
@@ -221,8 +220,8 @@ pub mod test {
 
     struct ContentData {
         key: StateContentKey,
-        store_value: Vec<u8>,
-        lookup_value: Vec<u8>,
+        store_value: RawContentValue,
+        lookup_value: RawContentValue,
     }
 
     #[rstest]
@@ -277,17 +276,9 @@ pub mod test {
 
         for value in value.as_sequence().unwrap() {
             result.push(ContentData {
-                key: StateContentKey::deserialize(value.get("content_key").unwrap())?,
-                store_value: hex_decode(
-                    value.get("content_value_offer").unwrap().as_str().unwrap(),
-                )?,
-                lookup_value: hex_decode(
-                    value
-                        .get("content_value_retrieval")
-                        .unwrap()
-                        .as_str()
-                        .unwrap(),
-                )?,
+                key: StateContentKey::deserialize(&value["content_key"])?,
+                store_value: RawContentValue::deserialize(&value["content_value_offer"])?,
+                lookup_value: RawContentValue::deserialize(&value["content_value_retrieval"])?,
             });
         }
 

@@ -8,13 +8,13 @@ use crate::header_validator::HeaderValidator;
 use ethportal_api::{
     types::{
         execution::header_with_proof::HeaderWithProof,
-        history::ContentInfo,
         jsonrpc::{
             endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint},
             request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
         },
+        portal::ContentInfo,
     },
-    BlockHeaderKey, Enr, HistoryContentKey, HistoryContentValue,
+    BlockHeaderKey, ContentValue, Enr, HistoryContentKey, HistoryContentValue,
 };
 
 /// Responsible for dispatching cross-overlay-network requests
@@ -64,7 +64,7 @@ impl HeaderOracle {
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: block_hash.0,
         });
-        let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
+        let endpoint = HistoryEndpoint::RecursiveFindContent(content_key.clone());
         let (resp, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
         let request = HistoryJsonRpcRequest { endpoint, resp };
         let tx = self.history_jsonrpc_tx()?;
@@ -76,7 +76,7 @@ impl HeaderOracle {
             }
             None => return Err(anyhow!("No response from chain history subnetwork")),
         };
-        let content = match serde_json::from_value(content)? {
+        let content_bytes = match serde_json::from_value(content)? {
             ContentInfo::Content { content, .. } => content,
             ContentInfo::ConnectionId { .. } => {
                 return Err(anyhow!(
@@ -89,6 +89,7 @@ impl HeaderOracle {
                 ))
             }
         };
+        let content = HistoryContentValue::decode(&content_key, &content_bytes)?;
 
         match content {
             HistoryContentValue::BlockHeaderWithProof(content) => Ok(content),

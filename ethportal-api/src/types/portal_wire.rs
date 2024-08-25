@@ -24,7 +24,7 @@ use crate::{
         enr::{Enr, SszEnr},
     },
     utils::bytes::{hex_decode, hex_encode, ByteUtilsError},
-    RawContentKey,
+    RawContentKey, RawContentValue,
 };
 
 /// The maximum size of a Discv5 packet.
@@ -538,8 +538,7 @@ impl From<Nodes> for Value {
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct FindContent {
-    // TODO: Use some version of H256
-    pub content_key: Vec<u8>,
+    pub content_key: RawContentKey,
 }
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
@@ -575,7 +574,7 @@ pub struct Offer {
 #[derive(Debug, Clone)]
 pub struct PopulatedOffer {
     /// All the offered content, pairing the keys and values
-    pub content_items: Vec<(RawContentKey, Vec<u8>)>,
+    pub content_items: Vec<(RawContentKey, RawContentValue)>,
 }
 
 impl From<PopulatedOffer> for Offer {
@@ -593,7 +592,7 @@ impl From<PopulatedOffer> for Offer {
 #[derive(Debug, Clone)]
 pub struct PopulatedOfferWithResult {
     /// The offered content key & value
-    pub content_item: (RawContentKey, Vec<u8>),
+    pub content_item: (RawContentKey, RawContentValue),
     /// The channel to send the result of the offer to
     pub result_tx: tokio::sync::mpsc::UnboundedSender<bool>,
 }
@@ -622,6 +621,7 @@ impl From<Accept> for Value {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
+    use alloy_primitives::Bytes;
     use std::str::FromStr;
     use test_log::test;
 
@@ -760,7 +760,7 @@ mod test {
 
     #[test]
     fn message_encoding_find_content() {
-        let content_key = hex_decode("0x706f7274616c").unwrap();
+        let content_key = RawContentKey::from_str("0x706f7274616c").unwrap();
         let find_content = FindContent { content_key };
         let find_content = Message::FindContent(find_content);
 
@@ -821,7 +821,7 @@ mod test {
 
     #[test]
     fn message_encoding_offer() {
-        let content_keys = vec![hex_decode("0x010203").unwrap()];
+        let content_keys = vec![Bytes::from_str("0x010203").unwrap()];
         let offer = Offer { content_keys };
         let offer = Message::Offer(offer);
 

@@ -13,13 +13,12 @@ use ethportal_api::{
     types::{
         distance::Distance,
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
-        portal::{AcceptInfo, FindNodesInfo, PongInfo},
+        portal::{AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
         query_trace::QueryTrace,
-        state::{ContentInfo, TraceContentInfo},
     },
     utils::bytes::hex_encode,
-    ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
+    ContentValue, OverlayContentKey, RawContentValue, StateContentKey, StateContentValue,
 };
 
 /// Handles State network JSON-RPC requests
@@ -163,7 +162,7 @@ async fn recursive_find_nodes(
 fn local_storage_lookup(
     network: &Arc<StateNetwork>,
     content_key: &StateContentKey,
-) -> Result<Option<Vec<u8>>, String> {
+) -> Result<Option<RawContentValue>, String> {
     network
         .overlay
         .store
@@ -230,7 +229,7 @@ async fn recursive_find_content(
             None
         }
     };
-    let (content_bytes, utp_transfer, trace) = match local_content {
+    let (content, utp_transfer, trace) = match local_content {
         Some(value) => {
             let trace = if is_trace {
                 let local_enr = network.overlay.local_enr();
@@ -269,9 +268,6 @@ async fn recursive_find_content(
                 }
             })?,
     };
-
-    let content =
-        StateContentValue::decode(content_bytes.as_ref()).map_err(|err| err.to_string())?;
 
     if is_trace {
         Ok(json!(TraceContentInfo {

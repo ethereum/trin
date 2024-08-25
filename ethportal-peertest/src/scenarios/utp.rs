@@ -4,8 +4,8 @@ use crate::{
 };
 use discv5::enr::NodeId;
 use ethportal_api::{
-    types::history::{ContentInfo, TraceContentInfo},
-    HistoryNetworkApiClient,
+    types::portal::{ContentInfo, TraceContentInfo},
+    ContentValue, HistoryContentValue, HistoryNetworkApiClient,
 };
 use tracing::info;
 
@@ -16,7 +16,7 @@ pub async fn test_recursive_utp(peertest: &Peertest) {
     let (content_key, content_value) = fixture_header_with_proof();
     let store_result = peertest.nodes[0]
         .ipc_client
-        .store(content_key.clone(), content_value.clone())
+        .store(content_key.clone(), content_value.encode())
         .await
         .unwrap();
     assert!(store_result);
@@ -26,7 +26,7 @@ pub async fn test_recursive_utp(peertest: &Peertest) {
     let store_result = peertest
         .bootnode
         .ipc_client
-        .store(content_key.clone(), content_value.clone())
+        .store(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
@@ -43,7 +43,7 @@ pub async fn test_recursive_utp(peertest: &Peertest) {
         utp_transfer,
     } = content_info
     {
-        assert_eq!(content, content_value);
+        assert_eq!(content, content_value.encode());
         assert!(utp_transfer);
     } else {
         panic!("Error: Unexpected content info response");
@@ -57,7 +57,7 @@ pub async fn test_trace_recursive_utp(peertest: &Peertest) {
     let (content_key, content_value) = fixture_header_with_proof();
     let store_result = peertest.nodes[0]
         .ipc_client
-        .store(content_key.clone(), content_value.clone())
+        .store(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
@@ -68,7 +68,7 @@ pub async fn test_trace_recursive_utp(peertest: &Peertest) {
     let store_result = peertest
         .bootnode
         .ipc_client
-        .store(content_key.clone(), content_value.clone())
+        .store(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
@@ -76,14 +76,17 @@ pub async fn test_trace_recursive_utp(peertest: &Peertest) {
 
     let trace_content_info: TraceContentInfo = peertest.nodes[0]
         .ipc_client
-        .trace_recursive_find_content(content_key)
+        .trace_recursive_find_content(content_key.clone())
         .await
         .unwrap();
 
     let content = trace_content_info.content;
     let trace = trace_content_info.trace;
 
-    assert_eq!(content, content_value);
+    assert_eq!(
+        HistoryContentValue::decode(&content_key, &content).unwrap(),
+        content_value
+    );
 
     let query_origin_node: NodeId = peertest.nodes[0].enr.node_id();
     let node_with_content: NodeId = peertest.bootnode.enr.node_id();

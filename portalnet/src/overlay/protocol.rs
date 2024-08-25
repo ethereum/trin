@@ -47,7 +47,7 @@ use ethportal_api::{
         },
     },
     utils::bytes::hex_encode,
-    OverlayContentKey, RawContentKey,
+    OverlayContentKey, RawContentKey, RawContentValue,
 };
 use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
 use trin_storage::ContentStore;
@@ -205,7 +205,7 @@ where
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
-    pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
+    pub fn propagate_gossip(&self, content: Vec<(TContentKey, RawContentValue)>) -> usize {
         let kbuckets = Arc::clone(&self.kbuckets);
         propagate_gossip_cross_thread(content, kbuckets, self.command_tx.clone(), None)
     }
@@ -215,7 +215,7 @@ where
     pub async fn propagate_gossip_trace(
         &self,
         content_key: TContentKey,
-        data: Vec<u8>,
+        data: RawContentValue,
     ) -> GossipResult {
         let kbuckets = Arc::clone(&self.kbuckets);
         trace_propagate_gossip_cross_thread(content_key, data, kbuckets, self.command_tx.clone())
@@ -432,7 +432,7 @@ where
     pub async fn send_find_content(
         &self,
         enr: Enr,
-        content_key: Vec<u8>,
+        content_key: RawContentKey,
     ) -> Result<FindContentResult, OverlayRequestError> {
         // Construct the request.
         let request = FindContent {
@@ -441,7 +441,7 @@ where
         let direction = RequestDirection::Outgoing {
             destination: enr.clone(),
         };
-        let content_key = TContentKey::try_from(content_key).map_err(|err| {
+        let content_key = TContentKey::try_from(content_key.into()).map_err(|err| {
             OverlayRequestError::FailedValidation(format!(
                 "Error decoding content key for received utp content: {err}"
             ))
@@ -534,7 +534,7 @@ where
                     trace: None,
                 }),
             })
-            .collect::<Result<Vec<(RawContentKey, Vec<u8>)>, OverlayRequestError>>()?;
+            .collect::<Result<Vec<(RawContentKey, RawContentValue)>, OverlayRequestError>>()?;
         // Construct the request.
         let request = PopulatedOffer { content_items };
         let direction = RequestDirection::Outgoing {
@@ -557,7 +557,7 @@ where
         &self,
         enr: Enr,
         content_key: RawContentKey,
-        content_value: Vec<u8>,
+        content_value: RawContentValue,
     ) -> Result<Accept, OverlayRequestError> {
         // Construct the request.
         let request = Request::PopulatedOffer(PopulatedOffer {
@@ -581,7 +581,7 @@ where
         &self,
         enr: Enr,
         content_key: RawContentKey,
-        content_value: Vec<u8>,
+        content_value: RawContentValue,
     ) -> Result<bool, OverlayRequestError> {
         // Construct the request.
         let (result_tx, mut rx) = tokio::sync::mpsc::unbounded_channel();

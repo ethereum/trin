@@ -8,7 +8,8 @@ use crate::{
 use ethportal_api::{
     jsonrpsee::async_client::Client,
     types::execution::header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
-    HistoryContentKey, HistoryNetworkApiClient, StateNetworkApiClient,
+    ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
+    StateNetworkApiClient,
 };
 use tracing::info;
 
@@ -47,10 +48,11 @@ async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &Peerte
     HistoryNetworkApiClient::store(
         &peer.ipc_client,
         HistoryContentKey::BlockHeaderWithProof(fixture.block_header.hash().into()),
-        ethportal_api::HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
+        HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
             header: fixture.block_header.clone(),
             proof: BlockHeaderProof::None(SszNone::default()),
-        }),
+        })
+        .encode(),
     )
     .await
     .unwrap();
@@ -67,5 +69,5 @@ async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &Peerte
 
     // Check that peer has state content
     let lookup_content_value = wait_for_state_content(&peer.ipc_client, fixture.key.clone()).await;
-    assert_eq!(lookup_content_value, fixture.lookup_value);
+    assert_eq!(lookup_content_value.encode(), fixture.lookup_value);
 }

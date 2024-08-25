@@ -11,9 +11,10 @@ use ethportal_api::{
             LightClientUpdatesByRange,
         },
         distance::Distance,
+        portal::PaginateLocalContentInfo,
         portal_wire::ProtocolId,
     },
-    BeaconContentKey, OverlayContentKey,
+    BeaconContentKey, OverlayContentKey, RawContentValue,
 };
 use r2d2::Pool;
 use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
@@ -144,15 +145,8 @@ pub struct BeaconStorage {
 impl ContentStore for BeaconStorage {
     type Key = BeaconContentKey;
 
-    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
-        let content_key: Vec<u8> = key.clone().into();
-        let beacon_content_key = BeaconContentKey::try_from(content_key).map_err(|err| {
-            ContentStoreError::InvalidData {
-                message: format!("Error deserializing BeaconContentKey value: {err:?}"),
-            }
-        })?;
-
-        match beacon_content_key {
+    fn get(&self, key: &Self::Key) -> Result<Option<RawContentValue>, ContentStoreError> {
+        match &key {
             BeaconContentKey::LightClientBootstrap(_) => {
                 let content_id = key.content_id();
                 self.lookup_content_value(content_id).map_err(|err| {
@@ -194,17 +188,17 @@ impl ContentStore for BeaconStorage {
                         ),
                     ))?;
 
-                Ok(Some(result.as_ssz_bytes()))
+                Ok(Some(result.as_ssz_bytes().into()))
             }
             BeaconContentKey::LightClientFinalityUpdate(content_key) => {
                 match self.cache.get_finality_update(content_key.finalized_slot) {
-                    Some(finality_update) => Ok(Some(finality_update.as_ssz_bytes())),
+                    Some(finality_update) => Ok(Some(finality_update.as_ssz_bytes().into())),
                     None => Ok(None),
                 }
             }
             BeaconContentKey::LightClientOptimisticUpdate(content_key) => {
                 match self.cache.get_optimistic_update(content_key.signature_slot) {
-                    Some(optimistic_update) => Ok(Some(optimistic_update.as_ssz_bytes())),
+                    Some(optimistic_update) => Ok(Some(optimistic_update.as_ssz_bytes().into())),
                     None => Ok(None),
                 }
             }
@@ -214,7 +208,7 @@ impl ContentStore for BeaconStorage {
                     .get_historical_summaries_with_proof(content_key.epoch)
                 {
                     Some(historical_summaries_with_proof) => {
-                        Ok(Some(historical_summaries_with_proof.as_ssz_bytes()))
+                        Ok(Some(historical_summaries_with_proof.as_ssz_bytes().into()))
                     }
                     None => Ok(None),
                 }
@@ -226,7 +220,7 @@ impl ContentStore for BeaconStorage {
         &mut self,
         key: Self::Key,
         value: V,
-    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(Self::Key, RawContentValue)>, ContentStoreError> {
         // in the beacon network we don't return any dropped content for propagation
         self.store(&key, &value.as_ref().to_vec()).and(Ok(vec![]))
     }
@@ -483,7 +477,7 @@ impl BeaconStorage {
         &self,
         _offset: &u64,
         _limit: &u64,
-    ) -> Result<ethportal_api::types::beacon::PaginateLocalContentInfo, ContentStoreError> {
+    ) -> Result<PaginateLocalContentInfo<BeaconContentKey>, ContentStoreError> {
         Err(ContentStoreError::Database(
             "Paginate not implemented for Beacon storage".to_string(),
         ))
@@ -574,18 +568,17 @@ impl BeaconStorage {
     }
 
     /// Public method for looking up a content value by its content id
-    pub fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+    pub fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<RawContentValue>> {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY_BEACON)?;
-        let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
+        let result: Result<Vec<RawContentValue>, ContentStoreError> = query
             .query_map([id.as_slice()], |row| {
-                let row: Vec<u8> = row.get(0)?;
-                Ok(row)
+                row.get::<_, Vec<u8>>(0).map(RawContentValue::from)
             })?
             .map(|row| row.map_err(ContentStoreError::Rusqlite))
             .collect();
 
-        Ok(result?.first().map(|val| val.to_vec()))
+        Ok(result?.first().cloned())
     }
 
     /// Public method for looking up a  light client update value by period number

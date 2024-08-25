@@ -11,8 +11,7 @@ use discv5::enr::{CombinedKey, Enr, NodeId};
 use serde::{Deserialize, Serialize};
 
 use ethportal_api::{
-    utils::bytes::hex_encode, BeaconContentKey, BeaconContentValue, HistoryContentKey,
-    HistoryContentValue,
+    utils::bytes::hex_encode, BeaconContentKey, HistoryContentKey, RawContentValue,
 };
 
 /// Generates a set of N private keys, with node ids that are equally spaced
@@ -108,13 +107,13 @@ impl TestAssets {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryAsset {
     pub content_key: HistoryContentKey,
-    pub content_value: HistoryContentValue,
+    pub content_value: RawContentValue,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BeaconAsset {
     pub content_key: BeaconContentKey,
-    pub content_value: BeaconContentValue,
+    pub content_value: RawContentValue,
 }
 
 pub fn read_test_assets_from_file(test_path: PathBuf) -> TestAssets {
@@ -212,7 +211,7 @@ mod tests {
                 .unwrap();
         let content_key: HistoryContentKey =
             serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
-        let content_value: HistoryContentValue =
+        let content_value: RawContentValue =
             serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
 
         assert_eq!(assets[0].content_key, content_key);
@@ -227,7 +226,7 @@ mod tests {
                 .unwrap();
         let content_key: HistoryContentKey =
             serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
-        let content_value: HistoryContentValue =
+        let content_value: RawContentValue =
             serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
 
         assert_eq!(assets[0].content_key, content_key);

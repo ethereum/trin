@@ -8,9 +8,12 @@ pub mod versioned;
 use alloy_primitives::B256;
 use discv5::enr::NodeId;
 use error::ContentStoreError;
-use ethportal_api::types::{
-    content_key::overlay::{IdentityContentKey, OverlayContentKey},
-    distance::{Distance, Metric, XorMetric},
+use ethportal_api::{
+    types::{
+        content_key::overlay::{IdentityContentKey, OverlayContentKey},
+        distance::{Distance, Metric, XorMetric},
+    },
+    RawContentValue,
 };
 use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 use std::{ops::Deref, str::FromStr};
@@ -48,7 +51,7 @@ pub trait ContentStore {
     type Key;
 
     /// Looks up a piece of content by `key`.
-    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError>;
+    fn get(&self, key: &Self::Key) -> Result<Option<RawContentValue>, ContentStoreError>;
 
     /// Puts a piece of content into the store.
     /// Returns a list of keys that were evicted from the store, which should be gossiped into the
@@ -59,7 +62,7 @@ pub trait ContentStore {
         &mut self,
         key: Self::Key,
         value: V,
-    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError>;
+    ) -> Result<Vec<(Self::Key, RawContentValue)>, ContentStoreError>;
 
     /// Returns whether the content denoted by `key` is within the radius of the data store and not
     /// already stored within the data store.
@@ -75,7 +78,7 @@ pub trait ContentStore {
 /// An in-memory `ContentStore`.
 pub struct MemoryContentStore {
     /// The content store.
-    store: std::collections::HashMap<Vec<u8>, Vec<u8>>,
+    store: std::collections::HashMap<ContentId, RawContentValue>,
     /// The `NodeId` of the local node.
     node_id: NodeId,
     /// The distance function used by the store to compute distances.
@@ -107,7 +110,7 @@ impl MemoryContentStore {
 
     /// Returns `true` if the content store contains data for `key`.
     fn contains_key<K: OverlayContentKey>(&self, key: &K) -> bool {
-        let key = key.content_id().to_vec();
+        let key = key.content_id().into();
         self.store.contains_key(&key)
     }
 }
@@ -115,9 +118,9 @@ impl MemoryContentStore {
 impl ContentStore for MemoryContentStore {
     type Key = IdentityContentKey;
 
-    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
-        let key = key.content_id();
-        let val = self.store.get(key.as_slice()).cloned();
+    fn get(&self, key: &Self::Key) -> Result<Option<RawContentValue>, ContentStoreError> {
+        let key = key.content_id().into();
+        let val = self.store.get(&key).cloned();
         Ok(val)
     }
 
@@ -125,10 +128,10 @@ impl ContentStore for MemoryContentStore {
         &mut self,
         key: Self::Key,
         value: V,
-    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
-        let content_id = key.content_id();
-        let value: &[u8] = value.as_ref();
-        self.store.insert(content_id.to_vec(), value.to_vec());
+    ) -> Result<Vec<(Self::Key, RawContentValue)>, ContentStoreError> {
+        let content_id = key.content_id().into();
+        let value = RawContentValue::from_iter(value.as_ref());
+        self.store.insert(content_id, value);
 
         Ok(vec![])
     }
@@ -152,7 +155,7 @@ impl ContentStore for MemoryContentStore {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ContentId(B256);
 
 impl<T: Into<B256>> From<T> for ContentId {
@@ -228,7 +231,7 @@ pub mod test {
         let node_id = NodeId::random();
         let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
 
-        let val = vec![0xef];
+        let val = RawContentValue::from_iter([0xef]);
 
         // Arbitrary key not available.
         let arb_key = IdentityContentKey::new(node_id.raw());
@@ -244,7 +247,7 @@ pub mod test {
         let node_id = NodeId::random();
         let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
 
-        let val = vec![0xef];
+        let val = RawContentValue::from_iter([0xef]);
 
         // Store content
         let arb_key = IdentityContentKey::new(node_id.raw());

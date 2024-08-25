@@ -26,29 +26,27 @@ pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
 pub use state::{StateNetworkApiClient, StateNetworkApiServer};
 pub use web3::{Web3ApiClient, Web3ApiServer};
 
-pub use types::content_key::{
-    beacon::{BeaconContentKey, LightClientBootstrapKey, LightClientUpdatesByRangeKey},
-    error::ContentKeyError,
-    history::{
-        BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
-        RawContentKey,
-    },
-    overlay::{IdentityContentKey, OverlayContentKey},
-    state::StateContentKey,
-};
-
 pub use types::{
     consensus,
     consensus::light_client,
+    content_key::{
+        beacon::{BeaconContentKey, LightClientBootstrapKey, LightClientUpdatesByRangeKey},
+        error::ContentKeyError,
+        history::{
+            BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
+        },
+        overlay::{IdentityContentKey, OverlayContentKey},
+        state::StateContentKey,
+    },
     content_value::{
         beacon::BeaconContentValue, error::ContentValueError, history::HistoryContentValue,
-        state::StateContentValue,
+        state::StateContentValue, ContentValue,
     },
     execution::{block_body::*, header::*, receipts::*},
+    portal::{RawContentKey, RawContentValue},
 };
 
 // Re-exports jsonrpsee crate
 pub use jsonrpsee;
-pub use types::content_value::ContentValue;
 
 pub use types::{discv5::*, enr::*, node_id::*};

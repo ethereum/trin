@@ -2,6 +2,7 @@ use crate::{
     types::content_key::{error::ContentKeyError, overlay::OverlayContentKey},
     utils::bytes::hex_encode_compact,
 };
+use alloy_primitives::Bytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
@@ -90,6 +91,12 @@ impl From<&BeaconContentKey> for Vec<u8> {
 impl From<BeaconContentKey> for Vec<u8> {
     fn from(val: BeaconContentKey) -> Self {
         val.to_bytes()
+    }
+}
+
+impl From<BeaconContentKey> for Bytes {
+    fn from(value: BeaconContentKey) -> Self {
+        Self::from(value.to_bytes())
     }
 }
 

@@ -33,7 +33,7 @@ use crate::{
 };
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
-    types::{execution::accumulator::EpochAccumulator, history::ContentInfo},
+    types::{execution::accumulator::EpochAccumulator, portal::ContentInfo},
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
     HistoryContentValue, HistoryNetworkApiClient,
 };

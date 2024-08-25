@@ -27,7 +27,7 @@ use ethportal_api::{
         portal_wire::{PopulatedOffer, PopulatedOfferWithResult, Request, Response},
     },
     utils::bytes::{hex_encode, hex_encode_compact},
-    OverlayContentKey,
+    OverlayContentKey, RawContentValue,
 };
 
 /// Datatype to store the result of a gossip request.
@@ -44,7 +44,7 @@ pub struct GossipResult {
 /// Propagate gossip in a way that can be used across threads, without &self.
 /// Doesn't trace gossip results
 pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
-    content: Vec<(TContentKey, Vec<u8>)>,
+    content: Vec<(TContentKey, RawContentValue)>,
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
     utp_controller: Option<Arc<UtpController>>,
@@ -81,7 +81,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
 
     // HashMap to temporarily store all interested ENRs and the content.
     // Key is base64 string of node's ENR.
-    let mut enrs_and_content: HashMap<String, Vec<(TContentKey, Vec<u8>)>> = HashMap::new();
+    let mut enrs_and_content: HashMap<String, Vec<(TContentKey, RawContentValue)>> = HashMap::new();
 
     for (content_key, content_value) in content {
         let interested_enrs = calculate_interested_enrs(&content_key, &all_nodes);
@@ -164,7 +164,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
 /// Returns a trace detailing the outcome of the gossip.
 pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
     content_key: TContentKey,
-    data: Vec<u8>,
+    data: RawContentValue,
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
 ) -> GossipResult {

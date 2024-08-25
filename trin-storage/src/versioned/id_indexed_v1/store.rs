@@ -15,7 +15,7 @@ use crate::{
     versioned::{usage_stats::UsageStats, ContentType, StoreVersion, VersionedContentStore},
     ContentId,
 };
-use ethportal_api::{types::distance::Distance, OverlayContentKey};
+use ethportal_api::{types::distance::Distance, OverlayContentKey, RawContentValue};
 use trin_metrics::storage::StorageMetricsReporter;
 
 /// The result of looking for the farthest content.
@@ -217,7 +217,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
     pub fn lookup_content_value(
         &self,
         content_id: &ContentId,
-    ) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    ) -> Result<Option<RawContentValue>, ContentStoreError> {
         let timer = self.metrics.start_process_timer("lookup_content_value");
 
         let value = self
@@ -227,7 +227,10 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             .query_row(
                 &sql::lookup_value(&self.config.content_type),
                 named_params! { ":content_id": content_id.to_vec() },
-                |row| row.get::<&str, Vec<u8>>("content_value"),
+                |row| {
+                    row.get::<&str, Vec<u8>>("content_value")
+                        .map(RawContentValue::from)
+                },
             )
             .optional()?;
 
@@ -241,8 +244,8 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
     pub fn insert(
         &mut self,
         content_key: &TContentKey,
-        content_value: Vec<u8>,
-    ) -> Result<Vec<(TContentKey, Vec<u8>)>, ContentStoreError> {
+        content_value: RawContentValue,
+    ) -> Result<Vec<(TContentKey, RawContentValue)>, ContentStoreError> {
         let insert_with_pruning_timer = self.metrics.start_process_timer("insert_with_pruning");
 
         let content_id = content_key.content_id();
@@ -265,7 +268,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             named_params! {
                 ":content_id": content_id,
                 ":content_key": content_key,
-                ":content_value": content_value,
+                ":content_value": content_value.to_vec(),
                 ":distance_short": distance.big_endian_u32(),
                 ":content_size": content_size,
             },
@@ -445,8 +448,8 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
 
     /// Prunes database and updates `radius`.
     /// Returns any content items that were pruned.
-    fn prune(&mut self) -> Result<Vec<(TContentKey, Vec<u8>)>, ContentStoreError> {
-        let mut deleted_content: Vec<(TContentKey, Vec<u8>)> = Vec::new();
+    fn prune(&mut self) -> Result<Vec<(TContentKey, RawContentValue)>, ContentStoreError> {
+        let mut deleted_content: Vec<(TContentKey, RawContentValue)> = Vec::new();
         if !self.pruning_strategy.should_prune(&self.usage_stats) {
             warn!(Db = %self.config.content_type,
                 "Pruning requested but not needed. Skipping");
@@ -478,15 +481,17 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             let deleted_content_result = delete_query
                 .query_map(named_params! { ":limit": to_delete }, |row| {
                     let key_bytes: Vec<u8> = row.get("content_key")?;
+                    let key = TContentKey::try_from(key_bytes).map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
+                    })?;
+
                     let value_bytes: Vec<u8> = row.get("content_value")?;
+                    let value = RawContentValue::from(value_bytes);
+
                     let size: u64 = row.get("content_size")?;
-                    TContentKey::try_from(key_bytes)
-                        .map(|key| (key, value_bytes, size))
-                        .map_err(|e| {
-                            rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
-                        })
+                    Ok((key, value, size))
                 })?
-                .collect::<Result<Vec<(TContentKey, Vec<u8>, u64)>, rusqlite::Error>>()?;
+                .collect::<Result<Vec<(TContentKey, RawContentValue, u64)>, rusqlite::Error>>()?;
             let pruning_duration = self.metrics.stop_process_timer(delete_timer);
             self.pruning_strategy
                 .observe_pruning_duration(pruning_duration);
@@ -499,14 +504,14 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 break;
             }
 
-            let deleted_content_values = deleted_content_result
-                .iter()
-                .map(|(key, value, _)| (key.clone(), value.clone()))
-                .collect::<Vec<(TContentKey, Vec<u8>)>>();
             let deleted_content_size = deleted_content_result
                 .iter()
                 .map(|(_, _, size)| size)
                 .sum::<u64>();
+            let deleted_content_values = deleted_content_result
+                .into_iter()
+                .map(|(key, value, _)| (key, value))
+                .collect::<Vec<(TContentKey, RawContentValue)>>();
             self.usage_stats.entry_count -= to_delete;
             self.usage_stats.total_entry_size_bytes -= deleted_content_size;
             self.usage_stats.report_metrics(&self.metrics);
@@ -579,7 +584,7 @@ mod tests {
     fn generate_key_value(
         config: &IdIndexedV1StoreConfig,
         distance: u8,
-    ) -> (IdentityContentKey, Vec<u8>) {
+    ) -> (IdentityContentKey, RawContentValue) {
         generate_key_value_with_content_size(config, distance, CONTENT_DEFAULT_SIZE_BYTES)
     }
 
@@ -587,7 +592,7 @@ mod tests {
         config: &IdIndexedV1StoreConfig,
         distance: u8,
         content_size: u64,
-    ) -> (IdentityContentKey, Vec<u8>) {
+    ) -> (IdentityContentKey, RawContentValue) {
         let mut key = rand::random::<[u8; 32]>();
         key[0] = config.node_id.raw()[0] ^ distance;
         let key = IdentityContentKey::new(key);
@@ -596,7 +601,7 @@ mod tests {
             panic!("Content size of at least 64 bytes is required (32 for id + 32 for key)")
         }
         let value = generate_random_bytes((content_size - 2 * 32) as usize);
-        (key, value)
+        (key, RawContentValue::from(value))
     }
 
     // Creates table and content at approximate middle distance (first byte distance is 0.80).
@@ -612,7 +617,7 @@ mod tests {
                 .execute(&sql::insert(&config.content_type), named_params! {
                     ":content_id": id.as_slice(),
                     ":content_key": key.to_bytes(),
-                    ":content_value": value,
+                    ":content_value": value.to_vec(),
                     ":distance_short": config.distance_fn.distance(&config.node_id, &id).big_endian_u32(),
                     ":content_size": content_size,
                 })?;

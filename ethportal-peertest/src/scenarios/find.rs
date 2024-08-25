@@ -6,9 +6,10 @@ use tracing::info;
 
 use crate::{utils::fixture_header_with_proof, Peertest};
 use ethportal_api::{
-    types::{history::ContentInfo, portal_wire::ProtocolId},
+    types::{portal::ContentInfo, portal_wire::ProtocolId},
     utils::bytes::hex_decode,
-    BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, OverlayContentKey, StateNetworkApiClient,
+    BeaconNetworkApiClient, ContentValue, Enr, HistoryContentValue, HistoryNetworkApiClient,
+    OverlayContentKey, StateNetworkApiClient,
 };
 
 pub async fn test_recursive_find_nodes_self(protocol: ProtocolId, peertest: &Peertest) {
@@ -86,7 +87,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     let store_result = HistoryNetworkApiClient::store(
         &peertest.bootnode.ipc_client,
         content_key.clone(),
-        content_value.clone(),
+        content_value.encode(),
     )
     .await
     .unwrap();
@@ -105,7 +106,10 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     let content = trace_content_info.content;
     let trace = trace_content_info.trace;
 
-    assert_eq!(content, content_value);
+    assert_eq!(
+        HistoryContentValue::decode(&content_key, &content).unwrap(),
+        content_value
+    );
 
     let query_origin_node: NodeId = peertest.nodes[0].enr.node_id();
     let node_with_content: NodeId = peertest.bootnode.enr.node_id();
@@ -155,7 +159,7 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
     let store_result = HistoryNetworkApiClient::store(
         &peertest.bootnode.ipc_client,
         content_key.clone(),
-        content_value.clone(),
+        content_value.encode(),
     )
     .await
     .unwrap();
@@ -164,12 +168,15 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
 
     let trace_content_info = HistoryNetworkApiClient::trace_recursive_find_content(
         &peertest.bootnode.ipc_client,
-        content_key,
+        content_key.clone(),
     )
     .await
     .unwrap();
     assert!(!trace_content_info.utp_transfer);
-    assert_eq!(trace_content_info.content, content_value);
+    assert_eq!(
+        HistoryContentValue::decode(&content_key, &trace_content_info.content).unwrap(),
+        content_value
+    );
 
     let origin = trace_content_info.trace.origin;
     assert_eq!(trace_content_info.trace.received_from.unwrap(), origin);

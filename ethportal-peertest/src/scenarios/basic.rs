@@ -2,7 +2,7 @@ use crate::{utils::fixture_header_with_proof, Peertest, PeertestNode};
 use alloy_primitives::{B256, U256};
 use ethportal_api::{
     types::{distance::Distance, portal_wire::ProtocolId},
-    BeaconNetworkApiClient, BlockHeaderKey, Discv5ApiClient, HistoryContentKey,
+    BeaconNetworkApiClient, BlockHeaderKey, ContentValue, Discv5ApiClient, HistoryContentKey,
     HistoryNetworkApiClient, StateNetworkApiClient, Web3ApiClient,
 };
 use jsonrpsee::async_client::Client;
@@ -176,7 +176,7 @@ pub async fn test_find_nodes_zero_distance(
 pub async fn test_history_store(target: &Client) {
     info!("Testing portal_historyStore");
     let (content_key, content_value) = fixture_header_with_proof();
-    let result = HistoryNetworkApiClient::store(target, content_key, content_value)
+    let result = HistoryNetworkApiClient::store(target, content_key, content_value.encode())
         .await
         .unwrap();
     assert!(result);

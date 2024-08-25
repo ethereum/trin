@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy_primitives::{Bytes, B256};
 use rand::{seq::SliceRandom, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
@@ -17,9 +17,6 @@ pub const HISTORY_BLOCK_HEADER_KEY_PREFIX: u8 = 0x00;
 pub const HISTORY_BLOCK_BODY_KEY_PREFIX: u8 = 0x01;
 pub const HISTORY_BLOCK_RECEIPTS_KEY_PREFIX: u8 = 0x02;
 pub const HISTORY_BLOCK_EPOCH_ACCUMULATOR_KEY_PREFIX: u8 = 0x03;
-
-/// SSZ encoded overlay content key as bytes
-pub type RawContentKey = Vec<u8>;
 
 /// A content key in the history overlay network.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -128,6 +125,12 @@ impl From<&HistoryContentKey> for Vec<u8> {
 impl From<HistoryContentKey> for Vec<u8> {
     fn from(val: HistoryContentKey) -> Self {
         val.to_bytes()
+    }
+}
+
+impl From<HistoryContentKey> for Bytes {
+    fn from(value: HistoryContentKey) -> Self {
+        Self::from(value.to_bytes())
     }
 }
 

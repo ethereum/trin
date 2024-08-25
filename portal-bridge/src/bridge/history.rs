@@ -22,7 +22,7 @@ use crate::{
 };
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
-    EpochAccumulatorKey, HistoryContentKey, HistoryContentValue,
+    ContentValue, EpochAccumulatorKey, HistoryContentKey, HistoryContentValue,
 };
 use trin_validation::{
     constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
@@ -88,10 +88,13 @@ impl HistoryBridge {
         // test files have no block number data, so we report all gossiped content at height 0.
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(0)));
         for asset in assets.0.into_iter() {
+            let content_value =
+                HistoryContentValue::decode(&asset.content_key, &asset.content_value)
+                    .expect("Error parsing history content value test asset");
             let _ = gossip_history_content(
                 self.portal_client.clone(),
                 asset.content_key.clone(),
-                asset.content_value,
+                content_value,
                 block_stats.clone(),
             )
             .await;

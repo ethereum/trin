@@ -168,7 +168,7 @@ mod tests {
         for (key, value) in key_value_map.into_iter() {
             assert_eq!(
                 store.lookup_content_value(&key.content_id().into())?,
-                Some(value),
+                Some(value.into()),
             );
         }
 

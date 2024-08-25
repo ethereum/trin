@@ -4,6 +4,7 @@ use crate::{
         optimistic_update::LightClientOptimisticUpdateDeneb, update::LightClientUpdateDeneb,
     },
     types::{
+        cli::BEACON_NETWORK,
         consensus::{
             fork::{ForkDigest, ForkName},
             historical_summaries::HistoricalSummariesWithProof,
@@ -26,9 +27,9 @@ use crate::{
         content_value::ContentValue,
     },
     utils::bytes::hex_encode,
-    ContentValueError,
+    BeaconContentKey, ContentValueError, RawContentValue,
 };
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Serialize, Serializer};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_types::{typenum::U128, VariableList};
 use std::ops::Deref;
@@ -496,36 +497,49 @@ pub enum BeaconContentValue {
 }
 
 impl ContentValue for BeaconContentValue {
-    fn encode(&self) -> Vec<u8> {
+    type TContentKey = BeaconContentKey;
+
+    fn encode(&self) -> RawContentValue {
         match self {
-            Self::HistoricalSummariesWithProof(value) => value.as_ssz_bytes(),
-            Self::LightClientBootstrap(value) => value.as_ssz_bytes(),
-            Self::LightClientUpdatesByRange(value) => value.as_ssz_bytes(),
-            Self::LightClientOptimisticUpdate(value) => value.as_ssz_bytes(),
-            Self::LightClientFinalityUpdate(value) => value.as_ssz_bytes(),
+            Self::HistoricalSummariesWithProof(value) => value.as_ssz_bytes().into(),
+            Self::LightClientBootstrap(value) => value.as_ssz_bytes().into(),
+            Self::LightClientUpdatesByRange(value) => value.as_ssz_bytes().into(),
+            Self::LightClientOptimisticUpdate(value) => value.as_ssz_bytes().into(),
+            Self::LightClientFinalityUpdate(value) => value.as_ssz_bytes().into(),
         }
     }
 
-    fn decode(buf: &[u8]) -> Result<Self, ContentValueError> {
-        if let Ok(value) = ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(buf) {
-            return Ok(Self::HistoricalSummariesWithProof(value));
+    fn decode(key: &Self::TContentKey, buf: &[u8]) -> Result<Self, ContentValueError> {
+        match key {
+            BeaconContentKey::LightClientBootstrap(_) => {
+                if let Ok(value) = ForkVersionedLightClientBootstrap::from_ssz_bytes(buf) {
+                    return Ok(Self::LightClientBootstrap(value));
+                }
+            }
+            BeaconContentKey::LightClientUpdatesByRange(_) => {
+                if let Ok(value) = LightClientUpdatesByRange::from_ssz_bytes(buf) {
+                    return Ok(Self::LightClientUpdatesByRange(value));
+                }
+            }
+            BeaconContentKey::LightClientFinalityUpdate(_) => {
+                if let Ok(value) = ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(buf) {
+                    return Ok(Self::LightClientFinalityUpdate(value));
+                }
+            }
+            BeaconContentKey::LightClientOptimisticUpdate(_) => {
+                if let Ok(value) = ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(buf) {
+                    return Ok(Self::LightClientOptimisticUpdate(value));
+                }
+            }
+            BeaconContentKey::HistoricalSummariesWithProof(_) => {
+                if let Ok(value) = ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(buf) {
+                    return Ok(Self::HistoricalSummariesWithProof(value));
+                }
+            }
         }
-        if let Ok(value) = ForkVersionedLightClientBootstrap::from_ssz_bytes(buf) {
-            return Ok(Self::LightClientBootstrap(value));
-        }
-        if let Ok(value) = LightClientUpdatesByRange::from_ssz_bytes(buf) {
-            return Ok(Self::LightClientUpdatesByRange(value));
-        }
-        if let Ok(value) = ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(buf) {
-            return Ok(Self::LightClientOptimisticUpdate(value));
-        }
-        if let Ok(value) = ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(buf) {
-            return Ok(Self::LightClientFinalityUpdate(value));
-        }
-
         Err(ContentValueError::UnknownContent {
             bytes: hex_encode(buf),
-            network: "beacon".to_string(),
+            network: BEACON_NETWORK.to_string(),
         })
     }
 }
@@ -539,21 +553,13 @@ impl Serialize for BeaconContentValue {
     }
 }
 
-impl<'de> Deserialize<'de> for BeaconContentValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Self::from_hex(&s).map_err(serde::de::Error::custom)
-    }
-}
-
 #[cfg(test)]
 mod test {
     use crate::{
-        consensus::fork::ForkName, utils::bytes::hex_decode, BeaconContentValue, ContentValue,
+        consensus::fork::ForkName, utils::bytes::hex_decode, BeaconContentKey, BeaconContentValue,
+        ContentValue,
     };
+    use serde::Deserialize;
     use serde_json::Value;
     use std::fs;
 
@@ -566,10 +572,11 @@ mod test {
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
         for (slot_num, obj) in json {
+            let content_key = BeaconContentKey::deserialize(&obj["content_key"]).unwrap();
             let slot_num: u64 = slot_num.parse().unwrap();
             let content_hexstr = obj.get("content_value").unwrap().as_str().unwrap();
             let content_bytes = hex_decode(content_hexstr).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_bytes).unwrap();
+            let beacon_content = BeaconContentValue::decode(&content_key, &content_bytes).unwrap();
 
             match beacon_content {
                 BeaconContentValue::LightClientBootstrap(ref value) => {
@@ -583,7 +590,7 @@ mod test {
 
             assert_eq!(content_bytes, beacon_content.encode());
 
-            assert_possible_content_value_roundtrip(beacon_content);
+            assert_possible_content_value_roundtrip(content_key, beacon_content);
         }
     }
 
@@ -596,10 +603,11 @@ mod test {
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
         for (slot_num, obj) in json {
+            let content_key = BeaconContentKey::deserialize(&obj["content_key"]).unwrap();
             let slot_num: u64 = slot_num.parse().unwrap();
             let content_hexstr = obj.get("content_value").unwrap().as_str().unwrap();
             let content_bytes = hex_decode(content_hexstr).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_bytes).unwrap();
+            let beacon_content = BeaconContentValue::decode(&content_key, &content_bytes).unwrap();
 
             match beacon_content {
                 BeaconContentValue::LightClientUpdatesByRange(ref updates) => {
@@ -619,7 +627,7 @@ mod test {
 
             assert_eq!(content_bytes, beacon_content.encode());
 
-            assert_possible_content_value_roundtrip(beacon_content);
+            assert_possible_content_value_roundtrip(content_key, beacon_content);
         }
     }
 
@@ -632,10 +640,11 @@ mod test {
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
         for (slot_num, obj) in json {
+            let content_key = BeaconContentKey::deserialize(&obj["content_key"]).unwrap();
             let slot_num: u64 = slot_num.parse().unwrap();
             let content_hexstr = obj.get("content_value").unwrap().as_str().unwrap();
             let content_bytes = hex_decode(content_hexstr).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_bytes).unwrap();
+            let beacon_content = BeaconContentValue::decode(&content_key, &content_bytes).unwrap();
 
             match beacon_content {
                 BeaconContentValue::LightClientOptimisticUpdate(ref value) => {
@@ -649,7 +658,7 @@ mod test {
 
             assert_eq!(content_bytes, beacon_content.encode());
 
-            assert_possible_content_value_roundtrip(beacon_content);
+            assert_possible_content_value_roundtrip(content_key, beacon_content);
         }
     }
 
@@ -662,10 +671,11 @@ mod test {
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
         for (slot_num, obj) in json {
+            let content_key = BeaconContentKey::deserialize(&obj["content_key"]).unwrap();
             let slot_num: u64 = slot_num.parse().unwrap();
             let content_hexstr = obj.get("content_value").unwrap().as_str().unwrap();
             let content_bytes = hex_decode(content_hexstr).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_bytes).unwrap();
+            let beacon_content = BeaconContentValue::decode(&content_key, &content_bytes).unwrap();
 
             match beacon_content {
                 BeaconContentValue::LightClientFinalityUpdate(ref value) => {
@@ -679,7 +689,7 @@ mod test {
 
             assert_eq!(content_bytes, beacon_content.encode());
 
-            assert_possible_content_value_roundtrip(beacon_content);
+            assert_possible_content_value_roundtrip(content_key, beacon_content);
         }
     }
 
@@ -687,10 +697,12 @@ mod test {
     fn historical_summaries_with_proof_encode_decode() {
         let file = fs::read_to_string("./../portal-spec-tests/tests/mainnet/beacon_chain/historical_summaries_with_proof/deneb/historical_summaries_with_proof.yaml").unwrap();
         let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
+        let content_key = BeaconContentKey::deserialize(&value["content_key"]).unwrap();
         let content_value = value.get("content_value").unwrap().as_str().unwrap();
         let historical_summaries_with_proof_bytes = hex_decode(content_value).unwrap();
         let historical_summaries_with_proof =
-            BeaconContentValue::decode(&historical_summaries_with_proof_bytes).unwrap();
+            BeaconContentValue::decode(&content_key, &historical_summaries_with_proof_bytes)
+                .unwrap();
         let expected_epoch = value.get("epoch").unwrap().as_u64().unwrap();
 
         match historical_summaries_with_proof {
@@ -710,10 +722,11 @@ mod test {
         );
     }
 
-    fn assert_possible_content_value_roundtrip(beacon_content: BeaconContentValue) {
-        let json_str = serde_json::to_string(&beacon_content).unwrap();
-        let possible_content_value: BeaconContentValue = serde_json::from_str(&json_str).unwrap();
-
-        assert_eq!(beacon_content, possible_content_value);
+    fn assert_possible_content_value_roundtrip(key: BeaconContentKey, value: BeaconContentValue) {
+        let json_str = serde_json::to_string(&value).unwrap();
+        let possible_content_value: String = serde_json::from_str(&json_str).unwrap();
+        let possible_content_value =
+            BeaconContentValue::from_hex(&key, &possible_content_value).unwrap();
+        assert_eq!(value, possible_content_value);
     }
 }

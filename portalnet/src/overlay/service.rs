@@ -74,7 +74,7 @@ use ethportal_api::{
         query_trace::QueryTrace,
     },
     utils::bytes::hex_encode_compact,
-    OverlayContentKey, RawContentKey,
+    OverlayContentKey, RawContentKey, RawContentValue,
 };
 use trin_metrics::overlay::OverlayMetricsReporter;
 use trin_storage::{ContentStore, ShouldWeStoreContent};
@@ -734,7 +734,7 @@ where
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
         content_key: TContentKey,
-        content: Vec<u8>,
+        content: RawContentValue,
         nodes_to_poke: Vec<NodeId>,
         utp_controller: Arc<UtpController>,
     ) {
@@ -932,7 +932,7 @@ where
             "Handling FindContent message",
         );
 
-        let content_key = match (TContentKey::try_from)(request.content_key) {
+        let content_key = match TContentKey::try_from(request.content_key.to_vec()) {
             Ok(key) => key,
             Err(_) => {
                 return Err(OverlayRequestError::InvalidRequest(
@@ -945,6 +945,7 @@ where
             self.utp_controller.get_outbound_semaphore(),
         ) {
             (Ok(Some(content)), Some(permit)) => {
+                let content = content.to_vec();
                 if content.len() <= MAX_PORTAL_CONTENT_PAYLOAD_SIZE {
                     Ok(Content::Content(content))
                 } else {
@@ -1029,7 +1030,7 @@ where
         let content_keys: Vec<TContentKey> = request
             .content_keys
             .into_iter()
-            .map(|k| (TContentKey::try_from)(k))
+            .map(|k| TContentKey::try_from(k.to_vec()))
             .collect::<Result<Vec<TContentKey>, _>>()
             .map_err(|_| {
                 OverlayRequestError::AcceptError(
@@ -1199,7 +1200,7 @@ where
                     })
                 })
                 .collect::<Vec<_>>();
-            let validated_content: Vec<(TContentKey, Vec<u8>)> = join_all(handles)
+            let validated_content: Vec<(TContentKey, RawContentValue)> = join_all(handles)
                 .await
                 .into_iter()
                 .enumerate()
@@ -1542,9 +1543,10 @@ where
     // non-blocking requests to this/other overlay networks).
     async fn validate_and_store_content(
         key: TContentKey,
-        content_value: Vec<u8>,
+        content_value_payload: Vec<u8>,
         utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
-    ) -> Option<Vec<(TContentKey, Vec<u8>)>> {
+    ) -> Option<Vec<(TContentKey, RawContentValue)>> {
+        let content_value = RawContentValue::from(content_value_payload);
         // Validate received content
         let validation_result = utp_processing
             .validator
@@ -1823,7 +1825,7 @@ where
         nodes_to_poke: Vec<NodeId>,
         utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
     ) {
-        let mut content = content;
+        let mut content = RawContentValue::from(content);
         // Operate under assumption that all content in the store is valid
         let local_value = utp_processing.store.read().get(&content_key);
         if let Ok(Some(val)) = local_value {
@@ -2017,17 +2019,17 @@ where
         store: Arc<RwLock<TStore>>,
         accept_message: &Accept,
         content_keys_offered: Vec<RawContentKey>,
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    ) -> anyhow::Result<Vec<RawContentValue>> {
         let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> =
             content_keys_offered
                 .into_iter()
-                .map(|key| TContentKey::try_from(key))
+                .map(|key| TContentKey::try_from(key.to_vec()))
                 .collect();
 
         let content_keys_offered: Vec<TContentKey> = content_keys_offered
             .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
 
-        let mut content_items: Vec<Vec<u8>> = Vec::new();
+        let mut content_items: Vec<RawContentValue> = Vec::new();
 
         for (i, key) in accept_message
             .content_keys
@@ -3121,7 +3123,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
-        let content = vec![0xef];
+        let content = RawContentValue::from_iter([0xef]);
 
         let status = NodeStatus {
             state: ConnectionState::Connected,
@@ -3172,7 +3174,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
-        let content = vec![0xef];
+        let content = RawContentValue::from_iter([0xef]);
 
         let (_, enr1) = generate_random_remote_enr();
         let (_, enr2) = generate_random_remote_enr();
@@ -3197,7 +3199,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
-        let content = vec![0xef];
+        let content = RawContentValue::from_iter([0xef]);
 
         let status = NodeStatus {
             state: ConnectionState::Connected,

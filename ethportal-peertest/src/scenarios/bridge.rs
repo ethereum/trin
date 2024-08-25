@@ -2,13 +2,17 @@ use crate::{
     utils::{fixture_header_with_proof_1000010, wait_for_beacon_content, wait_for_history_content},
     Peertest,
 };
-use ethportal_api::{jsonrpsee::http_client::HttpClient, BeaconContentKey, BeaconContentValue};
+use ethportal_api::{
+    jsonrpsee::http_client::HttpClient, BeaconContentKey, BeaconContentValue, ContentValue,
+    RawContentValue,
+};
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, history::HistoryBridge},
     constants::DEFAULT_GOSSIP_LIMIT,
     types::mode::BridgeMode,
 };
+use serde::Deserialize;
 use serde_json::Value;
 use tokio::time::{sleep, Duration};
 use trin_validation::oracle::HeaderOracle;
@@ -59,10 +63,9 @@ pub async fn test_beacon_bridge(peertest: &Peertest, portal_client: &HttpClient)
     let value = std::fs::read_to_string("./test_assets/portalnet/beacon_bridge_data.yaml")
         .expect("cannot find test asset");
     let value: Value = serde_yaml::from_str(&value).unwrap();
-    let content_key: BeaconContentKey =
-        serde_json::from_value(value[0].get("content_key").unwrap().clone()).unwrap();
-    let content_value: BeaconContentValue =
-        serde_json::from_value(value[0].get("content_value").unwrap().clone()).unwrap();
+    let content_key = BeaconContentKey::deserialize(&value[0]["content_key"]).unwrap();
+    let content_value = RawContentValue::deserialize(&value[0]["content_value"]).unwrap();
+    let content_value = BeaconContentValue::decode(&content_key, &content_value).unwrap();
 
     // Check if the stored content value in bootnode's DB matches the offered
     let received_content_value =

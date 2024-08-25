@@ -3,11 +3,10 @@ use std::sync::Arc;
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
-        beacon::{ContentInfo, TraceContentInfo},
         content_value::ContentValue,
         distance::Distance,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
-        portal::{AcceptInfo, FindNodesInfo, PongInfo},
+        portal::{AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
         query_trace::QueryTrace,
     },
@@ -124,18 +123,19 @@ async fn recursive_find_content(
     is_trace: bool,
 ) -> Result<Value, String> {
     // Check whether we have the data locally.
-    let local_content: Option<Vec<u8>> = match network.overlay.store.read().get(&content_key) {
-        Ok(Some(data)) => Some(data),
-        Ok(None) => None,
-        Err(err) => {
+    let local_content = network
+        .overlay
+        .store
+        .read()
+        .get(&content_key)
+        .unwrap_or_else(|err| {
             error!(
                 error = %err,
                 content.key = %content_key,
                 "Error checking data store for content",
             );
             None
-        }
-    };
+        });
     let (content_bytes, utp_transfer, trace) = match local_content {
         Some(val) => {
             let local_enr = network.overlay.local_enr();
@@ -239,12 +239,7 @@ async fn store(
     content_value: BeaconContentValue,
 ) -> Result<Value, String> {
     let data = content_value.encode();
-    let response = match network
-        .overlay
-        .store
-        .write()
-        .put::<Vec<u8>>(content_key, data)
-    {
+    let response = match network.overlay.store.write().put(content_key, data) {
         Ok(_) => Ok(Value::Bool(true)),
         Err(msg) => Ok(Value::String(msg.to_string())),
     };

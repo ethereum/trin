@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy_primitives::{Bytes, B256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
@@ -101,6 +101,12 @@ impl From<&StateContentKey> for Vec<u8> {
 impl From<StateContentKey> for Vec<u8> {
     fn from(val: StateContentKey) -> Self {
         val.to_bytes()
+    }
+}
+
+impl From<StateContentKey> for Bytes {
+    fn from(value: StateContentKey) -> Self {
+        Self::from(value.to_bytes())
     }
 }
 

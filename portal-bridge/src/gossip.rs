@@ -6,9 +6,11 @@ use tracing::{debug, warn, Instrument};
 
 use crate::stats::{BeaconSlotStats, HistoryBlockStats, StatsReporter};
 use ethportal_api::{
-    jsonrpsee::core::Error, types::portal::TraceGossipInfo, BeaconContentKey, BeaconContentValue,
-    BeaconNetworkApiClient, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
-    OverlayContentKey, StateContentKey, StateContentValue, StateNetworkApiClient,
+    jsonrpsee::core::Error,
+    types::portal::{ContentInfo, TraceGossipInfo},
+    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, ContentValue, HistoryContentKey,
+    HistoryContentValue, HistoryNetworkApiClient, OverlayContentKey, StateContentKey,
+    StateContentValue, StateNetworkApiClient,
 };
 
 const GOSSIP_RETRY_COUNT: u64 = 3;
@@ -45,7 +47,7 @@ async fn beacon_trace_gossip(
         let result = BeaconNetworkApiClient::trace_gossip(
             &client,
             content_key.clone(),
-            content_value.clone(),
+            content_value.encode(),
         )
         .await;
         // check if content was successfully transferred to at least one peer on network
@@ -62,7 +64,7 @@ async fn beacon_trace_gossip(
         // if not, make rfc request to see if data is available on network
         let result =
             BeaconNetworkApiClient::recursive_find_content(&client, content_key.clone()).await;
-        if let Ok(ethportal_api::types::beacon::ContentInfo::Content { .. }) = result {
+        if let Ok(ContentInfo::Content { .. }) = result {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             found = true;
             return Ok(GossipReport {
@@ -118,7 +120,7 @@ async fn history_trace_gossip(
         let result = HistoryNetworkApiClient::trace_gossip(
             &client,
             content_key.clone(),
-            content_value.clone(),
+            content_value.encode(),
         )
         .await;
         // check if content was successfully transferred to at least one peer on network
@@ -135,7 +137,7 @@ async fn history_trace_gossip(
         // if not, make rfc request to see if data is available on network
         let result =
             HistoryNetworkApiClient::recursive_find_content(&client, content_key.clone()).await;
-        if let Ok(ethportal_api::types::history::ContentInfo::Content { .. }) = result {
+        if let Ok(ContentInfo::Content { .. }) = result {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             found = true;
             return Ok(GossipReport {
@@ -186,7 +188,7 @@ async fn state_trace_gossip(
         let result = StateNetworkApiClient::trace_gossip(
             &client,
             content_key.clone(),
-            content_value.clone(),
+            content_value.encode(),
         )
         .await;
         // check if content was successfully transferred to at least one peer on network
@@ -203,7 +205,7 @@ async fn state_trace_gossip(
         // if not, make rfc request to see if data is available on network
         let result =
             StateNetworkApiClient::recursive_find_content(&client, content_key.clone()).await;
-        if let Ok(ethportal_api::types::state::ContentInfo::Content { .. }) = result {
+        if let Ok(ContentInfo::Content { .. }) = result {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             found = true;
             return Ok(GossipReport {

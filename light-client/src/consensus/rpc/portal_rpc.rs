@@ -53,7 +53,7 @@ impl ConsensusRpc for PortalRpc {
         let (tx, rx) = oneshot::channel();
 
         let overlay_command = OverlayCommand::FindContentQuery {
-            target: bootstrap_key,
+            target: bootstrap_key.clone(),
             callback: tx,
             is_trace: false,
         };
@@ -70,7 +70,7 @@ impl ConsensusRpc for PortalRpc {
         match rx.await {
             Ok(result) => {
                 let bootstrap = match result {
-                    Ok(result) => BeaconContentValue::decode(&result.0)?,
+                    Ok(result) => BeaconContentValue::decode(&bootstrap_key, &result.0)?,
                     Err(err) => {
                         bail!("LightClientBootstrap content not found on the network: {err}")
                     }
@@ -110,7 +110,7 @@ impl ConsensusRpc for PortalRpc {
         let (tx, rx) = oneshot::channel();
 
         let overlay_command = OverlayCommand::FindContentQuery {
-            target: updates_key,
+            target: updates_key.clone(),
             callback: tx,
             is_trace: false,
         };
@@ -127,7 +127,7 @@ impl ConsensusRpc for PortalRpc {
         match rx.await {
             Ok(result) => {
                 let content_value = match result {
-                    Ok(result) => BeaconContentValue::decode(&result.0)?,
+                    Ok(result) => BeaconContentValue::decode(&updates_key, &result.0)?,
                     Err(err) => {
                         return Err(anyhow!("LightClientUpdatesByRange period={period}, count={count} not found on the network: {err}"));
                     }
@@ -181,7 +181,7 @@ impl ConsensusRpc for PortalRpc {
         let (tx, rx) = oneshot::channel();
 
         let overlay_command = OverlayCommand::FindContentQuery {
-            target: finality_update_key,
+            target: finality_update_key.clone(),
             callback: tx,
             is_trace: false,
         };
@@ -198,7 +198,7 @@ impl ConsensusRpc for PortalRpc {
         match rx.await {
             Ok(result) => {
                 let finality_update = match result {
-                    Ok(result) => BeaconContentValue::decode(&result.0)?,
+                    Ok(result) => BeaconContentValue::decode(&finality_update_key, &result.0)?,
                     Err(err) => {
                         return Err(anyhow!("LightClientFinalityUpdate content with finalized slot 0 not found on the network: {err}"));
                     }
@@ -242,7 +242,7 @@ impl ConsensusRpc for PortalRpc {
         let (tx, rx) = oneshot::channel();
 
         let overlay_command = OverlayCommand::FindContentQuery {
-            target: optimistic_update_key,
+            target: optimistic_update_key.clone(),
             callback: tx,
             is_trace: false,
         };
@@ -259,7 +259,7 @@ impl ConsensusRpc for PortalRpc {
         match rx.await {
             Ok(result) => {
                 let optimistic_update = match result {
-                    Ok(result) => BeaconContentValue::decode(&result.0)?,
+                    Ok(result) => BeaconContentValue::decode(&optimistic_update_key, &result.0)?,
                     Err(err) => {
                         return Err(anyhow!("LightClientOptimisticUpdate content with signature slot {expected_current_slot} not found on the network: {err}"));
                     }
