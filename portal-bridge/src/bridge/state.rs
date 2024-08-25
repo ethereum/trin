@@ -165,7 +165,7 @@ impl StateBridge {
                     self.gossip_contract_bytecode(
                         address_hash,
                         &account_proof,
-                        block_tuple.header.header.hash(),
+                        block.header.hash(),
                         account.code_hash,
                         code,
                     )

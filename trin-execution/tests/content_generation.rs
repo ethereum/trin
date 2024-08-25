@@ -1,14 +1,9 @@
 use alloy_rlp::Decodable;
 use anyhow::{anyhow, ensure, Result};
-use e2store::{
-    era1::{Era1, BLOCK_TUPLE_COUNT},
-    utils::get_shuffled_era1_files,
-};
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::types::state_trie::account_state::AccountState;
 use revm::DatabaseRef;
 use revm_primitives::keccak256;
-use surf::{Client, Config};
 use tracing_test::traced_test;
 use trin_execution::{
     config::StateConfig,
@@ -16,6 +11,7 @@ use trin_execution::{
         create_account_content_key, create_account_content_value, create_contract_content_key,
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
+    era::manager::EraManager,
     execution::State,
     storage::utils::setup_temp_dir,
     trie_walker::TrieWalker,
@@ -39,15 +35,9 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
     // set last block to test for
     let blocks = 1_000_000;
 
-    let http_client: Client = Config::new()
-        .add_header("Content-Type", "application/xml")
-        .expect("to be able to add header")
-        .try_into()?;
-
-    let era1_files = get_shuffled_era1_files(&http_client).await?;
-    let mut era1 = get_era1(0, &era1_files, &http_client).await?;
-
     let temp_directory = setup_temp_dir()?;
+
+    let mut era_manager = EraManager::new().await?;
 
     let mut state = State::new(
         Some(temp_directory.path().to_path_buf()),
@@ -59,17 +49,9 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
     for block_number in 0..=blocks {
         println!("Starting block: {block_number}");
-        if era1.epoch_number() != Era1::epoch_number_from_block_number(block_number) {
-            era1 = get_era1(
-                Era1::epoch_number_from_block_number(block_number),
-                &era1_files,
-                &http_client,
-            )
-            .await?
-        }
-        let block_tuple = &era1.block_tuples[block_number as usize % BLOCK_TUPLE_COUNT];
+        let block = era_manager.get_block_by_number(block_number).await?;
         ensure!(
-            block_number == block_tuple.header.header.number,
+            block_number == block.header.number,
             "Block number doesn't match!"
         );
 
@@ -80,17 +62,17 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
             true => state
                 .initialize_genesis()
                 .map_err(|e| anyhow!("unable to create genesis state: {e}"))?,
-            false => state.process_block(block_tuple)?,
+            false => state.process_block(block)?,
         };
         ensure!(
-            state.get_root()? == block_tuple.header.header.state_root,
+            state.get_root()? == block.header.state_root,
             "State root doesn't match"
         );
 
         let mut content_pairs = 0;
         let walk_diff = TrieWalker::new(root_hash, changed_nodes);
         for node in walk_diff.nodes.keys() {
-            let block_hash = block_tuple.header.header.hash();
+            let block_hash = block.header.hash();
             let account_proof = walk_diff.get_proof(*node);
 
             // check account content key/value
@@ -142,21 +124,4 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
         println!("Block {block_number} finished. Total content key/value pairs: {content_pairs}");
     }
     Ok(())
-}
-
-async fn get_era1(
-    epoch_index: u64,
-    era1_files: impl IntoIterator<Item = &String>,
-    http_client: &Client,
-) -> Result<Era1> {
-    let path = era1_files
-        .into_iter()
-        .find(|file| file.contains(&format!("mainnet-{epoch_index:05}-")))
-        .expect("to be able to find era1 file");
-    let raw_era1 = http_client
-        .get(path.clone())
-        .recv_bytes()
-        .await
-        .map_err(|err| anyhow!("unable to read era1 file at path: {path:?} : {err}"))?;
-    Era1::deserialize(&raw_era1)
 }
