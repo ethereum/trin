@@ -4,15 +4,19 @@ use tokio::sync::mpsc;
 
 use ethportal_api::{
     types::{
-        beacon::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
         enr::Enr,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
-        portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
+        portal::{
+            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+            TraceContentInfo, TraceGossipInfo,
+        },
     },
-    BeaconContentKey, BeaconContentValue, BeaconNetworkApiServer, RoutingTableInfo,
+    BeaconContentKey, BeaconContentValue, BeaconNetworkApiServer, ContentValue, RawContentValue,
+    RoutingTableInfo,
 };
 
 use crate::{
+    errors::RpcServeError,
     fetch::proxy_to_subnet,
     jsonrpsee::core::{async_trait, RpcResult},
 };
@@ -130,7 +134,7 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         &self,
         offset: u64,
         limit: u64,
-    ) -> RpcResult<PaginateLocalContentInfo> {
+    ) -> RpcResult<PaginateLocalContentInfo<BeaconContentKey>> {
         let endpoint = BeaconEndpoint::PaginateLocalContentKeys(offset, limit);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -140,8 +144,10 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     async fn gossip(
         &self,
         content_key: BeaconContentKey,
-        content_value: BeaconContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<u32> {
+        let content_value = BeaconContentValue::decode(&content_key, &content_value)
+            .map_err(RpcServeError::from)?;
         let endpoint = BeaconEndpoint::Gossip(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -151,8 +157,10 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     async fn trace_gossip(
         &self,
         content_key: BeaconContentKey,
-        content_value: BeaconContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<TraceGossipInfo> {
+        let content_value = BeaconContentValue::decode(&content_key, &content_value)
+            .map_err(RpcServeError::from)?;
         let endpoint = BeaconEndpoint::TraceGossip(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -165,8 +173,10 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         &self,
         enr: Enr,
         content_key: BeaconContentKey,
-        content_value: BeaconContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<AcceptInfo> {
+        let content_value = BeaconContentValue::decode(&content_key, &content_value)
+            .map_err(RpcServeError::from)?;
         let endpoint = BeaconEndpoint::Offer(enr, content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -179,8 +189,10 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         &self,
         enr: Enr,
         content_key: BeaconContentKey,
-        content_value: BeaconContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<bool> {
+        let content_value = BeaconContentValue::decode(&content_key, &content_value)
+            .map_err(RpcServeError::from)?;
         let endpoint = BeaconEndpoint::TraceOffer(enr, content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -202,14 +214,16 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     async fn store(
         &self,
         content_key: BeaconContentKey,
-        content_value: BeaconContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<bool> {
+        let content_value = BeaconContentValue::decode(&content_key, &content_value)
+            .map_err(RpcServeError::from)?;
         let endpoint = BeaconEndpoint::Store(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Get a content from the local database.
-    async fn local_content(&self, content_key: BeaconContentKey) -> RpcResult<BeaconContentValue> {
+    async fn local_content(&self, content_key: BeaconContentKey) -> RpcResult<RawContentValue> {
         let endpoint = BeaconEndpoint::LocalContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }

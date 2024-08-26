@@ -6,6 +6,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use ethers::types::H160;
 use ethers_core::types::{Bloom, U256};
 use ethers_providers::*;
+use ethportal_api::ContentValue;
 use jsonrpsee::async_client::Client;
 use serde_yaml::Value;
 use serial_test::serial;
@@ -123,7 +124,7 @@ async fn test_eth_get_block_by_hash() {
     let content_key = HistoryContentKey::BlockHeaderWithProof(block_hash.into());
     let content_value = HistoryContentValue::BlockHeaderWithProof(hwp);
     let result = native_client
-        .store(content_key, content_value)
+        .store(content_key, content_value.encode())
         .await
         .unwrap();
     assert!(result);
@@ -132,7 +133,7 @@ async fn test_eth_get_block_by_hash() {
     let content_key = HistoryContentKey::BlockBody(block_hash.into());
     let content_value = HistoryContentValue::BlockBody(body);
     let result = native_client
-        .store(content_key, content_value)
+        .store(content_key, content_value.encode())
         .await
         .unwrap();
     assert!(result);

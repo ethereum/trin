@@ -2,10 +2,12 @@ use crate::{
     types::{
         content_key::state::StateContentKey,
         enr::Enr,
-        portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
-        state::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
+        portal::{
+            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+            TraceContentInfo, TraceGossipInfo,
+        },
     },
-    RoutingTableInfo, StateContentValue,
+    RawContentValue, RoutingTableInfo,
 };
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
@@ -71,7 +73,7 @@ pub trait StateNetworkApi {
         &self,
         offset: u64,
         limit: u64,
-    ) -> RpcResult<PaginateLocalContentInfo>;
+    ) -> RpcResult<PaginateLocalContentInfo<StateContentKey>>;
 
     /// Send the provided content value to interested peers. Clients may choose to send to some or
     /// all peers. Return the number of peers that the content was gossiped to.
@@ -79,7 +81,7 @@ pub trait StateNetworkApi {
     async fn gossip(
         &self,
         content_key: StateContentKey,
-        content_value: StateContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<u32>;
 
     /// Send the provided content value to interested peers. Clients may choose to send to some or
@@ -88,7 +90,7 @@ pub trait StateNetworkApi {
     async fn trace_gossip(
         &self,
         content_key: StateContentKey,
-        content_value: StateContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<TraceGossipInfo>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
@@ -100,7 +102,7 @@ pub trait StateNetworkApi {
         &self,
         enr: Enr,
         content_key: StateContentKey,
-        content_value: StateContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<AcceptInfo>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer.
@@ -112,7 +114,7 @@ pub trait StateNetworkApi {
         &self,
         enr: Enr,
         content_key: StateContentKey,
-        content_value: StateContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<bool>;
 
     /// Store content key with a content data to the local database.
@@ -120,10 +122,10 @@ pub trait StateNetworkApi {
     async fn store(
         &self,
         content_key: StateContentKey,
-        content_value: StateContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<bool>;
 
     /// Get a content from the local database
     #[method(name = "stateLocalContent")]
-    async fn local_content(&self, content_key: StateContentKey) -> RpcResult<StateContentValue>;
+    async fn local_content(&self, content_key: StateContentKey) -> RpcResult<RawContentValue>;
 }

@@ -29,7 +29,7 @@ impl Validator<StateContentKey> for StateValidator {
         content_key: &StateContentKey,
         content_value: &[u8],
     ) -> anyhow::Result<ValidationResult<StateContentKey>> {
-        let content_value = StateContentValue::decode(content_value)
+        let content_value = StateContentValue::decode(content_key, content_value)
             .map_err(|err| anyhow!("Error decoding StateContentValue: {err}"))?;
 
         match content_key {
@@ -161,8 +161,8 @@ mod tests {
     use ethportal_api::{
         types::{
             execution::header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
-            history::ContentInfo,
             jsonrpc::{endpoints::HistoryEndpoint, json_rpc_mock::MockJsonRpcBuilder},
+            portal::ContentInfo,
         },
         Header, HistoryContentKey, HistoryContentValue, OverlayContentKey,
     };
@@ -180,16 +180,17 @@ mod tests {
     }
 
     fn create_validator_with_header(header: Header) -> StateValidator {
+        let history_content_value = HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
+            header: header.clone(),
+            proof: BlockHeaderProof::None(SszNone::default()),
+        });
         let history_jsonrpc_tx = MockJsonRpcBuilder::new()
             .with_response(
                 HistoryEndpoint::RecursiveFindContent(HistoryContentKey::BlockHeaderWithProof(
                     header.hash().into(),
                 )),
                 ContentInfo::Content {
-                    content: HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
-                        header,
-                        proof: BlockHeaderProof::None(SszNone::default()),
-                    }),
+                    content: history_content_value.encode(),
                     utp_transfer: false,
                 },
             )

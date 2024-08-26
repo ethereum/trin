@@ -8,7 +8,8 @@ use crate::{
 use ethportal_api::{
     jsonrpsee::async_client::Client,
     types::execution::header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
-    HistoryContentKey, HistoryNetworkApiClient, StateNetworkApiClient,
+    ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
+    StateNetworkApiClient,
 };
 use tracing::info;
 
@@ -44,13 +45,16 @@ pub async fn test_state_gossip_contract_bytecode(peertest: &Peertest, target: &C
 
 async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &PeertestNode) {
     // Make sure that peer has block header
+    let history_content_key =
+        HistoryContentKey::BlockHeaderWithProof(fixture.block_header.hash().into());
+    let history_content_value = HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
+        header: fixture.block_header.clone(),
+        proof: BlockHeaderProof::None(SszNone::default()),
+    });
     HistoryNetworkApiClient::store(
         &peer.ipc_client,
-        HistoryContentKey::BlockHeaderWithProof(fixture.block_header.hash().into()),
-        ethportal_api::HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
-            header: fixture.block_header.clone(),
-            proof: BlockHeaderProof::None(SszNone::default()),
-        }),
+        history_content_key,
+        history_content_value.encode(),
     )
     .await
     .unwrap();
@@ -60,12 +64,12 @@ async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &Peerte
         target,
         peer.enr.clone(),
         fixture.key.clone(),
-        fixture.offer_value.clone(),
+        fixture.raw_offer_value.clone(),
     )
     .await
     .unwrap();
 
     // Check that peer has state content
     let lookup_content_value = wait_for_state_content(&peer.ipc_client, fixture.key.clone()).await;
-    assert_eq!(lookup_content_value, fixture.lookup_value);
+    assert_eq!(lookup_content_value, fixture.lookup_value());
 }

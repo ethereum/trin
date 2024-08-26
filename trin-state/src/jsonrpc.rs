@@ -13,13 +13,12 @@ use ethportal_api::{
     types::{
         distance::Distance,
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
-        portal::{AcceptInfo, FindNodesInfo, PongInfo},
+        portal::{AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
         query_trace::QueryTrace,
-        state::{ContentInfo, TraceContentInfo},
     },
     utils::bytes::hex_encode,
-    ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
+    ContentValue, OverlayContentKey, RawContentValue, StateContentKey, StateContentValue,
 };
 
 /// Handles State network JSON-RPC requests
@@ -270,18 +269,15 @@ async fn recursive_find_content(
             })?,
     };
 
-    let content =
-        StateContentValue::decode(content_bytes.as_ref()).map_err(|err| err.to_string())?;
-
     if is_trace {
         Ok(json!(TraceContentInfo {
-            content,
+            content: RawContentValue::from(content_bytes),
             utp_transfer,
             trace: trace.ok_or("Content query trace requested but none provided.".to_string())?,
         }))
     } else {
         Ok(json!(ContentInfo::Content {
-            content,
+            content: RawContentValue::from(content_bytes),
             utp_transfer
         }))
     }
@@ -313,7 +309,7 @@ async fn offer(
         "Offer",
         network
             .overlay
-            .send_offer(enr, content_key.into(), content_value.encode())
+            .send_offer(enr, content_key.into(), content_value.encode().to_vec())
             .await
             .map(|accept| AcceptInfo {
                 content_keys: accept.content_keys,
@@ -331,7 +327,7 @@ async fn trace_offer(
         "TraceOffer",
         network
             .overlay
-            .send_offer_trace(enr, content_key.into(), content_value.encode())
+            .send_offer_trace(enr, content_key.into(), content_value.encode().to_vec())
             .await,
     )
 }
@@ -346,13 +342,13 @@ async fn gossip(
         Ok(json!(
             network
                 .overlay
-                .propagate_gossip_trace(content_key, content_value.encode())
+                .propagate_gossip_trace(content_key, content_value.encode().to_vec())
                 .await
         ))
     } else {
         Ok(network
             .overlay
-            .propagate_gossip(vec![(content_key, content_value.encode())])
+            .propagate_gossip(vec![(content_key, content_value.encode().to_vec())])
             .into())
     }
 }

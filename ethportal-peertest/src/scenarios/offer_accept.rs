@@ -10,8 +10,8 @@ use crate::{
     Peertest,
 };
 use ethportal_api::{
-    jsonrpsee::async_client::Client, types::enr::Enr, utils::bytes::hex_encode, Discv5ApiClient,
-    HistoryNetworkApiClient,
+    jsonrpsee::async_client::Client, types::enr::Enr, utils::bytes::hex_encode, ContentValue,
+    Discv5ApiClient, HistoryNetworkApiClient,
 };
 
 pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
@@ -20,7 +20,7 @@ pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     let (content_key, content_value) = fixture_header_with_proof();
     // Store content to offer in the testnode db
     let store_result = target
-        .store(content_key.clone(), content_value.clone())
+        .store(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
@@ -78,7 +78,7 @@ pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
         .offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
             content_key.clone(),
-            content_value.clone(),
+            content_value.encode(),
         )
         .await
         .unwrap();
@@ -101,7 +101,7 @@ pub async fn test_populated_offer_with_trace(peertest: &Peertest, target: &Clien
     let store_result = peertest
         .bootnode
         .ipc_client
-        .store(content_key.clone(), content_value.clone())
+        .store(content_key.clone(), content_value.encode())
         .await
         .unwrap();
     assert!(store_result);
@@ -112,7 +112,7 @@ pub async fn test_populated_offer_with_trace(peertest: &Peertest, target: &Clien
         .trace_offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
             content_key.clone(),
-            content_value.clone(),
+            content_value.encode(),
         )
         .await
         .unwrap();
@@ -137,7 +137,7 @@ pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) 
         .offer(
             peertest.bootnode.enr.clone(),
             content_key.clone(),
-            content_value.clone(),
+            content_value.encode(),
         )
         .await
         .unwrap();
@@ -164,7 +164,7 @@ pub async fn test_offer_propagates_gossip_with_large_content(peertest: &Peertest
 
     // Store content to offer in the testnode db
     let store_result = target
-        .store(content_key.clone(), content_value.clone())
+        .store(content_key.clone(), content_value.encode())
         .await
         .unwrap();
     assert!(store_result);
@@ -208,7 +208,7 @@ pub async fn test_offer_propagates_gossip_multiple_content_values(
         .offer(
             peertest.bootnode.enr.clone(),
             header_key.clone(),
-            header_value.clone(),
+            header_value.encode(),
         )
         .await
         .unwrap();
@@ -229,17 +229,17 @@ pub async fn test_offer_propagates_gossip_multiple_content_values(
 
     // Store content to offer in the testnode db
     let store_result = target
-        .store(body_key.clone(), body_value.clone())
+        .store(body_key.clone(), body_value.encode())
         .await
         .unwrap();
     assert!(store_result);
     let store_result = target
-        .store(receipts_key.clone(), receipts_value.clone())
+        .store(receipts_key.clone(), receipts_value.encode())
         .await
         .unwrap();
     assert!(store_result);
     let store_result = target
-        .store(acc_key_1.clone(), acc_value_1.clone())
+        .store(acc_key_1.clone(), acc_value_1.encode())
         .await
         .unwrap();
     assert!(store_result);
@@ -308,12 +308,12 @@ pub async fn test_offer_propagates_gossip_multiple_large_content_values(
 
     // Store content to offer in the testnode db
     let store_result = target
-        .store(acc_key_1.clone(), acc_value_1.clone())
+        .store(acc_key_1.clone(), acc_value_1.encode())
         .await
         .unwrap();
     assert!(store_result);
     let store_result = target
-        .store(acc_key_2.clone(), acc_value_2.clone())
+        .store(acc_key_2.clone(), acc_value_2.encode())
         .await
         .unwrap();
     assert!(store_result);

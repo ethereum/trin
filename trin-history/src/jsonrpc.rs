@@ -4,9 +4,8 @@ use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
         distance::Distance,
-        history::{ContentInfo, TraceContentInfo},
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
-        portal::{AcceptInfo, FindNodesInfo, PongInfo},
+        portal::{AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
         query_trace::QueryTrace,
     },
@@ -218,7 +217,7 @@ async fn store(
     content_key: HistoryContentKey,
     content_value: ethportal_api::HistoryContentValue,
 ) -> Result<Value, String> {
-    let data = content_value.encode();
+    let data = content_value.encode().to_vec();
     let response = match network
         .overlay
         .store
@@ -309,7 +308,7 @@ async fn gossip(
     content_key: HistoryContentKey,
     content_value: ethportal_api::HistoryContentValue,
 ) -> Result<Value, String> {
-    let data = content_value.encode();
+    let data = content_value.encode().to_vec();
     Ok(network
         .overlay
         .propagate_gossip(vec![(content_key, data)])
@@ -322,7 +321,7 @@ async fn trace_gossip(
     content_key: HistoryContentKey,
     content_value: ethportal_api::HistoryContentValue,
 ) -> Result<Value, String> {
-    let data = content_value.encode();
+    let data = content_value.encode().to_vec();
     Ok(json!(
         network
             .overlay
@@ -340,7 +339,7 @@ async fn offer(
 ) -> Result<Value, String> {
     match network
         .overlay
-        .send_offer(enr, content_key.into(), content_value.encode())
+        .send_offer(enr, content_key.into(), content_value.encode().to_vec())
         .await
     {
         Ok(accept) => Ok(json!(AcceptInfo {
@@ -359,7 +358,7 @@ async fn trace_offer(
 ) -> Result<Value, String> {
     match network
         .overlay
-        .send_offer_trace(enr, content_key.into(), content_value.encode())
+        .send_offer_trace(enr, content_key.into(), content_value.encode().to_vec())
         .await
     {
         Ok(accept) => Ok(json!(accept)),

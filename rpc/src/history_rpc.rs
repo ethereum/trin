@@ -4,14 +4,18 @@ use tokio::sync::mpsc;
 use ethportal_api::{
     types::{
         enr::Enr,
-        history::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
-        portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
+        portal::{
+            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+            TraceContentInfo, TraceGossipInfo,
+        },
     },
-    HistoryContentKey, HistoryContentValue, HistoryNetworkApiServer, RoutingTableInfo,
+    ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiServer, RawContentValue,
+    RoutingTableInfo,
 };
 
 use crate::{
+    errors::RpcServeError,
     fetch::proxy_to_subnet,
     jsonrpsee::core::{async_trait, RpcResult},
 };
@@ -116,7 +120,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         &self,
         offset: u64,
         limit: u64,
-    ) -> RpcResult<PaginateLocalContentInfo> {
+    ) -> RpcResult<PaginateLocalContentInfo<HistoryContentKey>> {
         let endpoint = HistoryEndpoint::PaginateLocalContentKeys(offset, limit);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -126,8 +130,10 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     async fn gossip(
         &self,
         content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<u32> {
+        let content_value = HistoryContentValue::decode(&content_key, &content_value)
+            .map_err(RpcServeError::from)?;
         let endpoint = HistoryEndpoint::Gossip(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -137,8 +143,10 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     async fn trace_gossip(
         &self,
         content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<TraceGossipInfo> {
+        let content_value = HistoryContentValue::decode(&content_key, &content_value)
+            .map_err(RpcServeError::from)?;
         let endpoint = HistoryEndpoint::TraceGossip(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -151,8 +159,10 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         &self,
         enr: Enr,
         content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<AcceptInfo> {
+        let content_value = HistoryContentValue::decode(&content_key, &content_value)
+            .map_err(RpcServeError::from)?;
         let endpoint = HistoryEndpoint::Offer(enr, content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -165,8 +175,10 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         &self,
         enr: Enr,
         content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<bool> {
+        let content_value = HistoryContentValue::decode(&content_key, &content_value)
+            .map_err(RpcServeError::from)?;
         let endpoint = HistoryEndpoint::TraceOffer(enr, content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
@@ -188,17 +200,16 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     async fn store(
         &self,
         content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<bool> {
+        let content_value = HistoryContentValue::decode(&content_key, &content_value)
+            .map_err(RpcServeError::from)?;
         let endpoint = HistoryEndpoint::Store(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Get a content from the local database.
-    async fn local_content(
-        &self,
-        content_key: HistoryContentKey,
-    ) -> RpcResult<HistoryContentValue> {
+    async fn local_content(&self, content_key: HistoryContentKey) -> RpcResult<RawContentValue> {
         let endpoint = HistoryEndpoint::LocalContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }

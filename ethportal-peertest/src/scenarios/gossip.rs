@@ -10,7 +10,7 @@ use crate::{
     Peertest,
 };
 use ethportal_api::{
-    jsonrpsee::async_client::Client, types::cli::TrinConfig, Discv5ApiClient,
+    jsonrpsee::async_client::Client, types::cli::TrinConfig, ContentValue, Discv5ApiClient,
     HistoryNetworkApiClient,
 };
 pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
@@ -19,7 +19,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     let _ = target.ping(peertest.bootnode.enr.clone()).await.unwrap();
     let (content_key, content_value) = fixture_header_with_proof();
     let result = target
-        .trace_gossip(content_key.clone(), content_value.clone())
+        .trace_gossip(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
@@ -49,7 +49,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
 
     // send new trace gossip request
     let result = target
-        .trace_gossip(content_key.clone(), content_value.clone())
+        .trace_gossip(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
@@ -66,7 +66,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
 
     // test trace gossip without any expected accepts
     let result = target
-        .trace_gossip(content_key, content_value)
+        .trace_gossip(content_key, content_value.encode())
         .await
         .unwrap();
 
@@ -93,7 +93,7 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
     // Store accumulator_1 locally in client that is not connected to the network
     let (acc_key_1, acc_value_1) = fixture_epoch_acc_1();
     let store_result =
-        HistoryNetworkApiClient::store(&fresh_target, acc_key_1.clone(), acc_value_1.clone())
+        HistoryNetworkApiClient::store(&fresh_target, acc_key_1.clone(), acc_value_1.encode())
             .await
             .unwrap();
     assert!(store_result);
@@ -143,7 +143,7 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
     // doesn't store the content locally in target
     let (acc_key_2, acc_value_2) = fixture_epoch_acc_2();
     target
-        .offer(fresh_enr, acc_key_2.clone(), acc_value_2.clone())
+        .offer(fresh_enr, acc_key_2.clone(), acc_value_2.encode())
         .await
         .unwrap();
 
@@ -205,7 +205,7 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
     // Store accumulator_1 locally in client that is not connected to the network
     let (acc_key_1, acc_value_1) = fixture_epoch_acc_1();
     let store_result =
-        HistoryNetworkApiClient::store(&fresh_target, acc_key_1.clone(), acc_value_1.clone())
+        HistoryNetworkApiClient::store(&fresh_target, acc_key_1.clone(), acc_value_1.encode())
             .await
             .unwrap();
     assert!(store_result);
@@ -213,7 +213,7 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
     // Store accumulator_2 locally in target
     let (acc_key_2, acc_value_2) = fixture_epoch_acc_2();
     let store_result =
-        HistoryNetworkApiClient::store(target, acc_key_2.clone(), acc_value_2.clone())
+        HistoryNetworkApiClient::store(target, acc_key_2.clone(), acc_value_2.encode())
             .await
             .unwrap();
     assert!(store_result);

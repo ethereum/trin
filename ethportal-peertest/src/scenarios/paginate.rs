@@ -1,4 +1,4 @@
-use ethportal_api::{BlockHeaderKey, HistoryContentKey, HistoryNetworkApiClient};
+use ethportal_api::{BlockHeaderKey, ContentValue, HistoryContentKey, HistoryNetworkApiClient};
 
 use crate::{utils::fixture_header_with_proof, Peertest};
 
@@ -23,7 +23,7 @@ pub async fn test_paginate_local_storage(peertest: &Peertest) {
         let store_result = ipc_client
             .store(
                 serde_json::from_str(&content_key).unwrap(),
-                content_value.clone(),
+                content_value.encode(),
             )
             .await
             .unwrap();

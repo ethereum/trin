@@ -11,6 +11,7 @@ use ethportal_api::{
             LightClientUpdatesByRange,
         },
         distance::Distance,
+        portal::PaginateLocalContentInfo,
         portal_wire::ProtocolId,
     },
     BeaconContentKey, OverlayContentKey,
@@ -483,7 +484,7 @@ impl BeaconStorage {
         &self,
         _offset: &u64,
         _limit: &u64,
-    ) -> Result<ethportal_api::types::beacon::PaginateLocalContentInfo, ContentStoreError> {
+    ) -> Result<PaginateLocalContentInfo<BeaconContentKey>, ContentStoreError> {
         Err(ContentStoreError::Database(
             "Paginate not implemented for Beacon storage".to_string(),
         ))

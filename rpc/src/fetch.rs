@@ -8,14 +8,14 @@ use tokio::sync::mpsc;
 use ethportal_api::{
     types::{
         execution::{block_body::BlockBody, header::Header},
-        history::ContentInfo,
         jsonrpc::{
             endpoints::{HistoryEndpoint, SubnetworkEndpoint},
             request::{HistoryJsonRpcRequest, JsonRpcRequest},
         },
+        portal::ContentInfo,
         query_trace::QueryTrace,
     },
-    HistoryContentKey, HistoryContentValue,
+    ContentValue, HistoryContentKey, HistoryContentValue,
 };
 
 use crate::{
@@ -106,7 +106,7 @@ async fn find_content_by_hash(
     network: &mpsc::UnboundedSender<HistoryJsonRpcRequest>,
     content_key: HistoryContentKey,
 ) -> Result<HistoryContentValue, RpcServeError> {
-    let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
+    let endpoint = HistoryEndpoint::RecursiveFindContent(content_key.clone());
     let response: ContentInfo = proxy_to_subnet(network, endpoint).await?;
     let ContentInfo::Content { content, .. } = response else {
         return Err(RpcServeError::Message(format!(
@@ -114,5 +114,5 @@ async fn find_content_by_hash(
         )));
     };
 
-    Ok(content)
+    Ok(HistoryContentValue::decode(&content_key, &content)?)
 }

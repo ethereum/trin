@@ -5,14 +5,14 @@ use std::{
 };
 
 use alloy_primitives::B256;
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use chrono::Duration;
 use discv5::enr::{CombinedKey, Enr, NodeId};
 use serde::{Deserialize, Serialize};
 
 use ethportal_api::{
-    utils::bytes::hex_encode, BeaconContentKey, BeaconContentValue, HistoryContentKey,
-    HistoryContentValue,
+    utils::bytes::hex_encode, BeaconContentKey, BeaconContentValue, ContentValue,
+    HistoryContentKey, HistoryContentValue, RawContentValue,
 };
 
 /// Generates a set of N private keys, with node ids that are equally spaced
@@ -108,13 +108,35 @@ impl TestAssets {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryAsset {
     pub content_key: HistoryContentKey,
-    pub content_value: HistoryContentValue,
+    content_value: RawContentValue,
+}
+
+impl HistoryAsset {
+    pub fn content_value(&self) -> anyhow::Result<HistoryContentValue> {
+        HistoryContentValue::decode(&self.content_key, &self.content_value).map_err(|err| {
+            anyhow!(
+                "Unable to parse history content value: {}. Error: {err}",
+                self.content_value
+            )
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BeaconAsset {
     pub content_key: BeaconContentKey,
-    pub content_value: BeaconContentValue,
+    content_value: RawContentValue,
+}
+
+impl BeaconAsset {
+    pub fn content_value(&self) -> anyhow::Result<BeaconContentValue> {
+        BeaconContentValue::decode(&self.content_key, &self.content_value).map_err(|err| {
+            anyhow!(
+                "Unable to parse beacon content value: {}. Error: {err}",
+                self.content_value
+            )
+        })
+    }
 }
 
 pub fn read_test_assets_from_file(test_path: PathBuf) -> TestAssets {
@@ -210,10 +232,10 @@ mod tests {
             read_test_assets_from_file(PathBuf::from("../test_assets/portalnet/bridge_data.json"))
                 .into_history_assets()
                 .unwrap();
-        let content_key: HistoryContentKey =
-            serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
-        let content_value: HistoryContentValue =
-            serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
+        let content_key =
+            HistoryContentKey::deserialize(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
+        let content_value =
+            RawContentValue::deserialize(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
 
         assert_eq!(assets[0].content_key, content_key);
         assert_eq!(assets[0].content_value, content_value);
@@ -225,10 +247,10 @@ mod tests {
             read_test_assets_from_file(PathBuf::from("../test_assets/portalnet/bridge_data.yaml"))
                 .into_history_assets()
                 .unwrap();
-        let content_key: HistoryContentKey =
-            serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
-        let content_value: HistoryContentValue =
-            serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
+        let content_key =
+            HistoryContentKey::deserialize(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
+        let content_value =
+            RawContentValue::deserialize(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
 
         assert_eq!(assets[0].content_key, content_key);
         assert_eq!(assets[0].content_value, content_value);

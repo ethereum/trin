@@ -2,10 +2,12 @@ use crate::{
     types::{
         content_key::history::HistoryContentKey,
         enr::Enr,
-        history::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
-        portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
+        portal::{
+            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+            TraceContentInfo, TraceGossipInfo,
+        },
     },
-    HistoryContentValue, RoutingTableInfo,
+    RawContentValue, RoutingTableInfo,
 };
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
@@ -78,7 +80,7 @@ pub trait HistoryNetworkApi {
         &self,
         offset: u64,
         limit: u64,
-    ) -> RpcResult<PaginateLocalContentInfo>;
+    ) -> RpcResult<PaginateLocalContentInfo<HistoryContentKey>>;
 
     /// Send the provided content value to interested peers. Clients may choose to send to some or
     /// all peers. Return the number of peers that the content was gossiped to.
@@ -86,7 +88,7 @@ pub trait HistoryNetworkApi {
     async fn gossip(
         &self,
         content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<u32>;
 
     /// Send the provided content value to interested peers. Clients may choose to send to some or
@@ -95,7 +97,7 @@ pub trait HistoryNetworkApi {
     async fn trace_gossip(
         &self,
         content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<TraceGossipInfo>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
@@ -107,7 +109,7 @@ pub trait HistoryNetworkApi {
         &self,
         enr: Enr,
         content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<AcceptInfo>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer.
@@ -119,7 +121,7 @@ pub trait HistoryNetworkApi {
         &self,
         enr: Enr,
         content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<bool>;
 
     /// Send an OFFER request with given ContentKeys, to the designated peer and wait for a
@@ -138,11 +140,10 @@ pub trait HistoryNetworkApi {
     async fn store(
         &self,
         content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<bool>;
 
     /// Get a content value from the local database
     #[method(name = "historyLocalContent")]
-    async fn local_content(&self, content_key: HistoryContentKey)
-        -> RpcResult<HistoryContentValue>;
+    async fn local_content(&self, content_key: HistoryContentKey) -> RpcResult<RawContentValue>;
 }

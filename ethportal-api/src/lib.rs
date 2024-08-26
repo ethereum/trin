@@ -12,43 +12,42 @@ mod dashboard;
 pub mod discv5;
 mod eth;
 mod history;
-pub mod state;
+mod state;
 #[cfg(test)]
 mod test_utils;
 pub mod types;
 pub mod utils;
 mod web3;
 
-pub use crate::discv5::{Discv5ApiClient, Discv5ApiServer};
 pub use beacon::{BeaconNetworkApiClient, BeaconNetworkApiServer};
+pub use discv5::{Discv5ApiClient, Discv5ApiServer};
 pub use eth::{EthApiClient, EthApiServer};
 pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
 pub use state::{StateNetworkApiClient, StateNetworkApiServer};
 pub use web3::{Web3ApiClient, Web3ApiServer};
 
-pub use types::content_key::{
-    beacon::{BeaconContentKey, LightClientBootstrapKey, LightClientUpdatesByRangeKey},
-    error::ContentKeyError,
-    history::{
-        BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
-        RawContentKey,
-    },
-    overlay::{IdentityContentKey, OverlayContentKey},
-    state::StateContentKey,
-};
-
 pub use types::{
     consensus,
     consensus::light_client,
+    content_key::{
+        beacon::{BeaconContentKey, LightClientBootstrapKey, LightClientUpdatesByRangeKey},
+        error::ContentKeyError,
+        history::{
+            BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
+        },
+        overlay::{IdentityContentKey, OverlayContentKey},
+        state::StateContentKey,
+    },
     content_value::{
         beacon::BeaconContentValue, error::ContentValueError, history::HistoryContentValue,
-        state::StateContentValue,
+        state::StateContentValue, ContentValue,
     },
+    discv5::*,
+    enr::*,
     execution::{block_body::*, header::*, receipts::*},
+    node_id::*,
+    portal::{RawContentKey, RawContentValue},
 };
 
 // Re-exports jsonrpsee crate
 pub use jsonrpsee;
-pub use types::content_value::ContentValue;
-
-pub use types::{discv5::*, enr::*, node_id::*};

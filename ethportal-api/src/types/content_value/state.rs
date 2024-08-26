@@ -1,12 +1,14 @@
 use alloy_primitives::B256;
-use serde::{Deserialize, Serialize};
 use ssz::{Decode, Encode};
 use ssz_derive::{Decode, Encode};
 
 use crate::{
-    types::state_trie::{ByteCode, EncodedTrieNode, TrieProof},
+    types::{
+        cli::STATE_NETWORK,
+        state_trie::{ByteCode, EncodedTrieNode, TrieProof},
+    },
     utils::bytes::hex_encode,
-    ContentValue, ContentValueError,
+    ContentValue, ContentValueError, RawContentValue, StateContentKey,
 };
 
 /// A Portal State content value.
@@ -25,52 +27,49 @@ pub enum StateContentValue {
 }
 
 impl ContentValue for StateContentValue {
-    fn encode(&self) -> Vec<u8> {
+    type TContentKey = StateContentKey;
+
+    fn encode(&self) -> RawContentValue {
         match self {
-            Self::TrieNode(value) => value.as_ssz_bytes(),
-            Self::AccountTrieNodeWithProof(value) => value.as_ssz_bytes(),
-            Self::ContractStorageTrieNodeWithProof(value) => value.as_ssz_bytes(),
-            Self::ContractBytecode(value) => value.as_ssz_bytes(),
-            Self::ContractBytecodeWithProof(value) => value.as_ssz_bytes(),
+            Self::TrieNode(value) => value.as_ssz_bytes().into(),
+            Self::AccountTrieNodeWithProof(value) => value.as_ssz_bytes().into(),
+            Self::ContractStorageTrieNodeWithProof(value) => value.as_ssz_bytes().into(),
+            Self::ContractBytecode(value) => value.as_ssz_bytes().into(),
+            Self::ContractBytecodeWithProof(value) => value.as_ssz_bytes().into(),
         }
     }
 
-    fn decode(buf: &[u8]) -> Result<Self, ContentValueError> {
-        if let Ok(value) = TrieNode::from_ssz_bytes(buf) {
-            Ok(Self::TrieNode(value))
-        } else if let Ok(value) = AccountTrieNodeWithProof::from_ssz_bytes(buf) {
-            Ok(Self::AccountTrieNodeWithProof(value))
-        } else if let Ok(value) = ContractStorageTrieNodeWithProof::from_ssz_bytes(buf) {
-            Ok(Self::ContractStorageTrieNodeWithProof(value))
-        } else if let Ok(value) = ContractBytecode::from_ssz_bytes(buf) {
-            Ok(Self::ContractBytecode(value))
-        } else if let Ok(value) = ContractBytecodeWithProof::from_ssz_bytes(buf) {
-            Ok(Self::ContractBytecodeWithProof(value))
-        } else {
-            Err(ContentValueError::UnknownContent {
-                bytes: hex_encode(buf),
-                network: "state".to_string(),
-            })
+    fn decode(key: &Self::TContentKey, buf: &[u8]) -> Result<Self, ContentValueError> {
+        match key {
+            StateContentKey::AccountTrieNode(_) => {
+                if let Ok(value) = AccountTrieNodeWithProof::from_ssz_bytes(buf) {
+                    return Ok(Self::AccountTrieNodeWithProof(value));
+                }
+                if let Ok(value) = TrieNode::from_ssz_bytes(buf) {
+                    return Ok(Self::TrieNode(value));
+                }
+            }
+            StateContentKey::ContractStorageTrieNode(_) => {
+                if let Ok(value) = ContractStorageTrieNodeWithProof::from_ssz_bytes(buf) {
+                    return Ok(Self::ContractStorageTrieNodeWithProof(value));
+                }
+                if let Ok(value) = TrieNode::from_ssz_bytes(buf) {
+                    return Ok(Self::TrieNode(value));
+                }
+            }
+            StateContentKey::ContractBytecode(_) => {
+                if let Ok(value) = ContractBytecodeWithProof::from_ssz_bytes(buf) {
+                    return Ok(Self::ContractBytecodeWithProof(value));
+                }
+                if let Ok(value) = ContractBytecode::from_ssz_bytes(buf) {
+                    return Ok(Self::ContractBytecode(value));
+                }
+            }
         }
-    }
-}
-
-impl Serialize for StateContentValue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.to_hex())
-    }
-}
-
-impl<'de> Deserialize<'de> for StateContentValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Self::from_hex(&s).map_err(serde::de::Error::custom)
+        Err(ContentValueError::UnknownContent {
+            bytes: hex_encode(buf),
+            network: STATE_NETWORK.to_string(),
+        })
     }
 }
 
@@ -118,13 +117,15 @@ pub struct ContractBytecodeWithProof {
 
 #[cfg(test)]
 mod test {
-    use std::{path::PathBuf, str::FromStr};
+    use std::path::PathBuf;
 
+    use alloy_primitives::Bytes;
     use anyhow::Result;
     use rstest::rstest;
+    use serde::Deserialize;
     use serde_yaml::Value;
 
-    use crate::{test_utils::read_file_from_tests_submodule, utils::bytes::hex_decode};
+    use crate::test_utils::read_file_from_tests_submodule;
 
     use super::*;
 
@@ -133,13 +134,14 @@ mod test {
     #[test]
     fn trie_node() -> Result<()> {
         let value = read_yaml_file("trie_node.yaml")?;
-        let value = value.as_mapping().unwrap();
-
         let expected_content_value = StateContentValue::TrieNode(TrieNode {
-            node: EncodedTrieNode::from(yaml_as_hex(&value["trie_node"])),
+            node: yaml_to_bytes(&value["trie_node"]).into(),
         });
 
-        assert_content_value(&value["content_value"], expected_content_value);
+        assert_eq!(
+            expected_content_value.encode(),
+            RawContentValue::deserialize(&value["content_value"])?,
+        );
 
         Ok(())
     }
@@ -147,15 +149,17 @@ mod test {
     #[test]
     fn account_trie_node_with_proof() -> Result<()> {
         let value = read_yaml_file("account_trie_node_with_proof.yaml")?;
-        let value = value.as_mapping().unwrap();
 
         let expected_content_value =
             StateContentValue::AccountTrieNodeWithProof(AccountTrieNodeWithProof {
                 proof: yaml_as_proof(&value["proof"]),
-                block_hash: yaml_as_b256(&value["block_hash"]),
+                block_hash: B256::deserialize(&value["block_hash"])?,
             });
 
-        assert_content_value(&value["content_value"], expected_content_value);
+        assert_eq!(
+            expected_content_value.encode(),
+            RawContentValue::deserialize(&value["content_value"])?,
+        );
 
         Ok(())
     }
@@ -163,16 +167,18 @@ mod test {
     #[test]
     fn contract_storage_trie_node_with_proof() -> Result<()> {
         let value = read_yaml_file("contract_storage_trie_node_with_proof.yaml")?;
-        let value = value.as_mapping().unwrap();
 
         let expected_content_value =
             StateContentValue::ContractStorageTrieNodeWithProof(ContractStorageTrieNodeWithProof {
                 storage_proof: yaml_as_proof(&value["storage_proof"]),
                 account_proof: yaml_as_proof(&value["account_proof"]),
-                block_hash: yaml_as_b256(&value["block_hash"]),
+                block_hash: B256::deserialize(&value["block_hash"])?,
             });
 
-        assert_content_value(&value["content_value"], expected_content_value);
+        assert_eq!(
+            expected_content_value.encode(),
+            RawContentValue::deserialize(&value["content_value"])?,
+        );
 
         Ok(())
     }
@@ -180,13 +186,15 @@ mod test {
     #[test]
     fn contract_bytecode() -> Result<()> {
         let value = read_yaml_file("contract_bytecode.yaml")?;
-        let value = value.as_mapping().unwrap();
 
         let expected_content_value = StateContentValue::ContractBytecode(ContractBytecode {
-            code: ByteCode::from(yaml_as_hex(&value["bytecode"])),
+            code: yaml_to_bytes(&value["bytecode"]).into(),
         });
 
-        assert_content_value(&value["content_value"], expected_content_value);
+        assert_eq!(
+            expected_content_value.encode(),
+            RawContentValue::deserialize(&value["content_value"])?,
+        );
 
         Ok(())
     }
@@ -194,56 +202,74 @@ mod test {
     #[test]
     fn contract_bytecode_with_proof() -> Result<()> {
         let value = read_yaml_file("contract_bytecode_with_proof.yaml")?;
-        let value = value.as_mapping().unwrap();
 
         let expected_content_value =
             StateContentValue::ContractBytecodeWithProof(ContractBytecodeWithProof {
-                code: ByteCode::from(yaml_as_hex(&value["bytecode"])),
+                code: yaml_to_bytes(&value["bytecode"]).into(),
                 account_proof: yaml_as_proof(&value["account_proof"]),
-                block_hash: yaml_as_b256(&value["block_hash"]),
+                block_hash: B256::deserialize(&value["block_hash"])?,
             });
 
-        assert_content_value(&value["content_value"], expected_content_value);
-
-        Ok(())
-    }
-
-    #[rstest]
-    #[case::trie_node("trie_node.yaml")]
-    #[case::account_trie_node_with_proof("account_trie_node_with_proof.yaml")]
-    #[case::contract_storage_trie_node_with_proof("contract_storage_trie_node_with_proof.yaml")]
-    #[case::contract_bytecode("contract_bytecode.yaml")]
-    #[case::contract_bytecode_with_proof("contract_bytecode_with_proof.yaml")]
-    fn encode_decode(#[case] filename: &str) -> Result<()> {
-        let value = read_yaml_file(filename)?;
-        let value = value.as_mapping().unwrap();
-
-        let content_value_bytes = yaml_as_hex(&value["content_value"]);
-
-        let content_value = StateContentValue::decode(&content_value_bytes)?;
-
-        assert_eq!(content_value.encode(), content_value_bytes);
-
-        Ok(())
-    }
-
-    #[rstest]
-    #[case::trie_node("trie_node.yaml")]
-    #[case::account_trie_node_with_proof("account_trie_node_with_proof.yaml")]
-    #[case::contract_storage_trie_node_with_proof("contract_storage_trie_node_with_proof.yaml")]
-    #[case::contract_bytecode("contract_bytecode.yaml")]
-    #[case::contract_bytecode_with_proof("contract_bytecode_with_proof.yaml")]
-    fn serde(#[case] filename: &str) -> Result<()> {
-        let value = read_yaml_file(filename)?;
-        let value = value.as_mapping().unwrap();
-
-        let content_value = StateContentValue::deserialize(&value["content_value"])?;
-
         assert_eq!(
-            serde_yaml::to_value(content_value).unwrap(),
-            value["content_value"]
+            expected_content_value.encode(),
+            RawContentValue::deserialize(&value["content_value"])?,
         );
 
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::trie_node("account_trie_node_key.yaml", "trie_node.yaml")]
+    #[case::account_trie_node_with_proof(
+        "account_trie_node_key.yaml",
+        "account_trie_node_with_proof.yaml"
+    )]
+    #[case::contract_storage_trie_node_with_proof(
+        "contract_storage_trie_node_key.yaml",
+        "contract_storage_trie_node_with_proof.yaml"
+    )]
+    #[case::contract_bytecode("contract_bytecode_key.yaml", "contract_bytecode.yaml")]
+    #[case::contract_bytecode_with_proof(
+        "contract_bytecode_key.yaml",
+        "contract_bytecode_with_proof.yaml"
+    )]
+    fn encode_decode(#[case] key_filename: &str, #[case] value_filename: &str) -> Result<()> {
+        let key_file = read_yaml_file(key_filename)?;
+        let key = StateContentKey::deserialize(&key_file["content_key"])?;
+
+        let value = read_yaml_file(value_filename)?;
+
+        let content_value_bytes = RawContentValue::deserialize(&value["content_value"])?;
+        let content_value = StateContentValue::decode(&key, &content_value_bytes)?;
+
+        assert_eq!(content_value.encode(), content_value_bytes);
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::trie_node("account_trie_node_key.yaml", "trie_node.yaml")]
+    #[case::account_trie_node_with_proof(
+        "account_trie_node_key.yaml",
+        "account_trie_node_with_proof.yaml"
+    )]
+    #[case::contract_storage_trie_node_with_proof(
+        "contract_storage_trie_node_key.yaml",
+        "contract_storage_trie_node_with_proof.yaml"
+    )]
+    #[case::contract_bytecode("contract_bytecode_key.yaml", "contract_bytecode.yaml")]
+    #[case::contract_bytecode_with_proof(
+        "contract_bytecode_key.yaml",
+        "contract_bytecode_with_proof.yaml"
+    )]
+    fn hex_str(#[case] key_filename: &str, #[case] value_filename: &str) -> Result<()> {
+        let key_file = read_yaml_file(key_filename)?;
+        let key = StateContentKey::deserialize(&key_file["content_key"])?;
+
+        let value = read_yaml_file(value_filename)?;
+        let content_value_str = String::deserialize(&value["content_value"])?;
+        let content_value = StateContentValue::from_hex(&key, &content_value_str)?;
+
+        assert_eq!(content_value.to_hex(), content_value_str);
         Ok(())
     }
 
@@ -253,35 +279,20 @@ mod test {
         Ok(serde_yaml::from_str(&file)?)
     }
 
-    fn yaml_as_b256(value: &Value) -> B256 {
-        B256::from_str(value.as_str().unwrap()).unwrap()
-    }
-
-    fn yaml_as_hex(value: &Value) -> Vec<u8> {
-        hex_decode(value.as_str().unwrap()).unwrap()
+    fn yaml_to_bytes(value: &Value) -> Vec<u8> {
+        Bytes::deserialize(value).unwrap().to_vec()
     }
 
     fn yaml_as_proof(value: &Value) -> TrieProof {
-        TrieProof::from(
+        TrieProof::new(
             value
                 .as_sequence()
                 .unwrap()
                 .iter()
-                .map(|v| EncodedTrieNode::from(yaml_as_hex(v)))
-                .collect::<Vec<EncodedTrieNode>>(),
+                .map(yaml_to_bytes)
+                .map(EncodedTrieNode::from)
+                .collect(),
         )
-    }
-
-    fn assert_content_value(value: &Value, expected_content_value: StateContentValue) {
-        assert_eq!(
-            StateContentValue::decode(&yaml_as_hex(value)).unwrap(),
-            expected_content_value,
-            "decoding from bytes {value:?} didn't match expected value {expected_content_value:?}"
-        );
-
-        assert_eq!(
-            StateContentValue::deserialize(value).unwrap(),
-            expected_content_value,
-            "deserialization from string {value:?} didn't match expected value {expected_content_value:?}");
+        .unwrap()
     }
 }
