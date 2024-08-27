@@ -1,0 +1,13 @@
+version: '3'
+services:
+  trin:
+    container_name: trin
+    hostname: trin
+    image: portalnetwork/trin:latest
+    environment:
+      - RUST_LOG: info
+    command: "--web3-transport http --web3-http-address http://0.0.0.0:8545/"
+    network_mode: "host"
+    volumes: 
+      - ${HOME}/.local/share:${HOME}/.local/share
+    restart: always
