@@ -40,8 +40,9 @@ impl EraManager {
             era1_files,
         };
 
-        // initalize the current era
-        era_manager.fetch_era_file().await?;
+        // initialize the current era
+        let current_era = era_manager.fetch_era_file().await?;
+        let _ = era_manager.current_era.insert(current_era);
 
         Ok(era_manager)
     }
