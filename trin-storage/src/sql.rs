@@ -54,5 +54,29 @@ pub const LC_UPDATE_PERIOD_LOOKUP_QUERY: &str =
 
 pub const LC_UPDATE_TOTAL_SIZE_QUERY: &str = "SELECT TOTAL(update_size) FROM lc_update";
 
+/// Create the historical summaries table. Add CHECK constraint to ensure that only one row is
+/// inserted.
+pub const HISTORICAL_SUMMARIES_CREATE_TABLE: &str =
+    "CREATE TABLE IF NOT EXISTS historical_summaries (
+        ID INTEGER PRIMARY KEY CHECK (ID = 1),
+        epoch INTEGER NOT NULL,
+        value BLOB NOT NULL,
+        update_size INTEGER
+    );";
+
+/// Query to insert or update the historical summaries table.
+pub const INSERT_OR_REPLACE_HISTORICAL_SUMMARIES_QUERY: &str =
+    "INSERT OR REPLACE INTO historical_summaries (id, epoch, value, update_size)
+                      VALUES (?1, ?2, ?3, ?4)";
+
+/// Query to get the historical summary that is greater than or equal to the given epoch.
+pub const HISTORICAL_SUMMARIES_LOOKUP_QUERY: &str =
+    "SELECT value FROM historical_summaries WHERE epoch >= (?1) LIMIT 1";
+
+/// Query to get the epoch of the first historical summary that is greater than or equal to the
+/// given epoch.
+pub const HISTORICAL_SUMMARIES_EPOCH_LOOKUP_QUERY: &str =
+    "SELECT epoch FROM historical_summaries WHERE epoch >= (?1) LIMIT 1";
+
 // todo: remove this in the future
 pub const DROP_USAGE_STATS_DB: &str = "DROP TABLE IF EXISTS usage_stats;";

@@ -6,9 +6,8 @@ use ethportal_api::{
             LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX,
         },
         content_value::beacon::{
-            ForkVersionedHistoricalSummariesWithProof, ForkVersionedLightClientFinalityUpdate,
-            ForkVersionedLightClientOptimisticUpdate, ForkVersionedLightClientUpdate,
-            LightClientUpdatesByRange,
+            ForkVersionedLightClientFinalityUpdate, ForkVersionedLightClientOptimisticUpdate,
+            ForkVersionedLightClientUpdate, LightClientUpdatesByRange,
         },
         distance::Distance,
         portal_wire::ProtocolId,
@@ -26,9 +25,11 @@ use trin_metrics::storage::StorageMetricsReporter;
 use trin_storage::{
     error::ContentStoreError,
     sql::{
-        CONTENT_KEY_LOOKUP_QUERY_BEACON, CONTENT_VALUE_LOOKUP_QUERY_BEACON, INSERT_LC_UPDATE_QUERY,
-        INSERT_QUERY_BEACON, LC_UPDATE_LOOKUP_QUERY, LC_UPDATE_PERIOD_LOOKUP_QUERY,
-        LC_UPDATE_TOTAL_SIZE_QUERY, TOTAL_DATA_SIZE_QUERY_BEACON,
+        CONTENT_KEY_LOOKUP_QUERY_BEACON, CONTENT_VALUE_LOOKUP_QUERY_BEACON,
+        HISTORICAL_SUMMARIES_EPOCH_LOOKUP_QUERY, HISTORICAL_SUMMARIES_LOOKUP_QUERY,
+        INSERT_LC_UPDATE_QUERY, INSERT_OR_REPLACE_HISTORICAL_SUMMARIES_QUERY, INSERT_QUERY_BEACON,
+        LC_UPDATE_LOOKUP_QUERY, LC_UPDATE_PERIOD_LOOKUP_QUERY, LC_UPDATE_TOTAL_SIZE_QUERY,
+        TOTAL_DATA_SIZE_QUERY_BEACON,
     },
     utils::get_total_size_of_directory_in_bytes,
     ContentStore, DataSize, PortalStorageConfig, ShouldWeStoreContent,
@@ -39,7 +40,6 @@ use trin_storage::{
 pub struct BeaconStorageCache {
     optimistic_update: Option<ForkVersionedLightClientOptimisticUpdate>,
     finality_update: Option<ForkVersionedLightClientFinalityUpdate>,
-    historical_summaries: Option<ForkVersionedHistoricalSummariesWithProof>,
 }
 
 impl Default for BeaconStorageCache {
@@ -53,7 +53,6 @@ impl BeaconStorageCache {
         Self {
             optimistic_update: None,
             finality_update: None,
-            historical_summaries: None,
         }
     }
 
@@ -94,22 +93,6 @@ impl BeaconStorageCache {
         None
     }
 
-    /// Returns the historical summaries with proof if it exists and matches the given epoch.
-    pub fn get_historical_summaries_with_proof(
-        &self,
-        epoch: u64,
-    ) -> Option<ForkVersionedHistoricalSummariesWithProof> {
-        if let Some(historical_summaries) = &self.historical_summaries {
-            // Returns the current historical summaries with proof if it's epoch is bigger or equal
-            // to the requested epoch.
-            if historical_summaries.historical_summaries_with_proof.epoch >= epoch {
-                return Some(historical_summaries.clone());
-            }
-        }
-
-        None
-    }
-
     /// Sets the light client optimistic update
     pub fn set_optimistic_update(
         &mut self,
@@ -121,14 +104,6 @@ impl BeaconStorageCache {
     /// Sets the light client finality update
     pub fn set_finality_update(&mut self, finality_update: ForkVersionedLightClientFinalityUpdate) {
         self.finality_update = Some(finality_update);
-    }
-
-    /// Sets the historical summaries with proof
-    pub fn set_historical_summaries_with_proof(
-        &mut self,
-        historical_summaries: ForkVersionedHistoricalSummariesWithProof,
-    ) {
-        self.historical_summaries = Some(historical_summaries);
     }
 }
 
@@ -179,8 +154,8 @@ impl ContentStore for BeaconStorage {
                             ForkVersionedLightClientUpdate::from_ssz_bytes(result.as_slice())
                                 .map_err(|err| {
                                     ContentStoreError::Database(format!(
-                                    "Error ssz decode ForkVersionedLightClientUpdate value: {err:?}"
-                                ))
+                                        "Error ssz decode ForkVersionedLightClientUpdate value: {err:?}"
+                                    ))
                                 })?,
                         ),
                         None => return Ok(None),
@@ -209,13 +184,15 @@ impl ContentStore for BeaconStorage {
                 }
             }
             BeaconContentKey::HistoricalSummariesWithProof(content_key) => {
+                let epoch = content_key.epoch;
                 match self
-                    .cache
-                    .get_historical_summaries_with_proof(content_key.epoch)
-                {
-                    Some(historical_summaries_with_proof) => {
-                        Ok(Some(historical_summaries_with_proof.as_ssz_bytes()))
-                    }
+                    .lookup_historical_summaries_value(epoch)
+                    .map_err(|err| {
+                        ContentStoreError::Database(format!(
+                            "Error looking up HistoricalSummariesWithProof content value: {err:?}"
+                        ))
+                    })? {
+                    Some(result) => Ok(Some(result)),
                     None => Ok(None),
                 }
             }
@@ -299,18 +276,19 @@ impl ContentStore for BeaconStorage {
                 }
             }
             BeaconContentKey::HistoricalSummariesWithProof(content_key) => {
-                match self
-                    .cache
-                    .get_historical_summaries_with_proof(content_key.epoch)
-                {
-                    Some(content) => {
-                        if content.historical_summaries_with_proof.epoch >= content_key.epoch {
-                            Ok(ShouldWeStoreContent::AlreadyStored)
-                        } else {
-                            Ok(ShouldWeStoreContent::Store)
-                        }
-                    }
-                    None => Ok(ShouldWeStoreContent::Store),
+                let epoch = content_key.epoch;
+                let is_epoch_available = self
+                    .lookup_historical_summaries_epoch(epoch)
+                    .map_err(|err| {
+                        ContentStoreError::Database(format!(
+                            "Error looking up historical summaries epoch: {err:?}"
+                        ))
+                    })?
+                    .is_some();
+                if is_epoch_available {
+                    Ok(ShouldWeStoreContent::AlreadyStored)
+                } else {
+                    Ok(ShouldWeStoreContent::Store)
                 }
             }
         }
@@ -379,6 +357,24 @@ impl BeaconStorage {
         }
     }
 
+    /// Insert or replace historical summaries with proof into the database
+    fn db_insert_or_replace_historical_summaries_with_proof(
+        &self,
+        epoch: &u64,
+        value: &Vec<u8>,
+    ) -> Result<(), ContentStoreError> {
+        let conn = self.sql_connection_pool.get()?;
+        let value_size = value.len();
+
+        match conn.execute(
+            INSERT_OR_REPLACE_HISTORICAL_SUMMARIES_QUERY,
+            params![1, epoch, value, value_size],
+        ) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err.into()),
+        }
+    }
+
     pub fn store(
         &mut self,
         key: &impl OverlayContentKey,
@@ -404,15 +400,15 @@ impl BeaconStorage {
                             // update.count
                             let periods = update.start_period..(update.start_period + update.count);
                             let update_values = LightClientUpdatesByRange::from_ssz_bytes(
-                                value.as_slice(),
-                            )
-                            .map_err(|err| {
-                                ContentStoreError::InvalidData {
-                                    message: format!(
-                                        "Error deserializing LightClientUpdatesByRange value: {err:?}"
-                                    ),
-                                }
-                            })?;
+                                    value.as_slice(),
+                                )
+                                    .map_err(|err| {
+                                        ContentStoreError::InvalidData {
+                                            message: format!(
+                                                "Error deserializing LightClientUpdatesByRange value: {err:?}"
+                                            ),
+                                        }
+                                    })?;
 
                             for (period, value) in periods.zip(update_values.as_ref()) {
                                 if let Err(err) = self.db_insert_lc_update(&period, &value.encode())
@@ -435,34 +431,52 @@ impl BeaconStorage {
             }
             Some(&LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX) => {
                 self.cache.set_finality_update(
-                    ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(value.as_slice())
-                        .map_err(|err| ContentStoreError::InvalidData {
-                            message: format!(
-                                "Error deserializing ForkVersionedLightClientFinalityUpdate value: {err:?}"
-                            ),
-                        })?,
-                );
+                        ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(value.as_slice())
+                            .map_err(|err| ContentStoreError::InvalidData {
+                                message: format!(
+                                    "Error deserializing ForkVersionedLightClientFinalityUpdate value: {err:?}"
+                                ),
+                            })?,
+                    );
             }
             Some(&LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX) => {
                 self.cache.set_optimistic_update(
-                    ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(value.as_slice()).map_err(
-                        |err| ContentStoreError::InvalidData {
-                            message: format!(
-                                "Error deserializing ForkVersionedLightClientOptimisticUpdate value: {err:?}"
-                            ),
-                        },
-                    )?,
-                );
+                        ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(value.as_slice()).map_err(
+                            |err| ContentStoreError::InvalidData {
+                                message: format!(
+                                    "Error deserializing ForkVersionedLightClientOptimisticUpdate value: {err:?}"
+                                ),
+                            },
+                        )?,
+                    );
             }
             Some(&HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX) => {
-                self.cache.set_historical_summaries_with_proof(
-                    ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(value.as_slice())
-                        .map_err(|err| ContentStoreError::InvalidData {
-                            message: format!(
-                                "Error deserializing HistoricalSummariesWithProof value: {err:?}"
-                            ),
-                        })?,
-                );
+                if let Ok(historical_summaries) = BeaconContentKey::try_from(content_key) {
+                    match historical_summaries {
+                        BeaconContentKey::HistoricalSummariesWithProof(
+                            historical_summaries_key,
+                        ) => {
+                            if let Err(err) = self
+                                .db_insert_or_replace_historical_summaries_with_proof(
+                                    &historical_summaries_key.epoch,
+                                    value,
+                                )
+                            {
+                                debug!("Error writing historical summaries with proof to beacon network db: {err:?}");
+                                return Err(err);
+                            } else {
+                                self.metrics.increase_entry_count();
+                            }
+                        }
+                        _ => {
+                            // Unknown content type
+                            return Err(ContentStoreError::InvalidData {
+                                message: "Unexpected HistoricalSummariesWithProof content key"
+                                    .to_string(),
+                            });
+                        }
+                    }
+                }
             }
             _ => {
                 // Unknown content type
@@ -573,6 +587,24 @@ impl BeaconStorage {
         }
     }
 
+    /// Public method for looking up a historical summaries epoch by epoch number
+    pub fn lookup_historical_summaries_epoch(&self, epoch: u64) -> anyhow::Result<Option<u64>> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(HISTORICAL_SUMMARIES_EPOCH_LOOKUP_QUERY)?;
+
+        let rows: Result<Vec<u64>, rusqlite::Error> = query
+            .query_map([epoch], |row| {
+                let row: u64 = row.get(0)?;
+                Ok(row)
+            })?
+            .collect();
+
+        match rows?.first() {
+            Some(val) => Ok(Some(*val)),
+            None => Ok(None),
+        }
+    }
+
     /// Public method for looking up a content value by its content id
     pub fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
@@ -606,6 +638,23 @@ impl BeaconStorage {
         }
     }
 
+    /// Public method for looking up a historical summaries with proof value by epoch number
+    pub fn lookup_historical_summaries_value(&self, epoch: u64) -> anyhow::Result<Option<Vec<u8>>> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(HISTORICAL_SUMMARIES_LOOKUP_QUERY)?;
+
+        let rows: Result<Vec<Vec<u8>>, rusqlite::Error> = query
+            .query_map([epoch], |row| {
+                let row: Vec<u8> = row.get(0)?;
+                Ok(row)
+            })?
+            .collect();
+
+        match rows?.first() {
+            Some(val) => Ok(Some(val.to_vec())),
+            None => Ok(None),
+        }
+    }
     /// Get a summary of the current state of storage
     pub fn get_summary_info(&self) -> String {
         self.metrics.get_summary()
