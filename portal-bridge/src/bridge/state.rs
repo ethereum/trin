@@ -111,11 +111,16 @@ impl StateBridge {
             block_to_trace: BlockToTrace::None,
         };
         let mut state = State::new(Some(temp_directory.path().to_path_buf()), state_config)?;
-        let mut era_manager = EraManager::new().await?;
-        for block_number in 0..=last_block {
+        let starting_block = 0;
+        let mut era_manager = EraManager::new(starting_block).await?;
+        for block_number in starting_block..=last_block {
             info!("Gossipping state for block at height: {block_number}");
 
-            let block = era_manager.get_block_by_number(block_number).await?;
+            let block = if block_number == starting_block {
+                era_manager.get_current_block().await?
+            } else {
+                era_manager.get_next_block().await?
+            };
 
             // process block
             let RootWithTrieDiff {

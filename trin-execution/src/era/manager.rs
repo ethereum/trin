@@ -1,6 +1,6 @@
 use e2store::{
     era1::Era1,
-    utils::{get_era_file_download_links, get_shuffled_era1_files, ERA1_FILE_COUNT},
+    utils::{get_era_files, get_shuffled_era1_files, ERA1_FILE_COUNT},
 };
 use surf::{Client, Config};
 use tokio::task::JoinHandle;
@@ -17,6 +17,7 @@ use super::{
 };
 
 pub struct EraManager {
+    current_block_number: u64,
     current_era: Option<ProcessedEra>,
     next_era: Option<JoinHandle<ProcessedEra>>,
     http_client: Client,
@@ -24,35 +25,50 @@ pub struct EraManager {
 }
 
 impl EraManager {
-    pub async fn new() -> anyhow::Result<Self> {
+    pub async fn new(starting_block: u64) -> anyhow::Result<Self> {
         let http_client: Client = Config::new()
             .add_header("Content-Type", "application/xml")
             .expect("to be able to add header")
             .try_into()?;
         let era1_files = get_shuffled_era1_files(&http_client).await?;
-        Ok(Self {
+
+        let mut era_manager = Self {
+            current_block_number: starting_block,
             current_era: None,
             next_era: None,
             http_client,
             era1_files,
-        })
+        };
+
+        // initalize the current era
+        era_manager.fetch_era_file().await?;
+
+        Ok(era_manager)
     }
 
-    pub async fn get_block_by_number(
-        &mut self,
-        block_number: u64,
-    ) -> anyhow::Result<&ProcessedBlock> {
+    pub fn current_block_number(&self) -> u64 {
+        self.current_block_number
+    }
+
+    pub async fn get_current_block(&mut self) -> anyhow::Result<&ProcessedBlock> {
+        let Some(current_era) = &self.current_era else {
+            panic!("current_era should be initialized in EraManager::new");
+        };
+        Ok(current_era.get_block(self.current_block_number))
+    }
+
+    pub async fn get_next_block(&mut self) -> anyhow::Result<&ProcessedBlock> {
+        self.current_block_number += 1;
         let processed_era = match &self.current_era {
-            Some(processed_era) if processed_era.contains_block(block_number) => {
+            Some(processed_era) if processed_era.contains_block(self.current_block_number) => {
                 self.current_era.as_ref().expect("current_era to be some")
             }
             _ => {
-                let current_era = self.fetch_era_file(block_number).await?;
+                let current_era = self.fetch_era_file().await?;
                 self.current_era.insert(current_era)
             }
         };
-
-        Ok(processed_era.get_block(block_number))
+        Ok(processed_era.get_block(self.current_block_number))
     }
 
     async fn fetch_era_file_link(
@@ -71,29 +87,26 @@ impl EraManager {
                 Ok(era1_file)
             }
             EraType::Era => {
-                let era_files = get_era_file_download_links(&self.http_client).await?;
-                let era_file = era_files[&(epoch_index)].clone();
-                Ok(era_file)
+                let era_files = get_era_files(&self.http_client).await?;
+                Ok(era_files[&(epoch_index)].clone())
             }
         }
     }
 
-    async fn fetch_era_file(&mut self, block_number: u64) -> anyhow::Result<ProcessedEra> {
+    async fn fetch_era_file(&mut self) -> anyhow::Result<ProcessedEra> {
         info!("Fetching the next era file");
 
         // If next_era is none we must initial EraManager, with the first era file
         let current_era = self.next_era.take();
         let current_era = match current_era {
-            Some(block) => block
-                .await
-                .expect("to be able to download and process era1"),
-            None => self.init_current_era(block_number).await?,
+            Some(era_handle) => era_handle.await?,
+            None => self.init_current_era(self.current_block_number).await?,
         };
 
         // Download the next era file
         let mut next_epoch_index = current_era.epoch_index + 1;
         // Handle transition from era1 to era
-        if next_epoch_index == ERA1_FILE_COUNT as u64 {
+        if current_era.era_type == EraType::Era1 && next_epoch_index == ERA1_FILE_COUNT as u64 {
             next_epoch_index = FIRST_ERA_EPOCH_WITH_EXECUTION_PAYLOAD;
         }
         let next_block_number = current_era.first_block_number + current_era.len() as u64;

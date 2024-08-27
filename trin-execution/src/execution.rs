@@ -366,19 +366,14 @@ mod tests {
         )
         .unwrap();
         let _ = state.initialize_genesis().unwrap();
-        let mut era_manager = EraManager::new().await.unwrap();
+        let mut era_manager = EraManager::new(0).await.unwrap();
         let raw_era1 = fs::read("../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
         for block_tuple in Era1::iter_tuples(raw_era1) {
             if block_tuple.header.header.number == 0 {
                 continue;
             }
             state
-                .process_block(
-                    era_manager
-                        .get_block_by_number(block_tuple.header.header.number)
-                        .await
-                        .unwrap(),
-                )
+                .process_block(era_manager.get_next_block().await.unwrap())
                 .unwrap();
             assert_eq!(
                 state.get_root().unwrap(),

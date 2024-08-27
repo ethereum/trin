@@ -33,7 +33,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         trin_execution_config.into(),
     )?;
 
-    let mut era_manager = EraManager::new().await?;
+    let starting_block_number = state.block_execution_number();
+    let mut era_manager = EraManager::new(starting_block_number).await?;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     tokio::spawn(async move {
@@ -43,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("signal ctrl_c should never fail");
     });
 
-    for block_number in state.block_execution_number()..=get_spec_block_number(SpecId::MERGE) {
+    for block_number in starting_block_number..=get_spec_block_number(SpecId::MERGE) {
         if rx.try_recv().is_ok() {
             state.database.db.flush()?;
             info!(
@@ -54,7 +55,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
-        let block = era_manager.get_block_by_number(block_number).await?;
+        let block = if block_number == starting_block_number {
+            era_manager.get_current_block().await?
+        } else {
+            era_manager.get_next_block().await?
+        };
         stop_timer(timer);
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["processing_block"]);
         if block.header.number == 0 {

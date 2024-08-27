@@ -37,7 +37,7 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
     let temp_directory = setup_temp_dir()?;
 
-    let mut era_manager = EraManager::new().await?;
+    let mut era_manager = EraManager::new(0).await?;
 
     let mut state = State::new(
         Some(temp_directory.path().to_path_buf()),
@@ -49,7 +49,11 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
     for block_number in 0..=blocks {
         println!("Starting block: {block_number}");
-        let block = era_manager.get_block_by_number(block_number).await?;
+        let block = if block_number == 0 {
+            era_manager.get_current_block().await?
+        } else {
+            era_manager.get_next_block().await?
+        };
         ensure!(
             block_number == block.header.number,
             "Block number doesn't match!"

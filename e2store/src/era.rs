@@ -12,7 +12,7 @@ use std::{
     io::{Read, Write},
 };
 
-const SLOTS_PER_HISTORICAL_ROOT: usize = 8192;
+pub const SLOTS_PER_HISTORICAL_ROOT: usize = 8192;
 
 /// group := Version | block* | era-state | other-entries* | slot-index(block)? | slot-index(state)
 /// block := CompressedSignedBeaconBlock
@@ -47,22 +47,9 @@ impl Era {
 
         let slot_index_block = SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])?;
         let slot_index_state = SlotIndexStateEntry::try_from(&file.entries[entries_length - 1])?;
+        let slot_indexes = Era::get_block_slot_indexes(&slot_index_block);
 
-        // Iterate over the block entries. Skip the first and last 3 entries.
-        let slot_indexes = slot_index_block
-            .slot_index
-            .indices
-            .iter()
-            .enumerate()
-            .filter_map(|(i, index)| {
-                if *index != 0 {
-                    Some(slot_index_block.slot_index.starting_slot + i as u64)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<u64>>();
-
+        // an era file should has 4 entries which are not blocks
         ensure!(
             slot_indexes.len() == entries_length - 4,
             "invalid slot index block: incorrect count"
@@ -102,21 +89,8 @@ impl Era {
     ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<CompressedSignedBeaconBlock>>> {
         let file = E2StoreMemory::deserialize(&raw_era)?;
         let entries_length = file.entries.len();
-        let block_index =
-            SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])?.slot_index;
-
-        let slot_indexes = block_index
-            .indices
-            .iter()
-            .enumerate()
-            .filter_map(|(i, index)| {
-                if *index != 0 {
-                    Some(block_index.starting_slot + i as u64)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<u64>>();
+        let block_index = SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])?;
+        let slot_indexes = Era::get_block_slot_indexes(&block_index);
 
         ensure!(
             slot_indexes.len() == entries_length - 4,
@@ -132,6 +106,22 @@ impl Era {
                 let beacon_block = CompressedSignedBeaconBlock::try_from(&entry, fork)?;
                 Ok(beacon_block)
             }))
+    }
+
+    fn get_block_slot_indexes(slot_index_block_entry: &SlotIndexBlockEntry) -> Vec<u64> {
+        slot_index_block_entry
+            .slot_index
+            .indices
+            .iter()
+            .enumerate()
+            .filter_map(|(i, index)| {
+                if *index != 0 {
+                    Some(slot_index_block_entry.slot_index.starting_slot + i as u64)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<u64>>()
     }
 
     #[allow(dead_code)]
