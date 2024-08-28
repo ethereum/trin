@@ -4,8 +4,8 @@ use ethportal_api::{
         content_key::state::{AccountTrieNodeKey, ContractBytecodeKey, ContractStorageTrieNodeKey},
         content_value::state::{ContractBytecode, TrieNode},
         distance::Distance,
+        portal::PaginateLocalContentInfo,
         portal_wire::ProtocolId,
-        state::PaginateLocalContentInfo,
     },
     ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
 };
@@ -34,7 +34,7 @@ impl ContentStore for StateStorage {
         value: V,
     ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
         let key = StateContentKey::try_from(key.to_bytes())?;
-        let value = StateContentValue::decode(value.as_ref())?;
+        let value = StateContentValue::decode(&key, value.as_ref())?;
 
         match &key {
             StateContentKey::AccountTrieNode(account_trie_node_key) => self
@@ -84,7 +84,7 @@ impl StateStorage {
         &self,
         offset: u64,
         limit: u64,
-    ) -> Result<PaginateLocalContentInfo, ContentStoreError> {
+    ) -> Result<PaginateLocalContentInfo<StateContentKey>, ContentStoreError> {
         let paginate_result = self.store.paginate(offset, limit)?;
         Ok(PaginateLocalContentInfo {
             content_keys: paginate_result.content_keys,
@@ -129,8 +129,10 @@ impl StateStorage {
         let trie_node = TrieNode {
             node: last_trie_node.clone(),
         };
-        self.store
-            .insert(content_key, StateContentValue::TrieNode(trie_node).encode())
+        self.store.insert(
+            content_key,
+            StateContentValue::TrieNode(trie_node).encode().to_vec(),
+        )
     }
 
     fn put_contract_storage_trie_node(
@@ -165,8 +167,10 @@ impl StateStorage {
         let trie_node = TrieNode {
             node: last_trie_node.clone(),
         };
-        self.store
-            .insert(content_key, StateContentValue::TrieNode(trie_node).encode())
+        self.store.insert(
+            content_key,
+            StateContentValue::TrieNode(trie_node).encode().to_vec(),
+        )
     }
 
     fn put_contract_bytecode(
@@ -197,7 +201,9 @@ impl StateStorage {
 
         self.store.insert(
             content_key,
-            StateContentValue::ContractBytecode(contract_code).encode(),
+            StateContentValue::ContractBytecode(contract_code)
+                .encode()
+                .to_vec(),
         )
     }
 }

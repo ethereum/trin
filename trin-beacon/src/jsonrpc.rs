@@ -3,11 +3,10 @@ use std::sync::Arc;
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
-        beacon::{ContentInfo, TraceContentInfo},
         content_value::ContentValue,
         distance::Distance,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
-        portal::{AcceptInfo, FindNodesInfo, PongInfo},
+        portal::{AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
         query_trace::QueryTrace,
     },
@@ -238,7 +237,7 @@ async fn store(
     content_key: BeaconContentKey,
     content_value: BeaconContentValue,
 ) -> Result<Value, String> {
-    let data = content_value.encode();
+    let data = content_value.encode().to_vec();
     let response = match network
         .overlay
         .store
@@ -330,7 +329,7 @@ async fn gossip(
     content_value: BeaconContentValue,
     is_trace: bool,
 ) -> Result<Value, String> {
-    let data = content_value.encode();
+    let data = content_value.encode().to_vec();
     match is_trace {
         true => Ok(json!(
             network
@@ -354,7 +353,7 @@ async fn offer(
 ) -> Result<Value, String> {
     match network
         .overlay
-        .send_offer(enr, content_key.into(), content_value.encode())
+        .send_offer(enr, content_key.into(), content_value.encode().to_vec())
         .await
     {
         Ok(accept) => Ok(json!(AcceptInfo {
@@ -373,7 +372,7 @@ async fn trace_offer(
 ) -> Result<Value, String> {
     match network
         .overlay
-        .send_offer_trace(enr, content_key.into(), content_value.encode())
+        .send_offer_trace(enr, content_key.into(), content_value.encode().to_vec())
         .await
     {
         Ok(accept) => Ok(json!(accept)),

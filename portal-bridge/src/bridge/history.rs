@@ -91,7 +91,7 @@ impl HistoryBridge {
             let _ = gossip_history_content(
                 self.portal_client.clone(),
                 asset.content_key.clone(),
-                asset.content_value,
+                asset.content_value().expect("Error getting content value"),
                 block_stats.clone(),
             )
             .await;

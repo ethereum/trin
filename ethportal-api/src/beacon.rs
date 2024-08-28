@@ -1,11 +1,13 @@
 use crate::{
     types::{
-        beacon::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
         content_key::beacon::BeaconContentKey,
         enr::Enr,
-        portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
+        portal::{
+            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+            TraceContentInfo, TraceGossipInfo,
+        },
     },
-    BeaconContentValue, RoutingTableInfo,
+    RawContentValue, RoutingTableInfo,
 };
 use alloy_primitives::B256;
 use discv5::enr::NodeId;
@@ -82,7 +84,7 @@ pub trait BeaconNetworkApi {
         &self,
         offset: u64,
         limit: u64,
-    ) -> RpcResult<PaginateLocalContentInfo>;
+    ) -> RpcResult<PaginateLocalContentInfo<BeaconContentKey>>;
 
     /// Send the provided content value to interested peers. Clients may choose to send to some or
     /// all peers. Return the number of peers that the content was gossiped to.
@@ -90,7 +92,7 @@ pub trait BeaconNetworkApi {
     async fn gossip(
         &self,
         content_key: BeaconContentKey,
-        content_value: BeaconContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<u32>;
 
     /// Send the provided content value to interested peers. Clients may choose to send to some or
@@ -99,7 +101,7 @@ pub trait BeaconNetworkApi {
     async fn trace_gossip(
         &self,
         content_key: BeaconContentKey,
-        content_value: BeaconContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<TraceGossipInfo>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
@@ -111,7 +113,7 @@ pub trait BeaconNetworkApi {
         &self,
         enr: Enr,
         content_key: BeaconContentKey,
-        content_value: BeaconContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<AcceptInfo>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer.
@@ -123,7 +125,7 @@ pub trait BeaconNetworkApi {
         &self,
         enr: Enr,
         content_key: BeaconContentKey,
-        content_value: BeaconContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<bool>;
 
     /// Send an OFFER request with given ContentKeys, to the designated peer and wait for a
@@ -142,10 +144,10 @@ pub trait BeaconNetworkApi {
     async fn store(
         &self,
         content_key: BeaconContentKey,
-        content_value: BeaconContentValue,
+        content_value: RawContentValue,
     ) -> RpcResult<bool>;
 
     /// Get a content from the local database
     #[method(name = "beaconLocalContent")]
-    async fn local_content(&self, content_key: BeaconContentKey) -> RpcResult<BeaconContentValue>;
+    async fn local_content(&self, content_key: BeaconContentKey) -> RpcResult<RawContentValue>;
 }

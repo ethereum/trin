@@ -12,8 +12,8 @@ use ureq::serde::Deserialize;
 
 use ethportal_api::{
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, ContentValue, Header,
-    HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient, StateContentKey,
-    StateContentValue, StateNetworkApiClient,
+    HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient, RawContentValue,
+    StateContentKey, StateContentValue, StateNetworkApiClient,
 };
 
 pub async fn wait_for_successful_result<Fut, O>(f: impl Fn() -> Fut) -> O
@@ -43,9 +43,13 @@ pub async fn wait_for_history_content<P: HistoryNetworkApiClient + std::marker::
     content_key: HistoryContentKey,
 ) -> HistoryContentValue {
     wait_for_successful_result(|| {
+        let content_key = content_key.clone();
         ipc_client
             .local_content(content_key.clone())
             .map_err(anyhow::Error::from)
+            .and_then(|content| async move {
+                HistoryContentValue::decode(&content_key, &content).map_err(anyhow::Error::from)
+            })
     })
     .await
 }
@@ -56,9 +60,13 @@ pub async fn wait_for_beacon_content<P: BeaconNetworkApiClient + std::marker::Sy
     content_key: BeaconContentKey,
 ) -> BeaconContentValue {
     wait_for_successful_result(|| {
+        let content_key = content_key.clone();
         ipc_client
             .local_content(content_key.clone())
             .map_err(anyhow::Error::from)
+            .and_then(|content| async move {
+                BeaconContentValue::decode(&content_key, &content).map_err(anyhow::Error::from)
+            })
     })
     .await
 }
@@ -69,9 +77,13 @@ pub async fn wait_for_state_content<P: StateNetworkApiClient + std::marker::Sync
     content_key: StateContentKey,
 ) -> StateContentValue {
     wait_for_successful_result(|| {
+        let content_key = content_key.clone();
         ipc_client
             .local_content(content_key.clone())
             .map_err(anyhow::Error::from)
+            .and_then(|content| async move {
+                StateContentValue::decode(&content_key, &content).map_err(anyhow::Error::from)
+            })
     })
     .await
 }
@@ -83,10 +95,9 @@ fn read_history_content_key_value(
 
     let value: Value = serde_yaml::from_str(&yaml_content)?;
 
-    let content_key: HistoryContentKey =
-        serde_yaml::from_value(value.get("content_key").unwrap().clone())?;
-    let content_value: HistoryContentValue =
-        serde_yaml::from_value(value.get("content_value").unwrap().clone())?;
+    let content_key = HistoryContentKey::deserialize(&value["content_key"])?;
+    let content_value = RawContentValue::deserialize(&value["content_value"])?;
+    let content_value = HistoryContentValue::decode(&content_key, &content_value)?;
 
     Ok((content_key, content_value))
 }
@@ -142,7 +153,7 @@ fn read_epoch_acc(hash: &str) -> (HistoryContentKey, HistoryContentValue) {
         ethportal_api::HistoryContentKey::EpochAccumulator(ethportal_api::EpochAccumulatorKey {
             epoch_hash: alloy_primitives::B256::from_slice(&epoch_acc_hash),
         });
-    let content_value = ethportal_api::HistoryContentValue::decode(&epoch_acc).unwrap();
+    let content_value = HistoryContentValue::decode(&content_key, &epoch_acc).unwrap();
     (content_key, content_value)
 }
 
@@ -153,9 +164,21 @@ pub struct StateFixture {
     #[serde(rename = "content_key")]
     pub key: StateContentKey,
     #[serde(rename = "content_value_offer")]
-    pub offer_value: StateContentValue,
+    pub raw_offer_value: RawContentValue,
     #[serde(rename = "content_value_retrieval")]
-    pub lookup_value: StateContentValue,
+    pub raw_lookup_value: RawContentValue,
+}
+
+impl StateFixture {
+    pub fn offer_value(&self) -> StateContentValue {
+        StateContentValue::decode(&self.key, &self.raw_offer_value)
+            .expect("Error decoding state offer content value")
+    }
+
+    pub fn lookup_value(&self) -> StateContentValue {
+        StateContentValue::decode(&self.key, &self.raw_lookup_value)
+            .expect("Error decoding state lookup content value")
+    }
 }
 
 fn de_header<'de, D>(deserializer: D) -> Result<Header, D::Error>

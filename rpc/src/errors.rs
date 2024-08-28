@@ -6,7 +6,7 @@ use crate::{
     rpc_server::ServerKind,
     PortalRpcModule,
 };
-use ethportal_api::types::query_trace::QueryTrace;
+use ethportal_api::{types::query_trace::QueryTrace, ContentValueError};
 use serde::{Deserialize, Serialize};
 use std::io;
 
@@ -96,6 +96,12 @@ impl From<ContentNotFoundJsonError> for RpcServeError {
             message: e.message,
             trace: e.trace,
         }
+    }
+}
+
+impl From<ContentValueError> for RpcServeError {
+    fn from(err: ContentValueError) -> Self {
+        RpcServeError::Message(format!("Error decoding content value: {err}"))
     }
 }
 

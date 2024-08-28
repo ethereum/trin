@@ -5,7 +5,7 @@ use ethers::prelude::*;
 use ethers_providers::Ws;
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::{content_key::overlay::OverlayContentKey, history::ContentInfo},
+    types::{content_key::overlay::OverlayContentKey, portal::ContentInfo},
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey, HistoryNetworkApiClient,
 };
 use std::{

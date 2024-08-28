@@ -111,8 +111,8 @@ impl BeaconBridge {
         for asset in assets.0.into_iter() {
             gossip_beacon_content(
                 self.portal_client.clone(),
-                asset.content_key,
-                asset.content_value,
+                asset.content_key.clone(),
+                asset.content_value().expect("Error getting content value"),
                 slot_stats.clone(),
             )
             .await

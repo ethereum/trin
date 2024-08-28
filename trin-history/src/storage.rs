@@ -1,5 +1,5 @@
 use ethportal_api::{
-    types::{distance::Distance, history::PaginateLocalContentInfo, portal_wire::ProtocolId},
+    types::{distance::Distance, portal::PaginateLocalContentInfo, portal_wire::ProtocolId},
     HistoryContentKey, OverlayContentKey,
 };
 use trin_storage::{
@@ -68,7 +68,7 @@ impl HistoryStorage {
         &self,
         offset: u64,
         limit: u64,
-    ) -> Result<PaginateLocalContentInfo, ContentStoreError> {
+    ) -> Result<PaginateLocalContentInfo<HistoryContentKey>, ContentStoreError> {
         let paginate_result = self.store.paginate(offset, limit)?;
         Ok(PaginateLocalContentInfo {
             content_keys: paginate_result.content_keys,

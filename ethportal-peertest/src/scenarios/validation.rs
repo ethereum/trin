@@ -5,8 +5,8 @@ use crate::{
 use alloy_primitives::B256;
 use ethportal_api::{
     jsonrpsee::async_client::Client,
-    types::{content_key::history::BlockHeaderKey, enr::Enr, history::ContentInfo},
-    HistoryContentKey, HistoryNetworkApiClient,
+    types::{content_key::history::BlockHeaderKey, enr::Enr, portal::ContentInfo},
+    ContentValue, HistoryContentKey, HistoryNetworkApiClient,
 };
 use std::str::FromStr;
 use tracing::info;
@@ -20,7 +20,7 @@ pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, targ
     let store_result = peertest
         .bootnode
         .ipc_client
-        .store(content_key.clone(), content_value.clone())
+        .store(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
@@ -40,7 +40,7 @@ pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, targ
             content,
             utp_transfer,
         } => {
-            assert_eq!(content, content_value);
+            assert_eq!(content, content_value.encode());
             assert!(!utp_transfer);
         }
         _ => panic!("Content values should match"),
@@ -59,7 +59,7 @@ pub async fn test_invalidate_header_by_hash(peertest: &Peertest, target: &Client
     let store_result = peertest
         .bootnode
         .ipc_client
-        .store(invalid_content_key.clone(), content_value.clone())
+        .store(invalid_content_key.clone(), content_value.encode())
         .await
         .unwrap();
     assert!(store_result);
@@ -82,7 +82,10 @@ pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Cl
     info!("Test validating a pre-merge block body");
     // store header_with_proof to validate block body
     let (content_key, content_value) = fixture_header_with_proof();
-    let store_result = target.store(content_key, content_value).await.unwrap();
+    let store_result = target
+        .store(content_key, content_value.encode())
+        .await
+        .unwrap();
     assert!(store_result);
 
     // store block body
@@ -91,7 +94,7 @@ pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Cl
     let store_result = peertest
         .bootnode
         .ipc_client
-        .store(content_key.clone(), content_value.clone())
+        .store(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
@@ -111,7 +114,7 @@ pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Cl
             content,
             utp_transfer,
         } => {
-            assert_eq!(content, content_value);
+            assert_eq!(content, content_value.encode());
             assert!(utp_transfer);
         }
         _ => panic!("Content values should match"),
@@ -122,7 +125,10 @@ pub async fn test_validate_pre_merge_receipts(peertest: &Peertest, target: &Clie
     info!("Test validating pre-merge receipts");
     // store header_with_proof to validate block body
     let (content_key, content_value) = fixture_header_with_proof();
-    let store_result = target.store(content_key, content_value).await.unwrap();
+    let store_result = target
+        .store(content_key, content_value.encode())
+        .await
+        .unwrap();
     assert!(store_result);
 
     // store receipts
@@ -131,7 +137,7 @@ pub async fn test_validate_pre_merge_receipts(peertest: &Peertest, target: &Clie
     let store_result = peertest
         .bootnode
         .ipc_client
-        .store(content_key.clone(), content_value.clone())
+        .store(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
@@ -151,7 +157,7 @@ pub async fn test_validate_pre_merge_receipts(peertest: &Peertest, target: &Clie
             content,
             utp_transfer,
         } => {
-            assert_eq!(content, content_value);
+            assert_eq!(content, content_value.encode());
             assert!(utp_transfer);
         }
         _ => panic!("Content values should match"),

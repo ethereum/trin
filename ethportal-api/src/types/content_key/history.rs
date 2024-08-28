@@ -18,9 +18,6 @@ pub const HISTORY_BLOCK_BODY_KEY_PREFIX: u8 = 0x01;
 pub const HISTORY_BLOCK_RECEIPTS_KEY_PREFIX: u8 = 0x02;
 pub const HISTORY_BLOCK_EPOCH_ACCUMULATOR_KEY_PREFIX: u8 = 0x03;
 
-/// SSZ encoded overlay content key as bytes
-pub type RawContentKey = Vec<u8>;
-
 /// A content key in the history overlay network.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HistoryContentKey {
