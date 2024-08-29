@@ -116,11 +116,7 @@ impl StateBridge {
         for block_number in starting_block..=last_block {
             info!("Gossipping state for block at height: {block_number}");
 
-            let block = if block_number == starting_block {
-                era_manager.get_current_block().await?
-            } else {
-                era_manager.get_next_block().await?
-            };
+            let block = era_manager.get_next_block().await?;
 
             // process block
             let RootWithTrieDiff {

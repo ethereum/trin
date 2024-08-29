@@ -42,7 +42,7 @@ impl ProcessedEra {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EraType {
     Era,
     Era1,

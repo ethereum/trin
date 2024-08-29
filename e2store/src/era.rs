@@ -49,7 +49,7 @@ impl Era {
         let slot_index_state = SlotIndexStateEntry::try_from(&file.entries[entries_length - 1])?;
         let slot_indexes = Era::get_block_slot_indexes(&slot_index_block);
 
-        // an era file should has 4 entries which are not blocks
+        // an era file has 4 entries which are not blocks
         ensure!(
             slot_indexes.len() == entries_length - 4,
             "invalid slot index block: incorrect count"

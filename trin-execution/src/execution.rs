@@ -370,6 +370,8 @@ mod tests {
         let raw_era1 = fs::read("../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
         for block_tuple in Era1::iter_tuples(raw_era1) {
             if block_tuple.header.header.number == 0 {
+                // skip genesis block
+                era_manager.get_next_block().await.unwrap();
                 continue;
             }
             state

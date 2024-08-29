@@ -55,11 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
-        let block = if block_number == starting_block_number {
-            era_manager.get_current_block().await?
-        } else {
-            era_manager.get_next_block().await?
-        };
+        let block = era_manager.get_next_block().await?;
         stop_timer(timer);
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["processing_block"]);
         if block.header.number == 0 {

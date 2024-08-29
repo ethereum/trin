@@ -68,6 +68,10 @@ pub async fn get_era1_files(http_client: &Client) -> anyhow::Result<HashMap<u64,
             era1_files.len()
         )
     );
+    ensure!(
+        (0..ERA1_FILE_COUNT).all(|epoch| era1_files.contains_key(&(epoch as u64))),
+        "Epoch indices are not starting from zero or not consecutive",
+    );
     Ok(era1_files)
 }
 
