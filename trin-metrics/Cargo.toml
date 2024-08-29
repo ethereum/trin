@@ -10,7 +10,7 @@ categories = ["cryptography::cryptocurrencies"]
 description = "Trin metrics"
 
 [dependencies]
-anyhow = "1.0.68"
-ethportal-api = { path="../ethportal-api" }
-prometheus_exporter = "0.8.4"
-lazy_static = "1.4.0"
+anyhow.workspace = true
+ethportal-api.workspace = true
+prometheus_exporter.workspace = true
+lazy_static.workspace = true
