@@ -26,4 +26,4 @@ surf = { version = "2.3.2", default-features = false, features = ["h1-client-rus
 [dev-dependencies]
 rstest = "0.18.2"
 tempfile = "3.3.0"
-
+tokio = { version = "1.14.0", features = ["full"] }

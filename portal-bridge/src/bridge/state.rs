@@ -2,7 +2,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
-use e2store::{era1::Era1, utils::get_shuffled_era1_files};
+use e2store::utils::get_shuffled_era1_files;
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
@@ -24,6 +24,7 @@ use trin_execution::{
         create_account_content_key, create_account_content_value, create_contract_content_key,
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
+    era::manager::EraManager,
     execution::State,
     spec_id::get_spec_block_number,
     storage::utils::setup_temp_dir,
@@ -32,7 +33,7 @@ use trin_execution::{
     utils::full_nibble_path_to_address_hash,
 };
 use trin_metrics::bridge::BridgeMetricsReporter;
-use trin_validation::{constants::EPOCH_SIZE, oracle::HeaderOracle};
+use trin_validation::oracle::HeaderOracle;
 
 use crate::{
     bridge::history::SERVE_BLOCK_TIMEOUT,
@@ -102,8 +103,6 @@ impl StateBridge {
 
     async fn launch_state(&self, last_block: u64) -> anyhow::Result<()> {
         info!("Gossiping state data from block 0 to {last_block}");
-        let mut current_epoch_index = u64::MAX;
-        let mut current_raw_era1 = vec![];
         let temp_directory = setup_temp_dir()?;
 
         // Enable contract storage changes caching required for gossiping the storage trie
@@ -112,38 +111,22 @@ impl StateBridge {
             block_to_trace: BlockToTrace::None,
         };
         let mut state = State::new(Some(temp_directory.path().to_path_buf()), state_config)?;
-        for block_index in 0..=last_block {
-            info!("Gossipping state for block at height: {block_index}");
-            let epoch_index = block_index / EPOCH_SIZE;
-            // make sure we have the current era1 file loaded
-            if current_epoch_index != epoch_index {
-                let era1_path = self
-                    .era1_files
-                    .iter()
-                    .find(|file| file.contains(&format!("mainnet-{epoch_index:05}-")))
-                    .expect("to be able to find era1 file");
-                let raw_era1 = self
-                    .http_client
-                    .get(era1_path.clone())
-                    .recv_bytes()
-                    .await
-                    .unwrap_or_else(|err| {
-                        panic!("unable to read era1 file at path: {era1_path:?} : {err}")
-                    });
-                current_epoch_index = epoch_index;
-                current_raw_era1 = raw_era1;
-            }
+        let starting_block = 0;
+        let mut era_manager = EraManager::new(starting_block).await?;
+        for block_number in starting_block..=last_block {
+            info!("Gossipping state for block at height: {block_number}");
+
+            let block = era_manager.get_next_block().await?;
 
             // process block
-            let block_tuple = Era1::get_tuple_by_index(&current_raw_era1, block_index % EPOCH_SIZE);
             let RootWithTrieDiff {
                 root: root_hash,
                 trie_diff: changed_nodes,
-            } = match block_index == 0 {
+            } = match block_number == 0 {
                 true => state
                     .initialize_genesis()
                     .map_err(|e| anyhow!("unable to create genesis state: {e}"))?,
-                false => state.process_block(&block_tuple)?,
+                false => state.process_block(block)?,
             };
 
             let walk_diff = TrieWalker::new(root_hash, changed_nodes);
@@ -153,7 +136,7 @@ impl StateBridge {
                 let account_proof = walk_diff.get_proof(*node);
 
                 // gossip the account
-                self.gossip_account(&account_proof, block_tuple.header.header.hash())
+                self.gossip_account(&account_proof, block.header.hash())
                     .await?;
 
                 let Some(encoded_last_node) = account_proof.proof.last() else {
@@ -183,7 +166,7 @@ impl StateBridge {
                     self.gossip_contract_bytecode(
                         address_hash,
                         &account_proof,
-                        block_tuple.header.header.hash(),
+                        block.header.hash(),
                         account.code_hash,
                         code,
                     )
@@ -202,7 +185,7 @@ impl StateBridge {
                         &account_proof,
                         &storage_proof,
                         address_hash,
-                        block_tuple.header.header.hash(),
+                        block.header.hash(),
                     )
                     .await?;
                 }

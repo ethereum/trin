@@ -1,7 +1,6 @@
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy_rlp::Decodable;
-use anyhow::{anyhow, bail, ensure, Error};
-use e2store::era1::BlockTuple;
+use anyhow::{anyhow, bail, ensure};
 use eth_trie::{RootWithTrieDiff, Trie};
 use ethportal_api::types::{
     execution::transaction::Transaction,
@@ -26,6 +25,7 @@ use tracing::info;
 use crate::{
     block_reward::get_block_reward,
     dao_fork::process_dao_fork,
+    era::types::{ProcessedBlock, TransactionsWithSender},
     metrics::{start_timer_vec, stop_timer, BLOCK_PROCESSING_TIMES},
     spec_id::{get_spec_block_number, get_spec_id},
     storage::{
@@ -121,40 +121,33 @@ impl State {
         Ok(root_with_trie_diff)
     }
 
-    pub fn process_block(&mut self, block_tuple: &BlockTuple) -> anyhow::Result<RootWithTrieDiff> {
+    pub fn process_block(&mut self, block: &ProcessedBlock) -> anyhow::Result<RootWithTrieDiff> {
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["initialize_evm"]);
-        info!(
-            "State EVM processing block {}",
-            block_tuple.header.header.number
-        );
+        info!("State EVM processing block {}", block.header.number);
         ensure!(
-            self.execution_position.block_execution_number() == block_tuple.header.header.number,
+            self.execution_position.block_execution_number() == block.header.number,
             "Expected block {}, received {}",
             self.execution_position.block_execution_number(),
-            block_tuple.header.header.number
+            block.header.number
         );
 
         // initialize evm environment
         let mut env = Env::default();
-        env.block.number = U256::from(block_tuple.header.header.number);
-        env.block.coinbase = block_tuple.header.header.author;
-        env.block.timestamp = U256::from(block_tuple.header.header.timestamp);
-        if get_spec_id(block_tuple.header.header.number).is_enabled_in(SpecId::MERGE) {
+        env.block.number = U256::from(block.header.number);
+        env.block.coinbase = block.header.author;
+        env.block.timestamp = U256::from(block.header.timestamp);
+        if get_spec_id(block.header.number).is_enabled_in(SpecId::MERGE) {
             env.block.difficulty = U256::ZERO;
-            env.block.prevrandao = block_tuple.header.header.mix_hash;
+            env.block.prevrandao = block.header.mix_hash;
         } else {
-            env.block.difficulty = block_tuple.header.header.difficulty;
+            env.block.difficulty = block.header.difficulty;
             env.block.prevrandao = None;
         }
-        env.block.basefee = block_tuple
-            .header
-            .header
-            .base_fee_per_gas
-            .unwrap_or_default();
-        env.block.gas_limit = block_tuple.header.header.gas_limit;
+        env.block.basefee = block.header.base_fee_per_gas.unwrap_or_default();
+        env.block.gas_limit = block.header.gas_limit;
 
         // EIP-4844 excess blob gas of this block, introduced in Cancun
-        if let Some(excess_blob_gas) = block_tuple.header.header.excess_blob_gas {
+        if let Some(excess_blob_gas) = block.header.excess_blob_gas {
             env.block
                 .set_blob_excess_gas_and_price(u64::from_be_bytes(excess_blob_gas.to_be_bytes()));
         }
@@ -164,8 +157,8 @@ impl State {
         // insert blockhash into database
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["insert_blockhash"]);
         self.database.db.put(
-            keccak256(B256::from(U256::from(block_tuple.header.header.number))),
-            block_tuple.header.header.hash(),
+            keccak256(B256::from(U256::from(block.header.number))),
+            block.header.hash(),
         )?;
         stop_timer(timer);
 
@@ -174,30 +167,10 @@ impl State {
 
         let cumulative_transaction_timer =
             start_timer_vec(&BLOCK_PROCESSING_TIMES, &["cumulative_transaction"]);
-        let transactions = block_tuple
-            .body
-            .body
-            .transactions()
-            .map_err(|err| Error::msg(format!("Error getting transactions: {err:?}")))?;
-        for (index, transaction) in transactions.iter().enumerate() {
-            if index != self.execution_position.transaction_index() as usize {
-                cumulative_gas_used =
-                    block_tuple.receipts.receipts.receipt_list[index].cumulative_gas_used;
-                continue;
-            }
-
+        for transaction in block.transactions.iter() {
             let transaction_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["transaction"]);
             let evm_result = self.execute_transaction(transaction, &env)?;
             cumulative_gas_used += U256::from(evm_result.result.gas_used());
-            if cumulative_gas_used
-                != block_tuple.receipts.receipts.receipt_list[index].cumulative_gas_used
-            {
-                panic!(
-                    "Cumulative gas used doesn't match! Block number: {} Transaction Index: {}",
-                    self.execution_position.block_execution_number(),
-                    self.execution_position.transaction_index()
-                )
-            }
             self.execution_position
                 .increase_transaction_index(self.database.db.clone())?;
             self.database.commit(evm_result.state);
@@ -207,7 +180,7 @@ impl State {
 
         // update beneficiary
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["update_beneficiary"]);
-        for (beneficiary, reward) in get_block_reward(block_tuple) {
+        for (beneficiary, reward) in get_block_reward(block) {
             let mut account = self.get_account_state(&beneficiary)?;
             account.balance += U256::from(reward);
             self.database
@@ -234,7 +207,7 @@ impl State {
         }
 
         // check if dao fork, if it is drain accounts and transfer it to beneficiary
-        if block_tuple.header.header.number == get_spec_block_number(SpecId::DAO_FORK) {
+        if block.header.number == get_spec_block_number(SpecId::DAO_FORK) {
             process_dao_fork(&self.database)?;
         }
         stop_timer(timer);
@@ -244,7 +217,7 @@ impl State {
             root,
             trie_diff: changed_nodes,
         } = self.get_root_with_trie_diff()?;
-        if root != block_tuple.header.header.state_root {
+        if root != block.header.state_root {
             panic!(
                 "State root doesn't match! Irreversible! Block number: {}",
                 self.execution_position.block_execution_number()
@@ -268,7 +241,7 @@ impl State {
 
     fn execute_transaction(
         &mut self,
-        tx: &Transaction,
+        tx: &TransactionsWithSender,
         evm_evnironment: &Env,
     ) -> anyhow::Result<ResultAndState> {
         let block_number = evm_evnironment.block.number.to::<u64>();
@@ -278,10 +251,8 @@ impl State {
             .with_env(Box::new(evm_evnironment.clone()))
             .with_spec_id(get_spec_id(block_number))
             .modify_tx_env(|tx_env| {
-                tx_env.caller = tx
-                    .get_transaction_sender_address()
-                    .expect("We should always be able to get the sender address of a transaction");
-                match tx {
+                tx_env.caller = tx.sender_address;
+                match &tx.transaction {
                     Transaction::Legacy(tx) => tx.modify(block_number, tx_env),
                     Transaction::EIP1559(tx) => tx.modify(block_number, tx_env),
                     Transaction::AccessList(tx) => tx.modify(block_number, tx_env),
@@ -296,7 +267,8 @@ impl State {
                 .join("evm_traces")
                 .join(format!("block_{block_number}"));
             fs::create_dir_all(&output_path)?;
-            let output_file = File::create(output_path.join(format!("tx_{}.json", tx.hash())))?;
+            let output_file =
+                File::create(output_path.join(format!("tx_{}.json", tx.transaction.hash())))?;
             base_evm_builder
                 .with_external_context(TracerEip3155::new(Box::new(output_file)))
                 .append_handler_register(inspector_handle_register)
@@ -376,17 +348,18 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use e2store::era1::Era1;
     use std::fs;
 
-    use crate::{config::StateConfig, storage::utils::setup_temp_dir};
+    use crate::{
+        config::StateConfig, era::utils::process_era1_file, storage::utils::setup_temp_dir,
+    };
 
     use super::State;
     use alloy_primitives::Address;
     use revm_primitives::hex::FromHex;
 
-    #[test_log::test]
-    fn test_we_generate_the_correct_state_root_for_the_first_8192_blocks() {
+    #[tokio::test]
+    async fn test_we_generate_the_correct_state_root_for_the_first_8192_blocks() {
         let temp_directory = setup_temp_dir().unwrap();
         let mut state = State::new(
             Some(temp_directory.path().to_path_buf()),
@@ -395,15 +368,13 @@ mod tests {
         .unwrap();
         let _ = state.initialize_genesis().unwrap();
         let raw_era1 = fs::read("../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
-        for block_tuple in Era1::iter_tuples(raw_era1) {
-            if block_tuple.header.header.number == 0 {
+        let processed_era = process_era1_file(raw_era1, 0).unwrap();
+        for block in processed_era.blocks {
+            if block.header.number == 0 {
                 continue;
             }
-            state.process_block(&block_tuple).unwrap();
-            assert_eq!(
-                state.get_root().unwrap(),
-                block_tuple.header.header.state_root
-            );
+            state.process_block(&block).unwrap();
+            assert_eq!(state.get_root().unwrap(), block.header.state_root);
         }
     }
 

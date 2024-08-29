@@ -4,7 +4,7 @@ use revm_primitives::SpecId;
 use tracing::info;
 use trin_execution::{
     cli::TrinExecutionConfig,
-    era_manager::EraManager,
+    era::manager::EraManager,
     execution::State,
     metrics::{start_timer_vec, stop_timer, BLOCK_PROCESSING_TIMES},
     spec_id::get_spec_block_number,
@@ -33,7 +33,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         trin_execution_config.into(),
     )?;
 
-    let mut era_manager = EraManager::new().await?;
+    let starting_block_number = state.block_execution_number();
+    let mut era_manager = EraManager::new(starting_block_number).await?;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     tokio::spawn(async move {
@@ -43,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("signal ctrl_c should never fail");
     });
 
-    for block_number in state.block_execution_number()..=get_spec_block_number(SpecId::MERGE) {
+    for block_number in starting_block_number..=get_spec_block_number(SpecId::MERGE) {
         if rx.try_recv().is_ok() {
             state.database.db.flush()?;
             info!(
@@ -54,16 +55,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
-        let block_tuple = era_manager.get_block_by_number(block_number).await?;
+        let block = era_manager.get_next_block().await?;
         stop_timer(timer);
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["processing_block"]);
-        if block_tuple.header.header.number == 0 {
+        if block.header.number == 0 {
             state.initialize_genesis()?;
             continue;
         }
-        state.process_block(block_tuple)?;
+        state.process_block(block)?;
         stop_timer(timer);
-        assert_eq!(state.get_root()?, block_tuple.header.header.state_root);
+        assert_eq!(state.get_root()?, block.header.state_root);
     }
 
     Ok(())

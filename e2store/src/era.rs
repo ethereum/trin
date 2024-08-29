@@ -12,7 +12,7 @@ use std::{
     io::{Read, Write},
 };
 
-const SLOTS_PER_HISTORICAL_ROOT: usize = 8192;
+pub const SLOTS_PER_HISTORICAL_ROOT: usize = 8192;
 
 /// group := Version | block* | era-state | other-entries* | slot-index(block)? | slot-index(state)
 /// block := CompressedSignedBeaconBlock
@@ -47,14 +47,17 @@ impl Era {
 
         let slot_index_block = SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])?;
         let slot_index_state = SlotIndexStateEntry::try_from(&file.entries[entries_length - 1])?;
+        let slot_indexes = Era::get_block_slot_indexes(&slot_index_block);
 
-        // Iterate over the block entries. Skip the first and last 3 entries.
-        let mut next_slot = slot_index_block.slot_index.starting_slot;
-        for idx in 1..entries_length - 3 {
-            let entry = &file.entries[idx];
-            let fork = get_beacon_fork(next_slot);
+        // an era file has 4 entries which are not blocks
+        ensure!(
+            slot_indexes.len() == entries_length - 4,
+            "invalid slot index block: incorrect count"
+        );
+        for (index, slot) in slot_indexes.into_iter().enumerate() {
+            let entry = &file.entries[index + 1];
+            let fork = get_beacon_fork(slot);
             let beacon_block = CompressedSignedBeaconBlock::try_from(entry, fork)?;
-            next_slot = beacon_block.block.slot() + 1;
             blocks.push(beacon_block);
         }
         let fork = get_beacon_fork(slot_index_state.slot_index.starting_slot);
@@ -80,6 +83,47 @@ impl Era {
         Ok(era_state.state)
     }
 
+    /// Iterate over beacon blocks.
+    pub fn iter_blocks(
+        raw_era: Vec<u8>,
+    ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<CompressedSignedBeaconBlock>>> {
+        let file = E2StoreMemory::deserialize(&raw_era)?;
+        let entries_length = file.entries.len();
+        let block_index = SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])?;
+        let slot_indexes = Era::get_block_slot_indexes(&block_index);
+
+        ensure!(
+            slot_indexes.len() == entries_length - 4,
+            "invalid slot index block: incorrect count"
+        );
+
+        Ok(slot_indexes
+            .into_iter()
+            .enumerate()
+            .map(move |(index, slot)| {
+                let entry: Entry = file.entries[index + 1].clone();
+                let fork = get_beacon_fork(slot);
+                let beacon_block = CompressedSignedBeaconBlock::try_from(&entry, fork)?;
+                Ok(beacon_block)
+            }))
+    }
+
+    fn get_block_slot_indexes(slot_index_block_entry: &SlotIndexBlockEntry) -> Vec<u64> {
+        slot_index_block_entry
+            .slot_index
+            .indices
+            .iter()
+            .enumerate()
+            .filter_map(|(i, index)| {
+                if *index != 0 {
+                    Some(slot_index_block_entry.slot_index.starting_slot + i as u64)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<u64>>()
+    }
+
     #[allow(dead_code)]
     fn write(&self) -> anyhow::Result<Vec<u8>> {
         let mut entries: Vec<Entry> = vec![];
@@ -102,6 +146,17 @@ impl Era {
         file.write(&mut buf)?;
         Ok(buf)
     }
+
+    pub fn contains(&self, block_number: u64) -> bool {
+        if self.blocks.is_empty() {
+            return false;
+        }
+        let first_block_number = self.blocks[0].block.execution_block_number();
+        let last_block_number = self.blocks[self.blocks.len() - 1]
+            .block
+            .execution_block_number();
+        (first_block_number..=last_block_number).contains(&block_number)
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -110,7 +165,7 @@ pub struct CompressedSignedBeaconBlock {
 }
 
 impl CompressedSignedBeaconBlock {
-    fn try_from(entry: &Entry, fork: ForkName) -> Result<Self, anyhow::Error> {
+    pub fn try_from(entry: &Entry, fork: ForkName) -> Result<Self, anyhow::Error> {
         ensure!(
             entry.header.type_ == 0x01,
             "invalid compressed signed beacon block entry: incorrect header type"
@@ -257,7 +312,7 @@ impl TryFrom<Entry> for SlotIndexBlock {
 // slot-index := starting-slot | index | index | index ... | count
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SlotIndexStateEntry {
-    slot_index: SlotIndexState,
+    pub slot_index: SlotIndexState,
 }
 
 impl TryFrom<&Entry> for SlotIndexStateEntry {
@@ -304,7 +359,7 @@ impl TryInto<Entry> for SlotIndexStateEntry {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SlotIndexState {
-    starting_slot: u64,
+    pub starting_slot: u64,
     indices: [u64; 1],
     count: u64,
 }
@@ -326,7 +381,7 @@ impl TryFrom<Entry> for SlotIndexState {
     }
 }
 
-fn get_beacon_fork(slot_index: u64) -> ForkName {
+pub fn get_beacon_fork(slot_index: u64) -> ForkName {
     if slot_index < 4_636_672 {
         panic!("e2store/era doesn't support this fork");
     } else if (4_636_672..6_209_536).contains(&slot_index) {
