@@ -17,38 +17,38 @@ alloy-primitives.workspace = true
 anyhow.workspace = true
 clap = { version = "4.2.1", features = ["derive"] }
 dirs = "5.0.1"
-discv5 = { version = "0.4.1", features = ["serde"] }
+discv5.workspace = true
 ethereum_ssz.workspace = true
 ethers = { version = "2.0"}
 ethers-providers = { version = "2.0", features = ["ws"] }
 ethportal-api.workspace = true
 e2store = { path = "e2store" }
-futures = "0.3.21"
-jsonrpsee = "0.20.0"
+futures.workspace = true
+jsonrpsee.workspace = true
 lazy_static = "1.4.0"
 parking_lot = "0.11.2"
 portalnet = { path = "portalnet" }
-portal-bridge = { path = "portal-bridge" }
+portal-bridge.workspace = true
 prometheus_exporter = "0.8.4"
 rand.workspace = true
 regex = "1.10.2"
-reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
-rpc = { path = "rpc"}
-serde_json = {version = "1.0.89", features = ["preserve_order"]}
+reth-ipc.workspace = true
+rpc.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"]}
 sha3 = "0.9.1"
 surf.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
-tracing = "0.1.36"
-tracing-subscriber = "0.3.15"
-tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tree_hash.workspace = true
 trin-beacon = { path = "trin-beacon" }
-trin-history = { path = "trin-history" }
-trin-state = { path = "trin-state" }
+trin-history.workspace = true
+trin-state.workspace = true
 trin-storage = { path = "trin-storage" }
-trin-utils = { path = "trin-utils" }
-trin-validation = { path = "trin-validation" }
-url = "2.3.1"
+trin-utils.workspace = true
+trin-validation.workspace = true
+url.workspace = true
 utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.13" }
 
 [dev-dependencies]
@@ -57,7 +57,7 @@ ethers-providers = { version = "2.0", default-features = false, features = ["ipc
 ethportal-peertest = { path = "ethportal-peertest" }
 serde_yaml = "0.9"
 serial_test = "0.5.1"
-ureq = { version = "2.5.0", features = ["json"] }
+ureq.workspace = true
 
 [workspace]
 members = [
@@ -82,13 +82,34 @@ members = [
 alloy-primitives = "0.7.0"
 alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
+discv5 = { version = "0.4.1", features = ["serde"] }
 ethereum_ssz = "0.5.3"
 ethereum_ssz_derive = "0.5.3"
 ethportal-api = { path = "ethportal-api" }
+futures = "0.3.21"
+hex = "0.4.3"
+hyper = "0.14.28"
+jsonrpsee = "0.20.0"
+portal-bridge = { path = "portal-bridge" }
 rand = "0.8.4"
+reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
+rpc = { path = "rpc"}
 rstest = "0.18.2"
 scraper = "0.18.1"
+serde = { version = "1.0.150", features = ["derive"] }
+serde_json = "1.0.89"
+serde_yaml = "0.9.33"
 snap = "1.1.1"
 surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustls because OpenSSL cause issues compiling on aarch64
 tempfile = "3.3.0"
 tokio = { version = "1.14.0", features = ["full"] }
+tracing = "0.1.36"
+tracing-subscriber = "0.3.15"
+tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
+trin-history = { path = "trin-history" }
+trin-state = { path = "trin-state" }
+trin-utils = { path = "trin-utils" }
+trin-validation = { path = "trin-validation" }
+uds_windows = "1.0.1"
+ureq = { version = "2.5.0", features = ["json"] }
+url = "2.3.1"

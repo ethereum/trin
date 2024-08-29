@@ -11,36 +11,36 @@ description = "Testing utilities for trin"
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = "0.7.0"
-alloy-rlp = "0.3.4"
-anyhow = "1.0.68"
-discv5 = { version = "0.4.1", features = ["serde"] }
-ethereum_ssz = "0.5.3"
-ethportal-api = { path="../ethportal-api"}
-futures = "0.3.21"
-hex = "0.4.3"
-hyper = { version = "0.14", features = ["full"] }
-jsonrpsee = {version="0.20.0", features = ["async-client", "client", "macros", "server"]}
-rand = "0.8.4"
-reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
-rpc = { path = "../rpc" }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.89"
-serde_yaml = "0.9"
-surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustls because OpenSSL cause issues compiling on aarch64
-tempfile = "3.3.0"
-tokio = {version = "1.14.0", features = ["full"]}
-tracing = "0.1.36"
-tracing-subscriber = "0.3.15"
-tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+anyhow.workspace = true
+discv5.workspace = true
+ethereum_ssz.workspace = true
+ethportal-api.workspace = true
+futures.workspace = true
+hex.workspace = true
+hyper = { workspace = true, features = ["full"] }
+jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"]}
+rand.workspace = true
+reth-ipc.workspace = true
+rpc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+surf.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tree_hash.workspace = true
 trin = { path = ".." }
-portal-bridge = { path = "../portal-bridge" }
-trin-history = { path = "../trin-history" }
-trin-state = { path = "../trin-state" }
-trin-utils = { path = "../trin-utils" }
-trin-validation = { path = "../trin-validation" }
-ureq = { version = "2.5.0", features = ["json"] }
-url = "2.3.1"
+portal-bridge.workspace = true
+trin-history.workspace = true
+trin-state.workspace = true
+trin-utils.workspace = true
+trin-validation.workspace = true
+ureq.workspace = true
+url.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-uds_windows = "1.0.1"
+uds_windows.workspace = true
