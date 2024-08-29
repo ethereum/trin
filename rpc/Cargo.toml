@@ -11,22 +11,22 @@ description = "Implementations of jsonrpsee server API traits for Trin and serve
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = "0.7.0"
-alloy-rlp = "0.3.4"
-discv5 = { version = "0.4.1", features = ["serde"] }
-eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "7947a83091192a7988f359b750b05121d5d7ba8c" }
-ethportal-api = { path = "../ethportal-api"}
-portalnet = { path = "../portalnet"}
-tracing = "0.1.27"
-trin-utils = { path = "../trin-utils"}
-tokio = { version = "1.14.0", features = ["full"] }
-hyper = "0.14.28"
-reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
-reth-rpc-types = { rev = "8d1d13ef89cf19459adc37ba0c45e7aac6270dc1", git = "https://github.com/paradigmxyz/reth.git"}
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.95"
-strum = { version = "0.26.1", features = ["derive"] }
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+discv5.workspace = true
+eth_trie.workspace = true
+ethportal-api.workspace = true
+portalnet.workspace = true
+tracing.workspace = true
+trin-utils.workspace = true
+tokio.workspace = true
+hyper.workspace = true
+reth-ipc.workspace = true
+reth-rpc-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true
 tower-http = { version = "0.4.4", features = ["full"] }
 tower = { version = "0.4.13", features = ["full"] }
-trin-validation = { path="../trin-validation" }
-thiserror = "1.0.57"
+trin-validation.workspace = true
+thiserror.workspace = true
