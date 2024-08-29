@@ -348,10 +348,11 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use e2store::era1::Era1;
     use std::fs;
 
-    use crate::{config::StateConfig, era::manager::EraManager, storage::utils::setup_temp_dir};
+    use crate::{
+        config::StateConfig, era::utils::process_era1_file, storage::utils::setup_temp_dir,
+    };
 
     use super::State;
     use alloy_primitives::Address;
@@ -366,21 +367,14 @@ mod tests {
         )
         .unwrap();
         let _ = state.initialize_genesis().unwrap();
-        let mut era_manager = EraManager::new(0).await.unwrap();
         let raw_era1 = fs::read("../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
-        for block_tuple in Era1::iter_tuples(raw_era1) {
-            if block_tuple.header.header.number == 0 {
-                // skip genesis block
-                era_manager.get_next_block().await.unwrap();
+        let processed_era = process_era1_file(raw_era1, 0).unwrap();
+        for block in processed_era.blocks {
+            if block.header.number == 0 {
                 continue;
             }
-            state
-                .process_block(era_manager.get_next_block().await.unwrap())
-                .unwrap();
-            assert_eq!(
-                state.get_root().unwrap(),
-                block_tuple.header.header.state_root
-            );
+            state.process_block(&block).unwrap();
+            assert_eq!(state.get_root().unwrap(), block.header.state_root);
         }
     }
 
