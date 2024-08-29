@@ -27,7 +27,7 @@ futures.workspace = true
 jsonrpsee.workspace = true
 lazy_static.workspace = true
 parking_lot.workspace = true
-portalnet = { path = "portalnet" }
+portalnet.workspace = true
 portal-bridge.workspace = true
 prometheus_exporter.workspace = true
 rand.workspace = true
@@ -82,7 +82,9 @@ members = [
 alloy-primitives = "0.7.0"
 alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
+async-trait = "0.1.68"
 bytes = "1.3.0"
+chrono = "0.4.38"
 clap = { version = "4.2.1", features = ["derive"] }
 discv5 = { version = "0.4.1", features = ["serde"] }
 e2store = { path = "e2store" }
@@ -91,7 +93,7 @@ eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "7947a830
 ethereum_ssz = "0.5.3"
 ethereum_ssz_derive = "0.5.3"
 ethportal-api = { path = "ethportal-api" }
-futures = "0.3.21"
+futures = "0.3.23"
 hex = "0.4.3"
 hyper = "0.14.28"
 jsonrpsee = "0.20.0"
@@ -99,6 +101,7 @@ keccak-hash = "0.10.0"
 lazy_static = "1.4.0"
 parking_lot = "0.11.2"
 portal-bridge = { path = "portal-bridge" }
+portalnet = { path = "portalnet" }
 prometheus_exporter = "0.8.4"
 quickcheck = "1.0.3"
 rand = "0.8.5"
@@ -115,6 +118,7 @@ serial_test = "0.5.1"
 sha3 = "0.9.1"
 snap = "1.1.1"
 ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "2a5922de75f00746890bf4ea9ad663c9d5d58efe" }
+strum = { version = "0.26.1", features = ["derive"] }
 surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustls because OpenSSL cause issues compiling on aarch64
 tempfile = "3.3.0"
 test-log = { version = "0.2.11", features = ["trace"] }
