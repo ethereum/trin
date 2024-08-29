@@ -11,19 +11,19 @@ description = "A testing suite for the UTP protocol."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-anyhow = "1.0.68"
-clap = { version = "4.2.1", features = ["derive"] }
-discv5 = { version = "0.4.1", features = ["serde"] }
-ethportal-api = { path="../ethportal-api"}
-jsonrpsee = {version = "0.20.0", features = ["full"]}
-portalnet = { path = "../portalnet" }
-rand = "0.8.4"
-tracing = "0.1.36"
-tracing-subscriber = "0.3.15"
-trin-utils = { path = "../trin-utils" }
-trin-validation = { path="../trin-validation" }
-tokio = {version = "1.14.0", features = ["full"]}
-utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.13" }
+anyhow.workspace = true
+clap.workspace = true
+discv5.workspace = true
+ethportal-api.workspace = true
+jsonrpsee = { workspace = true, features = ["full"]}
+portalnet.workspace = true
+rand.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+trin-utils.workspace = true
+trin-validation.workspace = true
+tokio.workspace = true
+utp-rs.workspace = true
 
 [[bin]]
 name = "utp-test-app"
