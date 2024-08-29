@@ -11,29 +11,29 @@ description = "History network subprotocol for Trin."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = "0.7.0"
-anyhow = "1.0.68"
-discv5 = { version = "0.4.1", features = ["serde"] }
-ethereum_ssz = "0.5.3"
-ethportal-api = {path = "../ethportal-api"}
-parking_lot = "0.11.2"
-portalnet = { path = "../portalnet" }
-serde_json = "1.0.89"
-tokio = { version = "1.14.0", features = ["full"] }
-tracing = "0.1.36"
-tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
-trin-storage = { path = "../trin-storage" }
-trin-validation = { path = "../trin-validation" }
-utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.13" }
+alloy-primitives.workspace = true
+anyhow.workspace = true
+discv5.workspace = true
+ethereum_ssz.workspace = true
+ethportal-api.workspace = true
+parking_lot.workspace = true
+portalnet.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tree_hash.workspace = true
+trin-storage.workspace = true
+trin-validation.workspace = true
+utp-rs.workspace = true
 
 [dev-dependencies]
-env_logger = "0.9.0"
-quickcheck = "1.0.3"
-rand = "0.8.4"
-rstest = "0.18.2"
-serial_test = "0.5.1"
-ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "2a5922de75f00746890bf4ea9ad663c9d5d58efe" }
-test-log = { version = "0.2.11", features = ["trace"] }
-tokio-test = "0.4.2"
-tracing-subscriber = "0.3.15"
-ureq = { version = "2.5.0", features = ["json"] }
+env_logger.workspace = true
+quickcheck.workspace = true
+rand.workspace = true
+rstest.workspace = true
+serial_test.workspace = true
+ssz_types.workspace = true
+test-log.workspace = true
+tokio-test.workspace = true
+tracing-subscriber.workspace = true
+ureq.workspace = true
