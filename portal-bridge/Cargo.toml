@@ -12,46 +12,46 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 
 [dependencies]
-alloy-consensus = { git = "https://github.com/alloy-rs/alloy.git", rev = "d68a6b787b2904061f0ae7fcc02ece8513e3c500"}
-alloy-primitives = "0.7.0"
-alloy-rlp = "0.3.4"
-anyhow = "1.0.68"
-async-trait = "0.1.68"
-chrono = "0.4.26"
-clap = { version = "4.2.1", features = ["derive"] }
-discv5 = { version = "0.4.1", features = ["serde"] }
-ethereum_ssz = "0.5.3"
-ethportal-api = { path = "../ethportal-api" }
-eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "7947a83091192a7988f359b750b05121d5d7ba8c" }
-e2store = { path = "../e2store" }
-futures = "0.3.21"
-jsonrpsee = { version = "0.20.0", features = [
+alloy-consensus.workspace = true
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+clap.workspace = true
+discv5.workspace = true
+ethereum_ssz.workspace = true
+ethportal-api.workspace = true
+eth_trie.workspace = true
+e2store.workspace = true
+futures.workspace = true
+jsonrpsee = { workspace = true, features = [
   "async-client",
   "client",
   "macros",
   "server",
 ] }
-portalnet = { path = "../portalnet" }
-prometheus_exporter = "0.8.4"
-rand = "0.8.4"
-revm = { version = "8.0.0", features = ["std", "secp256k1", "serde-json"], default-features = false }
-revm-primitives = { version = "3.1.0", features = ["std", "serde"], default-features = false }
-scraper = "0.18.1"
-serde = { version = "1.0.150", features = ["derive", "rc"] }
-serde_json = "1.0.89"
-serde_yaml = "0.9"
-ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "2a5922de75f00746890bf4ea9ad663c9d5d58efe" }
-surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustls because OpenSSL cause issues compiling on aarch64
-tokio = { version = "1.14.0", features = ["full"] }
-tracing = "0.1.36"
-trin-execution = { path = "../trin-execution" }
-trin-metrics = { path = "../trin-metrics" }
-trin-utils = { path = "../trin-utils" }
-trin-validation = { path = "../trin-validation" }
-url = "2.3.1"
+portalnet.workspace = true
+prometheus_exporter.workspace = true
+rand.workspace = true
+revm.workspace = true
+revm-primitives.workspace = true
+scraper.workspace = true
+serde = { workspace = true, features = ["rc"] }
+serde_json.workspace = true
+serde_yaml.workspace = true
+ssz_types.workspace = true
+surf.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+trin-execution.workspace = true
+trin-metrics.workspace = true
+trin-utils.workspace = true
+trin-validation.workspace = true
+url.workspace = true
 
 [dev-dependencies]
-env_logger = "0.9.0"
-rstest = "0.18.2"
-test-log = { version = "0.2.11", features = ["trace"] }
-tracing-test = "0.1"
+env_logger.workspace = true
+rstest.workspace = true
+test-log.workspace = true
+tracing-test.workspace = true

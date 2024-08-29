@@ -79,6 +79,7 @@ members = [
 ]
 
 [workspace.dependencies]
+alloy-consensus = { git = "https://github.com/alloy-rs/alloy.git", rev = "d68a6b787b2904061f0ae7fcc02ece8513e3c500"}
 alloy-primitives = "0.7.0"
 alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
@@ -107,6 +108,8 @@ quickcheck = "1.0.3"
 rand = "0.8.5"
 reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
 reth-rpc-types = { rev = "8d1d13ef89cf19459adc37ba0c45e7aac6270dc1", git = "https://github.com/paradigmxyz/reth.git"}
+revm = { version = "8.0.0", features = ["std", "secp256k1", "serde-json"], default-features = false }
+revm-primitives = { version = "3.1.0", features = ["std", "serde"], default-features = false }
 rpc = { path = "rpc"}
 rstest = "0.18.2"
 scraper = "0.18.1"
@@ -126,10 +129,13 @@ thiserror = "1.0.57"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
+tracing-test = "0.1"
 tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
 tree_hash_derive = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
 trin-beacon = { path = "trin-beacon" }
+trin-execution = { path = "trin-execution" }
 trin-history = { path = "trin-history" }
+trin-metrics = { path = "trin-metrics" }
 trin-state = { path = "trin-state" }
 trin-storage = { path = "trin-storage" }
 trin-utils = { path = "trin-utils" }
