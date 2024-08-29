@@ -5900,7 +5900,9 @@ name = "rpc"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
+ "alloy-rlp",
  "discv5",
+ "eth_trie",
  "ethportal-api",
  "hyper",
  "portalnet",

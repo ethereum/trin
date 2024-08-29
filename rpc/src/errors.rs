@@ -53,7 +53,6 @@ impl RpcError {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
 pub enum RpcServeError {
     /// A generic error with no data
     Message(String),
@@ -62,7 +61,7 @@ pub enum RpcServeError {
     /// ContentNotFound
     ContentNotFound {
         message: String,
-        trace: Option<QueryTrace>,
+        trace: Option<Box<QueryTrace>>,
     },
 }
 
@@ -94,7 +93,7 @@ impl From<ContentNotFoundJsonError> for RpcServeError {
     fn from(e: ContentNotFoundJsonError) -> Self {
         RpcServeError::ContentNotFound {
             message: e.message,
-            trace: e.trace,
+            trace: e.trace.map(Box::new),
         }
     }
 }
