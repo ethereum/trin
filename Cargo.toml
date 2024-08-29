@@ -101,11 +101,14 @@ hyper = "0.14.28"
 jsonrpsee = "0.20.0"
 keccak-hash = "0.10.0"
 lazy_static = "1.4.0"
+light-client = { path = "light-client" }
 parking_lot = "0.11.2"
 portal-bridge = { path = "portal-bridge" }
 portalnet = { path = "portalnet" }
 prometheus_exporter = "0.8.4"
 quickcheck = "1.0.3"
+r2d2 = "0.8.9"
+r2d2_sqlite = "0.24.0"
 rand = "0.8.5"
 reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
 reth-rpc-types = { rev = "8d1d13ef89cf19459adc37ba0c45e7aac6270dc1", git = "https://github.com/paradigmxyz/reth.git"}
@@ -113,6 +116,7 @@ revm = { version = "8.0.0", features = ["std", "secp256k1", "serde-json"], defau
 revm-primitives = { version = "3.1.0", features = ["std", "serde"], default-features = false }
 rpc = { path = "rpc"}
 rstest = "0.18.2"
+rusqlite = { version = "0.31.0", features = ["bundled"] }
 scraper = "0.18.1"
 serde = { version = "1.0.150", features = ["derive"] }
 serde_json = "1.0.95"
