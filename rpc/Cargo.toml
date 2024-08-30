@@ -16,17 +16,17 @@ alloy-rlp.workspace = true
 discv5.workspace = true
 eth_trie.workspace = true
 ethportal-api.workspace = true
-portalnet.workspace = true
-tracing.workspace = true
-trin-utils.workspace = true
-tokio.workspace = true
 hyper.workspace = true
+portalnet.workspace = true
 reth-ipc.workspace = true
 reth-rpc-types.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 strum.workspace = true
-tower-http = { version = "0.4.4", features = ["full"] }
-tower = { version = "0.4.13", features = ["full"] }
-trin-validation.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
+tower = { version = "0.4.13", features = ["full"] }
+tower-http = { version = "0.4.4", features = ["full"] }
+tracing.workspace = true
+trin-utils.workspace = true
+trin-validation.workspace = true

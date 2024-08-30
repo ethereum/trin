@@ -18,11 +18,11 @@ ethportal-api.workspace = true
 jsonrpsee = { workspace = true, features = ["full"]}
 portalnet.workspace = true
 rand.workspace = true
+tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 trin-utils.workspace = true
 trin-validation.workspace = true
-tokio.workspace = true
 utp-rs.workspace = true
 
 [[bin]]

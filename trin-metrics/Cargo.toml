@@ -12,5 +12,5 @@ description = "Trin metrics"
 [dependencies]
 anyhow.workspace = true
 ethportal-api.workspace = true
-prometheus_exporter.workspace = true
 lazy_static.workspace = true
+prometheus_exporter.workspace = true

@@ -21,6 +21,7 @@ futures.workspace = true
 hex.workspace = true
 hyper = { workspace = true, features = ["full"] }
 jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"]}
+portal-bridge.workspace = true
 rand.workspace = true
 reth-ipc.workspace = true
 rpc.workspace = true
@@ -34,7 +35,6 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tree_hash.workspace = true
 trin = { path = ".." }
-portal-bridge.workspace = true
 trin-history.workspace = true
 trin-state.workspace = true
 trin-utils.workspace = true

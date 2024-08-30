@@ -18,17 +18,17 @@ anyhow.workspace = true
 clap.workspace = true
 dirs = "5.0.1"
 discv5.workspace = true
+e2store.workspace = true
 ethereum_ssz.workspace = true
 ethers = { version = "2.0"}
 ethers-providers = { version = "2.0", features = ["ws"] }
 ethportal-api.workspace = true
-e2store.workspace = true
 futures.workspace = true
 jsonrpsee.workspace = true
 lazy_static.workspace = true
 parking_lot.workspace = true
-portalnet.workspace = true
 portal-bridge.workspace = true
+portalnet.workspace = true
 prometheus_exporter.workspace = true
 rand.workspace = true
 regex = "1.10.2"

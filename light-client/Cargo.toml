@@ -24,9 +24,9 @@ milagro_bls = { package="snowbridge-milagro-bls", git = "https://github.com/Snow
 portalnet.workspace = true
 reqwest = { version = "0.11.13", default-features = false, features = ["json", "rustls-tls"] }
 serde.workspace = true
+serde-this-or-that.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
-serde-this-or-that.workspace = true
 ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "d09f55b4f8554491e3431e01af1c32347a8781cd" }
 ssz_types.workspace = true
 strum.workspace = true

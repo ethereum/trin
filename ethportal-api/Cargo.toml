@@ -17,12 +17,12 @@ anyhow.workspace = true
 base64 = "0.13.0"
 bimap = "0.6.3"
 bytes.workspace = true
+c-kzg = "1.0.0"
 clap.workspace = true
 const_format = {version = "0.2.0", features = ["rust_1_64"]}
-c-kzg = "1.0.0"
 discv5.workspace = true
-ethereum_hashing = "0.6.0"
 eth_trie.workspace = true
+ethereum_hashing = "0.6.0"
 ethereum_serde_utils = "0.5.2"
 ethereum_ssz.workspace = true
 ethereum_ssz_derive.workspace = true
@@ -39,17 +39,17 @@ rlp = "0.5.0"
 rs_merkle = "1.4.2"
 secp256k1 = { version = "0.29.0", features = ["global-context", "recovery", "rand"] }
 serde = { workspace = true, features = ["rc"] }
-serde_json.workspace = true
 serde-this-or-that.workspace = true
+serde_json.workspace = true
 sha2 = "0.10.1"
 sha3.workspace = true
-superstruct = "0.7.0"
 ssz_types.workspace = true
+superstruct = "0.7.0"
 thiserror.workspace = true
+tokio.workspace = true
 tree_hash.workspace = true
 tree_hash_derive.workspace = true
 trin-utils.workspace = true
-tokio.workspace = true
 ureq.workspace = true
 url.workspace = true
 validator = { version = "0.13.0", features = ["derive"] }

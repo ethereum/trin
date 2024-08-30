@@ -20,10 +20,10 @@ async-trait.workspace = true
 chrono.workspace = true
 clap.workspace = true
 discv5.workspace = true
+e2store.workspace = true
+eth_trie.workspace = true
 ethereum_ssz.workspace = true
 ethportal-api.workspace = true
-eth_trie.workspace = true
-e2store.workspace = true
 futures.workspace = true
 jsonrpsee = { workspace = true, features = [
   "async-client",
