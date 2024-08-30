@@ -12,18 +12,18 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 
 [dependencies]
-alloy-primitives = "0.7.0"
-alloy-rlp = "0.3.4"
-anyhow = "1.0.68"
-ethereum_ssz = "0.5.3"
-ethereum_ssz_derive = "0.5.3"
-ethportal-api = { path = "../ethportal-api" }
-rand = "0.8.4"
-scraper = "0.18.1"
-snap = "1.1.1"
-surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustls because OpenSSL cause issues compiling on aarch64
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+anyhow.workspace = true
+ethereum_ssz.workspace = true
+ethereum_ssz_derive.workspace = true
+ethportal-api.workspace = true
+rand.workspace = true
+scraper.workspace = true
+snap.workspace = true
+surf.workspace = true
 
 [dev-dependencies]
-rstest = "0.18.2"
-tempfile = "3.3.0"
-tokio = { version = "1.14.0", features = ["full"] }
+rstest.workspace = true
+tempfile.workspace = true
+tokio.workspace = true

@@ -11,26 +11,26 @@ description = "Validation layer for the Portal Network data."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = { version = "0.7.0", features = ["ssz"] }
-anyhow = "1.0.68"
+alloy-primitives = { workspace = true, features = ["ssz"] }
+anyhow.workspace = true
 enr = "0.10.0"
 eth2_hashing = "0.2.0"
-ethereum_ssz = "0.5.3"
-ethereum_ssz_derive = "0.5.3"
-ethportal-api = { path = "../ethportal-api" }
-lazy_static = "1.4.0"
+ethereum_ssz.workspace = true
+ethereum_ssz_derive.workspace = true
+ethportal-api.workspace = true
+lazy_static.workspace = true
 rust-embed = "6.6.1"
-serde = { version = "1.0.150", features = ["derive"] }
-serde_json = "1.0.89"
-ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "2a5922de75f00746890bf4ea9ad663c9d5d58efe" }
-tokio = { version = "1.14.0", features = ["full"] }
-tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
-tree_hash_derive = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
+serde.workspace = true
+serde_json.workspace = true
+ssz_types.workspace = true
+tokio.workspace = true
+tree_hash.workspace = true
+tree_hash_derive.workspace = true
 
 [dev-dependencies]
-alloy-rlp = "0.3.4"
-quickcheck = "1.0.3"
+alloy-rlp.workspace = true
+quickcheck.workspace = true
 quickcheck_macros = "1.0.0"
-rstest = "0.18.2"
-serde_yaml = "0.9.33"
+rstest.workspace = true
+serde_yaml.workspace = true
 

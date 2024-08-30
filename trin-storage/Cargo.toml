@@ -11,20 +11,20 @@ description = "Storage library for Trin."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = "0.7.0"
-discv5 = { version = "0.4.1", features = ["serde"] }
-ethportal-api = {path = "../ethportal-api"}
-r2d2 = "0.8.9"
-r2d2_sqlite = "0.24.0"
-rand = "0.8.4"
-rusqlite = { version = "0.31.0", features = ["bundled"] }
-strum = { version = "0.26.1", features = ["derive"] }
-tempfile = "3.3.0"
-thiserror = "1.0.57"
-tracing = "0.1.36"
-trin-metrics = { path = "../trin-metrics" }
+alloy-primitives.workspace = true
+discv5.workspace = true
+ethportal-api.workspace = true
+r2d2.workspace = true
+r2d2_sqlite.workspace = true
+rand.workspace = true
+rusqlite.workspace = true
+strum.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+trin-metrics.workspace = true
 
 [dev-dependencies]
-anyhow = "1.0.68"
-quickcheck = "1.0.3"
-rstest = "0.18.2"
+anyhow.workspace = true
+quickcheck.workspace = true
+rstest.workspace = true

@@ -12,33 +12,33 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 
 [dependencies]
-alloy-consensus = { git = "https://github.com/alloy-rs/alloy.git", rev = "d68a6b787b2904061f0ae7fcc02ece8513e3c500"}
-alloy-primitives = "0.7.0"
-alloy-rlp = "0.3.4"
-anyhow = "1.0.68"
-clap = { version = "4.2.1", features = ["derive"] }
-directories = "3.0"
-ethportal-api = { path = "../ethportal-api" }
-e2store = { path = "../e2store" }
-eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "7947a83091192a7988f359b750b05121d5d7ba8c" }
+alloy-consensus.workspace = true
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+directories.workspace = true
+ethportal-api.workspace = true
+e2store.workspace = true
+eth_trie.workspace = true
 hashbrown = "0.14.0"
-lazy_static = "1.4.0"
-parking_lot = "0.11.2"
-prometheus_exporter = "0.8.4"
+lazy_static.workspace = true
+parking_lot.workspace = true
+prometheus_exporter.workspace = true
 rayon = "1.10.0"
-revm = { version = "8.0.0", features = ["std", "secp256k1", "serde-json"], default-features = false }
+revm.workspace = true
 revm-inspectors = { git = "https://github.com/paradigmxyz/evm-inspectors", rev = "848d568" }
-revm-primitives = { version = "3.1.0", features = ["std", "serde"], default-features = false }
+revm-primitives.workspace = true
 rocksdb = "0.22.0"
-serde = { version = "1.0.150", features = ["derive", "rc"] }
-serde_json = "1.0.89"
-surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustls because OpenSSL cause issues compiling on aarch64
-tempfile = "3.3.0"
-thiserror = "1.0.57"
-tokio = { version = "1.14.0", features = ["full"] }
-tracing = "0.1.36"
-trin-utils = { path = "../trin-utils" }
+serde = { workspace = true, features = ["rc"] }
+serde_json.workspace = true
+surf.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+trin-utils.workspace = true
 
 [dev-dependencies]
-test-log = { version = "0.2.11", features = ["trace"] }
-tracing-test = "0.1"
+test-log.workspace = true
+tracing-test.workspace = true
