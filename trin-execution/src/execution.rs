@@ -193,7 +193,7 @@ impl State {
 
             // Commit the bundle if we have reached the limits, to prevent to much memory usage
             // We won't use this during the dos attack to avoid writing empty accounts to disk
-            if !(block_number < 2_700_000 && block_number > 2_200_000)
+            if !(2_200_000..2_700_000).contains(&block_number)
                 && should_we_commit_block_execution_early(
                     block_number - start,
                     evm.context.evm.db.bundle_size_hint() as u64,
@@ -431,14 +431,20 @@ impl State {
     }
 }
 
+/// This function is used to determine if we should commit the block execution early.
+/// We want this for a few reasons
+/// - To prevent memory usage from getting too high
+/// - To cap the amount of time it takes to commit everything to the database, the bigger the
+///   changes the more time it takes The various limits are arbitrary and can be adjusted as needed,
+///   but are based on the current state of the network and what we have seen so far
 pub fn should_we_commit_block_execution_early(
     blocks_processed: u64,
-    changes_processed: u64,
+    pending_cache_size_mb: u64,
     cumulative_gas_used: u64,
     elapsed: Duration,
 ) -> bool {
     blocks_processed >= 500_000
-        || changes_processed >= 5_000_000
+        || pending_cache_size_mb >= 5_000_000
         || cumulative_gas_used >= 30_000_000 * 50_000
         || elapsed >= Duration::from_secs(30 * 60)
 }

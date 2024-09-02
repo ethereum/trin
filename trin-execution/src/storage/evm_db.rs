@@ -92,6 +92,72 @@ impl EvmDB {
         trie_diff
     }
 
+    fn commit_account(
+        &mut self,
+        address_hash: B256,
+        account_info: AccountInfo,
+    ) -> anyhow::Result<()> {
+        let plain_state_some_account_timer = start_timer_vec(
+            &BUNDLE_COMMIT_PROCESSING_TIMES,
+            &["account:plain_state_some_account"],
+        );
+
+        let mut rocks_account: RocksAccount = account_info.into();
+
+        let timer = start_timer_vec(
+            &BUNDLE_COMMIT_PROCESSING_TIMES,
+            &["account:fetch_account_from_db"],
+        );
+        let raw_account = self.db.get(address_hash)?.unwrap_or_default();
+        stop_timer(timer);
+
+        if !raw_account.is_empty() {
+            let decoded_account = RocksAccount::decode(&mut raw_account.as_slice())?;
+            rocks_account.storage_root = decoded_account.storage_root;
+        }
+
+        let timer = start_timer_vec(
+            &BUNDLE_COMMIT_PROCESSING_TIMES,
+            &["account:insert_into_trie"],
+        );
+        let _ = self.trie.lock().insert(
+            address_hash.as_ref(),
+            &alloy_rlp::encode(AccountStateInfo::from(&rocks_account)),
+        );
+        stop_timer(timer);
+
+        let timer = start_timer_vec(
+            &BUNDLE_COMMIT_PROCESSING_TIMES,
+            &["account:put_account_into_db"],
+        );
+        self.db
+            .put(address_hash, alloy_rlp::encode(rocks_account))?;
+        stop_timer(timer);
+
+        stop_timer(plain_state_some_account_timer);
+        Ok(())
+    }
+
+    fn delete_account_and_storage(
+        &mut self,
+        address_hash: B256,
+        raw_account: Vec<u8>,
+    ) -> anyhow::Result<()> {
+        let timer = start_timer_vec(&BUNDLE_COMMIT_PROCESSING_TIMES, &["account:delete_account"]);
+        let rocks_account = RocksAccount::decode(&mut raw_account.as_slice())?;
+        if rocks_account.storage_root != keccak256([EMPTY_STRING_CODE]) {
+            let account_db = AccountDB::new(address_hash, self.db.clone());
+            let mut trie = EthTrie::from(Arc::new(account_db), rocks_account.storage_root)?;
+            trie.clear_trie_from_db()?;
+        }
+        self.db.delete(address_hash)?;
+
+        // update trie
+        let _ = self.trie.lock().remove(address_hash.as_ref());
+        stop_timer(timer);
+        Ok(())
+    }
+
     fn commit_accounts(
         &mut self,
         plain_account: Vec<(Address, Option<AccountInfo>)>,
@@ -99,62 +165,9 @@ impl EvmDB {
         for (address, account) in plain_account {
             let address_hash = keccak256(address);
             if let Some(account_info) = account {
-                let plain_state_some_account_timer = start_timer_vec(
-                    &BUNDLE_COMMIT_PROCESSING_TIMES,
-                    &["account:plain_state_some_account"],
-                );
-
-                let mut rocks_account: RocksAccount = account_info.into();
-
-                let timer = start_timer_vec(
-                    &BUNDLE_COMMIT_PROCESSING_TIMES,
-                    &["account:fetch_account_from_db"],
-                );
-                let raw_account = self.db.get(address_hash)?.unwrap_or_default();
-                stop_timer(timer);
-
-                if !raw_account.is_empty() {
-                    let decoded_account: RocksAccount =
-                        Decodable::decode(&mut raw_account.as_slice())?;
-                    rocks_account.storage_root = decoded_account.storage_root;
-                }
-
-                let timer = start_timer_vec(
-                    &BUNDLE_COMMIT_PROCESSING_TIMES,
-                    &["account:insert_into_trie"],
-                );
-                let _ = self.trie.lock().insert(
-                    address_hash.as_ref(),
-                    &alloy_rlp::encode(AccountStateInfo::from(&rocks_account)),
-                );
-                stop_timer(timer);
-
-                let timer = start_timer_vec(
-                    &BUNDLE_COMMIT_PROCESSING_TIMES,
-                    &["account:put_account_into_db"],
-                );
-                self.db
-                    .put(address_hash, alloy_rlp::encode(rocks_account))?;
-                stop_timer(timer);
-
-                stop_timer(plain_state_some_account_timer);
-            } else if self.db.get(address_hash)?.is_some() {
-                let timer =
-                    start_timer_vec(&BUNDLE_COMMIT_PROCESSING_TIMES, &["account:delete_account"]);
-                let rocks_account: RocksAccount = match self.db.get(address_hash)? {
-                    Some(raw_account) => Decodable::decode(&mut raw_account.as_slice())?,
-                    None => RocksAccount::default(),
-                };
-                if rocks_account.storage_root != keccak256([EMPTY_STRING_CODE]) {
-                    let account_db = AccountDB::new(address_hash, self.db.clone());
-                    let mut trie = EthTrie::from(Arc::new(account_db), rocks_account.storage_root)?;
-                    trie.clear_trie_from_db()?;
-                }
-                self.db.delete(address_hash)?;
-
-                // update trie
-                let _ = self.trie.lock().remove(address_hash.as_ref());
-                stop_timer(timer);
+                self.commit_account(address_hash, account_info)?;
+            } else if let Some(raw_account) = self.db.get(address_hash)? {
+                self.delete_account_and_storage(address_hash, raw_account)?;
             }
         }
         Ok(())
@@ -228,14 +241,11 @@ impl EvmDB {
                 };
 
                 for (key, value) in storage {
-                    let key = B256::from(key);
-                    trie.remove(keccak256(B256::from(key)).as_ref())?;
-
-                    if value != U256::ZERO {
-                        trie.insert(
-                            keccak256(B256::from(key)).as_ref(),
-                            &alloy_rlp::encode(value),
-                        )?;
+                    let trie_key = keccak256(B256::from(key));
+                    if value.is_zero() {
+                        trie.remove(trie_key.as_ref())?;
+                    } else {
+                        trie.insert(trie_key.as_ref(), &alloy_rlp::encode(value))?;
                     }
                 }
 
@@ -322,22 +332,18 @@ impl EvmDB {
 impl Database for EvmDB {
     type Error = EVMError;
 
-    #[doc = " Get basic account information."]
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         DatabaseRef::basic_ref(&self, address)
     }
 
-    #[doc = " Get account code by its hash."]
     fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
         DatabaseRef::code_by_hash_ref(&self, code_hash)
     }
 
-    #[doc = " Get storage value of address at index."]
     fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
         DatabaseRef::storage_ref(&self, address, index)
     }
 
-    #[doc = " Get block hash by block number."]
     fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
         DatabaseRef::block_hash_ref(&self, number)
     }
@@ -346,10 +352,9 @@ impl Database for EvmDB {
 impl DatabaseRef for EvmDB {
     type Error = EVMError;
 
-    #[doc = " Get basic account information."]
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        let _timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["database_get_basic"]);
-        match self.db.get(keccak256(address))? {
+        let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["database_get_basic"]);
+        let result = match self.db.get(keccak256(address))? {
             Some(raw_account) => {
                 let account: RocksAccount = Decodable::decode(&mut raw_account.as_slice())?;
 
@@ -361,24 +366,26 @@ impl DatabaseRef for EvmDB {
                 }))
             }
             None => Ok(None),
-        }
+        };
+        stop_timer(timer);
+        result
     }
 
-    #[doc = " Get account code by its hash."]
     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        let _timer = start_timer_vec(
+        let timer = start_timer_vec(
             &TRANSACTION_PROCESSING_TIMES,
             &["database_get_code_by_hash"],
         );
-        match self.db.get(code_hash)? {
+        let result = match self.db.get(code_hash)? {
             Some(raw_code) => Ok(Bytecode::new_raw(raw_code.into())),
             None => Err(Self::Error::NotFound("code_by_hash".to_string())),
-        }
+        };
+        stop_timer(timer);
+        result
     }
 
-    #[doc = " Get storage value of address at index."]
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        let _timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["database_get_storage"]);
+        let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["database_get_storage"]);
         let address_hash = keccak256(address);
         let account: RocksAccount = match self.db.get(address_hash)? {
             Some(raw_account) => Decodable::decode(&mut raw_account.as_slice())?,
@@ -390,17 +397,21 @@ impl DatabaseRef for EvmDB {
         } else {
             EthTrie::from(Arc::new(account_db), account.storage_root)?
         };
-        match trie.get(keccak256(B256::from(index)).as_ref())? {
+        let result = match trie.get(keccak256(B256::from(index)).as_ref())? {
             Some(raw_value) => Ok(Decodable::decode(&mut raw_value.as_slice())?),
             None => Ok(U256::ZERO),
-        }
+        };
+        stop_timer(timer);
+        result
     }
 
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
-        let _timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["database_get_block_hash"]);
-        match self.db.get(keccak256(B256::from(U256::from(number))))? {
+        let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["database_get_block_hash"]);
+        let result = match self.db.get(keccak256(B256::from(U256::from(number))))? {
             Some(raw_hash) => Ok(B256::from_slice(&raw_hash)),
             None => Err(Self::Error::NotFound("block_hash".to_string())),
-        }
+        };
+        stop_timer(timer);
+        result
     }
 }
