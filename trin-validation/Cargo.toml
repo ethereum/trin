@@ -11,7 +11,7 @@ description = "Validation layer for the Portal Network data."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = { workspace = true, features = ["ssz"] }
+alloy-primitives.workspace = true
 anyhow.workspace = true
 enr = "0.10.0"
 eth2_hashing = "0.2.0"
