@@ -109,13 +109,19 @@ impl Era {
     }
 
     fn get_block_slot_indexes(slot_index_block_entry: &SlotIndexBlockEntry) -> Vec<u64> {
+        if slot_index_block_entry.slot_index.indices.is_empty() {
+            return vec![];
+        }
+        // minus 8 because the first 8 bytes are the starting slot
+        let beginning_of_index_record = slot_index_block_entry.slot_index.indices[0] - 8;
+
         slot_index_block_entry
             .slot_index
             .indices
             .iter()
             .enumerate()
-            .filter_map(|(i, index)| {
-                if *index != 0 {
+            .filter_map(|(i, offset)| {
+                if *offset != beginning_of_index_record {
                     Some(slot_index_block_entry.slot_index.starting_slot + i as u64)
                 } else {
                     None
