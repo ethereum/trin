@@ -1,4 +1,6 @@
-use ethportal_api::{types::execution::transaction::Transaction, Header};
+use ethportal_api::{
+    consensus::execution_payload::Withdrawal, types::execution::transaction::Transaction, Header,
+};
 use revm_primitives::{Address, SpecId};
 
 use crate::spec_id::get_spec_block_number;
@@ -13,6 +15,7 @@ pub struct TransactionsWithSender {
 pub struct ProcessedBlock {
     pub header: Header,
     pub uncles: Option<Vec<Header>>,
+    pub withdraws: Option<Vec<Withdrawal>>,
     pub transactions: Vec<TransactionsWithSender>,
 }
 

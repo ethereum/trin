@@ -40,6 +40,7 @@ pub fn process_era1_file(raw_era1: Vec<u8>, epoch_index: u64) -> anyhow::Result<
         blocks.push(ProcessedBlock {
             header: header.header,
             uncles,
+            withdraws: None,
             transactions: transactions_with_recovered_senders,
         });
     }

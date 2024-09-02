@@ -24,14 +24,13 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
-    block_reward::get_block_reward,
-    dao_fork::{DAO_HARDFORK_BENEFICIARY, DAO_HARDKFORK_ACCOUNTS},
+    block_reward::get_post_block_balance_increases,
     era::types::{ProcessedBlock, TransactionsWithSender},
     metrics::{
         set_int_gauge_vec, start_timer_vec, stop_timer, BLOCK_HEIGHT, BLOCK_PROCESSING_TIMES,
         TRANSACTION_PROCESSING_TIMES,
     },
-    spec_id::{get_spec_block_number, get_spec_id},
+    spec_id::get_spec_id,
     storage::{account::Account as RocksAccount, evm_db::EvmDB},
     transaction::TxEnvModifier,
     types::block_to_trace::BlockToTrace,
@@ -145,17 +144,6 @@ impl<'a> BlockExecutor<'a> {
         Ok(self.evm.db_mut().increment_balances(balances)?)
     }
 
-    fn process_dao_fork(&mut self) -> anyhow::Result<()> {
-        // drain balances from DAO hardfork accounts
-        let drained_balances = self.evm.db_mut().drain_balances(DAO_HARDKFORK_ACCOUNTS)?;
-        let drained_balance_sum: u128 = drained_balances.iter().sum();
-
-        // transfer drained balance to beneficiary
-        self.increment_balances([(DAO_HARDFORK_BENEFICIARY, drained_balance_sum)].into_iter())?;
-
-        Ok(())
-    }
-
     pub fn commit_bundle(mut self) -> anyhow::Result<RootWithTrieDiff> {
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_bundle"]);
         self.evm
@@ -248,14 +236,11 @@ impl<'a> BlockExecutor<'a> {
         );
         self.cumulative_gas_used += block_gas_used;
 
-        // update beneficiary
+        // update beneficiaries
         let beneficiary_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["update_beneficiary"]);
-        let _ = self.increment_balances(get_block_reward(block));
+        let balance_increases = get_post_block_balance_increases(&mut self.evm, block)?;
+        let _ = self.increment_balances(balance_increases);
 
-        // check if dao fork, if it is drain accounts and transfer it to beneficiary
-        if block.header.number == get_spec_block_number(SpecId::DAO_FORK) {
-            self.process_dao_fork()?;
-        }
         stop_timer(beneficiary_timer);
 
         self.manage_block_hash_serve_window(&block.header)?;
