@@ -11,7 +11,7 @@ categories = ["cryptography::cryptocurrencies"]
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = { workspace = true, features = ["ssz"] }
+alloy-primitives.workspace = true
 alloy-rlp.workspace = true
 anyhow.workspace = true
 base64 = "0.13.0"
