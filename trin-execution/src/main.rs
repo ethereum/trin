@@ -53,10 +53,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
 
-        let end =
-            ((block_number / (BLOCK_TUPLE_COUNT as u64)) + 86) * (BLOCK_TUPLE_COUNT as u64) - 1;
-        let end = std::cmp::min(end, end_block);
-
         if block_number == 0 {
             // initialize genesis state processes this block so we skip it
             state.era_manager.lock().await.get_next_block().await?;
@@ -64,7 +60,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             block_number = 1;
             continue;
         }
-        state.process_range_of_blocks(block_number, end).await?;
+        state
+            .process_range_of_blocks(block_number, end_block)
+            .await?;
         block_number = state.next_block_number();
     }
 
