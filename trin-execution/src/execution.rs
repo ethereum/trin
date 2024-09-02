@@ -70,6 +70,7 @@ pub struct State {
 
 const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";
 const TEST_GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
+const BLOCKHASH_SERVE_WINDOW: u64 = 256;
 
 impl State {
     pub async fn new(path: Option<PathBuf>, config: StateConfig) -> anyhow::Result<Self> {
@@ -180,9 +181,9 @@ impl State {
                 keccak256(B256::from(U256::from(block.header.number))),
                 block.header.hash(),
             )?;
-            if block.header.number >= 8192 {
+            if block.header.number >= BLOCKHASH_SERVE_WINDOW {
                 self.database.db.delete(keccak256(B256::from(U256::from(
-                    block.header.number - 8192,
+                    block.header.number - BLOCKHASH_SERVE_WINDOW,
                 ))))?;
             }
             stop_timer(timer);

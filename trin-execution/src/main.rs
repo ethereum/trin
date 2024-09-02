@@ -1,6 +1,5 @@
 use clap::Parser;
 
-use e2store::era1::BLOCK_TUPLE_COUNT;
 use revm_primitives::SpecId;
 use tracing::info;
 use trin_execution::{
