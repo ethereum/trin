@@ -1,4 +1,5 @@
 use ethportal_api::{
+    consensus::fork::ForkName,
     types::{
         content_key::beacon::{
             HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX, LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX,
@@ -6,8 +7,9 @@ use ethportal_api::{
             LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX,
         },
         content_value::beacon::{
-            ForkVersionedLightClientFinalityUpdate, ForkVersionedLightClientOptimisticUpdate,
-            ForkVersionedLightClientUpdate, LightClientUpdatesByRange,
+            ForkVersionedLightClientBootstrap, ForkVersionedLightClientFinalityUpdate,
+            ForkVersionedLightClientOptimisticUpdate, ForkVersionedLightClientUpdate,
+            LightClientUpdatesByRange,
         },
         distance::Distance,
         portal::PaginateLocalContentInfo,
@@ -22,14 +24,15 @@ use ssz::{Decode, Encode};
 use ssz_types::{typenum::U128, VariableList};
 use std::path::PathBuf;
 use tracing::debug;
+use tree_hash::TreeHash;
 use trin_metrics::storage::StorageMetricsReporter;
 use trin_storage::{
     error::ContentStoreError,
     sql::{
-        CONTENT_KEY_LOOKUP_QUERY_BEACON, CONTENT_VALUE_LOOKUP_QUERY_BEACON,
         HISTORICAL_SUMMARIES_EPOCH_LOOKUP_QUERY, HISTORICAL_SUMMARIES_LOOKUP_QUERY,
-        INSERT_LC_UPDATE_QUERY, INSERT_OR_REPLACE_HISTORICAL_SUMMARIES_QUERY, INSERT_QUERY_BEACON,
-        LC_UPDATE_LOOKUP_QUERY, LC_UPDATE_PERIOD_LOOKUP_QUERY, LC_UPDATE_TOTAL_SIZE_QUERY,
+        INSERT_BOOTSTRAP_QUERY, INSERT_LC_UPDATE_QUERY,
+        INSERT_OR_REPLACE_HISTORICAL_SUMMARIES_QUERY, LC_BOOTSTRAP_LOOKUP_QUERY,
+        LC_BOOTSTRAP_ROOT_LOOKUP_QUERY, LC_UPDATE_LOOKUP_QUERY, LC_UPDATE_PERIOD_LOOKUP_QUERY,
         TOTAL_DATA_SIZE_QUERY_BEACON,
     },
     utils::get_total_size_of_directory_in_bytes,
@@ -129,14 +132,13 @@ impl ContentStore for BeaconStorage {
         })?;
 
         match beacon_content_key {
-            BeaconContentKey::LightClientBootstrap(_) => {
-                let content_id = key.content_id();
-                self.lookup_content_value(content_id).map_err(|err| {
+            BeaconContentKey::LightClientBootstrap(content_key) => self
+                .lookup_lc_bootstrap_value(&content_key.block_hash)
+                .map_err(|err| {
                     ContentStoreError::Database(format!(
                         "Error looking up LightClientBootstrap content value: {err:?}"
                     ))
-                })
-            }
+                }),
             BeaconContentKey::LightClientUpdatesByRange(content_key) => {
                 let periods =
                     content_key.start_period..(content_key.start_period + content_key.count);
@@ -222,13 +224,12 @@ impl ContentStore for BeaconStorage {
         })?;
 
         match beacon_content_key {
-            BeaconContentKey::LightClientBootstrap(_) => {
-                let key = key.content_id();
+            BeaconContentKey::LightClientBootstrap(content_key) => {
                 let is_key_available = self
-                    .lookup_content_key(key)
+                    .lookup_lc_bootstrap_block_root(&content_key.block_hash)
                     .map_err(|err| {
                         ContentStoreError::Database(format!(
-                            "Error looking up content key: {err:?}"
+                            "Error looking up light client bootstrap block root: {err:?}"
                         ))
                     })?
                     .is_some();
@@ -248,7 +249,7 @@ impl ContentStore for BeaconStorage {
                         .lookup_lc_update_period(period)
                         .map_err(|err| {
                             ContentStoreError::Database(format!(
-                                "Error looking up lc update period: {err:?}"
+                                "Error looking up light client update period: {err:?}"
                             ))
                         })?
                         .is_some();
@@ -327,21 +328,16 @@ impl BeaconStorage {
         Ok(storage)
     }
 
-    fn db_insert(
+    fn db_insert_lc_bootstrap(
         &self,
-        content_id: &[u8; 32],
-        content_key: &Vec<u8>,
+        block_root: &[u8; 32],
         value: &Vec<u8>,
+        slot: u64,
     ) -> Result<usize, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
         Ok(conn.execute(
-            INSERT_QUERY_BEACON,
-            params![
-                content_id.as_slice(),
-                content_key,
-                value,
-                32 + content_key.len() + value.len()
-            ],
+            INSERT_BOOTSTRAP_QUERY,
+            params![block_root, value, slot, 32 + value.len() + 8],
         )?)
     }
 
@@ -386,8 +382,60 @@ impl BeaconStorage {
 
         match content_key.first() {
             Some(&LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX) => {
-                if let Err(err) = self.db_insert(&content_id, &content_key, value) {
-                    debug!("Error writing light client bootstrap content ID {content_id:?} to beacon network db: {err:?}");
+                let bootstrap = ForkVersionedLightClientBootstrap::from_ssz_bytes(value.as_slice())
+                    .map_err(|err| ContentStoreError::InvalidData {
+                        message: format!(
+                            "Error deserializing ForkVersionedLightClientBootstrap value: {err:?}"
+                        ),
+                    })?;
+
+                let (slot, block_root) = match bootstrap.fork_name {
+                    ForkName::Bellatrix => {
+                        let bootstrap_header = bootstrap.bootstrap.header_bellatrix().map_err(|err| {
+                            ContentStoreError::InvalidData {
+                                message: format!(
+                                    "Error getting header from bellatrix ForkVersionedLightClientBootstrap value: {err:?}"
+                                ),
+                            }
+                        })?;
+
+                        (
+                            bootstrap_header.beacon.slot,
+                            bootstrap_header.beacon.tree_hash_root(),
+                        )
+                    }
+                    ForkName::Capella => {
+                        let bootstrap_header = bootstrap.bootstrap.header_capella().map_err(|err| {
+                            ContentStoreError::InvalidData {
+                                message: format!(
+                                    "Error getting header from capella ForkVersionedLightClientBootstrap value: {err:?}"
+                                ),
+                            }
+                        })?;
+
+                        (
+                            bootstrap_header.beacon.slot,
+                            bootstrap_header.beacon.tree_hash_root(),
+                        )
+                    }
+                    ForkName::Deneb => {
+                        let bootstrap_header = bootstrap.bootstrap.header_deneb().map_err(|err| {
+                            ContentStoreError::InvalidData {
+                                message: format!(
+                                    "Error getting header from deneb ForkVersionedLightClientBootstrap value: {err:?}"
+                                ),
+                            }
+                        })?;
+
+                        (
+                            bootstrap_header.beacon.slot,
+                            bootstrap_header.beacon.tree_hash_root(),
+                        )
+                    }
+                };
+
+                if let Err(err) = self.db_insert_lc_bootstrap(&block_root, value, slot) {
+                    debug!(block_root = %block_root, "Error writing light client bootstrap to lc_bootstrap db table: {err:?}");
                     return Err(err);
                 } else {
                     self.metrics.increase_entry_count();
@@ -531,33 +579,21 @@ impl BeaconStorage {
         }?
         .num_bytes;
 
-        let mut lc_update_stmt = conn.prepare(LC_UPDATE_TOTAL_SIZE_QUERY)?;
-        let lc_update_result = lc_update_stmt.query_map([], |row| {
-            Ok(DataSize {
-                num_bytes: row.get(0)?,
-            })
-        });
-        let lc_update_sum = match lc_update_result?.next() {
-            Some(total) => total,
-            None => {
-                let err = "Unable to compute sum over lc update item sizes".to_string();
-                return Err(ContentStoreError::Database(err));
-            }
-        }?
-        .num_bytes;
+        self.metrics
+            .report_content_data_storage_bytes(content_data_sum);
 
-        let sum = content_data_sum + lc_update_sum;
-        self.metrics.report_content_data_storage_bytes(sum);
-
-        Ok(sum as u64)
+        Ok(content_data_sum as u64)
     }
 
-    /// Public method for looking up a content key by its content id
-    pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+    /// Public method for looking up a light client bootstrap by block root
+    pub fn lookup_lc_bootstrap_block_root(
+        &self,
+        block_root: &[u8; 32],
+    ) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY_BEACON)?;
+        let mut query = conn.prepare(LC_BOOTSTRAP_ROOT_LOOKUP_QUERY)?;
         let result: Result<Vec<BeaconContentKey>, ContentStoreError> = query
-            .query_map([id.as_slice()], |row| {
+            .query_map([block_root], |row| {
                 let row: Vec<u8> = row.get(0)?;
                 Ok(row)
             })?
@@ -606,12 +642,15 @@ impl BeaconStorage {
         }
     }
 
-    /// Public method for looking up a content value by its content id
-    pub fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+    /// Public method for looking up a light client bootstrap value by block root
+    pub fn lookup_lc_bootstrap_value(
+        &self,
+        block_root: &[u8; 32],
+    ) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY_BEACON)?;
+        let mut query = conn.prepare(LC_BOOTSTRAP_LOOKUP_QUERY)?;
         let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
-            .query_map([id.as_slice()], |row| {
+            .query_map([block_root], |row| {
                 let row: Vec<u8> = row.get(0)?;
                 Ok(row)
             })?
@@ -674,19 +713,26 @@ mod test {
         },
         LightClientBootstrapKey, LightClientUpdatesByRangeKey,
     };
+    use tree_hash::TreeHash;
     use trin_storage::test_utils::create_test_portal_storage_config_with_capacity;
 
     #[test]
     fn test_beacon_storage_get_put_bootstrap() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
         let mut storage = BeaconStorage::new(config).unwrap();
+        let value = test_utils::get_light_client_bootstrap(0);
+        let block_root = value
+            .bootstrap
+            .header_capella()
+            .unwrap()
+            .beacon
+            .tree_hash_root();
         let key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
-            block_hash: [1; 32],
+            block_hash: *block_root,
         });
-        let value = vec![1, 2, 3, 4, 5];
-        storage.put(key.clone(), &value).unwrap();
+        storage.put(key.clone(), &value.as_ssz_bytes()).unwrap();
         let result = storage.get(&key).unwrap().unwrap();
-        assert_eq!(result, value);
+        assert_eq!(result, value.as_ssz_bytes());
     }
 
     #[test]
