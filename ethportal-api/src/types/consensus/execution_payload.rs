@@ -1,4 +1,7 @@
-use super::serde::{de_hex_to_txs, de_number_to_u256, se_hex_to_number, se_txs_to_hex};
+use super::{
+    serde::{de_hex_to_txs, de_number_to_u256, se_hex_to_number, se_txs_to_hex},
+    withdrawal::Withdrawal,
+};
 use crate::{
     types::{
         bytes::ByteList32,
@@ -147,17 +150,6 @@ impl ExecutionPayloadDeneb {
     pub fn withdrawals_root(&self) -> B256 {
         self.withdrawals.tree_hash_root()
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize, Encode, Decode, TreeHash)]
-pub struct Withdrawal {
-    #[serde(deserialize_with = "as_u64")]
-    pub index: u64,
-    #[serde(deserialize_with = "as_u64")]
-    pub validator_index: u64,
-    pub address: Address,
-    #[serde(deserialize_with = "as_u64")]
-    pub amount: u64,
 }
 
 #[superstruct(
