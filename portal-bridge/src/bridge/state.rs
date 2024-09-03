@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
@@ -6,7 +6,7 @@ use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use revm::DatabaseRef;
 use revm_primitives::{keccak256, Bytecode, SpecId, B256};
 use surf::{Client, Config};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{mpsc::UnboundedSender, OwnedSemaphorePermit, Semaphore};
 use tracing::{error, info};
 
 use crate::{
@@ -43,6 +43,7 @@ pub struct StateBridge {
     pub era1_files: Vec<String>,
     pub http_client: Client,
     pub metrics: BridgeMetricsReporter,
+    pub gossip_semaphore: Arc<Semaphore>,
 }
 
 impl StateBridge {
@@ -51,6 +52,7 @@ impl StateBridge {
         gossip_tx: UnboundedSender<GossipRequest>,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
+        gossip_limit: usize,
     ) -> anyhow::Result<Self> {
         let http_client: Client = Config::new()
             .add_header("Content-Type", "application/xml")
@@ -58,7 +60,9 @@ impl StateBridge {
             .try_into()?;
         let era1_files = get_shuffled_era1_files(&http_client).await?;
         let metrics = BridgeMetricsReporter::new("state".to_string(), &format!("{mode:?}"));
-
+        // We are using a semaphore to limit the amount of active gossip transfers to make sure
+        // we don't overwhelm the trin client
+        let gossip_semaphore = Arc::new(Semaphore::new(gossip_limit));
         Ok(Self {
             mode,
             gossip_tx,
@@ -67,6 +71,7 @@ impl StateBridge {
             era1_files,
             http_client,
             metrics,
+            gossip_semaphore,
         })
     }
 
@@ -191,9 +196,10 @@ impl StateBridge {
         account_proof: &TrieProof,
         block_hash: B256,
     ) -> anyhow::Result<()> {
+        let permit = self.acquire_gossip_permit().await;
         let content_key = create_account_content_key(account_proof)?;
         let content_value = create_account_content_value(block_hash, account_proof)?;
-        Self::serve_state_content(self.gossip_tx.clone(), content_key, content_value)
+        Self::serve_state_content(self.gossip_tx.clone(), content_key, content_value, permit).await
     }
 
     async fn gossip_contract_bytecode(
@@ -204,9 +210,16 @@ impl StateBridge {
         code_hash: B256,
         code: Bytecode,
     ) -> anyhow::Result<()> {
+        let permit = self.acquire_gossip_permit().await;
         let code_content_key = create_contract_content_key(address_hash, code_hash)?;
         let code_content_value = create_contract_content_value(block_hash, account_proof, code)?;
-        Self::serve_state_content(self.gossip_tx.clone(), code_content_key, code_content_value)
+        Self::serve_state_content(
+            self.gossip_tx.clone(),
+            code_content_key,
+            code_content_value,
+            permit,
+        )
+        .await
     }
 
     async fn gossip_storage(
@@ -216,6 +229,7 @@ impl StateBridge {
         address_hash: B256,
         block_hash: B256,
     ) -> anyhow::Result<()> {
+        let permit = self.acquire_gossip_permit().await;
         let storage_content_key = create_storage_content_key(storage_proof, address_hash)?;
         let storage_content_value =
             create_storage_content_value(block_hash, account_proof, storage_proof)?;
@@ -223,18 +237,36 @@ impl StateBridge {
             self.gossip_tx.clone(),
             storage_content_key,
             storage_content_value,
+            permit,
         )
+        .await
     }
 
-    fn serve_state_content(
+    async fn serve_state_content(
         gossip_tx: UnboundedSender<GossipRequest>,
         content_key: StateContentKey,
         content_value: StateContentValue,
+        permit: OwnedSemaphorePermit,
     ) -> anyhow::Result<()> {
         info!("Serving state content for content key: {content_key}");
-        let gossip_request = GossipRequest::from((content_key, content_value));
-        gossip_tx
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
+        let _x = gossip_tx
             .send(gossip_request)
-            .map_err(|e| anyhow!("unable to send state content gossip request: {e}"))
+            .map_err(|e| anyhow!("unable to send state content gossip request: {e}"));
+        // permit.forget();
+        if let Err(e) = resp_rx.await {
+            error!("Failed to gossip state content: {e}");
+        }
+        drop(permit);
+        Ok(())
+    }
+
+    async fn acquire_gossip_permit(&self) -> OwnedSemaphorePermit {
+        self.gossip_semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("to be able to acquire semaphore")
     }
 }

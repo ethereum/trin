@@ -45,6 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bridge_tasks = Vec::new();
 
+    // start gossip engine and add tasks to bridge_tasks
     let (gossip_tx, gossip_rx) = mpsc::unbounded_channel();
     let gossip_tasks = run_gossip_engine(
         gossip_rx,
@@ -91,8 +92,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let gossip_tx_clone = gossip_tx.clone();
         let epoch_acc_path = bridge_config.epoch_acc_path.clone();
         let header_oracle = HeaderOracle::default();
-        let state_bridge =
-            StateBridge::new(bridge_mode, gossip_tx_clone, header_oracle, epoch_acc_path).await?;
+        let state_bridge = StateBridge::new(
+            bridge_mode,
+            gossip_tx_clone,
+            header_oracle,
+            epoch_acc_path,
+            bridge_config.gossip_limit,
+        )
+        .await?;
         let bridge_handle = tokio::spawn(async move {
             state_bridge
                 .launch()
@@ -120,6 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bridge_config.epoch_acc_path,
                     gossip_tx.clone(),
                     execution_api,
+                    bridge_config.gossip_limit,
                 )
                 .await?;
                 let bridge_handle = tokio::spawn(async move {
@@ -137,6 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         execution_api,
                         gossip_tx.clone(),
                         bridge_config.epoch_acc_path,
+                        bridge_config.gossip_limit,
                     );
 
                     bridge

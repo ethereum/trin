@@ -6,7 +6,7 @@ use futures::future::join_all;
 use rand::{seq::SliceRandom, thread_rng};
 use surf::{Client, Config};
 use tokio::{
-    sync::mpsc::UnboundedSender,
+    sync::{mpsc::UnboundedSender, OwnedSemaphorePermit, Semaphore},
     task::JoinHandle,
     time::{sleep, timeout, Duration},
 };
@@ -46,6 +46,7 @@ pub struct Era1Bridge {
     pub metrics: BridgeMetricsReporter,
     pub gossip_tx: UnboundedSender<GossipRequest>,
     pub execution_api: ExecutionApi,
+    pub gossip_semaphore: Arc<Semaphore>,
 }
 
 // todo: validate via checksum, so we don't have to validate content on a per-value basis
@@ -56,6 +57,7 @@ impl Era1Bridge {
         epoch_acc_path: PathBuf,
         gossip_tx: UnboundedSender<GossipRequest>,
         execution_api: ExecutionApi,
+        gossip_limit: usize,
     ) -> anyhow::Result<Self> {
         let header_oracle = HeaderOracle::default();
         let http_client: Client = Config::new()
@@ -64,6 +66,7 @@ impl Era1Bridge {
             .try_into()?;
         let era1_files = get_shuffled_era1_files(&http_client).await?;
         let metrics = BridgeMetricsReporter::new("era1".to_string(), &format!("{mode:?}"));
+        let gossip_semaphore = Arc::new(Semaphore::new(gossip_limit));
         Ok(Self {
             mode,
             portal_client,
@@ -74,6 +77,7 @@ impl Era1Bridge {
             metrics,
             gossip_tx,
             execution_api,
+            gossip_semaphore,
         })
     }
 
@@ -255,11 +259,20 @@ impl Era1Bridge {
                 }
             }
             self.metrics.report_current_block(block_number as i64);
+            // is it dangerous to acquire a permit and then use the semaphore within?
+            // can it block?
+            let permit = self
+                .gossip_semaphore
+                .clone()
+                .acquire_owned()
+                .await
+                .expect("to be able to acquire semaphore");
             let serve_block_tuple_handle = Self::spawn_serve_block_tuple(
                 self.portal_client.clone(),
                 block_tuple,
                 epoch_acc.clone(),
                 header_validator.clone(),
+                permit,
                 self.gossip_tx.clone(),
                 self.metrics.clone(),
                 hunt,
@@ -282,18 +295,24 @@ impl Era1Bridge {
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
         let content_value = HistoryContentValue::EpochAccumulator(epoch_acc.clone());
         debug!("Built EpochAccumulator for Epoch #{epoch_index:?}: now gossiping.");
-        let gossip_request = GossipRequest::from((content_key, content_value));
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
         if let Err(err) = self.gossip_tx.send(gossip_request) {
             bail!("Error sending epoch acc gossip request: {err}");
+        }
+        if let Err(err) = resp_rx.await {
+            bail!("Error awaiting epoch acc gossip response: {err}");
         }
         Ok(Arc::new(epoch_acc))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn spawn_serve_block_tuple(
         portal_client: HttpClient,
         block_tuple: BlockTuple,
         epoch_acc: Arc<EpochAccumulator>,
         header_validator: Arc<HeaderValidator>,
+        permit: OwnedSemaphorePermit,
         gossip_tx: UnboundedSender<GossipRequest>,
         metrics: BridgeMetricsReporter,
         hunt: bool,
@@ -321,6 +340,7 @@ impl Era1Bridge {
                 },
                 Err(_) => error!("serve_full_block() timed out on height {number}: this is an indication a bug is present")
             };
+            drop(permit);
             metrics.stop_process_timer(timer);
         })
     }
@@ -358,6 +378,8 @@ impl Era1Bridge {
         }
         if gossip_header {
             let timer = metrics.start_process_timer("construct_and_gossip_header");
+            // skip semaphore for header?
+            // nope, but figure out how many times we're double counting
             match Self::construct_and_gossip_header(
                 gossip_tx.clone(),
                 block_tuple.clone(),
@@ -511,10 +533,15 @@ impl Era1Bridge {
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
 
-        let gossip_request = GossipRequest::from((content_key, content_value));
-        gossip_tx
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
+        let _x = gossip_tx
             .send(gossip_request)
-            .map_err(|err| anyhow!("Error sending header gossip request: {err}"))
+            .map_err(|err| anyhow!("Error sending header gossip request: {err}"));
+        if let Err(err) = resp_rx.await {
+            bail!("Error awaiting header gossip response: {err}");
+        }
+        Ok(())
     }
 
     async fn construct_and_gossip_block_body(
@@ -532,10 +559,15 @@ impl Era1Bridge {
         });
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockBody(block_tuple.body.body);
-        let gossip_request = GossipRequest::from((content_key, content_value));
-        gossip_tx
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
+        let _x = gossip_tx
             .send(gossip_request)
-            .map_err(|err| anyhow!("Error sending block body gossip request: {err}"))
+            .map_err(|err| anyhow!("Error sending block body gossip request: {err}"));
+        if let Err(err) = resp_rx.await {
+            bail!("Error awaiting block body gossip response: {err}");
+        }
+        Ok(())
     }
 
     async fn construct_and_gossip_receipts(
@@ -553,10 +585,15 @@ impl Era1Bridge {
         });
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::Receipts(block_tuple.receipts.receipts);
-        let gossip_request = GossipRequest::from((content_key, content_value));
-        gossip_tx
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
+        let _x = gossip_tx
             .send(gossip_request)
-            .map_err(|err| anyhow!("Error sending receipts gossip request: {err}"))
+            .map_err(|err| anyhow!("Error sending receipts gossip request: {err}"));
+        if let Err(err) = resp_rx.await {
+            bail!("Error awaiting block receipts gossip response: {err}");
+        }
+        Ok(())
     }
 }
 

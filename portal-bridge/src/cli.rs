@@ -150,7 +150,7 @@ pub struct BridgeConfig {
     #[arg(
         default_value_t = DEFAULT_GOSSIP_LIMIT,
         long = "gossip-limit",
-        help = "The maximum number of active blocks being gossiped."
+        help = "The maximum number of active blocks being gossiped (per active subnetwork)"
     )]
     pub gossip_limit: usize,
 

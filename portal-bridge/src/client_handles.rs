@@ -58,6 +58,7 @@ pub fn trin_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
     command
         .kill_on_drop(true)
         .args(["--ephemeral"])
+        .args(["--no-upnp"])
         .args(["--mb", "0"])
         .args(["--web3-transport", "http"])
         .args(["--network", bridge_config.network.get_network_name()])

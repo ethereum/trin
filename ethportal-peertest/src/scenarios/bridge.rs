@@ -41,7 +41,7 @@ pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient
         DEFAULT_GOSSIP_LIMIT,
     )
     .await;
-    let bridge = HistoryBridge::new(mode, execution_api, gossip_tx, epoch_acc_path);
+    let bridge = HistoryBridge::new(mode, execution_api, gossip_tx, epoch_acc_path, 12);
     bridge.launch().await;
     let (content_key, content_value) = fixture_header_with_proof_1000010();
     // Check if the stored content value in bootnode's DB matches the offered

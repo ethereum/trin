@@ -20,7 +20,10 @@ use ethportal_api::{
     BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, OverlayContentKey, StateNetworkApiClient,
 };
 
-const DELAY: Duration = Duration::from_secs(120);
+// why was this delay chosen?
+// we need a somewhat short delay so that the event loop iterated rfn lookups can start
+// as soon as possible...
+const DELAY: Duration = Duration::from_secs(60);
 
 /// The census is responsible for maintaining a list of known peers in the network,
 /// checking their liveness, updating their data radius, iterating through their
@@ -65,7 +68,7 @@ impl Census {
         loop {
             tokio::select! {
                 // handle enrs request
-                biased;
+                //biased;
                 Some(request) = self.census_rx.recv() => {
                     let enrs = self.get_interested_enrs(request.content_key).await;
                     if let Err(err) = request.resp_tx.send(enrs) {
@@ -144,41 +147,48 @@ impl Network {
         };
 
         for enr in initial_enrs {
-            self.process_enr(enr.clone()).await;
+            info!("xxx loop peers: {:?}", self.peers.len());
+            self.iterate_rfn(enr.clone()).await;
         }
+        // the goal of initializing the census is to reach a "complete"
+        // view of the entire network, so that gossip modes that are short lived
+        // can be effective (eg. gossiping a single block).
+        //
         // census is considered initialized when no new peers
         // are found in a single iteration...
         // the census will continue to iterate through the peers after "initialization"
         // the initialization is just to reach a critical mass of peers so that gossip
         // can be effectively performed
-        let mut initialized = false;
-        while !initialized {
-            let initial_peers = self.peers.len();
-            let peers = self
-                .peers
-                .iter()
-                .map(|peer| peer.1 .0.clone())
-                .collect::<Vec<_>>();
-            for peer in peers {
-                self.process_enr(peer.clone()).await;
-            }
-            if self.peers.len() == initial_peers {
-                info!(
-                    "Census ({:?}) initialized: total peers: {}",
-                    self.subnetwork,
-                    self.peers.len()
-                );
-                initialized = true;
-            } else {
-                let new_peers = self.peers.len() - initial_peers;
-                info!(
-                    "Census ({:?}) initializing: found new peers: {} / {}",
-                    self.subnetwork,
-                    new_peers,
-                    self.peers.len()
-                );
-            }
-        }
+        //let mut initialized = false;
+        info!("pre-initialization peers: {:?}", self.peers.len());
+        /* while !initialized { */
+        /* let initial_peers = self.peers.len(); */
+        /* let peers = self */
+        /* .peers */
+        /* .iter() */
+        /* .map(|peer| peer.1 .0.clone()) */
+        /* .collect::<Vec<_>>(); */
+        /* for peer in peers { */
+        /* self.iterate_rfn(peer.clone()).await; */
+        /* } */
+        /* info!("post initialization peers: {:?}", self.peers.len()); */
+        /* if self.peers.len() == initial_peers { */
+        /* info!( */
+        /* "Census ({:?}) initialized: total peers: {}", */
+        /* self.subnetwork, */
+        /* self.peers.len() */
+        /* ); */
+        /* initialized = true; */
+        /* } else { */
+        /* let new_peers = self.peers.len() - initial_peers; */
+        /* info!( */
+        /* "Census ({:?}) initializing: found new peers: {} / {}", */
+        /* self.subnetwork, */
+        /* new_peers, */
+        /* self.peers.len() */
+        /* ); */
+        /* } */
+        /* } */
     }
 
     async fn process_enr(&mut self, enr: Enr) {
@@ -186,7 +196,12 @@ impl Network {
         if !self.liveness_check(enr.clone()).await {
             return;
         }
-        // iterate rfn over various distances
+        // iterate rfn
+        self.iterate_rfn(enr).await;
+    }
+
+    // iterate rfn of peer over various distances
+    async fn iterate_rfn(&mut self, enr: Enr) {
         for distance in 245..257 {
             let Ok(result) = self
                 .subnetwork

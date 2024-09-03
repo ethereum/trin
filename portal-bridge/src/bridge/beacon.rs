@@ -109,13 +109,16 @@ impl BeaconBridge {
 
         // test files have no slot number data, so report all gossiped content at height 0.
         for asset in assets.0.into_iter() {
+            let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
             let gossip_request = GossipRequest::from((
                 asset.content_key.clone(),
                 asset.content_value().expect("Error getting content value"),
+                resp_tx,
             ));
             self.gossip_tx
                 .send(gossip_request)
                 .expect("Error sending beacon gossip request in test mode.");
+            let _ = resp_rx.await;
         }
     }
 
@@ -272,11 +275,13 @@ impl BeaconBridge {
         });
 
         // Return the latest finalized block root if we successfully gossiped the latest bootstrap.
-        // @ogi is this a problem? if the gossip fails, we still update the finalized block root
-        let gossip_request = GossipRequest::from((content_key, content_value));
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
         if let Err(err) = gossip_tx.send(gossip_request) {
             bail!("Error sending beacon light client bootstrap gossip request: {err}");
         }
+        // xxxx
+        let _ = resp_rx.await;
         *finalized_block_root.lock().await = latest_finalized_block_root;
         Ok(())
     }
@@ -339,11 +344,13 @@ impl BeaconBridge {
         );
 
         // Update the current known period if we successfully gossiped the latest data.
-        // @ogi is this a problem? if the gossip fails, we still update the current period
-        let gossip_request = GossipRequest::from((content_key, content_value));
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
         if let Err(err) = gossip_tx.send(gossip_request) {
             bail!("Error sending beacon light client update gossip request: {err}");
         }
+        // xxxx
+        let _ = resp_rx.await;
         *current_period.lock().await = expected_current_period;
         Ok(())
     }
@@ -365,10 +372,14 @@ impl BeaconBridge {
             LightClientOptimisticUpdateKey::new(update.signature_slot),
         );
         let content_value = BeaconContentValue::LightClientOptimisticUpdate(update.into());
-        let gossip_request = GossipRequest::from((content_key, content_value));
-        gossip_tx.send(gossip_request).map_err(|e| {
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
+        let _ = gossip_tx.send(gossip_request).map_err(|e| {
             anyhow!("Error sending beacon light client optimistic update gossip request: {e}")
-        })
+        });
+        // xxxx
+        let _ = resp_rx.await;
+        Ok(())
     }
 
     async fn serve_light_client_finality_update(
@@ -406,10 +417,13 @@ impl BeaconBridge {
         );
         let content_value = BeaconContentValue::LightClientFinalityUpdate(update.into());
 
-        let gossip_request = GossipRequest::from((content_key, content_value));
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
         if let Err(err) = gossip_tx.send(gossip_request) {
             bail!("Error sending beacon light client finality update gossip request: {err}");
         }
+        // xxxx
+        let _ = resp_rx.await;
         *finalized_slot.lock().await = new_finalized_slot;
         Ok(())
     }
@@ -473,10 +487,13 @@ impl BeaconBridge {
         let content_value =
             BeaconContentValue::HistoricalSummariesWithProof(historical_summaries_with_proof);
 
-        let gossip_request = GossipRequest::from((content_key, content_value));
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
         if let Err(err) = gossip_tx.send(gossip_request) {
             bail!("Error sending beacon historical summaries with proof gossip request: {err}");
         }
+        // xxxx
+        let _ = resp_rx.await;
         finalized_state_root.lock().await.state_root = latest_finalized_state_root;
         finalized_state_root.lock().await.in_progress = false;
         Ok(())

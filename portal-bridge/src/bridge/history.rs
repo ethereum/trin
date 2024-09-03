@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use anyhow::bail;
 use futures::future::join_all;
 use tokio::{
-    sync::mpsc::UnboundedSender,
+    sync::{mpsc::UnboundedSender, OwnedSemaphorePermit, Semaphore},
     task::JoinHandle,
     time::{sleep, timeout, Duration},
 };
@@ -39,6 +39,8 @@ pub struct HistoryBridge {
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
     pub metrics: BridgeMetricsReporter,
+    // pubs?
+    pub gossip_semaphore: Arc<Semaphore>,
 }
 
 impl HistoryBridge {
@@ -47,9 +49,11 @@ impl HistoryBridge {
         execution_api: ExecutionApi,
         gossip_tx: UnboundedSender<GossipRequest>,
         epoch_acc_path: PathBuf,
+        gossip_limit: usize,
     ) -> Self {
         let header_oracle = HeaderOracle::default();
         let metrics = BridgeMetricsReporter::new("history".to_string(), &format!("{mode:?}"));
+        let gossip_semaphore = Arc::new(Semaphore::new(gossip_limit));
         Self {
             mode,
             gossip_tx,
@@ -57,6 +61,7 @@ impl HistoryBridge {
             header_oracle,
             epoch_acc_path,
             metrics,
+            gossip_semaphore,
         }
     }
 }
@@ -81,13 +86,17 @@ impl HistoryBridge {
 
         // test files have no block number data, so we report all gossiped content at height 0.
         for asset in assets.0.into_iter() {
+            // use semaphore here...
+            let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
             let gossip_request = GossipRequest::from((
                 asset.content_key.clone(),
                 asset.content_value().expect("Error getting content value"),
+                resp_tx,
             ));
             if let Err(err) = self.gossip_tx.send(gossip_request) {
                 error!("Error sending test history gossip request to gossip engine: {err:?}");
             }
+            let _ = resp_rx.await;
             if let HistoryContentKey::BlockHeaderWithProof(_) = asset.content_key {
                 sleep(Duration::from_millis(50)).await;
             }
@@ -145,6 +154,7 @@ impl HistoryBridge {
                     None,
                     self.gossip_tx.clone(),
                     self.execution_api.clone(),
+                    None,
                     self.metrics.clone(),
                 );
             }
@@ -165,6 +175,7 @@ impl HistoryBridge {
             .mode
             .get_block_range(latest_block)
             .expect("Error launching bridge in backfill mode: Invalid block range.");
+
         // initialize current_epoch_index as an impossible value u64::MAX so that
         // epoch_acc gets set on the first iteration of the loop
         let mut current_epoch_index = u64::MAX;
@@ -191,12 +202,16 @@ impl HistoryBridge {
             } else if height > MERGE_BLOCK_NUMBER {
                 epoch_acc = None;
             }
+            let permit = self.gossip_semaphore.clone().acquire_owned().await.expect(
+                "acquire_owned() can only error on semaphore close, this should be impossible",
+            );
             self.metrics.report_current_block(height as i64);
             serve_full_block_handles.push(Self::spawn_serve_full_block(
                 height,
                 epoch_acc.clone(),
                 self.gossip_tx.clone(),
                 self.execution_api.clone(),
+                Some(permit),
                 self.metrics.clone(),
             ));
         }
@@ -211,6 +226,7 @@ impl HistoryBridge {
         epoch_acc: Option<Arc<EpochAccumulator>>,
         gossip_tx: UnboundedSender<GossipRequest>,
         execution_api: ExecutionApi,
+        permit: Option<OwnedSemaphorePermit>,
         metrics: BridgeMetricsReporter,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
@@ -227,6 +243,9 @@ impl HistoryBridge {
                 },
                 Err(_) => error!("serve_full_block() timed out on height {height}: this is an indication a bug is present")
             };
+            if let Some(permit) = permit {
+                drop(permit);
+            }
             metrics.stop_process_timer(timer);
         })
     }
@@ -243,11 +262,13 @@ impl HistoryBridge {
         let (full_header, header_content_key, header_content_value) =
             execution_api.get_header(height, epoch_acc).await?;
         debug!("Built and validated HeaderWithProof for Block #{height:?}: now gossiping.");
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
         let gossip_request =
-            GossipRequest::from((header_content_key.clone(), header_content_value));
+            GossipRequest::from((header_content_key.clone(), header_content_value, resp_tx));
         if let Err(err) = gossip_tx.send(gossip_request) {
             bail!("Error sending HeaderWithProof gossip request to gossip engine: {err:?}");
         };
+        let _ = resp_rx.await;
         metrics.stop_process_timer(timer);
 
         // Sleep for 10 seconds to allow headers to saturate network,
@@ -318,10 +339,12 @@ impl HistoryBridge {
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
         let content_value = HistoryContentValue::EpochAccumulator(epoch_acc.clone());
         debug!("Built EpochAccumulator for Epoch #{epoch_index:?}: now gossiping.");
-        let gossip_request = GossipRequest::from((content_key, content_value));
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
         if let Err(err) = self.gossip_tx.send(gossip_request) {
             bail!("Error sending EpochAccumulator gossip request to gossip engine: {err:?}");
         };
+        let _ = resp_rx.await;
         Ok(Arc::new(epoch_acc))
     }
 
@@ -337,10 +360,13 @@ impl HistoryBridge {
             "Built and validated Receipts for Block #{:?}: now gossiping.",
             full_header.header.number
         );
-        let gossip_request = GossipRequest::from((content_key, content_value));
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
         if let Err(err) = gossip_tx.send(gossip_request) {
             bail!("Error sending Receipts gossip request to gossip engine: {err:?}");
         };
+        // we have to do all this awaiting to maintain integrity of semaphore
+        let _ = resp_rx.await;
         metrics.stop_process_timer(timer);
         Ok(())
     }
@@ -357,10 +383,13 @@ impl HistoryBridge {
             "Built and validated BlockBody for Block #{:?}: now gossiping.",
             full_header.header.number
         );
-        let gossip_request = GossipRequest::from((content_key, content_value));
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let gossip_request = GossipRequest::from((content_key, content_value, resp_tx));
         if let Err(err) = gossip_tx.send(gossip_request) {
             bail!("Error sending BlockBody gossip request to gossip engine: {err:?}");
         };
+        // we have to do all this awaiting to maintain integrity of semaphore
+        let _ = resp_rx.await;
         metrics.stop_process_timer(timer);
         Ok(())
     }

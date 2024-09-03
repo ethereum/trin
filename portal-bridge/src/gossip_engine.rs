@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
 use futures::channel::oneshot;
 use tokio::{
-    sync::{mpsc, Semaphore},
+    sync::mpsc,
     task::JoinHandle,
     time::{timeout, Duration},
 };
@@ -18,14 +16,16 @@ use crate::{
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient, BeaconContentKey, BeaconContentValue,
     BeaconNetworkApiClient, ContentValue, Enr, HistoryContentKey, HistoryContentValue,
-    HistoryNetworkApiClient, OverlayContentKey, StateContentKey, StateContentValue,
-    StateNetworkApiClient,
+    HistoryNetworkApiClient, StateContentKey, StateContentValue, StateNetworkApiClient,
 };
 use trin_metrics::bridge::BridgeMetricsReporter;
 
 // Each gossip request / piece of content is given a timeout of 120 seconds
 const GOSSIP_CONTENT_TIMEOUT: Duration = Duration::from_secs(120);
 
+// Starts the gossip engine with the given parameters. The engine will handle gossip requests
+// and offer the requested content to the network. Returns a vector of join handles to the
+// spawned tasks used to run the engine.
 pub async fn run_gossip_engine(
     gossip_rx: mpsc::UnboundedReceiver<GossipRequest>,
     client: HttpClient,
@@ -40,20 +40,14 @@ pub async fn run_gossip_engine(
     let (census_tx, census_rx) = mpsc::unbounded_channel();
     match gossip_mode {
         GossipMode::Gossip => {
-            let mut engine =
-                GossipEngine::new(client.clone(), None, gossip_rx, gossip_mode, gossip_limit);
+            let mut engine = GossipEngine::new(client.clone(), None, gossip_rx, gossip_mode);
             let engine_handle = tokio::spawn(async move { engine.run().await });
             vec![engine_handle]
         }
         GossipMode::Offer => {
             let mut census = Census::new(client.clone(), census_rx);
-            let mut engine = GossipEngine::new(
-                client.clone(),
-                Some(census_tx),
-                gossip_rx,
-                gossip_mode,
-                gossip_limit,
-            );
+            let mut engine =
+                GossipEngine::new(client.clone(), Some(census_tx), gossip_rx, gossip_mode);
             census.start(subnetworks).await;
             let census_handle = tokio::spawn(async move { census.run().await });
             let engine_handle = tokio::spawn(async move { engine.run().await });
@@ -67,7 +61,6 @@ pub async fn run_gossip_engine(
 /// also maintain a census of all the peers live in the network.
 pub struct GossipEngine {
     client: HttpClient,
-    semaphore: Arc<Semaphore>,
     metrics: BridgeMetricsReporter,
     request_channel: mpsc::UnboundedReceiver<GossipRequest>,
     mode: GossipMode,
@@ -80,16 +73,13 @@ impl GossipEngine {
         census_tx: Option<mpsc::UnboundedSender<EnrsRequest>>,
         request_channel: mpsc::UnboundedReceiver<GossipRequest>,
         mode: GossipMode,
-        gossip_limit: usize,
     ) -> Self {
         let metrics = BridgeMetricsReporter::new("gossip_engine".to_string(), "direct");
         // We are using a semaphore to limit the amount of active gossip transfers to make sure
         // we don't overwhelm the trin client
-        let semaphore = Arc::new(Semaphore::new(gossip_limit));
         Self {
             client,
             census_tx,
-            semaphore,
             request_channel,
             mode,
             metrics,
@@ -100,7 +90,6 @@ impl GossipEngine {
         loop {
             tokio::select! {
                 Some(request) = self.request_channel.recv() => {
-                    let semaphore = self.semaphore.clone();
                     let client = self.client.clone();
                     let metrics = self.metrics.clone();
                     match self.mode {
@@ -108,7 +97,7 @@ impl GossipEngine {
                             tokio::spawn(async move {
                                 if timeout(
                                     GOSSIP_CONTENT_TIMEOUT,
-                                    handle_gossip(request, client, semaphore, metrics),
+                                    handle_gossip(request, client, metrics),
                                 ).await.is_err() {
                                     error!("Timeout handling gossip request, this is an indication that a bug is present");
                                 }
@@ -119,7 +108,7 @@ impl GossipEngine {
                                 tokio::spawn(async move {
                                     if timeout(
                                         GOSSIP_CONTENT_TIMEOUT,
-                                        handle_offer(request, client, census_tx, semaphore, metrics),
+                                        handle_offer(request, client, census_tx, metrics),
                                     ).await.is_err() {
                                         error!("Timeout handling offer request, this is an indication that a bug is present");
                                     }
@@ -135,35 +124,39 @@ impl GossipEngine {
     }
 }
 
-async fn handle_gossip(
-    request: GossipRequest,
-    client: HttpClient,
-    semaphore: Arc<tokio::sync::Semaphore>,
-    metrics: BridgeMetricsReporter,
-) {
+async fn handle_gossip(request: GossipRequest, client: HttpClient, metrics: BridgeMetricsReporter) {
+    // i think we can remove all the timers here and change all original ones back
     let timer = metrics.start_process_timer("handle_gossip");
-    let permit = semaphore.acquire_owned().await;
     match request {
-        GossipRequest::History((key, value)) => {
-            let gossip_report = history_trace_gossip(client, key.clone(), value).await;
+        GossipRequest::History(request) => {
+            let key = request.content_key.clone();
+            let gossip_report =
+                history_trace_gossip(client, key.clone(), request.content_value).await;
+            // what stats?
+            let _ = request.resp_tx.send(true);
             let stats = ContentStats::from(gossip_report);
             info!("GossipReport(history): key: {key}, stats: {stats}");
             debug!("GossipReport(history): key: {key}, stats: {stats:?}");
         }
-        GossipRequest::State((key, value)) => {
-            let gossip_report = state_trace_gossip(client, key.clone(), value).await;
+        GossipRequest::State(request) => {
+            let key = request.content_key.clone();
+            let gossip_report =
+                state_trace_gossip(client, key.clone(), request.content_value).await;
             let stats = ContentStats::from(gossip_report);
+            let _ = request.resp_tx.send(true);
             info!("GossipReport(state): key: {key}, stats: {stats}");
             debug!("GossipReport(state): key: {key}, stats: {stats:?}");
         }
-        GossipRequest::Beacon((key, value)) => {
-            let gossip_report = beacon_trace_gossip(client, key.clone(), value).await;
+        GossipRequest::Beacon(request) => {
+            let key = request.content_key.clone();
+            let gossip_report =
+                beacon_trace_gossip(client, key.clone(), request.content_value).await;
             let stats = ContentStats::from(gossip_report);
+            let _ = request.resp_tx.send(true);
             info!("GossipReport(beacon): key: {key}, stats: {stats}");
             debug!("GossipReport(beacon): key: {key}, stats: {stats:?}");
         }
     }
-    drop(permit);
     metrics.stop_process_timer(timer);
 }
 
@@ -171,7 +164,6 @@ async fn handle_offer(
     request: GossipRequest,
     client: HttpClient,
     census_tx: mpsc::UnboundedSender<EnrsRequest>,
-    semaphore: Arc<tokio::sync::Semaphore>,
     metrics: BridgeMetricsReporter,
 ) {
     let timer = metrics.start_process_timer("handle_offer");
@@ -188,22 +180,37 @@ async fn handle_offer(
         error!("Error receiving enrs response from census, skipping offer.");
         return;
     };
-    // todo test semamphore with era1 file....
     let mut handles = vec![];
+    let (content_key, content_value, resp_tx) = match request {
+        GossipRequest::History(request) => (
+            ContentKey::History(request.content_key.clone()),
+            request.content_value.encode(),
+            request.resp_tx,
+        ),
+        GossipRequest::State(request) => (
+            ContentKey::State(request.content_key.clone()),
+            request.content_value.encode(),
+            request.resp_tx,
+        ),
+        GossipRequest::Beacon(request) => (
+            ContentKey::Beacon(request.content_key.clone()),
+            request.content_value.encode(),
+            request.resp_tx,
+        ),
+    };
     for node in enrs.clone() {
         let client = client.clone();
-        let request = request.clone();
-        let semaphore = semaphore.clone();
-        let handle = tokio::spawn(async move {
-            let permit = semaphore.acquire_owned().await;
+        let content_key = content_key.clone();
+        let content_value = content_value.clone();
+        let handle: JoinHandle<Option<Enr>> = tokio::spawn(async move {
             let mut result = None;
-            match request {
-                GossipRequest::History((key, value)) => {
+            match content_key {
+                ContentKey::History(key) => {
                     if let Ok(offer_result) = HistoryNetworkApiClient::trace_offer(
                         &client,
                         node.clone(),
                         key,
-                        value.encode(),
+                        content_value,
                     )
                     .await
                     {
@@ -212,12 +219,12 @@ async fn handle_offer(
                         }
                     }
                 }
-                GossipRequest::State((key, value)) => {
+                ContentKey::State(key) => {
                     if let Ok(offer_result) = StateNetworkApiClient::trace_offer(
                         &client,
                         node.clone(),
                         key,
-                        value.encode(),
+                        content_value,
                     )
                     .await
                     {
@@ -226,12 +233,12 @@ async fn handle_offer(
                         }
                     }
                 }
-                GossipRequest::Beacon((key, value)) => {
+                ContentKey::Beacon(key) => {
                     if let Ok(offer_result) = BeaconNetworkApiClient::trace_offer(
                         &client,
                         node.clone(),
                         key,
-                        value.encode(),
+                        content_value,
                     )
                     .await
                     {
@@ -241,7 +248,6 @@ async fn handle_offer(
                     }
                 }
             };
-            drop(permit);
             result
         });
         handles.push(handle);
@@ -256,19 +262,17 @@ async fn handle_offer(
         .filter(|enr| !transferred_enrs.contains(enr))
         .cloned()
         .collect();
-    let (subnet, content_key) = match request.content_key() {
-        ContentKey::History(key) => ("history", key.to_hex()),
-        ContentKey::State(key) => ("state", key.to_hex()),
-        ContentKey::Beacon(key) => ("beacon", key.to_hex()),
-    };
+    // ...?
+    // this is just to signal that the gossip process is complete... change to ()?
+    let _ = resp_tx.send(true);
     info!(
-        "GossipReport({subnet}): key: {:?}, transferred_enrs: {} / {}",
+        "GossipReport: key: {:?}, transferred_enrs: {} / {}",
         content_key,
         transferred_enrs.len(),
         enrs.len()
     );
     debug!(
-        "GossipReport({subnet}): key: {:?}, transferred_enrs: {:?}, failed_enrs: {:?}",
+        "GossipReport: key: {:?}, transferred_enrs: {:?}, failed_enrs: {:?}",
         content_key, transferred_enrs, failed_enrs
     );
     metrics.stop_process_timer(timer);
@@ -281,39 +285,96 @@ pub enum ContentKey {
     Beacon(BeaconContentKey),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum GossipRequest {
-    History((HistoryContentKey, HistoryContentValue)),
-    State((StateContentKey, StateContentValue)),
-    Beacon((BeaconContentKey, BeaconContentValue)),
+    History(HistoryRequest),
+    State(StateRequest),
+    Beacon(BeaconRequest),
+}
+
+#[derive(Debug)]
+pub struct HistoryRequest {
+    content_key: HistoryContentKey,
+    content_value: HistoryContentValue,
+    resp_tx: oneshot::Sender<bool>,
+}
+
+#[derive(Debug)]
+pub struct StateRequest {
+    content_key: StateContentKey,
+    content_value: StateContentValue,
+    resp_tx: oneshot::Sender<bool>,
+}
+
+#[derive(Debug)]
+pub struct BeaconRequest {
+    content_key: BeaconContentKey,
+    content_value: BeaconContentValue,
+    resp_tx: oneshot::Sender<bool>,
 }
 
 impl GossipRequest {
     fn content_key(&self) -> ContentKey {
         match self {
-            GossipRequest::History((key, _)) => ContentKey::History(key.clone()),
-            GossipRequest::State((key, _)) => ContentKey::State(key.clone()),
-            GossipRequest::Beacon((key, _)) => ContentKey::Beacon(key.clone()),
+            GossipRequest::History(request) => ContentKey::History(request.content_key.clone()),
+            GossipRequest::State(request) => ContentKey::State(request.content_key.clone()),
+            GossipRequest::Beacon(request) => ContentKey::Beacon(request.content_key.clone()),
         }
     }
 }
 
-impl From<(HistoryContentKey, HistoryContentValue)> for GossipRequest {
-    fn from((key, value): (HistoryContentKey, HistoryContentValue)) -> Self {
-        GossipRequest::History((key, value))
+impl
+    From<(
+        HistoryContentKey,
+        HistoryContentValue,
+        oneshot::Sender<bool>,
+    )> for GossipRequest
+{
+    fn from(
+        (content_key, content_value, resp_tx): (
+            HistoryContentKey,
+            HistoryContentValue,
+            oneshot::Sender<bool>,
+        ),
+    ) -> Self {
+        GossipRequest::History(HistoryRequest {
+            content_key,
+            content_value,
+            resp_tx,
+        })
     }
 }
 
-impl From<(StateContentKey, StateContentValue)> for GossipRequest {
-    fn from((key, value): (StateContentKey, StateContentValue)) -> Self {
-        GossipRequest::State((key, value))
+impl From<(StateContentKey, StateContentValue, oneshot::Sender<bool>)> for GossipRequest {
+    fn from(
+        (content_key, content_value, resp_tx): (
+            StateContentKey,
+            StateContentValue,
+            oneshot::Sender<bool>,
+        ),
+    ) -> Self {
+        GossipRequest::State(StateRequest {
+            content_key,
+            content_value,
+            resp_tx,
+        })
     }
 }
 
-impl From<(BeaconContentKey, BeaconContentValue)> for GossipRequest {
-    fn from((key, value): (BeaconContentKey, BeaconContentValue)) -> Self {
-        GossipRequest::Beacon((key, value))
+impl From<(BeaconContentKey, BeaconContentValue, oneshot::Sender<bool>)> for GossipRequest {
+    fn from(
+        (content_key, content_value, resp_tx): (
+            BeaconContentKey,
+            BeaconContentValue,
+            oneshot::Sender<bool>,
+        ),
+    ) -> Self {
+        GossipRequest::Beacon(BeaconRequest {
+            content_key,
+            content_value,
+            resp_tx,
+        })
     }
 }
 
