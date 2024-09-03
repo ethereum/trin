@@ -13,7 +13,7 @@ categories = ["cryptography::cryptocurrencies"]
 description = "A Rust implementation of the Ethereum Portal Network"
 
 [dependencies]
-alloy-primitives = { workspace = true, features = ["ssz"] }
+alloy-primitives.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 dirs = "5.0.1"
@@ -80,7 +80,7 @@ members = [
 
 [workspace.dependencies]
 alloy-consensus = { git = "https://github.com/alloy-rs/alloy.git", rev = "d68a6b787b2904061f0ae7fcc02ece8513e3c500"}
-alloy-primitives = "0.7.0"
+alloy-primitives = { version = "0.7.0", features = ["ssz"] }
 alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
 async-trait = "0.1.68"
