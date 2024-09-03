@@ -26,6 +26,7 @@ lazy_static.workspace = true
 parking_lot.workspace = true
 prometheus_exporter.workspace = true
 rayon = "1.10.0"
+reth-rpc-types.workspace = true
 revm.workspace = true
 revm-inspectors = { git = "https://github.com/paradigmxyz/evm-inspectors", rev = "848d568" }
 revm-primitives.workspace = true

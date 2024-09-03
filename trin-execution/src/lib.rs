@@ -4,6 +4,7 @@ pub mod config;
 pub mod content;
 pub mod dao_fork;
 pub mod era;
+pub mod evm;
 pub mod execution;
 pub mod metrics;
 pub mod spec_id;

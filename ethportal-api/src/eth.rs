@@ -1,6 +1,6 @@
 use alloy_primitives::{Address, Bytes, B256, U256};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
-use reth_rpc_types::{Block, BlockId};
+use reth_rpc_types::{Block, BlockId, TransactionRequest};
 
 /// Web3 JSON-RPC endpoints
 #[rpc(client, server, namespace = "eth")]
@@ -24,4 +24,11 @@ pub trait EthApi {
     #[method(name = "getStorageAt")]
     async fn get_storage_at(&self, address: Address, slot: U256, block: BlockId)
         -> RpcResult<B256>;
+
+    #[method(name = "call")]
+    async fn call(
+        &self,
+        transaction_request: TransactionRequest,
+        block: BlockId,
+    ) -> RpcResult<Bytes>;
 }

@@ -1,13 +1,29 @@
 use alloy_primitives::U256;
 use ethportal_api::types::execution::transaction::{
     AccessListTransaction, BlobTransaction, EIP1559Transaction, LegacyTransaction, ToAddress,
+    Transaction,
 };
+use reth_rpc_types::TransactionRequest;
 use revm_primitives::{SpecId, TransactTo, TxEnv};
+
+use crate::era::types::TransactionsWithSender;
 
 use super::spec_id::get_spec_id;
 
 pub trait TxEnvModifier {
     fn modify(&self, block_number: u64, tx_env: &mut TxEnv);
+}
+
+impl TxEnvModifier for TransactionsWithSender {
+    fn modify(&self, block_number: u64, tx_env: &mut TxEnv) {
+        tx_env.caller = self.sender_address;
+        match &self.transaction {
+            Transaction::Legacy(tx) => tx.modify(block_number, tx_env),
+            Transaction::EIP1559(tx) => tx.modify(block_number, tx_env),
+            Transaction::AccessList(tx) => tx.modify(block_number, tx_env),
+            Transaction::Blob(tx) => tx.modify(block_number, tx_env),
+        }
+    }
 }
 
 impl TxEnvModifier for LegacyTransaction {
@@ -126,6 +142,42 @@ impl TxEnvModifier for BlobTransaction {
             .collect();
         tx_env.blob_hashes.clone_from(&self.blob_versioned_hashes);
         tx_env.max_fee_per_blob_gas = Some(U256::from(self.max_fee_per_blob_gas));
+    }
+}
+
+impl TxEnvModifier for TransactionRequest {
+    fn modify(&self, _block_number: u64, tx_env: &mut TxEnv) {
+        if let Some(from) = self.from {
+            tx_env.caller = from;
+        }
+        if let Some(to) = self.to {
+            tx_env.transact_to = TransactTo::call(to);
+        }
+        if let Some(gas_price) = self.gas_price {
+            tx_env.gas_price = gas_price;
+        }
+        if let Some(max_fee_per_gas) = self.max_fee_per_gas {
+            tx_env.gas_limit = max_fee_per_gas.to();
+        }
+        tx_env.gas_priority_fee = self.max_priority_fee_per_gas;
+        tx_env.max_fee_per_blob_gas = self.max_fee_per_blob_gas;
+        if let Some(gas) = self.gas {
+            tx_env.gas_limit = gas.to();
+        }
+        if let Some(value) = self.value {
+            tx_env.value = value;
+        }
+        if let Some(data) = self.input.input() {
+            tx_env.data.clone_from(data);
+        }
+        tx_env.nonce = self.nonce;
+        tx_env.chain_id = self.chain_id;
+        if let Some(access_list) = &self.access_list {
+            tx_env.access_list = access_list.flattened();
+        }
+        if let Some(blob_versioned_hashes) = &self.blob_versioned_hashes {
+            tx_env.blob_hashes.clone_from(blob_versioned_hashes);
+        }
     }
 }
 

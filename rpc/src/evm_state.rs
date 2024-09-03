@@ -1,0 +1,258 @@
+use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
+use alloy_rlp::Decodable;
+use eth_trie::{node::Node, TrieError};
+use ethportal_api::{
+    jsonrpsee::types::ErrorObjectOwned,
+    types::{
+        content_key::state::{AccountTrieNodeKey, ContractBytecodeKey, ContractStorageTrieNodeKey},
+        jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
+        portal::ContentInfo,
+        state_trie::{
+            account_state::AccountState,
+            nibbles::Nibbles,
+            trie_traversal::{NodeTraversal, TraversalError, TraversalResult},
+        },
+    },
+    ContentValue, ContentValueError, Header, StateContentKey, StateContentValue,
+};
+use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
+use tokio::sync::mpsc;
+use trin_execution::evm::db::AsyncDatabaseRef;
+
+use crate::{errors::RpcServeError, fetch::proxy_to_subnet};
+
+#[derive(Debug, PartialEq, thiserror::Error)]
+pub enum EvmStateError {
+    #[error("Received content value has unexpected type. key: {0} value: {0}")]
+    InvalidContentValueType(StateContentKey, StateContentValue),
+    #[error("Error decoding content value: {0}")]
+    DecodingContentValue(#[from] ContentValueError),
+    #[error("Error decoding trie node: {0}")]
+    DecodingTrieNode(#[from] TrieError),
+    #[error("Error RLP decoding trie value: {0}")]
+    DecodingTrieValue(#[from] alloy_rlp::Error),
+    #[error("Error traversing trie: {0}")]
+    TrieTraversal(#[from] TraversalError),
+    #[error("Storage value is invalid: {0}")]
+    InvalidStorageValue(Bytes),
+    #[error("Internal Error: {0}")]
+    InternalError(String),
+}
+
+impl From<EvmStateError> for RpcServeError {
+    fn from(value: EvmStateError) -> Self {
+        Self::Message(value.to_string())
+    }
+}
+
+impl From<EvmStateError> for ErrorObjectOwned {
+    fn from(value: EvmStateError) -> Self {
+        RpcServeError::from(value).into()
+    }
+}
+
+/// Provides access to the EVM state at the specific block
+pub struct EvmBlockState {
+    block_header: Header,
+    state_network: mpsc::UnboundedSender<StateJsonRpcRequest>,
+}
+
+impl EvmBlockState {
+    pub fn new(
+        block_header: Header,
+        state_network: mpsc::UnboundedSender<StateJsonRpcRequest>,
+    ) -> Self {
+        Self {
+            block_header,
+            state_network,
+        }
+    }
+
+    // Public functions
+
+    pub fn block_header(&self) -> &Header {
+        &self.block_header
+    }
+
+    pub async fn account_state(
+        &self,
+        address_hash: B256,
+    ) -> Result<Option<AccountState>, EvmStateError> {
+        self.traverse_trie(
+            self.block_header.state_root,
+            address_hash,
+            |path, node_hash| {
+                StateContentKey::AccountTrieNode(AccountTrieNodeKey { path, node_hash })
+            },
+        )
+        .await
+    }
+
+    pub async fn contract_storage_at_slot(
+        &self,
+        storage_root: B256,
+        address_hash: B256,
+        storage_slot: U256,
+    ) -> Result<B256, EvmStateError> {
+        let path = keccak256(storage_slot.to_be_bytes::<32>());
+        let value = self
+            .traverse_trie::<Bytes>(storage_root, path, |path, node_hash| {
+                StateContentKey::ContractStorageTrieNode(ContractStorageTrieNodeKey {
+                    address_hash,
+                    path,
+                    node_hash,
+                })
+            })
+            .await?
+            .unwrap_or_default();
+        if value.len() > B256::len_bytes() {
+            return Err(EvmStateError::InvalidStorageValue(value));
+        }
+
+        Ok(B256::left_padding_from(&value))
+    }
+
+    pub async fn contract_bytecode(
+        &self,
+        address_hash: B256,
+        code_hash: B256,
+    ) -> Result<Bytes, EvmStateError> {
+        let content_key = StateContentKey::ContractBytecode(ContractBytecodeKey {
+            address_hash,
+            code_hash,
+        });
+        let content_value = self.fetch_content(content_key.clone()).await?;
+        let StateContentValue::ContractBytecode(contract_bytecode) = content_value else {
+            return Err(EvmStateError::InvalidContentValueType(
+                content_key,
+                content_value,
+            ));
+        };
+        let bytes = Vec::from(contract_bytecode.code);
+        Ok(Bytes::from(bytes))
+    }
+
+    // Utility functions
+
+    async fn fetch_content(
+        &self,
+        content_key: StateContentKey,
+    ) -> Result<StateContentValue, EvmStateError> {
+        let endpoint = StateEndpoint::RecursiveFindContent(content_key.clone());
+        let response: ContentInfo = proxy_to_subnet(&self.state_network, endpoint)
+            .await
+            .map_err(|err| EvmStateError::InternalError(err.to_string()))?;
+        let ContentInfo::Content { content, .. } = response else {
+            return Err(EvmStateError::InternalError(format!(
+                "Invalid response variant: State RecursiveFindContent should contain content value; got {response:?}"
+            )));
+        };
+
+        let content_value = StateContentValue::decode(&content_key, &content)?;
+        Ok(content_value)
+    }
+
+    async fn fetch_trie_node(&self, content_key: StateContentKey) -> Result<Node, EvmStateError> {
+        let content_value = self.fetch_content(content_key.clone()).await?;
+        let StateContentValue::TrieNode(trie_node) = content_value else {
+            return Err(EvmStateError::InvalidContentValueType(
+                content_key,
+                content_value,
+            ));
+        };
+        Ok(trie_node.node.as_trie_node()?)
+    }
+
+    /// Utility function for fetching trie nodes and traversing the trie.
+    ///
+    /// This function works both with the account trie and the contract state trie.
+    async fn traverse_trie<T: Decodable>(
+        &self,
+        root: B256,
+        path: B256,
+        content_key_fn: impl Fn(Nibbles, B256) -> StateContentKey,
+    ) -> Result<Option<T>, EvmStateError> {
+        let path = Nibbles::unpack_nibbles(path.as_slice());
+
+        let mut node_hash = root;
+        let mut remaining_path = path.as_slice();
+
+        let value = loop {
+            let path_from_root = path
+                .strip_suffix(remaining_path)
+                .expect("Remaining path should be suffix of the path");
+
+            let content_key = content_key_fn(
+                Nibbles::try_from_unpacked_nibbles(path_from_root)
+                    .expect("we should be able to create Nibbles from path"),
+                node_hash,
+            );
+            let node = self.fetch_trie_node(content_key).await?;
+
+            match node.traverse(remaining_path) {
+                TraversalResult::Empty(_) => break None,
+                TraversalResult::Value(value) => break Some(value),
+                TraversalResult::Node(next_node) => {
+                    node_hash = next_node.hash;
+                    remaining_path = next_node.remaining_path;
+                }
+                TraversalResult::Error(err) => return Err(err.into()),
+            }
+        };
+
+        Ok(value
+            .map(|value| T::decode(&mut value.as_ref()))
+            .transpose()?)
+    }
+}
+
+impl AsyncDatabaseRef for EvmBlockState {
+    type Error = EvmStateError;
+
+    async fn basic_async(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        let address_hash = keccak256(address);
+        let account_state = self.account_state(address_hash).await?;
+
+        let Some(account_state) = account_state else {
+            return Ok(None);
+        };
+
+        let code = if account_state.code_hash == KECCAK_EMPTY {
+            Bytecode::new()
+        } else {
+            let bytecode_raw = self
+                .contract_bytecode(address_hash, account_state.code_hash)
+                .await?;
+            Bytecode::new_raw(bytecode_raw)
+        };
+        Ok(Some(AccountInfo::new(
+            account_state.balance,
+            account_state.nonce,
+            account_state.code_hash,
+            code,
+        )))
+    }
+
+    async fn code_by_hash_async(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
+        Err(EvmStateError::InternalError(
+            "The code_by_hash_async is not supported".to_string(),
+        ))
+    }
+
+    async fn storage_async(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        let address_hash = keccak256(address);
+        let account_state = self.account_state(address_hash).await?;
+        let Some(account_state) = account_state else {
+            return Ok(U256::ZERO);
+        };
+        self.contract_storage_at_slot(account_state.storage_root, address_hash, index)
+            .await
+            .map(|value| U256::from_be_bytes(value.0))
+    }
+
+    async fn block_hash_async(&self, _number: U256) -> Result<B256, Self::Error> {
+        Err(EvmStateError::InternalError(
+            "The block_hash_async is not supported".to_string(),
+        ))
+    }
+}
