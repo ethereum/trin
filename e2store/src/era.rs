@@ -40,6 +40,7 @@ impl Era {
     }
 
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
+        let file_length = buf.len();
         let file = E2StoreMemory::deserialize(buf)?;
         let version = VersionEntry::try_from(&file.entries[0])?;
         let entries_length = file.entries.len();
@@ -47,12 +48,14 @@ impl Era {
 
         let slot_index_block = SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])?;
         let slot_index_state = SlotIndexStateEntry::try_from(&file.entries[entries_length - 1])?;
-        let slot_indexes = Era::get_block_slot_indexes(&slot_index_block);
+        let slot_indexes = Era::get_block_slot_indexes(file_length, &slot_index_block);
 
         // an era file has 4 entries which are not blocks
         ensure!(
             slot_indexes.len() == entries_length - 4,
-            "invalid slot index block: incorrect count"
+            "invalid slot index block: incorrect count {} {}",
+            slot_indexes.len(),
+            entries_length - 4
         );
         for (index, slot) in slot_indexes.into_iter().enumerate() {
             let entry = &file.entries[index + 1];
@@ -87,10 +90,11 @@ impl Era {
     pub fn iter_blocks(
         raw_era: Vec<u8>,
     ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<CompressedSignedBeaconBlock>>> {
+        let file_length = raw_era.len();
         let file = E2StoreMemory::deserialize(&raw_era)?;
         let entries_length = file.entries.len();
         let block_index = SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])?;
-        let slot_indexes = Era::get_block_slot_indexes(&block_index);
+        let slot_indexes = Era::get_block_slot_indexes(file_length, &block_index);
 
         ensure!(
             slot_indexes.len() == entries_length - 4,
@@ -108,12 +112,17 @@ impl Era {
             }))
     }
 
-    fn get_block_slot_indexes(slot_index_block_entry: &SlotIndexBlockEntry) -> Vec<u64> {
-        if slot_index_block_entry.slot_index.indices.is_empty() {
-            return vec![];
-        }
-        // minus 8 because the first 8 bytes are the starting slot
-        let beginning_of_index_record = slot_index_block_entry.slot_index.indices[0] - 8;
+    fn get_block_slot_indexes(
+        file_length: usize,
+        slot_index_block_entry: &SlotIndexBlockEntry,
+    ) -> Vec<u64> {
+        // To calculate the beginning of the index record, we need to subtract:
+        // - 8192*8 + 3*8 = 65560 bytes for the slot index block entry
+        // - 4*8=32 bytes for the slot index state entry
+        // from the total file length.
+        // Then subtract the result from u64::MAX to get the starting slot of the index record then
+        // add 1.
+        let beginning_of_index_record = u64::MAX - (file_length as u64 - (65560 + 32)) + 1;
 
         slot_index_block_entry
             .slot_index
