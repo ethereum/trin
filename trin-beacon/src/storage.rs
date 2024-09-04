@@ -730,7 +730,7 @@ mod test {
         let key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
             block_hash: *block_root,
         });
-        storage.put(key.clone(), &value.as_ssz_bytes()).unwrap();
+        storage.put(key.clone(), value.as_ssz_bytes()).unwrap();
         let result = storage.get(&key).unwrap().unwrap();
         assert_eq!(result, value.as_ssz_bytes());
     }
@@ -750,7 +750,7 @@ mod test {
             lc_update_1.clone(),
         ])
         .unwrap();
-        storage.put(key.clone(), &value.as_ssz_bytes()).unwrap();
+        storage.put(key.clone(), value.as_ssz_bytes()).unwrap();
         let result = storage.get(&key).unwrap().unwrap();
 
         assert_eq!(result, value.as_ssz_bytes());
@@ -786,7 +786,7 @@ mod test {
         let key = BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
             finalized_slot,
         });
-        storage.put(key.clone(), &value.as_ssz_bytes()).unwrap();
+        storage.put(key.clone(), value.as_ssz_bytes()).unwrap();
         let result = storage.get(&key).unwrap().unwrap();
         assert_eq!(result, value.as_ssz_bytes());
 
@@ -825,7 +825,7 @@ mod test {
         let key = BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
             signature_slot,
         });
-        storage.put(key.clone(), &value.as_ssz_bytes()).unwrap();
+        storage.put(key.clone(), value.as_ssz_bytes()).unwrap();
         let result = storage.get(&key).unwrap().unwrap();
         assert_eq!(result, value.as_ssz_bytes());
 
@@ -864,7 +864,7 @@ mod test {
         let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
             epoch,
         });
-        storage.put(key.clone(), &value.as_ssz_bytes()).unwrap();
+        storage.put(key.clone(), value.as_ssz_bytes()).unwrap();
         let result = storage.get(&key).unwrap().unwrap();
         assert_eq!(result, value.as_ssz_bytes());
 
