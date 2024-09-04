@@ -153,6 +153,13 @@ pub struct BridgeConfig {
         help = "The maximum number of active blocks being gossiped."
     )]
     pub gossip_limit: usize,
+
+    #[arg(
+        long = "gossip-mode",
+        help = "The gossip mode to use for the bridge ('gossip' or 'offer')",
+        default_value_t = GossipMode::Gossip,
+    )]
+    pub gossip_mode: GossipMode,
 }
 
 pub fn url_to_client(url: Url) -> Result<Client, String> {
@@ -247,6 +254,37 @@ impl Middleware for Retry {
 impl Default for Retry {
     fn default() -> Self {
         Self { attempts: 3 }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GossipMode {
+    // Default. Uses gossip endpoint to offer content to all interested peers stored in
+    // local routing table.
+    Gossip,
+    // Starts a census process to maintain a view of all peers in the entire network. Then
+    // directly offers content to all interested peers in the network.
+    Offer,
+}
+
+impl FromStr for GossipMode {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "gossip" => Ok(GossipMode::Gossip),
+            "offer" => Ok(GossipMode::Offer),
+            _ => Err("Invalid gossip mode"),
+        }
+    }
+}
+
+impl std::fmt::Display for GossipMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GossipMode::Gossip => write!(f, "gossip"),
+            GossipMode::Offer => write!(f, "offer"),
+        }
     }
 }
 

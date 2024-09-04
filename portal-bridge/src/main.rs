@@ -1,12 +1,16 @@
 use clap::Parser;
-use tokio::time::{sleep, Duration};
+use tokio::{
+    sync::mpsc,
+    time::{sleep, Duration},
+};
 use tracing::Instrument;
 
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, era1::Era1Bridge, history::HistoryBridge, state::StateBridge},
-    cli::BridgeConfig,
+    census::Census,
+    cli::{BridgeConfig, GossipMode},
     types::{mode::BridgeMode, network::NetworkKind},
 };
 use trin_utils::log::init_tracing_logger;
@@ -41,6 +45,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bridge_tasks = Vec::new();
 
+    // If gossip mode is 'offer', initialize the census & add task to bridge_tasks
+    let mut census_tx = None;
+    if bridge_config.gossip_mode == GossipMode::Offer {
+        let (census_send, census_rx) = mpsc::unbounded_channel();
+        census_tx = Some(census_send);
+        let mut census = Census::new(portal_client.clone(), census_rx);
+        // initialize the census to acquire critical threshold view of network before gossiping
+        census.init(bridge_config.portal_subnetworks.clone()).await;
+        let census_handle = tokio::spawn(async move {
+            census
+                .run()
+                .instrument(tracing::trace_span!("census"))
+                .await;
+        });
+        bridge_tasks.push(census_handle);
+    }
+
     // Launch State Network portal bridge
     if bridge_config
         .portal_subnetworks
@@ -56,6 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             header_oracle,
             epoch_acc_path,
             bridge_config.gossip_limit,
+            census_tx.clone(),
         )
         .await?;
 

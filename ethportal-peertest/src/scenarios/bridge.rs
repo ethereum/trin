@@ -36,6 +36,7 @@ pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient
         header_oracle,
         epoch_acc_path,
         DEFAULT_GOSSIP_LIMIT,
+        None, // census tx not needed in test mode, uses default gossip mode
     );
     bridge.launch().await;
     let (content_key, content_value) = fixture_header_with_proof_1000010();

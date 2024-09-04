@@ -35,6 +35,7 @@ use trin_validation::oracle::HeaderOracle;
 
 use crate::{
     bridge::history::SERVE_BLOCK_TIMEOUT,
+    census::EnrsRequest,
     gossip::gossip_state_content,
     types::mode::{BridgeMode, ModeType},
 };
@@ -47,7 +48,12 @@ pub struct StateBridge {
     pub era1_files: Vec<String>,
     pub http_client: Client,
     pub metrics: BridgeMetricsReporter,
-    pub gossip_limit_semaphore: Arc<Semaphore>,
+    // Semaphore used to limit the amount of active gossip transfers
+    // to make sure we don't overwhelm the trin client
+    pub gossip_semaphore: Arc<Semaphore>,
+    // Used to request all interested enrs in the network from census process.
+    // If None, the bridge will use the default gossip mode.
+    pub census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
 }
 
 impl StateBridge {
@@ -57,6 +63,7 @@ impl StateBridge {
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
         gossip_limit: usize,
+        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<Self> {
         let http_client: Client = Config::new()
             .add_header("Content-Type", "application/xml")
@@ -64,10 +71,7 @@ impl StateBridge {
             .try_into()?;
         let era1_files = get_shuffled_era1_files(&http_client).await?;
         let metrics = BridgeMetricsReporter::new("state".to_string(), &format!("{mode:?}"));
-
-        // We are using a semaphore to limit the amount of active gossip transfers to make sure
-        // we don't overwhelm the trin client
-        let gossip_limit_semaphore = Arc::new(Semaphore::new(gossip_limit));
+        let gossip_semaphore = Arc::new(Semaphore::new(gossip_limit));
         Ok(Self {
             mode,
             portal_client,
@@ -76,7 +80,8 @@ impl StateBridge {
             era1_files,
             http_client,
             metrics,
-            gossip_limit_semaphore,
+            gossip_semaphore,
+            census_tx,
         })
     }
 
@@ -134,7 +139,7 @@ impl StateBridge {
                 let account_proof = walk_diff.get_proof(*node);
 
                 // gossip the account
-                self.gossip_account(&account_proof, block.header.hash())
+                self.gossip_account(&account_proof, block.header.hash(), self.census_tx.clone())
                     .await?;
 
                 let Some(encoded_last_node) = account_proof.proof.last() else {
@@ -167,6 +172,7 @@ impl StateBridge {
                         block.header.hash(),
                         account.code_hash,
                         code,
+                        self.census_tx.clone(),
                     )
                     .await?;
                 }
@@ -185,6 +191,7 @@ impl StateBridge {
                         &storage_proof,
                         address_hash,
                         block.header.hash(),
+                        self.census_tx.clone(),
                     )
                     .await?;
                 }
@@ -201,13 +208,9 @@ impl StateBridge {
         &self,
         account_proof: &TrieProof,
         block_hash: B256,
+        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
-        let permit = self
-            .gossip_limit_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore");
+        let permit = self.acquire_gossip_permit().await;
         let content_key = create_account_content_key(account_proof)?;
         let content_value = create_account_content_value(block_hash, account_proof)?;
         Self::spawn_serve_state_proof(
@@ -216,6 +219,7 @@ impl StateBridge {
             content_value,
             permit,
             self.metrics.clone(),
+            census_tx,
         );
         Ok(())
     }
@@ -227,13 +231,9 @@ impl StateBridge {
         block_hash: B256,
         code_hash: B256,
         code: Bytecode,
+        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
-        let permit = self
-            .gossip_limit_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore");
+        let permit = self.acquire_gossip_permit().await;
         let code_content_key = create_contract_content_key(address_hash, code_hash)?;
         let code_content_value = create_contract_content_value(block_hash, account_proof, code)?;
         Self::spawn_serve_state_proof(
@@ -242,6 +242,7 @@ impl StateBridge {
             code_content_value,
             permit,
             self.metrics.clone(),
+            census_tx,
         );
         Ok(())
     }
@@ -252,13 +253,9 @@ impl StateBridge {
         storage_proof: &TrieProof,
         address_hash: B256,
         block_hash: B256,
+        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
-        let permit = self
-            .gossip_limit_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore");
+        let permit = self.acquire_gossip_permit().await;
         let storage_content_key = create_storage_content_key(storage_proof, address_hash)?;
         let storage_content_value =
             create_storage_content_value(block_hash, account_proof, storage_proof)?;
@@ -268,6 +265,7 @@ impl StateBridge {
             storage_content_value,
             permit,
             self.metrics.clone(),
+            census_tx,
         );
         Ok(())
     }
@@ -278,6 +276,7 @@ impl StateBridge {
         content_value: StateContentValue,
         permit: OwnedSemaphorePermit,
         metrics: BridgeMetricsReporter,
+        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> JoinHandle<()> {
         info!("Spawning serve_state_proof for content key: {content_key}");
         tokio::spawn(async move {
@@ -288,7 +287,8 @@ impl StateBridge {
                     portal_client,
                     content_key.clone(),
                     content_value,
-                    metrics.clone()
+                    metrics.clone(),
+                    census_tx,
                 )).await
                 {
                 Ok(result) => match result {
@@ -309,9 +309,12 @@ impl StateBridge {
         content_key: StateContentKey,
         content_value: StateContentValue,
         metrics: BridgeMetricsReporter,
+        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
         let timer = metrics.start_process_timer("gossip_state_content");
-        match gossip_state_content(portal_client, content_key.clone(), content_value).await {
+        match gossip_state_content(portal_client, content_key.clone(), content_value, census_tx)
+            .await
+        {
             Ok(_) => {
                 debug!("Successfully gossiped state proof: {content_key}")
             }
@@ -321,5 +324,13 @@ impl StateBridge {
         }
         metrics.stop_process_timer(timer);
         Ok(())
+    }
+
+    async fn acquire_gossip_permit(&self) -> OwnedSemaphorePermit {
+        self.gossip_semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("to be able to acquire semaphore")
     }
 }
