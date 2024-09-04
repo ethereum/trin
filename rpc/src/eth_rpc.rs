@@ -1,7 +1,7 @@
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy_rlp::Decodable;
 use eth_trie::node::Node;
-use reth_rpc_types::{other::OtherFields, Block, BlockId, BlockTransactions};
+use reth_rpc_types::{Block, BlockId, BlockTransactions};
 use tokio::sync::mpsc;
 
 use ethportal_api::{
@@ -85,7 +85,6 @@ impl EthApiServer for EthApi {
             transactions,
             uncles: vec![],
             size: None,
-            other: OtherFields::default(),
             withdrawals: None,
         };
         Ok(block)

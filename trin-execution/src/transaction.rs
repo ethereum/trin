@@ -2,7 +2,7 @@ use alloy_primitives::U256;
 use ethportal_api::types::execution::transaction::{
     AccessListTransaction, BlobTransaction, EIP1559Transaction, LegacyTransaction, ToAddress,
 };
-use revm_primitives::{SpecId, TransactTo, TxEnv};
+use revm_primitives::{AccessListItem, SpecId, TransactTo, TxEnv};
 
 use super::spec_id::get_spec_id;
 
@@ -17,7 +17,7 @@ impl TxEnvModifier for LegacyTransaction {
         tx_env.gas_priority_fee = None;
         tx_env.transact_to = match self.to {
             ToAddress::Exists(to) => TransactTo::Call(to),
-            ToAddress::Empty => TransactTo::create(),
+            ToAddress::Empty => TransactTo::Create,
         };
         tx_env.value = self.value;
         tx_env.data = alloy_primitives::Bytes(self.data.clone());
@@ -40,7 +40,7 @@ impl TxEnvModifier for EIP1559Transaction {
         tx_env.gas_priority_fee = Some(self.max_priority_fee_per_gas);
         tx_env.transact_to = match self.to {
             ToAddress::Exists(to) => TransactTo::Call(to),
-            ToAddress::Empty => TransactTo::create(),
+            ToAddress::Empty => TransactTo::Create,
         };
         tx_env.value = self.value;
         tx_env.data = alloy_primitives::Bytes(self.data.clone());
@@ -50,14 +50,9 @@ impl TxEnvModifier for EIP1559Transaction {
             .access_list
             .list
             .iter()
-            .map(|l| {
-                (
-                    l.address,
-                    l.storage_keys
-                        .iter()
-                        .map(|k| U256::from_be_bytes(k.0))
-                        .collect(),
-                )
+            .map(|l| AccessListItem {
+                address: l.address,
+                storage_keys: l.storage_keys.clone(),
             })
             .collect();
         tx_env.blob_hashes.clear();
@@ -72,7 +67,7 @@ impl TxEnvModifier for AccessListTransaction {
         tx_env.gas_priority_fee = None;
         tx_env.transact_to = match self.to {
             ToAddress::Exists(to) => TransactTo::Call(to),
-            ToAddress::Empty => TransactTo::create(),
+            ToAddress::Empty => TransactTo::Create,
         };
         tx_env.value = self.value;
         tx_env.data = alloy_primitives::Bytes(self.data.clone());
@@ -82,14 +77,9 @@ impl TxEnvModifier for AccessListTransaction {
             .access_list
             .list
             .iter()
-            .map(|l| {
-                (
-                    l.address,
-                    l.storage_keys
-                        .iter()
-                        .map(|k| U256::from_be_bytes(k.0))
-                        .collect(),
-                )
+            .map(|l| AccessListItem {
+                address: l.address,
+                storage_keys: l.storage_keys.clone(),
             })
             .collect();
         tx_env.blob_hashes.clear();
@@ -104,7 +94,7 @@ impl TxEnvModifier for BlobTransaction {
         tx_env.gas_priority_fee = Some(self.max_priority_fee_per_gas);
         tx_env.transact_to = match self.to {
             ToAddress::Exists(to) => TransactTo::Call(to),
-            ToAddress::Empty => TransactTo::create(),
+            ToAddress::Empty => TransactTo::Create,
         };
         tx_env.value = self.value;
         tx_env.data = alloy_primitives::Bytes(self.data.clone());
@@ -114,14 +104,9 @@ impl TxEnvModifier for BlobTransaction {
             .access_list
             .list
             .iter()
-            .map(|l| {
-                (
-                    l.address,
-                    l.storage_keys
-                        .iter()
-                        .map(|k| U256::from_be_bytes(k.0))
-                        .collect(),
-                )
+            .map(|l| AccessListItem {
+                address: l.address,
+                storage_keys: l.storage_keys.clone(),
             })
             .collect();
         tx_env.blob_hashes.clone_from(&self.blob_versioned_hashes);

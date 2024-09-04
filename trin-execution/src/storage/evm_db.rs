@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use crate::{config::StateConfig, storage::error::EVMError};
-use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{Address, B256, U256};
 use alloy_rlp::{Decodable, EMPTY_STRING_CODE};
 use eth_trie::{EthTrie, RootWithTrieDiff, Trie};
@@ -11,7 +10,7 @@ use ethportal_api::{
 use hashbrown::{HashMap as BrownHashMap, HashSet};
 use parking_lot::Mutex;
 use revm::{DatabaseCommit, DatabaseRef};
-use revm_primitives::{keccak256, Account, AccountInfo, Bytecode, HashMap};
+use revm_primitives::{keccak256, Account, AccountInfo, Bytecode, HashMap, KECCAK_EMPTY};
 use rocksdb::DB as RocksDB;
 
 use super::{
@@ -299,8 +298,8 @@ impl DatabaseRef for EvmDB {
         }
     }
 
-    fn block_hash_ref(&self, number: U256) -> Result<B256, Self::Error> {
-        match self.db.get(keccak256(B256::from(number)))? {
+    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+        match self.db.get(keccak256(B256::from(U256::from(number))))? {
             Some(raw_hash) => Ok(B256::from_slice(&raw_hash)),
             None => Err(Self::Error::NotFound),
         }

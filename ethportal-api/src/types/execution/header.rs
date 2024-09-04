@@ -229,7 +229,7 @@ impl PartialEq for Header {
 /// RpcHeader is a field in reth's `Block` RPC type used in eth_getBlockByHash, for example.
 impl From<Header> for RpcHeader {
     fn from(header: Header) -> Self {
-        let hash = Some(header.hash().0.into());
+        let hash = header.hash();
         let Header {
             parent_hash,
             uncles_hash,
@@ -262,20 +262,21 @@ impl From<Header> for RpcHeader {
             receipts_root,
             logs_bloom,
             difficulty,
-            number: Some(U256::from(number)),
-            gas_limit,
-            gas_used,
-            timestamp: U256::from(timestamp),
+            number,
+            gas_limit: gas_limit.to::<u128>(),
+            gas_used: gas_used.to::<u128>(),
+            timestamp,
             extra_data: extra_data.into(),
             mix_hash,
             nonce,
-            base_fee_per_gas,
+            base_fee_per_gas: base_fee_per_gas.map(|v| v.to::<u128>()),
             withdrawals_root,
-            blob_gas_used,
-            excess_blob_gas,
+            blob_gas_used: blob_gas_used.map(|v| v.to::<u128>()),
+            excess_blob_gas: excess_blob_gas.map(|v| v.to::<u128>()),
             hash,
             parent_beacon_block_root: parent_beacon_block_root.map(|h264| h264.0.into()),
             total_difficulty: Some(difficulty),
+            requests_root: None,
         }
     }
 }
