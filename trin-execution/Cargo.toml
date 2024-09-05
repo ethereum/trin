@@ -12,7 +12,6 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 
 [dependencies]
-alloy-consensus.workspace = true
 alloy-primitives.workspace = true
 alloy-rlp.workspace = true
 anyhow.workspace = true
@@ -27,7 +26,7 @@ parking_lot.workspace = true
 prometheus_exporter.workspace = true
 rayon = "1.10.0"
 revm.workspace = true
-revm-inspectors = { git = "https://github.com/paradigmxyz/evm-inspectors", rev = "848d568" }
+revm-inspectors = "0.6"
 revm-primitives.workspace = true
 rocksdb = "0.22.0"
 serde = { workspace = true, features = ["rc"] }

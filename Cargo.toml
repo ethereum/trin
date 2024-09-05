@@ -79,8 +79,7 @@ members = [
 ]
 
 [workspace.dependencies]
-alloy-consensus = { git = "https://github.com/alloy-rs/alloy.git", rev = "d68a6b787b2904061f0ae7fcc02ece8513e3c500"}
-alloy-primitives = { version = "0.8.0" }
+alloy-primitives = "0.8.0" 
 alloy-rlp = "0.3.8"
 anyhow = "1.0.68"
 async-trait = "0.1.68"

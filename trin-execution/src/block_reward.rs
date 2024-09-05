@@ -1,8 +1,16 @@
-use alloy_consensus::constants::ETH_TO_WEI;
 use alloy_primitives::Address;
 use revm_primitives::SpecId;
 
 use crate::{era::types::ProcessedBlock, spec_id::get_spec_block_number};
+
+/// Multiplier for converting gwei to wei.
+pub const GWEI_TO_WEI: u64 = 1_000_000_000;
+
+/// Multiplier for converting finney (milliether) to wei.
+pub const FINNEY_TO_WEI: u128 = (GWEI_TO_WEI as u128) * 1_000_000;
+
+/// Multiplier for converting ether to wei.
+pub const ETH_TO_WEI: u128 = FINNEY_TO_WEI * 1000;
 
 // Calculate block reward
 // https://github.com/paradigmxyz/reth/blob/v0.2.0-beta.6/crates/consensus/common/src/calc.rs
