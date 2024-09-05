@@ -4,7 +4,7 @@
 - Get access to cluster repo (add person to @trin-deployments)
 - `git clone` the cluster repo: https://github.com/ethereum/cluster.git
 - Install dependencies within `cluster` virtualenv:
-    ```shell=
+    ```bash
     cd cluster
     python3 -m venv venv
     . venv/bin/activate
@@ -35,7 +35,7 @@
 
 ### Update Docker images
 Docker images are how Ansible moves the binaries to the nodes. Update the Docker tags with:
-```shell=
+```shell
 docker pull portalnetwork/trin:latest
 docker pull portalnetwork/trin:latest-bridge
 docker image tag portalnetwork/trin:latest portalnetwork/trin:testnet
@@ -105,7 +105,7 @@ Note that building the Docker image on git's master takes some time. If you merg
 ### Why can't I decrypt the SOPS file?
 
 You might see this when running ansible, or the sops check:
-```shell=
+```shell
 Failed to get the data key required to decrypt the SOPS file.
 
 Group 0: FAILED

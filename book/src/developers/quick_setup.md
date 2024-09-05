@@ -83,7 +83,7 @@ rustc --version
 You should see something like:
 
 ```bash
-rustc 1.79.0 (129f3b996 2024-06-10)
+rustc 1.80.0 (051478957 2024-07-21)
 ```
 
 Next, install the required dependencies:

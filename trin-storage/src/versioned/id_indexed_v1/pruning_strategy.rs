@@ -77,12 +77,12 @@ impl Default for PruningConfig {
 /// Ideally, we would want to prune down to `target_capacity_bytes`, but this would usually be too
 /// slow. The `max_pruning_count` represents the maximum number of entries that we will prune at
 /// one point, and it will be updated based on how long it takes in comparison to
-/// `optimal_pruning_duration_range`:
+///   `optimal_pruning_duration_range`:
 /// - it will not change if pruning duration falls within `optimal_pruning_duration_range`
 /// - it will increase by `max_pruning_count_change_fraction` if pruning duration is below the
-/// `optimal_pruning_duration_range`
+///   `optimal_pruning_duration_range`
 /// - it will decrease by `max_pruning_count_change_fraction` if pruning duration is above the
-/// `optimal_pruning_duration_range`
+///   `optimal_pruning_duration_range`
 pub struct PruningStrategy {
     /// The store configuration.
     config: IdIndexedV1StoreConfig,

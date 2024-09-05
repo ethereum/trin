@@ -52,7 +52,7 @@ executors:
     environment:
       IMAGE_NAME: portalnetwork/trin
     docker:
-      - image: cimg/rust:1.79.0
+      - image: cimg/rust:1.80.0
   docker-nightly:
     docker:
       - image: rustlang/rust:nightly
@@ -153,7 +153,7 @@ jobs:
     resource_class: xlarge
     executor:
       name: rust/default
-      tag: 1.79.0
+      tag: 1.80.0
     environment:
       RUSTFLAGS: "-D warnings"
       RUST_LOG: "debug"
@@ -174,7 +174,7 @@ jobs:
     resource_class: xlarge
     executor:
       name: rust/default
-      tag: 1.79.0
+      tag: 1.80.0
     environment:
       RUSTFLAGS: "-D warnings"
       RUST_LOG: "debug"
@@ -211,7 +211,7 @@ jobs:
     resource_class: 2xlarge
     executor:
       name: rust/default
-      tag: 1.79.0
+      tag: 1.80.0
     environment:
       RUSTFLAGS: "-D warnings"
       RUST_LOG: "debug,html5ever=error,selectors=error,discv5::service=info"
