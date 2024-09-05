@@ -8100,6 +8100,7 @@ dependencies = [
 name = "trin-execution"
 version = "0.1.0"
 dependencies = [
+ "alloy-consensus",
  "alloy-primitives",
  "alloy-rlp",
  "anyhow",
