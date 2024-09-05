@@ -224,6 +224,32 @@ jobs:
           name: Test Trin workspace
           command: cargo test --workspace -- --nocapture
       - save-sccache-cache
+  # 'cargo check' performs all the compilation without actually building the crate, so it is quicker for the same guarantee
+  check-workspace-crates:
+    executor:
+      name: rust/default
+      tag: 1.79.0
+    # parallelism level should be set to the amount of simulators we have or greater
+    # The reason for this is the CI code currently only supports 1 input at a time
+    # if we have a parallelism level of 5 and 6 sims one test runner will get 2 test sims and fail
+    parallelism: 17
+    steps:
+      - checkout
+      - run:
+          name: Install jq
+          command: sudo apt install jq
+      - run:
+          name: Update packages
+          command: sudo apt update
+      - run:
+          name: Install libclang
+          command: sudo apt install -y clang          
+      - run:
+          name: "Check if crates build"
+          command: |
+            Crate=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[].name' | circleci tests split --split-by=timings)
+            echo "Checking crate: $Crate"
+            cargo check -p $Crate
   utp-test:
     description: |
       Run uTP network simulator
@@ -306,3 +332,4 @@ workflows:
       - test
       - check-windows
       - utp-test
+      - check-workspace-crates
