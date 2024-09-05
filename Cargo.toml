@@ -91,7 +91,7 @@ directories = "3.0"
 discv5 = { version = "0.4.1", features = ["serde"] }
 e2store = { path = "e2store" }
 env_logger = "0.9.0"
-eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "dc8b95d40ded01396ba53bff10e1ea364bd5ed54" }
+eth_trie = { tag = "v0.1.0-alpha.1", git = "https://github.com/ethereum/eth-trie.rs" }
 ethereum_ssz = "0.7.1"
 ethereum_ssz_derive = "0.7.1"
 ethportal-api = { path = "ethportal-api" }
@@ -149,4 +149,4 @@ trin-validation = { path = "trin-validation" }
 uds_windows = "1.0.1"
 ureq = { version = "2.5.0", features = ["json"] }
 url = "2.3.1"
-utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.13" }
+utp-rs = { tag = "v0.1.0-alpha.13", git = "https://github.com/ethereum/utp" }
