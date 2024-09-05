@@ -1,6 +1,6 @@
 use crate::e2store::{
     memory::E2StoreMemory,
-    types::{Entry, VersionEntry},
+    types::{Entry, Header, VersionEntry},
 };
 use anyhow::{anyhow, ensure};
 use ethportal_api::consensus::{
@@ -116,13 +116,10 @@ impl Era {
         file_length: usize,
         slot_index_block_entry: &SlotIndexBlockEntry,
     ) -> Vec<u64> {
-        // To calculate the beginning of the index record, we need to subtract:
-        // - 8192*8 + 3*8 = 65560 bytes for the slot index block entry
-        // - 4*8=32 bytes for the slot index state entry
-        // from the total file length.
-        // Then subtract the result from u64::MAX to get the starting slot of the index record then
-        // add 1.
-        let beginning_of_index_record = u64::MAX - (file_length as u64 - (65560 + 32)) + 1;
+        let beginning_of_index_record = file_length
+            - SlotIndexBlockEntry::SERIALIZED_SIZE
+            - SlotIndexStateEntry::SERIALIZED_SIZE;
+        let beginning_of_file_offset = -(beginning_of_index_record as i64);
 
         slot_index_block_entry
             .slot_index
@@ -130,7 +127,7 @@ impl Era {
             .iter()
             .enumerate()
             .filter_map(|(i, offset)| {
-                if *offset != beginning_of_index_record {
+                if *offset != beginning_of_file_offset {
                     Some(slot_index_block_entry.slot_index.starting_slot + i as u64)
                 } else {
                     None
@@ -254,6 +251,11 @@ pub struct SlotIndexBlockEntry {
     pub slot_index: SlotIndexBlock,
 }
 
+impl SlotIndexBlockEntry {
+    pub const SERIALIZED_SIZE: usize =
+        Header::SERIALIZED_SIZE as usize + SlotIndexBlock::SERIALIZED_SIZE;
+}
+
 impl TryFrom<&Entry> for SlotIndexBlockEntry {
     type Error = anyhow::Error;
 
@@ -263,7 +265,7 @@ impl TryFrom<&Entry> for SlotIndexBlockEntry {
             "invalid slot index entry: incorrect header type"
         );
         ensure!(
-            entry.header.length == 65552,
+            entry.header.length == SlotIndexBlock::SERIALIZED_SIZE as u32,
             "invalid slot index entry: incorrect header length"
         );
         ensure!(
@@ -271,7 +273,7 @@ impl TryFrom<&Entry> for SlotIndexBlockEntry {
             "invalid slot index entry: incorrect header reserved bytes"
         );
         ensure!(
-            entry.value.len() == 65552,
+            entry.value.len() == SlotIndexBlock::SERIALIZED_SIZE,
             "invalid slot index entry: incorrect value length"
         );
         Ok(Self {
@@ -286,7 +288,9 @@ impl TryInto<Entry> for SlotIndexBlockEntry {
     fn try_into(self) -> Result<Entry, Self::Error> {
         let mut buf: Vec<u64> = vec![];
         buf.push(self.slot_index.starting_slot);
-        buf.extend_from_slice(&self.slot_index.indices);
+        for index in &self.slot_index.indices {
+            buf.push(*index as u64);
+        }
         buf.push(self.slot_index.count);
         let encoded = buf
             .iter()
@@ -299,8 +303,12 @@ impl TryInto<Entry> for SlotIndexBlockEntry {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SlotIndexBlock {
     pub starting_slot: u64,
-    pub indices: [u64; SLOTS_PER_HISTORICAL_ROOT],
+    pub indices: [i64; SLOTS_PER_HISTORICAL_ROOT],
     pub count: u64,
+}
+
+impl SlotIndexBlock {
+    pub const SERIALIZED_SIZE: usize = 8 * (1 + SLOTS_PER_HISTORICAL_ROOT + 1);
 }
 
 impl TryFrom<Entry> for SlotIndexBlock {
@@ -308,9 +316,9 @@ impl TryFrom<Entry> for SlotIndexBlock {
 
     fn try_from(entry: Entry) -> Result<Self, Self::Error> {
         let starting_slot = u64::from_le_bytes(entry.value[0..8].try_into()?);
-        let mut indices = [0u64; SLOTS_PER_HISTORICAL_ROOT];
+        let mut indices = [0i64; SLOTS_PER_HISTORICAL_ROOT];
         for (i, index) in indices.iter_mut().enumerate() {
-            *index = u64::from_le_bytes(entry.value[(i * 8 + 8)..(i * 8 + 16)].try_into()?);
+            *index = i64::from_le_bytes(entry.value[(i * 8 + 8)..(i * 8 + 16)].try_into()?);
         }
         let count = u64::from_le_bytes(
             entry.value[(SLOTS_PER_HISTORICAL_ROOT * 8 + 8)..(SLOTS_PER_HISTORICAL_ROOT * 8 + 16)]
@@ -328,6 +336,11 @@ impl TryFrom<Entry> for SlotIndexBlock {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SlotIndexStateEntry {
     pub slot_index: SlotIndexState,
+}
+
+impl SlotIndexStateEntry {
+    pub const SERIALIZED_SIZE: usize =
+        Header::SERIALIZED_SIZE as usize + SlotIndexState::SERIALIZED_SIZE;
 }
 
 impl TryFrom<&Entry> for SlotIndexStateEntry {
@@ -362,7 +375,9 @@ impl TryInto<Entry> for SlotIndexStateEntry {
     fn try_into(self) -> Result<Entry, Self::Error> {
         let mut buf: Vec<u64> = vec![];
         buf.push(self.slot_index.starting_slot);
-        buf.extend_from_slice(&self.slot_index.indices);
+        for index in &self.slot_index.indices {
+            buf.push(*index as u64);
+        }
         buf.push(self.slot_index.count);
         let encoded = buf
             .iter()
@@ -375,8 +390,12 @@ impl TryInto<Entry> for SlotIndexStateEntry {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SlotIndexState {
     pub starting_slot: u64,
-    indices: [u64; 1],
+    indices: [i64; 1],
     count: u64,
+}
+
+impl SlotIndexState {
+    pub const SERIALIZED_SIZE: usize = 8 * (1 + 1 + 1);
 }
 
 impl TryFrom<Entry> for SlotIndexState {
@@ -384,7 +403,7 @@ impl TryFrom<Entry> for SlotIndexState {
 
     fn try_from(entry: Entry) -> Result<Self, Self::Error> {
         let starting_slot = u64::from_le_bytes(entry.value[0..8].try_into()?);
-        let index = u64::from_le_bytes(entry.value[8..16].try_into()?);
+        let index = i64::from_le_bytes(entry.value[8..16].try_into()?);
         let indices = [index; 1];
 
         let count = u64::from_le_bytes(entry.value[(8 + 8)..(8 + 16)].try_into()?);
