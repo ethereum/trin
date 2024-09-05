@@ -1,4 +1,4 @@
-use alloy_primitives::{B64, U64};
+use alloy_primitives::{Bloom, B64, U64};
 use alloy_rlp::Decodable;
 use ethportal_api::{
     consensus::{
@@ -43,8 +43,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockBellatrix {
             state_root: payload.state_root,
             transactions_root: payload.transaction_root(),
             receipts_root: payload.receipts_root,
-            logs_bloom: Decodable::decode(&mut payload.logs_bloom.to_vec().as_slice())
-                .expect("We should always be able to decode the logs bloom of a block"),
+            logs_bloom: Bloom::from_slice(payload.logs_bloom.to_vec().as_slice()),
             difficulty: U256::ZERO,
             number: payload.block_number,
             gas_limit: U256::from(payload.gas_limit),
@@ -78,8 +77,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockCapella {
             state_root: payload.state_root,
             transactions_root: payload.transaction_root(),
             receipts_root: payload.receipts_root,
-            logs_bloom: Decodable::decode(&mut payload.logs_bloom.to_vec().as_slice())
-                .expect("We should always be able to decode the logs bloom of a block"),
+            logs_bloom: Bloom::from_slice(payload.logs_bloom.to_vec().as_slice()),
             difficulty: U256::ZERO,
             number: payload.block_number,
             gas_limit: U256::from(payload.gas_limit),
@@ -113,8 +111,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
             state_root: payload.state_root,
             transactions_root: payload.transaction_root(),
             receipts_root: payload.receipts_root,
-            logs_bloom: Decodable::decode(&mut payload.logs_bloom.to_vec().as_slice())
-                .expect("We should always be able to decode the logs bloom of a block"),
+            logs_bloom: Bloom::from_slice(payload.logs_bloom.to_vec().as_slice()),
             difficulty: U256::ZERO,
             number: payload.block_number,
             gas_limit: U256::from(payload.gas_limit),
@@ -144,9 +141,8 @@ fn process_transactions(
     transactions
         .into_par_iter()
         .map(|raw_tx| {
-            let transaction =
-                Transaction::decode_enveloped_transactions(&mut raw_tx.to_vec().as_slice())
-                    .map_err(|err| anyhow::anyhow!("Failed decoding transaction rlp: {err:?}"))?;
+            let transaction = Transaction::decode(&mut raw_tx.to_vec().as_slice())
+                .map_err(|err| anyhow::anyhow!("Failed decoding transaction rlp: {err:?}"))?;
             transaction
                 .get_transaction_sender_address()
                 .map(|sender_address| TransactionsWithSender {
