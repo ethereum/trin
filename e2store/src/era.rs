@@ -105,9 +105,9 @@ impl Era {
             .into_iter()
             .enumerate()
             .map(move |(index, slot)| {
-                let entry: Entry = file.entries[index + 1].clone();
                 let fork = get_beacon_fork(slot);
-                let beacon_block = CompressedSignedBeaconBlock::try_from(&entry, fork)?;
+                let beacon_block =
+                    CompressedSignedBeaconBlock::try_from(&file.entries[index + 1], fork)?;
                 Ok(beacon_block)
             }))
     }
