@@ -1,5 +1,6 @@
-use alloy_primitives::{keccak256, B256, U256};
-use alloy_rlp::{RlpDecodable, RlpEncodable, EMPTY_STRING_CODE};
+use alloy_consensus::{constants::KECCAK_EMPTY, EMPTY_ROOT_HASH};
+use alloy_primitives::{B256, U256};
+use alloy_rlp::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Serialize};
 
 /// The Account State stored in the state trie.
@@ -16,8 +17,8 @@ impl Default for AccountState {
         Self {
             nonce: 0,
             balance: U256::ZERO,
-            storage_root: keccak256([EMPTY_STRING_CODE]),
-            code_hash: keccak256([]),
+            storage_root: EMPTY_ROOT_HASH,
+            code_hash: KECCAK_EMPTY,
         }
     }
 }

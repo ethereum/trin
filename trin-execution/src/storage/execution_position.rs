@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use alloy_rlp::{Decodable, RlpDecodable, RlpEncodable, EMPTY_STRING_CODE};
-use revm_primitives::{keccak256, B256};
+use alloy_consensus::EMPTY_ROOT_HASH;
+use alloy_rlp::{Decodable, RlpDecodable, RlpEncodable};
+use revm_primitives::B256;
 use rocksdb::DB as RocksDB;
 use serde::{Deserialize, Serialize};
 
@@ -28,7 +29,7 @@ impl ExecutionPosition {
             None => Self {
                 version: 0,
                 next_block_number: 0,
-                state_root: keccak256([EMPTY_STRING_CODE]),
+                state_root: EMPTY_ROOT_HASH,
             },
         })
     }

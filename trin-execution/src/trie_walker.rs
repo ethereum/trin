@@ -1,10 +1,9 @@
 use std::collections::VecDeque;
 
+use alloy_consensus::EMPTY_ROOT_HASH;
 use alloy_primitives::B256;
-use alloy_rlp::EMPTY_STRING_CODE;
 use eth_trie::{decode_node, node::Node};
 use hashbrown::HashMap as BrownHashMap;
-use revm_primitives::keccak256;
 use serde::{Deserialize, Serialize};
 
 use super::types::trie_proof::TrieProof;
@@ -38,7 +37,7 @@ pub struct TrieWalker {
 impl TrieWalker {
     pub fn new(root_hash: B256, nodes: BrownHashMap<B256, Vec<u8>>) -> Self {
         // if the storage root is empty then there is no storage to gossip
-        if root_hash == keccak256([EMPTY_STRING_CODE]) {
+        if root_hash == EMPTY_ROOT_HASH {
             return Self {
                 nodes: BrownHashMap::new(),
             };
