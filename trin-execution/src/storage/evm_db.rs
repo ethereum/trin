@@ -138,24 +138,44 @@ impl EvmDB {
         Ok(())
     }
 
-    fn delete_account_and_storage(
+    fn delete_account_storage(
         &mut self,
         address_hash: B256,
-        raw_account: Vec<u8>,
-    ) -> anyhow::Result<()> {
-        let timer = start_timer_vec(&BUNDLE_COMMIT_PROCESSING_TIMES, &["account:delete_account"]);
-        let rocks_account = RocksAccount::decode(&mut raw_account.as_slice())?;
+        rocks_account: RocksAccount,
+        delete_account: bool,
+    ) -> anyhow::Result<Option<RocksAccount>> {
+        let timer_label = match delete_account {
+            true => "account:delete_account",
+            false => "storage:wipe_storage",
+        };
+        let timer = start_timer_vec(&BUNDLE_COMMIT_PROCESSING_TIMES, &[timer_label]);
         if rocks_account.storage_root != keccak256([EMPTY_STRING_CODE]) {
             let account_db = AccountDB::new(address_hash, self.db.clone());
             let mut trie = EthTrie::from(Arc::new(account_db), rocks_account.storage_root)?;
             trie.clear_trie_from_db()?;
         }
-        self.db.delete(address_hash)?;
+        let rocks_account = if delete_account {
+            self.db.delete(address_hash)?;
 
-        // update trie
-        let _ = self.trie.lock().remove(address_hash.as_ref());
+            // update trie
+            let _ = self.trie.lock().remove(address_hash.as_ref());
+
+            None
+        } else {
+            let mut rocks_account = rocks_account;
+            rocks_account.storage_root = keccak256([EMPTY_STRING_CODE]);
+            let _ = self.trie.lock().insert(
+                address_hash.as_ref(),
+                &alloy_rlp::encode(AccountStateInfo::from(&rocks_account)),
+            );
+            self.db
+                .put(address_hash, &alloy_rlp::encode(&rocks_account))
+                .expect("Inserting account should never fail");
+
+            Some(rocks_account)
+        };
         stop_timer(timer);
-        Ok(())
+        Ok(rocks_account)
     }
 
     fn commit_accounts(
@@ -167,9 +187,62 @@ impl EvmDB {
             if let Some(account_info) = account {
                 self.commit_account(address_hash, account_info)?;
             } else if let Some(raw_account) = self.db.get(address_hash)? {
-                self.delete_account_and_storage(address_hash, raw_account)?;
+                let rocks_account = RocksAccount::decode(&mut raw_account.as_slice())?;
+                self.delete_account_storage(address_hash, rocks_account, true)?;
             }
         }
+        Ok(())
+    }
+
+    fn commit_storage_changes(
+        &mut self,
+        address_hash: B256,
+        rocks_account: Option<RocksAccount>,
+        storage: Vec<(U256, U256)>,
+    ) -> anyhow::Result<()> {
+        let timer = start_timer_vec(&BUNDLE_COMMIT_PROCESSING_TIMES, &["storage:apply_updates"]);
+
+        let account_db = AccountDB::new(address_hash, self.db.clone());
+        let mut rocks_account = rocks_account.unwrap_or_default();
+
+        let mut trie = if rocks_account.storage_root == keccak256([EMPTY_STRING_CODE]) {
+            EthTrie::new(Arc::new(account_db))
+        } else {
+            EthTrie::from(Arc::new(account_db), rocks_account.storage_root)?
+        };
+
+        for (key, value) in storage {
+            let trie_key = keccak256(B256::from(key));
+            if value.is_zero() {
+                trie.remove(trie_key.as_ref())?;
+            } else {
+                trie.insert(trie_key.as_ref(), &alloy_rlp::encode(value))?;
+            }
+        }
+
+        // update trie
+        let RootWithTrieDiff {
+            root: storage_root,
+            trie_diff,
+        } = trie.root_hash_with_changed_nodes()?;
+
+        if self.config.cache_contract_storage_changes {
+            let account_storage_cache = self.storage_cache.entry(address_hash).or_default();
+            for key in trie_diff.keys() {
+                account_storage_cache.insert(*key);
+            }
+        }
+
+        rocks_account.storage_root = storage_root;
+
+        let _ = self.trie.lock().insert(
+            address_hash.as_ref(),
+            &alloy_rlp::encode(AccountStateInfo::from(&rocks_account)),
+        );
+
+        self.db
+            .put(address_hash, alloy_rlp::encode(rocks_account))?;
+        stop_timer(timer);
         Ok(())
     }
 
@@ -197,81 +270,15 @@ impl EvmDB {
                 });
             stop_timer(timer);
 
-            if wipe_storage && rocks_account.is_some() {
-                let timer =
-                    start_timer_vec(&BUNDLE_COMMIT_PROCESSING_TIMES, &["storage:wipe_storage"]);
-
-                let account_db = AccountDB::new(address_hash, self.db.clone());
-                let mut rocks_account = rocks_account.expect("We already checked that it is some");
-                if rocks_account.storage_root != keccak256([EMPTY_STRING_CODE]) {
-                    let mut trie = EthTrie::from(Arc::new(account_db), rocks_account.storage_root)?;
-                    trie.clear_trie_from_db()?;
-                    rocks_account.storage_root = keccak256([EMPTY_STRING_CODE]);
-                    let _ = self.trie.lock().insert(
-                        address_hash.as_ref(),
-                        &alloy_rlp::encode(AccountStateInfo::from(&rocks_account)),
-                    );
-                    self.db
-                        .put(address_hash, alloy_rlp::encode(rocks_account))
-                        .expect("Inserting account should never fail");
-                }
-                stop_timer(timer);
-            }
+            let rocks_account = if wipe_storage && rocks_account.is_some() {
+                let rocks_account = rocks_account.expect("We already checked that it is some");
+                self.delete_account_storage(address_hash, rocks_account, false)?
+            } else {
+                rocks_account
+            };
 
             if !storage.is_empty() {
-                let timer =
-                    start_timer_vec(&BUNDLE_COMMIT_PROCESSING_TIMES, &["storage:apply_updates"]);
-
-                let account_db = AccountDB::new(address_hash, self.db.clone());
-                let mut rocks_account: RocksAccount = self
-                    .db
-                    .get(address_hash)?
-                    .map(|raw_account| {
-                        let rocks_account: RocksAccount =
-                            Decodable::decode(&mut raw_account.as_slice())
-                                .expect("Decoding account should never fail");
-                        rocks_account
-                    })
-                    .unwrap_or_default();
-
-                let mut trie = if rocks_account.storage_root == keccak256([EMPTY_STRING_CODE]) {
-                    EthTrie::new(Arc::new(account_db))
-                } else {
-                    EthTrie::from(Arc::new(account_db), rocks_account.storage_root)?
-                };
-
-                for (key, value) in storage {
-                    let trie_key = keccak256(B256::from(key));
-                    if value.is_zero() {
-                        trie.remove(trie_key.as_ref())?;
-                    } else {
-                        trie.insert(trie_key.as_ref(), &alloy_rlp::encode(value))?;
-                    }
-                }
-
-                // update trie
-                let RootWithTrieDiff {
-                    root: storage_root,
-                    trie_diff,
-                } = trie.root_hash_with_changed_nodes()?;
-
-                if self.config.cache_contract_storage_changes {
-                    let account_storage_cache = self.storage_cache.entry(address_hash).or_default();
-                    for key in trie_diff.keys() {
-                        account_storage_cache.insert(*key);
-                    }
-                }
-
-                rocks_account.storage_root = storage_root;
-
-                let _ = self.trie.lock().insert(
-                    address_hash.as_ref(),
-                    &alloy_rlp::encode(AccountStateInfo::from(&rocks_account)),
-                );
-
-                self.db
-                    .put(address_hash, alloy_rlp::encode(rocks_account))?;
-                stop_timer(timer);
+                self.commit_storage_changes(address_hash, rocks_account, storage)?;
             }
             stop_timer(plain_state_storage_timer);
         }

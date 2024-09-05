@@ -440,12 +440,12 @@ impl State {
 ///   but are based on the current state of the network and what we have seen so far
 pub fn should_we_commit_block_execution_early(
     blocks_processed: u64,
-    pending_cache_size_mb: u64,
+    pending_state_changes: u64,
     cumulative_gas_used: u64,
     elapsed: Duration,
 ) -> bool {
     blocks_processed >= 500_000
-        || pending_cache_size_mb >= 5_000_000
+        || pending_state_changes >= 5_000_000
         || cumulative_gas_used >= 30_000_000 * 50_000
         || elapsed >= Duration::from_secs(30 * 60)
 }
