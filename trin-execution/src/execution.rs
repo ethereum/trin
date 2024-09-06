@@ -2,21 +2,11 @@ use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy_rlp::Decodable;
 use anyhow::{anyhow, bail, ensure};
 use eth_trie::{RootWithTrieDiff, Trie};
-use ethportal_api::types::{
-    execution::transaction::Transaction,
-    state_trie::account_state::AccountState as AccountStateInfo,
-};
-use revm::{
-    db::states::{bundle_state::BundleRetention, State as RevmState},
-    inspector_handle_register,
-    inspectors::TracerEip3155,
-    DatabaseCommit, Evm,
-};
-use revm_primitives::{Env, ResultAndState, SpecId};
+use ethportal_api::types::state_trie::account_state::AccountState as AccountStateInfo;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
-    fs::{self, File},
+    fs::File,
     io::BufReader,
     path::{Path, PathBuf},
     sync::Arc,
@@ -26,24 +16,15 @@ use tokio::sync::Mutex;
 use tracing::info;
 
 use crate::{
-    block_reward::get_block_reward,
-    dao_fork::process_dao_fork,
-    era::{
-        manager::EraManager,
-        types::{ProcessedBlock, TransactionsWithSender},
-    },
-    metrics::{
-        set_int_gauge_vec, start_timer_vec, stop_timer, BLOCK_HEIGHT, BLOCK_PROCESSING_TIMES,
-        TRANSACTION_PROCESSING_TIMES,
-    },
-    spec_id::{get_spec_block_number, get_spec_id},
+    era::manager::EraManager,
+    evm::execution_context::ExecutionContext,
+    metrics::{start_timer_vec, stop_timer, BLOCK_PROCESSING_TIMES},
     storage::{
         account::Account,
         evm_db::EvmDB,
         execution_position::ExecutionPosition,
         utils::{get_default_data_dir, setup_rocksdb},
     },
-    transaction::TxEnvModifier,
 };
 
 use super::{config::StateConfig, types::trie_proof::TrieProof, utils::address_to_nibble_path};
@@ -70,7 +51,6 @@ pub struct State {
 
 const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";
 const TEST_GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
-const BLOCKHASH_SERVE_WINDOW: u64 = 256;
 
 impl State {
     pub async fn new(path: Option<PathBuf>, config: StateConfig) -> anyhow::Result<Self> {
@@ -149,22 +129,14 @@ impl State {
         end: u64,
     ) -> anyhow::Result<RootWithTrieDiff> {
         info!("Processing blocks from {} to {} (inclusive)", start, end);
-        let database = RevmState::builder()
-            .with_database(self.database.clone())
-            .with_bundle_update()
-            .build();
-
-        let mut evm: Evm<(), RevmState<EvmDB>> = Evm::builder().with_db(database).build();
-        let mut cumulative_gas_used = 0;
-        let mut cumulative_gas_expected = 0;
+        let mut execution_context = ExecutionContext::new(
+            self.database.clone(),
+            self.config.block_to_trace.clone(),
+            self.node_data_directory.clone(),
+        );
         let range_start = Instant::now();
-        let mut last_block_executed = start - 1;
+        let mut last_state_root = self.execution_position.state_root();
         for block_number in start..=end {
-            if get_spec_id(block_number).is_enabled_in(SpecId::SPURIOUS_DRAGON) {
-                evm.db_mut().set_state_clear_flag(true);
-            } else {
-                evm.db_mut().set_state_clear_flag(false);
-            };
             let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
             let block = self
                 .era_manager
@@ -175,30 +147,16 @@ impl State {
                 .clone();
             stop_timer(timer);
 
-            // insert blockhash into database and remove old one
-            let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["insert_blockhash"]);
-            self.database.db.put(
-                keccak256(B256::from(U256::from(block.header.number))),
-                block.header.hash(),
-            )?;
-            if block.header.number >= BLOCKHASH_SERVE_WINDOW {
-                self.database.db.delete(keccak256(B256::from(U256::from(
-                    block.header.number - BLOCKHASH_SERVE_WINDOW,
-                ))))?;
-            }
-            stop_timer(timer);
-
-            cumulative_gas_used += self.execute_block(&block, &mut evm)?;
-            cumulative_gas_expected += block.header.gas_used.to::<u64>();
-            last_block_executed = block_number;
+            execution_context.execute_block(&block)?;
+            last_state_root = block.header.state_root;
 
             // Commit the bundle if we have reached the limits, to prevent to much memory usage
             // We won't use this during the dos attack to avoid writing empty accounts to disk
             if !(2_200_000..2_700_000).contains(&block_number)
                 && should_we_commit_block_execution_early(
                     block_number - start,
-                    evm.context.evm.db.bundle_size_hint() as u64,
-                    cumulative_gas_used,
+                    execution_context.bundle_size_hint() as u64,
+                    execution_context.cumulative_gas_used(),
                     range_start.elapsed(),
                 )
             {
@@ -206,167 +164,22 @@ impl State {
             }
         }
 
-        ensure!(
-            cumulative_gas_used == cumulative_gas_expected,
-            "Cumulative gas used doesn't match gas expected! Irreversible! Block number: {}",
-            end
-        );
-
-        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_bundle"]);
-        evm.db_mut().merge_transitions(BundleRetention::PlainState);
-        let state_bundle = evm.db_mut().take_bundle();
-        self.database.commit_bundle(state_bundle)?;
-        stop_timer(timer);
-
-        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["get_root_with_trie_diff"]);
-        let RootWithTrieDiff {
-            root,
-            trie_diff: changed_nodes,
-        } = self.get_root_with_trie_diff()?;
-        let header_state_root = self
-            .era_manager
-            .lock()
-            .await
-            .last_fetched_block()
-            .await?
-            .header
-            .state_root;
-        if root != header_state_root {
-            panic!(
-                "State root doesn't match! Irreversible! Block number: {}",
-                last_block_executed
-            )
-        }
-        stop_timer(timer);
+        let root_with_trie_diff = execution_context.commit_bundle(last_state_root)?;
 
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["set_block_execution_number"]);
         self.execution_position.set_next_block_number(
             self.database.db.clone(),
-            last_block_executed + 1,
-            root,
+            execution_context.block_number() + 1,
+            root_with_trie_diff.root,
         )?;
         stop_timer(timer);
 
-        Ok(RootWithTrieDiff {
-            root,
-            trie_diff: changed_nodes,
-        })
+        Ok(root_with_trie_diff)
     }
 
     pub async fn process_block(&mut self, block_number: u64) -> anyhow::Result<RootWithTrieDiff> {
         self.process_range_of_blocks(block_number, block_number)
             .await
-    }
-
-    pub fn execute_block(
-        &self,
-        block: &ProcessedBlock,
-        evm: &mut Evm<(), RevmState<EvmDB>>,
-    ) -> anyhow::Result<u64> {
-        let execute_block_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["execute_block"]);
-        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["initialize_evm"]);
-        info!("State EVM processing block {}", block.header.number);
-
-        // initialize evm environment
-        let mut env = Env::default();
-        env.block.number = U256::from(block.header.number);
-        env.block.coinbase = block.header.author;
-        env.block.timestamp = U256::from(block.header.timestamp);
-        if get_spec_id(block.header.number).is_enabled_in(SpecId::MERGE) {
-            env.block.difficulty = U256::ZERO;
-            env.block.prevrandao = block.header.mix_hash;
-        } else {
-            env.block.difficulty = block.header.difficulty;
-            env.block.prevrandao = None;
-        }
-        env.block.basefee = block.header.base_fee_per_gas.unwrap_or_default();
-        env.block.gas_limit = block.header.gas_limit;
-
-        // EIP-4844 excess blob gas of this block, introduced in Cancun
-        if let Some(excess_blob_gas) = block.header.excess_blob_gas {
-            env.block
-                .set_blob_excess_gas_and_price(u64::from_be_bytes(excess_blob_gas.to_be_bytes()));
-        }
-
-        evm.context.evm.env = Box::new(env);
-        evm.handler.modify_spec_id(get_spec_id(block.header.number));
-
-        stop_timer(timer);
-
-        // execute transactions
-        let mut cumulative_gas_used = 0;
-
-        let cumulative_transaction_timer =
-            start_timer_vec(&BLOCK_PROCESSING_TIMES, &["cumulative_transaction"]);
-        for transaction in block.transactions.iter() {
-            let transaction_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["transaction"]);
-            let transaction_execution_timer =
-                start_timer_vec(&BLOCK_PROCESSING_TIMES, &["transaction_execution"]);
-            let evm_result = self.execute_transaction(transaction, evm)?;
-            cumulative_gas_used += evm_result.result.gas_used();
-            stop_timer(transaction_execution_timer);
-            let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_state"]);
-            evm.db_mut().commit(evm_result.state);
-            stop_timer(timer);
-            stop_timer(transaction_timer);
-        }
-        stop_timer(cumulative_transaction_timer);
-
-        // update beneficiary
-        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["update_beneficiary"]);
-        let _ = evm.db_mut().increment_balances(get_block_reward(block));
-
-        // check if dao fork, if it is drain accounts and transfer it to beneficiary
-        if block.header.number == get_spec_block_number(SpecId::DAO_FORK) {
-            process_dao_fork(evm)?;
-        }
-        stop_timer(timer);
-        stop_timer(execute_block_timer);
-        set_int_gauge_vec(&BLOCK_HEIGHT, block.header.number as i64, &[]);
-        Ok(cumulative_gas_used)
-    }
-
-    fn execute_transaction(
-        &self,
-        tx: &TransactionsWithSender,
-        evm: &mut Evm<(), RevmState<EvmDB>>,
-    ) -> anyhow::Result<ResultAndState> {
-        let block_number = evm.context.evm.env.block.number.to::<u64>();
-
-        let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["modify_tx"]);
-        evm.context.evm.env.tx.caller = tx.sender_address;
-        match &tx.transaction {
-            Transaction::Legacy(tx) => tx.modify(block_number, &mut evm.context.evm.env.tx),
-            Transaction::EIP1559(tx) => tx.modify(block_number, &mut evm.context.evm.env.tx),
-            Transaction::AccessList(tx) => tx.modify(block_number, &mut evm.context.evm.env.tx),
-            Transaction::Blob(tx) => tx.modify(block_number, &mut evm.context.evm.env.tx),
-        }
-
-        if self.config.block_to_trace.should_trace(block_number) {
-            let output_path = self
-                .node_data_directory
-                .as_path()
-                .join("evm_traces")
-                .join(format!("block_{block_number}"));
-            fs::create_dir_all(&output_path)?;
-            let output_file =
-                File::create(output_path.join(format!("tx_{}.json", tx.transaction.hash())))?;
-            let mut evm_with_tracer = Evm::builder()
-                .with_env(evm.context.evm.inner.env.clone())
-                .with_spec_id(evm.handler.cfg.spec_id)
-                .with_db(&mut evm.context.evm.inner.db)
-                .with_external_context(TracerEip3155::new(Box::new(output_file)))
-                .append_handler_register(inspector_handle_register)
-                .build();
-            let result = evm_with_tracer.transact()?;
-            return Ok(result);
-        };
-        stop_timer(timer);
-
-        let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["transact"]);
-        let result = evm.transact()?;
-        stop_timer(timer);
-        Ok(result)
     }
 
     pub fn next_block_number(&self) -> u64 {

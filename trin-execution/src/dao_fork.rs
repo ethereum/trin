@@ -1,10 +1,7 @@
 //! DAO Fork related constants from [EIP-779](https://eips.ethereum.org/EIPS/eip-779).
 //! It happened on Ethereum block 1_920_000
 
-use revm::{db::State as RevmState, Evm};
 use revm_primitives::{address, Address};
-
-use crate::storage::evm_db::EvmDB;
 
 /// Dao hardfork beneficiary that received ether from accounts from DAO and DAO creator children.
 pub static DAO_HARDFORK_BENEFICIARY: Address = address!("bf4ed7b27f1d666546e30d74d50d173d20bca754");
@@ -128,16 +125,3 @@ pub static DAO_HARDKFORK_ACCOUNTS: [Address; 116] = [
     address!("bb9bc244d798123fde783fcc1c72d3bb8c189413"),
     address!("807640a13483f8ac783c557fcdf27be11ea4ac7a"),
 ];
-
-pub fn process_dao_fork(database: &mut Evm<(), RevmState<EvmDB>>) -> anyhow::Result<()> {
-    // drain balances from DAO hardfork accounts
-    let drained_balances = database.db_mut().drain_balances(DAO_HARDKFORK_ACCOUNTS)?;
-    let drained_balance_sum: u128 = drained_balances.iter().sum();
-
-    // transfer drained balance to beneficiary
-    database
-        .db_mut()
-        .increment_balances([(DAO_HARDFORK_BENEFICIARY, drained_balance_sum)].into_iter())?;
-
-    Ok(())
-}
