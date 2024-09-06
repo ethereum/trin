@@ -165,24 +165,24 @@ mod tests {
     use revm_primitives::hex::FromHex;
 
     use crate::{
-        config::StateConfig, execution::State, storage::utils::setup_temp_dir,
+        config::StateConfig, execution::TrinExecution, storage::utils::setup_temp_dir,
         trie_walker::TrieWalker,
     };
 
     #[tokio::test]
     async fn test_trie_walker_builds_valid_proof() {
         let temp_directory = setup_temp_dir().unwrap();
-        let mut state = State::new(
+        let mut trin_execution = TrinExecution::new(
             Some(temp_directory.path().to_path_buf()),
             StateConfig::default(),
         )
         .await
         .unwrap();
-        let RootWithTrieDiff { trie_diff, .. } = state.initialize_genesis().unwrap();
-        let valid_proof = state
+        let RootWithTrieDiff { trie_diff, .. } = trin_execution.process_block(0).await.unwrap();
+        let valid_proof = trin_execution
             .get_proof(Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())
             .unwrap();
-        let root_hash = state.get_root().unwrap();
+        let root_hash = trin_execution.get_root().unwrap();
         let walk_diff = TrieWalker::new(root_hash, trie_diff);
 
         let last_node = valid_proof

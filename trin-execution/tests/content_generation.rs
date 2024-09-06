@@ -1,5 +1,5 @@
 use alloy_rlp::Decodable;
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{ensure, Result};
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::types::state_trie::account_state::AccountState;
 use revm::DatabaseRef;
@@ -11,7 +11,7 @@ use trin_execution::{
         create_account_content_key, create_account_content_value, create_contract_content_key,
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
-    execution::State,
+    execution::TrinExecution,
     storage::utils::setup_temp_dir,
     trie_walker::TrieWalker,
     types::block_to_trace::BlockToTrace,
@@ -36,7 +36,7 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
     let temp_directory = setup_temp_dir()?;
 
-    let mut state = State::new(
+    let mut trin_execution = TrinExecution::new(
         Some(temp_directory.path().to_path_buf()),
         StateConfig {
             cache_contract_storage_changes: true,
@@ -51,17 +51,8 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
         let RootWithTrieDiff {
             root: root_hash,
             trie_diff: changed_nodes,
-        } = match block_number == 0 {
-            true => {
-                // initialize genesis state processes this block so we skip it
-                state.era_manager.lock().await.get_next_block().await?;
-                state
-                    .initialize_genesis()
-                    .map_err(|e| anyhow!("unable to create genesis state: {e}"))?
-            }
-            false => state.process_block(block_number).await?,
-        };
-        let block = state
+        } = trin_execution.process_block(block_number).await?;
+        let block = trin_execution
             .era_manager
             .lock()
             .await
@@ -73,7 +64,7 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
             "Block number doesn't match!"
         );
         ensure!(
-            state.get_root()? == block.header.state_root,
+            trin_execution.get_root()? == block.header.state_root,
             "State root doesn't match"
         );
 
@@ -106,14 +97,16 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
             // check contract code content key/value
             if account.code_hash != keccak256([]) {
-                let code = state.database.code_by_hash_ref(account.code_hash)?;
+                let code = trin_execution
+                    .database
+                    .code_by_hash_ref(account.code_hash)?;
                 assert!(create_contract_content_key(address_hash, account.code_hash).is_ok());
                 assert!(create_contract_content_value(block_hash, &account_proof, code).is_ok());
                 content_pairs += 1;
             }
 
             // check contract storage content key/value
-            let storage_changed_nodes = state.database.get_storage_trie_diff(address_hash);
+            let storage_changed_nodes = trin_execution.database.get_storage_trie_diff(address_hash);
             let storage_walk_diff = TrieWalker::new(account.storage_root, storage_changed_nodes);
             for storage_node in storage_walk_diff.nodes.keys() {
                 let storage_proof = storage_walk_diff.get_proof(*storage_node);
@@ -128,7 +121,7 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
         // flush the database cache
         // This is used for gossiping storage trie diffs
-        state.database.storage_cache.clear();
+        trin_execution.database.storage_cache.clear();
         println!("Block {block_number} finished. Total content key/value pairs: {content_pairs}");
     }
     Ok(())

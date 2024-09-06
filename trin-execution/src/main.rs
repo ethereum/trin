@@ -3,7 +3,7 @@ use clap::Parser;
 use revm_primitives::SpecId;
 use tracing::info;
 use trin_execution::{
-    cli::TrinExecutionConfig, execution::State, spec_id::get_spec_block_number,
+    cli::TrinExecutionConfig, execution::TrinExecution, spec_id::get_spec_block_number,
     storage::utils::setup_temp_dir,
 };
 use trin_utils::log::init_tracing_logger;
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         true => Some(setup_temp_dir()?),
     };
 
-    let mut state = State::new(
+    let mut trin_execution = TrinExecution::new(
         directory.map(|temp_directory| temp_directory.path().to_path_buf()),
         trin_execution_config.into(),
     )
@@ -38,31 +38,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("signal ctrl_c should never fail");
     });
 
-    let mut block_number = state.next_block_number();
+    let mut block_number = trin_execution.next_block_number();
 
     let end_block = get_spec_block_number(SpecId::MERGE);
     while block_number < end_block {
         if rx.try_recv().is_ok() {
-            state.database.db.flush()?;
+            trin_execution.database.db.flush()?;
             info!(
                 "Received SIGINT, stopping execution: {} {}",
                 block_number - 1,
-                state.get_root()?
+                trin_execution.get_root()?
             );
             break;
         }
 
-        if block_number == 0 {
-            // initialize genesis state processes this block so we skip it
-            state.era_manager.lock().await.get_next_block().await?;
-            state.initialize_genesis()?;
-            block_number = 1;
-            continue;
-        }
-        state
-            .process_range_of_blocks(block_number, end_block)
-            .await?;
-        block_number = state.next_block_number();
+        trin_execution.process_range_of_blocks(end_block).await?;
+        block_number = trin_execution.next_block_number();
     }
 
     Ok(())

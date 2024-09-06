@@ -136,44 +136,43 @@ impl EvmDB {
         Ok(())
     }
 
-    fn delete_account_storage(
+    fn wipe_account_storage(
         &mut self,
         address_hash: B256,
-        rocks_account: RocksAccount,
         delete_account: bool,
-    ) -> anyhow::Result<Option<RocksAccount>> {
-        let timer_label = match delete_account {
-            true => "account:delete_account",
-            false => "storage:wipe_storage",
+        timer_label: &str,
+    ) -> anyhow::Result<()> {
+        // load account from db
+        let Some(raw_account) = self.db.get(address_hash)? else {
+            return Ok(());
         };
         let timer = start_commit_timer(timer_label);
+
+        let mut rocks_account = RocksAccount::decode(&mut raw_account.as_slice())?;
+
+        // wipe storage trie and db
         if rocks_account.storage_root != EMPTY_ROOT_HASH {
             let account_db = AccountDB::new(address_hash, self.db.clone());
             let mut trie = EthTrie::from(Arc::new(account_db), rocks_account.storage_root)?;
             trie.clear_trie_from_db()?;
-        }
-        let rocks_account = if delete_account {
-            self.db.delete(address_hash)?;
-
-            // update trie
-            let _ = self.trie.lock().remove(address_hash.as_ref());
-
-            None
-        } else {
-            let mut rocks_account = rocks_account;
             rocks_account.storage_root = EMPTY_ROOT_HASH;
+        }
+
+        // update account trie and db
+        if delete_account {
+            self.db.delete(address_hash)?;
+            let _ = self.trie.lock().remove(address_hash.as_ref());
+        } else {
+            self.db
+                .put(address_hash, alloy_rlp::encode(&rocks_account))?;
             let _ = self.trie.lock().insert(
                 address_hash.as_ref(),
                 &alloy_rlp::encode(AccountStateInfo::from(&rocks_account)),
             );
-            self.db
-                .put(address_hash, alloy_rlp::encode(&rocks_account))
-                .expect("Inserting account should never fail");
+        }
 
-            Some(rocks_account)
-        };
         stop_timer(timer);
-        Ok(rocks_account)
+        Ok(())
     }
 
     fn commit_accounts(
@@ -184,9 +183,8 @@ impl EvmDB {
             let address_hash = keccak256(address);
             if let Some(account_info) = account {
                 self.commit_account(address_hash, account_info)?;
-            } else if let Some(raw_account) = self.db.get(address_hash)? {
-                let rocks_account = RocksAccount::decode(&mut raw_account.as_slice())?;
-                self.delete_account_storage(address_hash, rocks_account, true)?;
+            } else {
+                self.wipe_account_storage(address_hash, true, "account:delete_account")?;
             }
         }
         Ok(())
@@ -195,13 +193,20 @@ impl EvmDB {
     fn commit_storage_changes(
         &mut self,
         address_hash: B256,
-        rocks_account: Option<RocksAccount>,
         storage: Vec<(U256, U256)>,
     ) -> anyhow::Result<()> {
         let timer = start_commit_timer("storage:apply_updates");
 
         let account_db = AccountDB::new(address_hash, self.db.clone());
-        let mut rocks_account = rocks_account.unwrap_or_default();
+        let mut rocks_account: RocksAccount = self
+            .db
+            .get(address_hash)?
+            .map(|raw_account| {
+                let rocks_account: RocksAccount = Decodable::decode(&mut raw_account.as_slice())
+                    .expect("Decoding account should never fail");
+                rocks_account
+            })
+            .unwrap_or_default();
 
         let mut trie = if rocks_account.storage_root == EMPTY_ROOT_HASH {
             EthTrie::new(Arc::new(account_db))
@@ -253,24 +258,19 @@ impl EvmDB {
         {
             let plain_state_storage_timer = start_commit_timer("storage:plain_state_storage");
 
-            let timer = start_commit_timer("storage:fetch_account_from_db");
             let address_hash = keccak256(address);
-            let rocks_account: Option<RocksAccount> =
-                self.db.get(address_hash)?.map(|raw_account| {
-                    Decodable::decode(&mut raw_account.as_slice())
-                        .expect("valid account should be decoded")
-                });
-            stop_timer(timer);
 
-            let rocks_account = if wipe_storage && rocks_account.is_some() {
-                let rocks_account = rocks_account.expect("We already checked that it is some");
-                self.delete_account_storage(address_hash, rocks_account, false)?
-            } else {
-                rocks_account
-            };
+            if wipe_storage {
+                self.wipe_account_storage(address_hash, false, "storage:wipe_storage")?;
+            }
 
             if !storage.is_empty() {
-                self.commit_storage_changes(address_hash, rocks_account, storage)?;
+                // review comment: note that commit_storage_changes would have to load RocksAccount
+                // from db this means that it's possible that we will have to load
+                // it twice but I think it's quite uncommon, to have both
+                // wipe_storage and non-empty storage, so I don't think it's big
+                // deal
+                self.commit_storage_changes(address_hash, storage)?;
             }
             stop_timer(plain_state_storage_timer);
         }
@@ -376,12 +376,13 @@ impl DatabaseRef for EvmDB {
             None => return Err(Self::Error::NotFound("storage".to_string())),
         };
         let account_db = AccountDB::new(address_hash, self.db.clone());
-        let trie = if account.storage_root == EMPTY_ROOT_HASH {
-            EthTrie::new(Arc::new(account_db))
+        let raw_value = if account.storage_root == EMPTY_ROOT_HASH {
+            None
         } else {
-            EthTrie::from(Arc::new(account_db), account.storage_root)?
+            let trie = EthTrie::from(Arc::new(account_db), account.storage_root)?;
+            trie.get(keccak256(B256::from(index)).as_ref())?
         };
-        let result = match trie.get(keccak256(B256::from(index)).as_ref())? {
+        let result = match raw_value {
             Some(raw_value) => Ok(Decodable::decode(&mut raw_value.as_slice())?),
             None => Ok(U256::ZERO),
         };

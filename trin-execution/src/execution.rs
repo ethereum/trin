@@ -17,7 +17,7 @@ use tracing::info;
 
 use crate::{
     era::manager::EraManager,
-    evm::execution_context::ExecutionContext,
+    evm::block_executor::BlockExecutor,
     metrics::{start_timer_vec, stop_timer, BLOCK_PROCESSING_TIMES},
     storage::{
         account::Account,
@@ -41,7 +41,7 @@ struct GenesisConfig {
     state_root: B256,
 }
 
-pub struct State {
+pub struct TrinExecution {
     pub database: EvmDB,
     pub config: StateConfig,
     execution_position: ExecutionPosition,
@@ -52,7 +52,7 @@ pub struct State {
 const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";
 const TEST_GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
 
-impl State {
+impl TrinExecution {
     pub async fn new(path: Option<PathBuf>, config: StateConfig) -> anyhow::Result<Self> {
         let node_data_directory = match path {
             Some(path_buf) => path_buf,
@@ -68,7 +68,7 @@ impl State {
             EraManager::new(execution_position.next_block_number()).await?,
         ));
 
-        Ok(State {
+        Ok(Self {
             execution_position,
             config,
             era_manager,
@@ -77,7 +77,7 @@ impl State {
         })
     }
 
-    pub fn initialize_genesis(&mut self) -> anyhow::Result<RootWithTrieDiff> {
+    fn initialize_genesis(&mut self) -> anyhow::Result<RootWithTrieDiff> {
         ensure!(
             self.execution_position.next_block_number() == 0,
             "Trying to initialize genesis but received block {}",
@@ -123,18 +123,40 @@ impl State {
     /// This is a lot faster then process_block() as it executes the range in memory, but we won't
     /// return the trie diff so you can use this to sync up to the block you want, then use
     /// `process_block()` to get the trie diff to gossip on the state bridge
-    pub async fn process_range_of_blocks(
-        &mut self,
-        start: u64,
-        end: u64,
-    ) -> anyhow::Result<RootWithTrieDiff> {
+    pub async fn process_range_of_blocks(&mut self, end: u64) -> anyhow::Result<RootWithTrieDiff> {
+        let start = self.execution_position.next_block_number();
+        ensure!(
+            end >= start,
+            "End block number {} is less than start block number {}",
+            end,
+            start
+        );
+
+        // If we are starting from the beginning, we need to initialize the genesis state
+        if start == 0 {
+            self.era_manager.lock().await.get_next_block().await?;
+            let result = self.initialize_genesis()?;
+            if end == 0 {
+                return Ok(result);
+            }
+        }
+
+        let start = self.execution_position.next_block_number();
+        ensure!(
+            end >= start,
+            "End block number {} is less than start block number {}",
+            end,
+            start
+        );
+
         info!("Processing blocks from {} to {} (inclusive)", start, end);
-        let mut execution_context = ExecutionContext::new(
+        let mut block_executor = BlockExecutor::new(
             self.database.clone(),
             self.config.block_to_trace.clone(),
             self.node_data_directory.clone(),
         );
         let range_start = Instant::now();
+        let mut last_executed_block_number = start - 1;
         let mut last_state_root = self.execution_position.state_root();
         for block_number in start..=end {
             let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
@@ -147,7 +169,8 @@ impl State {
                 .clone();
             stop_timer(timer);
 
-            execution_context.execute_block(&block)?;
+            block_executor.execute_block(&block)?;
+            last_executed_block_number = block_number;
             last_state_root = block.header.state_root;
 
             // Commit the bundle if we have reached the limits, to prevent to much memory usage
@@ -155,8 +178,8 @@ impl State {
             if !(2_200_000..2_700_000).contains(&block_number)
                 && should_we_commit_block_execution_early(
                     block_number - start,
-                    execution_context.bundle_size_hint() as u64,
-                    execution_context.cumulative_gas_used(),
+                    block_executor.bundle_size_hint() as u64,
+                    block_executor.cumulative_gas_used(),
                     range_start.elapsed(),
                 )
             {
@@ -164,12 +187,17 @@ impl State {
             }
         }
 
-        let root_with_trie_diff = execution_context.commit_bundle(last_state_root)?;
+        let root_with_trie_diff = block_executor.commit_bundle()?;
+        ensure!(
+            root_with_trie_diff.root == last_state_root,
+            "State root doesn't match! Irreversible! Block number: {}",
+            last_executed_block_number
+        );
 
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["set_block_execution_number"]);
         self.execution_position.set_next_block_number(
             self.database.db.clone(),
-            execution_context.block_number() + 1,
+            last_executed_block_number + 1,
             root_with_trie_diff.root,
         )?;
         stop_timer(timer);
@@ -178,8 +206,7 @@ impl State {
     }
 
     pub async fn process_block(&mut self, block_number: u64) -> anyhow::Result<RootWithTrieDiff> {
-        self.process_range_of_blocks(block_number, block_number)
-            .await
+        self.process_range_of_blocks(block_number).await
     }
 
     pub fn next_block_number(&self) -> u64 {
@@ -268,53 +295,44 @@ mod tests {
     use std::fs;
 
     use crate::{
-        config::StateConfig, era::utils::process_era1_file, storage::utils::setup_temp_dir,
+        config::StateConfig, era::utils::process_era1_file, execution::TrinExecution,
+        storage::utils::setup_temp_dir,
     };
 
-    use super::State;
     use alloy_primitives::Address;
     use revm_primitives::hex::FromHex;
 
     #[tokio::test]
     async fn test_we_generate_the_correct_state_root_for_the_first_8192_blocks() {
         let temp_directory = setup_temp_dir().unwrap();
-        let mut state = State::new(
+        let mut trin_execution = TrinExecution::new(
             Some(temp_directory.path().to_path_buf()),
             StateConfig::default(),
         )
         .await
         .unwrap();
-        let _ = state.initialize_genesis().unwrap();
         let raw_era1 = fs::read("../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
         let processed_era = process_era1_file(raw_era1, 0).unwrap();
         for block in processed_era.blocks {
-            if block.header.number == 0 {
-                // initialize genesis state processes this block so we skip it
-                state
-                    .era_manager
-                    .lock()
-                    .await
-                    .get_next_block()
-                    .await
-                    .unwrap();
-                continue;
-            }
-            state.process_block(block.header.number).await.unwrap();
-            assert_eq!(state.get_root().unwrap(), block.header.state_root);
+            trin_execution
+                .process_block(block.header.number)
+                .await
+                .unwrap();
+            assert_eq!(trin_execution.get_root().unwrap(), block.header.state_root);
         }
     }
 
     #[tokio::test]
     async fn test_get_proof() {
         let temp_directory = setup_temp_dir().unwrap();
-        let mut state = State::new(
+        let mut trin_execution = TrinExecution::new(
             Some(temp_directory.path().to_path_buf()),
             StateConfig::default(),
         )
         .await
         .unwrap();
-        let _ = state.initialize_genesis().unwrap();
-        let valid_proof = state
+        trin_execution.process_block(0).await.unwrap();
+        let valid_proof = trin_execution
             .get_proof(Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())
             .unwrap();
         assert_eq!(valid_proof.path, [5, 9, 2, 13]);

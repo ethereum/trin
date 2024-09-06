@@ -33,15 +33,19 @@ use super::blocking::execute_transaction_with_external_context;
 
 const BLOCKHASH_SERVE_WINDOW: u64 = 256;
 
-pub struct ExecutionContext<'a> {
+/// BlockExecutor is a struct that is responsible for executing blocks or a block in memory.
+/// The use case is
+/// - initialize the BlockExecutor with a database
+/// - execute blocks
+/// - commit the changes and retrieve the result
+pub struct BlockExecutor<'a> {
     pub evm: Evm<'a, (), State<EvmDB>>,
     cumulative_gas_used: u64,
-    cumulative_gas_expected: u64,
     block_to_trace: BlockToTrace,
     node_data_directory: PathBuf,
 }
 
-impl<'a> ExecutionContext<'a> {
+impl<'a> BlockExecutor<'a> {
     pub fn new(
         database: EvmDB,
         block_to_trace: BlockToTrace,
@@ -56,13 +60,12 @@ impl<'a> ExecutionContext<'a> {
         Self {
             evm,
             cumulative_gas_used: 0,
-            cumulative_gas_expected: 0,
             block_to_trace,
             node_data_directory,
         }
     }
 
-    pub fn set_evm_environment_from_block(&mut self, block: &ProcessedBlock) {
+    fn set_evm_environment_from_block(&mut self, block: &ProcessedBlock) {
         let timer: prometheus_exporter::prometheus::HistogramTimer =
             start_timer_vec(&BLOCK_PROCESSING_TIMES, &["initialize_evm"]);
         if get_spec_id(block.header.number).is_enabled_in(SpecId::SPURIOUS_DRAGON) {
@@ -100,17 +103,17 @@ impl<'a> ExecutionContext<'a> {
     }
 
     pub fn set_transaction_evm_context(&mut self, tx: &TransactionsWithSender) {
-        let block_number = self.block_number();
-
         let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["modify_tx"]);
-        self.evm.context.evm.env.tx.caller = tx.sender_address;
+
+        let block_number = self.block_number();
+        let tx_env = &mut self.evm.context.evm.env.tx;
+
+        tx_env.caller = tx.sender_address;
         match &tx.transaction {
-            Transaction::Legacy(tx) => tx.modify(block_number, &mut self.evm.context.evm.env.tx),
-            Transaction::EIP1559(tx) => tx.modify(block_number, &mut self.evm.context.evm.env.tx),
-            Transaction::AccessList(tx) => {
-                tx.modify(block_number, &mut self.evm.context.evm.env.tx)
-            }
-            Transaction::Blob(tx) => tx.modify(block_number, &mut self.evm.context.evm.env.tx),
+            Transaction::Legacy(tx) => tx.modify(block_number, tx_env),
+            Transaction::EIP1559(tx) => tx.modify(block_number, tx_env),
+            Transaction::AccessList(tx) => tx.modify(block_number, tx_env),
+            Transaction::Blob(tx) => tx.modify(block_number, tx_env),
         }
         stop_timer(timer);
     }
@@ -138,20 +141,12 @@ impl<'a> ExecutionContext<'a> {
         let drained_balance_sum: u128 = drained_balances.iter().sum();
 
         // transfer drained balance to beneficiary
-        self.evm
-            .db_mut()
-            .increment_balances([(DAO_HARDFORK_BENEFICIARY, drained_balance_sum)].into_iter())?;
+        self.increment_balances([(DAO_HARDFORK_BENEFICIARY, drained_balance_sum)].into_iter())?;
 
         Ok(())
     }
 
-    pub fn commit_bundle(&mut self, expected_state_root: B256) -> anyhow::Result<RootWithTrieDiff> {
-        ensure!(
-            self.cumulative_gas_used == self.cumulative_gas_expected,
-            "Cumulative gas used doesn't match gas expected! Irreversible! Block number: {}",
-            self.block_number()
-        );
-
+    pub fn commit_bundle(&mut self) -> anyhow::Result<RootWithTrieDiff> {
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_bundle"]);
         self.evm
             .db_mut()
@@ -171,12 +166,7 @@ impl<'a> ExecutionContext<'a> {
             .trie
             .lock()
             .root_hash_with_changed_nodes()?;
-        if root != expected_state_root {
-            panic!(
-                "State root doesn't match! Irreversible! Block number: {}",
-                self.block_number()
-            )
-        }
+
         stop_timer(timer);
 
         Ok(RootWithTrieDiff {
@@ -188,23 +178,29 @@ impl<'a> ExecutionContext<'a> {
     pub fn execute_block(&mut self, block: &ProcessedBlock) -> anyhow::Result<()> {
         info!("State EVM processing block {}", block.header.number);
 
-        self.manage_block_hash_serve_window(block)?;
-
         let execute_block_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["execute_block"]);
-
         self.set_evm_environment_from_block(block);
 
         // execute transactions
         let cumulative_transaction_timer =
             start_timer_vec(&BLOCK_PROCESSING_TIMES, &["cumulative_transaction"]);
+        let mut block_gas_used = 0;
         for transaction in block.transactions.iter() {
             let transaction_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["transaction"]);
             let evm_result = self.execute_transaction(transaction)?;
-            self.cumulative_gas_used += evm_result.result.gas_used();
+            block_gas_used += evm_result.result.gas_used();
             self.commit(evm_result.state);
             stop_timer(transaction_timer);
         }
         stop_timer(cumulative_transaction_timer);
+
+        ensure!(
+            block_gas_used == block.header.gas_used.to::<u64>(),
+            "Block gas used mismatch at {} != {}",
+            block_gas_used,
+            block.header.gas_used
+        );
+        self.cumulative_gas_used += block_gas_used;
 
         // update beneficiary
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["update_beneficiary"]);
@@ -214,7 +210,9 @@ impl<'a> ExecutionContext<'a> {
         if block.header.number == get_spec_block_number(SpecId::DAO_FORK) {
             self.process_dao_fork()?;
         }
-        self.cumulative_gas_expected += block.header.gas_used.to::<u64>();
+
+        self.manage_block_hash_serve_window(block)?;
+
         stop_timer(timer);
         stop_timer(execute_block_timer);
         set_int_gauge_vec(&BLOCK_HEIGHT, block.header.number as i64, &[]);
@@ -275,10 +273,6 @@ impl<'a> ExecutionContext<'a> {
 
     pub fn cumulative_gas_used(&self) -> u64 {
         self.cumulative_gas_used
-    }
-
-    pub fn cumulative_gas_expected(&self) -> u64 {
-        self.cumulative_gas_expected
     }
 
     pub fn bundle_size_hint(&self) -> usize {

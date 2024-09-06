@@ -1,7 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
 use alloy_rlp::Decodable;
-use anyhow::anyhow;
 use e2store::utils::get_shuffled_era1_files;
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::{
@@ -24,7 +23,7 @@ use trin_execution::{
         create_account_content_key, create_account_content_value, create_contract_content_key,
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
-    execution::State,
+    execution::TrinExecution,
     spec_id::get_spec_block_number,
     storage::utils::setup_temp_dir,
     trie_walker::TrieWalker,
@@ -109,7 +108,8 @@ impl StateBridge {
             cache_contract_storage_changes: true,
             block_to_trace: BlockToTrace::None,
         };
-        let mut state = State::new(Some(temp_directory.path().to_path_buf()), state_config).await?;
+        let mut state =
+            TrinExecution::new(Some(temp_directory.path().to_path_buf()), state_config).await?;
         for block_number in 0..=last_block {
             info!("Gossipping state for block at height: {block_number}");
 
@@ -117,12 +117,8 @@ impl StateBridge {
             let RootWithTrieDiff {
                 root: root_hash,
                 trie_diff: changed_nodes,
-            } = match block_number == 0 {
-                true => state
-                    .initialize_genesis()
-                    .map_err(|e| anyhow!("unable to create genesis state: {e}"))?,
-                false => state.process_block(block_number).await?,
-            };
+            } = state.process_block(block_number).await?;
+
             let block = state
                 .era_manager
                 .lock()
