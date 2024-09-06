@@ -286,17 +286,15 @@ impl TryInto<Entry> for SlotIndexBlockEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        let mut buf: Vec<u64> = vec![];
-        buf.push(self.slot_index.starting_slot);
+        let mut buf = vec![];
+
+        buf.extend_from_slice(&self.slot_index.starting_slot.to_le_bytes());
         for index in &self.slot_index.indices {
-            buf.push(*index as u64);
+            buf.extend_from_slice(&index.to_le_bytes());
         }
-        buf.push(self.slot_index.count);
-        let encoded = buf
-            .iter()
-            .flat_map(|i| i.to_le_bytes().to_vec())
-            .collect::<Vec<u8>>();
-        Ok(Entry::new(0x3269, encoded))
+        buf.extend_from_slice(&self.slot_index.count.to_le_bytes());
+
+        Ok(Entry::new(0x3269, buf))
     }
 }
 
@@ -373,17 +371,15 @@ impl TryInto<Entry> for SlotIndexStateEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        let mut buf: Vec<u64> = vec![];
-        buf.push(self.slot_index.starting_slot);
+        let mut buf = vec![];
+
+        buf.extend_from_slice(&self.slot_index.starting_slot.to_le_bytes());
         for index in &self.slot_index.indices {
-            buf.push(*index as u64);
+            buf.extend_from_slice(&index.to_le_bytes());
         }
-        buf.push(self.slot_index.count);
-        let encoded = buf
-            .iter()
-            .flat_map(|i| i.to_le_bytes().to_vec())
-            .collect::<Vec<u8>>();
-        Ok(Entry::new(0x3269, encoded))
+        buf.extend_from_slice(&self.slot_index.count.to_le_bytes());
+
+        Ok(Entry::new(0x3269, buf))
     }
 }
 
