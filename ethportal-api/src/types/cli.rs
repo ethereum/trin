@@ -146,7 +146,7 @@ pub struct TrinConfig {
         value_parser = check_trusted_block_root,
         help = "Hex encoded block root from a trusted checkpoint"
     )]
-    pub trusted_block_root: Option<String>,
+    pub trusted_block_root: Option<B256>,
 
     #[arg(
     long = "portal-subnetworks",
@@ -345,13 +345,13 @@ pub fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> 
     }
 }
 
-fn check_trusted_block_root(trusted_root: &str) -> Result<String, String> {
+fn check_trusted_block_root(trusted_root: &str) -> Result<B256, String> {
     if !trusted_root.starts_with("0x") {
         return Err("Trusted block root must be prefixed with 0x".to_owned());
     }
 
     if trusted_root.len() == 66 {
-        return Ok(trusted_root.to_string());
+        return B256::from_str(trusted_root).map_err(|err| format!("HexError: {err}"));
     }
     Err(format!(
         "Invalid trusted block root length: {}, expected 66 (0x-prefixed 32 byte hexstring)",

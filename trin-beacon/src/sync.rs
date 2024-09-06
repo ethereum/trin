@@ -1,3 +1,4 @@
+use alloy_primitives::B256;
 use ethportal_api::BeaconContentKey;
 use light_client::{
     config::networks, consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client,
@@ -20,7 +21,7 @@ impl BeaconSync {
 
     pub async fn start(
         &self,
-        trusted_block_root: String,
+        trusted_block_root: B256,
     ) -> anyhow::Result<Client<FileDB, PortalRpc>> {
         // Create a new Light Client Builder
         let mut builder = ClientBuilder::new();
@@ -29,7 +30,7 @@ impl BeaconSync {
         builder = builder.network(networks::Network::Mainnet);
 
         // Set the checkpoint to the last known checkpoint
-        builder = builder.checkpoint(&trusted_block_root);
+        builder = builder.checkpoint(&trusted_block_root.to_string());
 
         // Set the data dir
         builder = builder.data_dir(PathBuf::from("/tmp/portal-light-client"));
