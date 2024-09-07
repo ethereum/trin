@@ -108,7 +108,7 @@ impl StateBridge {
             cache_contract_storage_changes: true,
             block_to_trace: BlockToTrace::None,
         };
-        let mut state =
+        let mut trin_execution =
             TrinExecution::new(Some(temp_directory.path().to_path_buf()), state_config).await?;
         for block_number in 0..=last_block {
             info!("Gossipping state for block at height: {block_number}");
@@ -117,9 +117,9 @@ impl StateBridge {
             let RootWithTrieDiff {
                 root: root_hash,
                 trie_diff: changed_nodes,
-            } = state.process_block(block_number).await?;
+            } = trin_execution.process_next_block().await?;
 
-            let block = state
+            let block = trin_execution
                 .era_manager
                 .lock()
                 .await
@@ -160,7 +160,7 @@ impl StateBridge {
                 // if the code_hash is empty then then don't try to gossip the contract bytecode
                 if account.code_hash != keccak256([]) {
                     // gossip contract bytecode
-                    let code = state.database.code_by_hash(account.code_hash)?;
+                    let code = trin_execution.database.code_by_hash(account.code_hash)?;
                     self.gossip_contract_bytecode(
                         address_hash,
                         &account_proof,
@@ -172,7 +172,8 @@ impl StateBridge {
                 }
 
                 // gossip contract storage
-                let storage_changed_nodes = state.database.get_storage_trie_diff(address_hash);
+                let storage_changed_nodes =
+                    trin_execution.database.get_storage_trie_diff(address_hash);
 
                 let storage_walk_diff =
                     TrieWalker::new(account.storage_root, storage_changed_nodes);
@@ -191,7 +192,7 @@ impl StateBridge {
 
             // flush the database cache
             // This is used for gossiping storage trie diffs
-            state.database.storage_cache.clear();
+            trin_execution.database.storage_cache.clear();
         }
         Ok(())
     }

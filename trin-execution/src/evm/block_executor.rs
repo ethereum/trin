@@ -1,18 +1,26 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
-    path::PathBuf,
+    io::BufReader,
+    path::{Path, PathBuf},
 };
 
-use anyhow::ensure;
+use anyhow::{bail, ensure};
 use eth_trie::{RootWithTrieDiff, Trie};
-use ethportal_api::types::execution::transaction::Transaction;
+use ethportal_api::{
+    types::{
+        execution::transaction::Transaction,
+        state_trie::account_state::AccountState as AccountStateInfo,
+    },
+    Header,
+};
 use revm::{
     db::{states::bundle_state::BundleRetention, State},
     inspectors::TracerEip3155,
     DatabaseCommit, Evm,
 };
-use revm_primitives::{keccak256, Account, Address, Env, ResultAndState, SpecId, B256, U256};
+use revm_primitives::{keccak256, Address, Env, ResultAndState, SpecId, B256, U256};
+use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
@@ -24,7 +32,7 @@ use crate::{
         TRANSACTION_PROCESSING_TIMES,
     },
     spec_id::{get_spec_block_number, get_spec_id},
-    storage::evm_db::EvmDB,
+    storage::{account::Account as RocksAccount, evm_db::EvmDB},
     transaction::TxEnvModifier,
     types::block_to_trace::BlockToTrace,
 };
@@ -32,6 +40,20 @@ use crate::{
 use super::blocking::execute_transaction_with_external_context;
 
 const BLOCKHASH_SERVE_WINDOW: u64 = 256;
+const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";
+const TEST_GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AllocBalance {
+    balance: U256,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GenesisConfig {
+    alloc: HashMap<Address, AllocBalance>,
+    state_root: B256,
+}
 
 /// BlockExecutor is a struct that is responsible for executing blocks or a block in memory.
 /// The use case is
@@ -39,7 +61,7 @@ const BLOCKHASH_SERVE_WINDOW: u64 = 256;
 /// - execute blocks
 /// - commit the changes and retrieve the result
 pub struct BlockExecutor<'a> {
-    pub evm: Evm<'a, (), State<EvmDB>>,
+    evm: Evm<'a, (), State<EvmDB>>,
     cumulative_gas_used: u64,
     block_to_trace: BlockToTrace,
     node_data_directory: PathBuf,
@@ -65,10 +87,10 @@ impl<'a> BlockExecutor<'a> {
         }
     }
 
-    fn set_evm_environment_from_block(&mut self, block: &ProcessedBlock) {
+    fn set_evm_environment_from_block(&mut self, header: &Header) {
         let timer: prometheus_exporter::prometheus::HistogramTimer =
             start_timer_vec(&BLOCK_PROCESSING_TIMES, &["initialize_evm"]);
-        if get_spec_id(block.header.number).is_enabled_in(SpecId::SPURIOUS_DRAGON) {
+        if get_spec_id(header.number).is_enabled_in(SpecId::SPURIOUS_DRAGON) {
             self.evm.db_mut().set_state_clear_flag(true);
         } else {
             self.evm.db_mut().set_state_clear_flag(false);
@@ -76,33 +98,31 @@ impl<'a> BlockExecutor<'a> {
 
         // initialize evm environment
         let mut env = Env::default();
-        env.block.number = U256::from(block.header.number);
-        env.block.coinbase = block.header.author;
-        env.block.timestamp = U256::from(block.header.timestamp);
-        if get_spec_id(block.header.number).is_enabled_in(SpecId::MERGE) {
+        env.block.number = U256::from(header.number);
+        env.block.coinbase = header.author;
+        env.block.timestamp = U256::from(header.timestamp);
+        if get_spec_id(header.number).is_enabled_in(SpecId::MERGE) {
             env.block.difficulty = U256::ZERO;
-            env.block.prevrandao = block.header.mix_hash;
+            env.block.prevrandao = header.mix_hash;
         } else {
-            env.block.difficulty = block.header.difficulty;
+            env.block.difficulty = header.difficulty;
             env.block.prevrandao = None;
         }
-        env.block.basefee = block.header.base_fee_per_gas.unwrap_or_default();
-        env.block.gas_limit = block.header.gas_limit;
+        env.block.basefee = header.base_fee_per_gas.unwrap_or_default();
+        env.block.gas_limit = header.gas_limit;
 
         // EIP-4844 excess blob gas of this block, introduced in Cancun
-        if let Some(excess_blob_gas) = block.header.excess_blob_gas {
+        if let Some(excess_blob_gas) = header.excess_blob_gas {
             env.block
                 .set_blob_excess_gas_and_price(u64::from_be_bytes(excess_blob_gas.to_be_bytes()));
         }
 
         self.evm.context.evm.env = Box::new(env);
-        self.evm
-            .handler
-            .modify_spec_id(get_spec_id(block.header.number));
+        self.evm.handler.modify_spec_id(get_spec_id(header.number));
         stop_timer(timer);
     }
 
-    pub fn set_transaction_evm_context(&mut self, tx: &TransactionsWithSender) {
+    fn set_transaction_evm_context(&mut self, tx: &TransactionsWithSender) {
         let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["modify_tx"]);
 
         let block_number = self.block_number();
@@ -118,24 +138,14 @@ impl<'a> BlockExecutor<'a> {
         stop_timer(timer);
     }
 
-    pub fn commit(&mut self, evm_state: HashMap<Address, Account>) {
-        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_state"]);
-        self.evm.db_mut().commit(evm_state);
-        stop_timer(timer);
-    }
-
-    pub fn transact(&mut self) -> anyhow::Result<ResultAndState> {
-        Ok(self.evm.transact()?)
-    }
-
-    pub fn increment_balances(
+    fn increment_balances(
         &mut self,
         balances: impl IntoIterator<Item = (Address, u128)>,
     ) -> anyhow::Result<()> {
         Ok(self.evm.db_mut().increment_balances(balances)?)
     }
 
-    pub fn process_dao_fork(&mut self) -> anyhow::Result<()> {
+    fn process_dao_fork(&mut self) -> anyhow::Result<()> {
         // drain balances from DAO hardfork accounts
         let drained_balances = self.evm.db_mut().drain_balances(DAO_HARDKFORK_ACCOUNTS)?;
         let drained_balance_sum: u128 = drained_balances.iter().sum();
@@ -146,7 +156,7 @@ impl<'a> BlockExecutor<'a> {
         Ok(())
     }
 
-    pub fn commit_bundle(&mut self) -> anyhow::Result<RootWithTrieDiff> {
+    pub fn commit_bundle(mut self) -> anyhow::Result<RootWithTrieDiff> {
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_bundle"]);
         self.evm
             .db_mut()
@@ -175,11 +185,50 @@ impl<'a> BlockExecutor<'a> {
         })
     }
 
+    fn process_genesis(&mut self, header: &Header) -> anyhow::Result<()> {
+        ensure!(
+            header.number == 0,
+            "Trying to initialize genesis but received block {}",
+            header.number,
+        );
+        let genesis_file = if Path::new(GENESIS_STATE_FILE).is_file() {
+            File::open(GENESIS_STATE_FILE)?
+        } else if Path::new(TEST_GENESIS_STATE_FILE).is_file() {
+            File::open(TEST_GENESIS_STATE_FILE)?
+        } else {
+            bail!("Genesis file not found")
+        };
+        let genesis: GenesisConfig = serde_json::from_reader(BufReader::new(genesis_file))?;
+
+        for (address, alloc_balance) in genesis.alloc {
+            let address_hash = keccak256(address);
+            let mut account = RocksAccount::default();
+            account.balance += alloc_balance.balance;
+            self.evm.db().database.trie.lock().insert(
+                address_hash.as_ref(),
+                &alloy_rlp::encode(AccountStateInfo::from(&account)),
+            )?;
+            self.evm
+                .db()
+                .database
+                .db
+                .put(address_hash, alloy_rlp::encode(account))?;
+        }
+
+        Ok(())
+    }
+
     pub fn execute_block(&mut self, block: &ProcessedBlock) -> anyhow::Result<()> {
         info!("State EVM processing block {}", block.header.number);
 
         let execute_block_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["execute_block"]);
-        self.set_evm_environment_from_block(block);
+
+        if block.header.number == 0 {
+            self.process_genesis(&block.header)?;
+            return Ok(());
+        }
+
+        self.set_evm_environment_from_block(&block.header);
 
         // execute transactions
         let cumulative_transaction_timer =
@@ -189,7 +238,9 @@ impl<'a> BlockExecutor<'a> {
             let transaction_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["transaction"]);
             let evm_result = self.execute_transaction(transaction)?;
             block_gas_used += evm_result.result.gas_used();
-            self.commit(evm_result.state);
+            let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_state"]);
+            self.evm.db_mut().commit(evm_result.state);
+            stop_timer(timer);
             stop_timer(transaction_timer);
         }
         stop_timer(cumulative_transaction_timer);
@@ -203,7 +254,7 @@ impl<'a> BlockExecutor<'a> {
         self.cumulative_gas_used += block_gas_used;
 
         // update beneficiary
-        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["update_beneficiary"]);
+        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["beneficiary_timer"]);
         let _ = self.increment_balances(get_block_reward(block));
 
         // check if dao fork, if it is drain accounts and transfer it to beneficiary
@@ -211,7 +262,7 @@ impl<'a> BlockExecutor<'a> {
             self.process_dao_fork()?;
         }
 
-        self.manage_block_hash_serve_window(block)?;
+        self.manage_block_hash_serve_window(&block.header)?;
 
         stop_timer(timer);
         stop_timer(execute_block_timer);
@@ -244,7 +295,7 @@ impl<'a> BlockExecutor<'a> {
                 &mut self.evm.context.evm.inner.db,
             )?
         } else {
-            self.transact()?
+            self.evm.transact()?
         };
         stop_timer(timer);
 
@@ -252,19 +303,19 @@ impl<'a> BlockExecutor<'a> {
     }
 
     /// insert block hash into database and remove old one
-    fn manage_block_hash_serve_window(&self, block: &ProcessedBlock) -> anyhow::Result<()> {
+    fn manage_block_hash_serve_window(&self, header: &Header) -> anyhow::Result<()> {
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["insert_blockhash"]);
         self.evm.db().database.db.put(
-            keccak256(B256::from(U256::from(block.header.number))),
-            block.header.hash(),
+            keccak256(B256::from(U256::from(header.number))),
+            header.hash(),
         )?;
-        if block.header.number >= BLOCKHASH_SERVE_WINDOW {
+        if header.number >= BLOCKHASH_SERVE_WINDOW {
             self.evm
                 .db()
                 .database
                 .db
                 .delete(keccak256(B256::from(U256::from(
-                    block.header.number - BLOCKHASH_SERVE_WINDOW,
+                    header.number - BLOCKHASH_SERVE_WINDOW,
                 ))))?;
         }
         stop_timer(timer);
@@ -279,7 +330,7 @@ impl<'a> BlockExecutor<'a> {
         self.evm.db().bundle_size_hint()
     }
 
-    pub fn block_number(&self) -> u64 {
+    fn block_number(&self) -> u64 {
         self.evm.context.evm.env.block.number.to::<u64>()
     }
 }

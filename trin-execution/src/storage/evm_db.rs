@@ -110,11 +110,10 @@ impl EvmDB {
         let plain_state_some_account_timer = start_commit_timer("account:plain_state_some_account");
 
         let timer = start_commit_timer("account:fetch_account_from_db");
-        let raw_account = self.db.get(address_hash)?.unwrap_or_default();
+        let fetched_rocks_account = self.fetch_account(address_hash)?;
         stop_timer(timer);
 
-        let rocks_account = if !raw_account.is_empty() {
-            let decoded_account = RocksAccount::decode(&mut raw_account.as_slice())?;
+        let rocks_account = if let Some(decoded_account) = fetched_rocks_account {
             RocksAccount::from_account_info(account_info, decoded_account.storage_root)
         } else {
             RocksAccount::from_account_info(account_info, EMPTY_ROOT_HASH)
@@ -143,12 +142,10 @@ impl EvmDB {
         timer_label: &str,
     ) -> anyhow::Result<()> {
         // load account from db
-        let Some(raw_account) = self.db.get(address_hash)? else {
+        let Some(mut rocks_account) = self.fetch_account(address_hash)? else {
             return Ok(());
         };
         let timer = start_commit_timer(timer_label);
-
-        let mut rocks_account = RocksAccount::decode(&mut raw_account.as_slice())?;
 
         // wipe storage trie and db
         if rocks_account.storage_root != EMPTY_ROOT_HASH {
@@ -198,15 +195,7 @@ impl EvmDB {
         let timer = start_commit_timer("storage:apply_updates");
 
         let account_db = AccountDB::new(address_hash, self.db.clone());
-        let mut rocks_account: RocksAccount = self
-            .db
-            .get(address_hash)?
-            .map(|raw_account| {
-                let rocks_account: RocksAccount = Decodable::decode(&mut raw_account.as_slice())
-                    .expect("Decoding account should never fail");
-                rocks_account
-            })
-            .unwrap_or_default();
+        let mut rocks_account = self.fetch_account(address_hash)?.unwrap_or_default();
 
         let mut trie = if rocks_account.storage_root == EMPTY_ROOT_HASH {
             EthTrie::new(Arc::new(account_db))
@@ -265,11 +254,6 @@ impl EvmDB {
             }
 
             if !storage.is_empty() {
-                // review comment: note that commit_storage_changes would have to load RocksAccount
-                // from db this means that it's possible that we will have to load
-                // it twice but I think it's quite uncommon, to have both
-                // wipe_storage and non-empty storage, so I don't think it's big
-                // deal
                 self.commit_storage_changes(address_hash, storage)?;
             }
             stop_timer(plain_state_storage_timer);
@@ -322,6 +306,13 @@ impl EvmDB {
 
         Ok(())
     }
+
+    fn fetch_account(&self, address_hash: B256) -> anyhow::Result<Option<RocksAccount>> {
+        match self.db.get(address_hash)? {
+            Some(raw_account) => Ok(Some(RocksAccount::decode(&mut raw_account.as_slice())?)),
+            None => Ok(None),
+        }
+    }
 }
 
 impl Database for EvmDB {
@@ -349,17 +340,13 @@ impl DatabaseRef for EvmDB {
 
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         let timer = start_processing_timer("database_get_basic");
-        let result = match self.db.get(keccak256(address))? {
-            Some(raw_account) => {
-                let account: RocksAccount = Decodable::decode(&mut raw_account.as_slice())?;
-
-                Ok(Some(AccountInfo {
-                    balance: account.balance,
-                    nonce: account.nonce,
-                    code_hash: account.code_hash,
-                    code: None,
-                }))
-            }
+        let result = match self.fetch_account(keccak256(address))? {
+            Some(account) => Ok(Some(AccountInfo {
+                balance: account.balance,
+                nonce: account.nonce,
+                code_hash: account.code_hash,
+                code: None,
+            })),
             None => Ok(None),
         };
         stop_timer(timer);
@@ -379,8 +366,8 @@ impl DatabaseRef for EvmDB {
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
         let timer = start_processing_timer("database_get_storage");
         let address_hash = keccak256(address);
-        let account: RocksAccount = match self.db.get(address_hash)? {
-            Some(raw_account) => Decodable::decode(&mut raw_account.as_slice())?,
+        let account: RocksAccount = match self.fetch_account(address_hash)? {
+            Some(account) => account,
             None => return Err(Self::Error::NotFound("storage".to_string())),
         };
         let account_db = AccountDB::new(address_hash, self.db.clone());

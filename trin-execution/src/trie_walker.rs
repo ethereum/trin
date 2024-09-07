@@ -178,7 +178,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let RootWithTrieDiff { trie_diff, .. } = trin_execution.process_block(0).await.unwrap();
+        let RootWithTrieDiff { trie_diff, .. } = trin_execution.process_next_block().await.unwrap();
         let valid_proof = trin_execution
             .get_proof(Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())
             .unwrap();

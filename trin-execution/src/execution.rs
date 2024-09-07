@@ -1,14 +1,11 @@
-use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
+use alloy_primitives::{keccak256, Address, Bytes, B256};
 use alloy_rlp::Decodable;
 use anyhow::{anyhow, bail, ensure};
 use eth_trie::{RootWithTrieDiff, Trie};
 use ethportal_api::types::state_trie::account_state::AccountState as AccountStateInfo;
-use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeSet, HashMap},
-    fs::File,
-    io::BufReader,
-    path::{Path, PathBuf},
+    collections::BTreeSet,
+    path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -29,18 +26,6 @@ use crate::{
 
 use super::{config::StateConfig, types::trie_proof::TrieProof, utils::address_to_nibble_path};
 
-#[derive(Debug, Serialize, Deserialize)]
-struct AllocBalance {
-    balance: U256,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GenesisConfig {
-    alloc: HashMap<Address, AllocBalance>,
-    state_root: B256,
-}
-
 pub struct TrinExecution {
     pub database: EvmDB,
     pub config: StateConfig,
@@ -48,9 +33,6 @@ pub struct TrinExecution {
     pub era_manager: Arc<Mutex<EraManager>>,
     pub node_data_directory: PathBuf,
 }
-
-const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";
-const TEST_GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
 
 impl TrinExecution {
     pub async fn new(path: Option<PathBuf>, config: StateConfig) -> anyhow::Result<Self> {
@@ -77,76 +59,13 @@ impl TrinExecution {
         })
     }
 
-    fn initialize_genesis(&mut self) -> anyhow::Result<RootWithTrieDiff> {
-        ensure!(
-            self.execution_position.next_block_number() == 0,
-            "Trying to initialize genesis but received block {}",
-            self.execution_position.next_block_number(),
-        );
-
-        let genesis_file = if Path::new(GENESIS_STATE_FILE).is_file() {
-            File::open(GENESIS_STATE_FILE)?
-        } else if Path::new(TEST_GENESIS_STATE_FILE).is_file() {
-            File::open(TEST_GENESIS_STATE_FILE)?
-        } else {
-            bail!("Genesis file not found")
-        };
-        let genesis: GenesisConfig = serde_json::from_reader(BufReader::new(genesis_file))?;
-
-        for (address, alloc_balance) in genesis.alloc {
-            let mut account = Account::default();
-            account.balance += alloc_balance.balance;
-            self.database.trie.lock().insert(
-                keccak256(address).as_ref(),
-                &alloy_rlp::encode(AccountStateInfo::from(&account)),
-            )?;
-            self.database
-                .db
-                .put(keccak256(address.as_slice()), alloy_rlp::encode(account))?;
-        }
-
-        let root_with_trie_diff = self.get_root_with_trie_diff()?;
-        ensure!(
-            root_with_trie_diff.root == genesis.state_root,
-            "Root doesn't match state root from genesis file"
-        );
-
-        self.execution_position.set_next_block_number(
-            self.database.db.clone(),
-            1,
-            root_with_trie_diff.root,
-        )?;
-
-        Ok(root_with_trie_diff)
-    }
-
-    /// This is a lot faster then process_block() as it executes the range in memory, but we won't
-    /// return the trie diff so you can use this to sync up to the block you want, then use
-    /// `process_block()` to get the trie diff to gossip on the state bridge
+    /// Processes up to end block number (inclusive) and returns the root with trie diff
+    /// If the state cache gets too big, we will commit the state to the database early
     pub async fn process_range_of_blocks(&mut self, end: u64) -> anyhow::Result<RootWithTrieDiff> {
         let start = self.execution_position.next_block_number();
         ensure!(
             end >= start,
-            "End block number {} is less than start block number {}",
-            end,
-            start
-        );
-
-        // If we are starting from the beginning, we need to initialize the genesis state
-        if start == 0 {
-            self.era_manager.lock().await.get_next_block().await?;
-            let result = self.initialize_genesis()?;
-            if end == 0 {
-                return Ok(result);
-            }
-        }
-
-        let start = self.execution_position.next_block_number();
-        ensure!(
-            end >= start,
-            "End block number {} is less than start block number {}",
-            end,
-            start
+            "End block number {end} is less than start block number {start}",
         );
 
         info!("Processing blocks from {} to {} (inclusive)", start, end);
@@ -156,7 +75,7 @@ impl TrinExecution {
             self.node_data_directory.clone(),
         );
         let range_start = Instant::now();
-        let mut last_executed_block_number = start - 1;
+        let mut last_executed_block_number = u64::MAX;
         let mut last_state_root = self.execution_position.state_root();
         for block_number in start..=end {
             let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
@@ -190,8 +109,8 @@ impl TrinExecution {
         let root_with_trie_diff = block_executor.commit_bundle()?;
         ensure!(
             root_with_trie_diff.root == last_state_root,
-            "State root doesn't match! Irreversible! Block number: {}",
-            last_executed_block_number
+            "State root doesn't match! Irreversible! Block number: {last_executed_block_number} | Generated root: {} | Expected root: {last_state_root}",
+            root_with_trie_diff.root
         );
 
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["set_block_execution_number"]);
@@ -205,8 +124,9 @@ impl TrinExecution {
         Ok(root_with_trie_diff)
     }
 
-    pub async fn process_block(&mut self, block_number: u64) -> anyhow::Result<RootWithTrieDiff> {
-        self.process_range_of_blocks(block_number).await
+    pub async fn process_next_block(&mut self) -> anyhow::Result<RootWithTrieDiff> {
+        self.process_range_of_blocks(self.execution_position.next_block_number())
+            .await
     }
 
     pub fn next_block_number(&self) -> u64 {
@@ -314,10 +234,7 @@ mod tests {
         let raw_era1 = fs::read("../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
         let processed_era = process_era1_file(raw_era1, 0).unwrap();
         for block in processed_era.blocks {
-            trin_execution
-                .process_block(block.header.number)
-                .await
-                .unwrap();
+            trin_execution.process_next_block().await.unwrap();
             assert_eq!(trin_execution.get_root().unwrap(), block.header.state_root);
         }
     }
@@ -331,7 +248,7 @@ mod tests {
         )
         .await
         .unwrap();
-        trin_execution.process_block(0).await.unwrap();
+        trin_execution.process_next_block().await.unwrap();
         let valid_proof = trin_execution
             .get_proof(Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())
             .unwrap();
