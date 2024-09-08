@@ -1,4 +1,3 @@
-pub mod block_reward;
 pub mod cli;
 pub mod config;
 pub mod content;

@@ -16,7 +16,9 @@ use crate::{
 // https://github.com/paradigmxyz/reth/blob/v0.2.0-beta.6/crates/consensus/common/src/calc.rs
 pub fn process_block_rewards(block: &ProcessedBlock, beneficiaries: &mut HashMap<Address, u128>) {
     let base_block_reward = if block.header.number >= get_spec_block_number(SpecId::MERGE) {
-        0
+        // After the merge, the block reward is 0'
+        // Validators are rewarded through the beacon chain
+        return;
     } else if block.header.number >= get_spec_block_number(SpecId::CONSTANTINOPLE) {
         ETH_TO_WEI * 2
     } else if block.header.number >= get_spec_block_number(SpecId::BYZANTIUM) {
@@ -25,18 +27,14 @@ pub fn process_block_rewards(block: &ProcessedBlock, beneficiaries: &mut HashMap
         ETH_TO_WEI * 5
     };
 
-    // If the block reward is 0, the Merge happened which means the execution layer no longer
-    // determines the block reward
-    if base_block_reward > 0 {
-        if let Some(uncles) = &block.uncles {
-            for uncle in uncles.iter() {
-                *beneficiaries.entry(uncle.author).or_default() +=
-                    ((8 + uncle.number - block.header.number) as u128 * base_block_reward) >> 3;
-            }
-
-            *beneficiaries.entry(block.header.author).or_default() +=
-                base_block_reward + (base_block_reward >> 5) * uncles.len() as u128;
+    if let Some(uncles) = &block.uncles {
+        for uncle in uncles.iter() {
+            *beneficiaries.entry(uncle.author).or_default() +=
+                ((8 + uncle.number - block.header.number) as u128 * base_block_reward) >> 3;
         }
+
+        *beneficiaries.entry(block.header.author).or_default() +=
+            base_block_reward + (base_block_reward >> 5) * uncles.len() as u128;
     }
 }
 
@@ -68,7 +66,7 @@ fn process_dao_fork(
     Ok(())
 }
 
-pub fn get_post_block_balance_increases(
+pub fn get_post_block_beneficiaries(
     evm: &mut Evm<(), State<EvmDB>>,
     block: &ProcessedBlock,
 ) -> anyhow::Result<HashMap<Address, u128>> {

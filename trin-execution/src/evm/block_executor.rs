@@ -24,8 +24,8 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
-    block_reward::get_post_block_balance_increases,
     era::types::{ProcessedBlock, TransactionsWithSender},
+    evm::post_block_beneficiaries::get_post_block_beneficiaries,
     metrics::{
         set_int_gauge_vec, start_timer_vec, stop_timer, BLOCK_HEIGHT, BLOCK_PROCESSING_TIMES,
         TRANSACTION_PROCESSING_TIMES,
@@ -238,9 +238,8 @@ impl<'a> BlockExecutor<'a> {
 
         // update beneficiaries
         let beneficiary_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["update_beneficiary"]);
-        let balance_increases = get_post_block_balance_increases(&mut self.evm, block)?;
-        let _ = self.increment_balances(balance_increases);
-
+        let beneficiaries = get_post_block_beneficiaries(&mut self.evm, block)?;
+        let _ = self.increment_balances(beneficiaries);
         stop_timer(beneficiary_timer);
 
         self.manage_block_hash_serve_window(&block.header)?;
