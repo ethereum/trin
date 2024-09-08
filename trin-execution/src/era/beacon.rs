@@ -62,6 +62,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockBellatrix {
         Ok(ProcessedBlock {
             header: header.clone(),
             uncles: None,
+            withdraws: None,
             transactions: process_transactions(&payload.transactions)?,
         })
     }
@@ -96,6 +97,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockCapella {
         Ok(ProcessedBlock {
             header: header.clone(),
             uncles: None,
+            withdraws: Some(payload.withdrawals.to_vec()),
             transactions: process_transactions(&payload.transactions)?,
         })
     }
@@ -130,6 +132,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
         Ok(ProcessedBlock {
             header: header.clone(),
             uncles: None,
+            withdraws: Some(payload.withdrawals.to_vec()),
             transactions: process_transactions(&payload.transactions)?,
         })
     }
