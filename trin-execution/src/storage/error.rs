@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Debug, PartialEq, Eq, Error)]
+#[derive(Debug, Error)]
 pub enum EVMError {
     #[error("trie error {0}")]
     Trie(#[from] eth_trie::TrieError),
@@ -11,8 +11,11 @@ pub enum EVMError {
     #[error("rocksdb error {0}")]
     DB(#[from] rocksdb::Error),
 
-    #[error("not found")]
-    NotFound,
+    #[error("ethportal error {0}")]
+    ANYHOW(#[from] anyhow::Error),
+
+    #[error("not found database error {0}")]
+    NotFound(String),
 
     #[error("balance error")]
     BalanceError,

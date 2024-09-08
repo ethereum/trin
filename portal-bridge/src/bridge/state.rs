@@ -1,7 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
 use alloy_rlp::Decodable;
-use anyhow::anyhow;
 use e2store::utils::get_shuffled_era1_files;
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::{
@@ -9,7 +8,7 @@ use ethportal_api::{
     types::state_trie::account_state::AccountState as AccountStateInfo, StateContentKey,
     StateContentValue,
 };
-use revm::DatabaseRef;
+use revm::Database;
 use revm_primitives::{keccak256, Bytecode, SpecId, B256};
 use surf::{Client, Config};
 use tokio::{
@@ -24,8 +23,7 @@ use trin_execution::{
         create_account_content_key, create_account_content_value, create_contract_content_key,
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
-    era::manager::EraManager,
-    execution::State,
+    execution::TrinExecution,
     spec_id::get_spec_block_number,
     storage::utils::setup_temp_dir,
     trie_walker::TrieWalker,
@@ -86,10 +84,10 @@ impl StateBridge {
         info!("Launching state bridge: {:?}", self.mode);
         match self.mode.clone() {
             BridgeMode::Single(ModeType::Block(last_block)) => {
-                if last_block > get_spec_block_number(SpecId::DAO_FORK) {
+                if last_block > get_spec_block_number(SpecId::MERGE) {
                     panic!(
                         "State bridge only supports blocks up to {} for the time being.",
-                        get_spec_block_number(SpecId::DAO_FORK)
+                        get_spec_block_number(SpecId::MERGE)
                     );
                 }
                 self.launch_state(last_block)
@@ -110,24 +108,24 @@ impl StateBridge {
             cache_contract_storage_changes: true,
             block_to_trace: BlockToTrace::None,
         };
-        let mut state = State::new(Some(temp_directory.path().to_path_buf()), state_config)?;
-        let starting_block = 0;
-        let mut era_manager = EraManager::new(starting_block).await?;
-        for block_number in starting_block..=last_block {
+        let mut trin_execution =
+            TrinExecution::new(Some(temp_directory.path().to_path_buf()), state_config).await?;
+        for block_number in 0..=last_block {
             info!("Gossipping state for block at height: {block_number}");
-
-            let block = era_manager.get_next_block().await?;
 
             // process block
             let RootWithTrieDiff {
                 root: root_hash,
                 trie_diff: changed_nodes,
-            } = match block_number == 0 {
-                true => state
-                    .initialize_genesis()
-                    .map_err(|e| anyhow!("unable to create genesis state: {e}"))?,
-                false => state.process_block(block)?,
-            };
+            } = trin_execution.process_next_block().await?;
+
+            let block = trin_execution
+                .era_manager
+                .lock()
+                .await
+                .last_fetched_block()
+                .await?
+                .clone();
 
             let walk_diff = TrieWalker::new(root_hash, changed_nodes);
 
@@ -162,7 +160,7 @@ impl StateBridge {
                 // if the code_hash is empty then then don't try to gossip the contract bytecode
                 if account.code_hash != keccak256([]) {
                     // gossip contract bytecode
-                    let code = state.database.code_by_hash_ref(account.code_hash)?;
+                    let code = trin_execution.database.code_by_hash(account.code_hash)?;
                     self.gossip_contract_bytecode(
                         address_hash,
                         &account_proof,
@@ -174,7 +172,8 @@ impl StateBridge {
                 }
 
                 // gossip contract storage
-                let storage_changed_nodes = state.database.get_storage_trie_diff(address_hash);
+                let storage_changed_nodes =
+                    trin_execution.database.get_storage_trie_diff(address_hash);
 
                 let storage_walk_diff =
                     TrieWalker::new(account.storage_root, storage_changed_nodes);
@@ -193,7 +192,7 @@ impl StateBridge {
 
             // flush the database cache
             // This is used for gossiping storage trie diffs
-            state.database.storage_cache.clear();
+            trin_execution.database.storage_cache.clear();
         }
         Ok(())
     }

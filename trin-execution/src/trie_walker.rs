@@ -1,10 +1,9 @@
 use std::collections::VecDeque;
 
+use alloy_consensus::EMPTY_ROOT_HASH;
 use alloy_primitives::B256;
-use alloy_rlp::EMPTY_STRING_CODE;
 use eth_trie::{decode_node, node::Node};
 use hashbrown::HashMap as BrownHashMap;
-use revm_primitives::keccak256;
 use serde::{Deserialize, Serialize};
 
 use super::types::trie_proof::TrieProof;
@@ -38,7 +37,7 @@ pub struct TrieWalker {
 impl TrieWalker {
     pub fn new(root_hash: B256, nodes: BrownHashMap<B256, Vec<u8>>) -> Self {
         // if the storage root is empty then there is no storage to gossip
-        if root_hash == keccak256([EMPTY_STRING_CODE]) {
+        if root_hash == EMPTY_ROOT_HASH {
             return Self {
                 nodes: BrownHashMap::new(),
             };
@@ -166,23 +165,24 @@ mod tests {
     use revm_primitives::hex::FromHex;
 
     use crate::{
-        config::StateConfig, execution::State, storage::utils::setup_temp_dir,
+        config::StateConfig, execution::TrinExecution, storage::utils::setup_temp_dir,
         trie_walker::TrieWalker,
     };
 
-    #[test_log::test]
-    fn test_trie_walker_builds_valid_proof() {
+    #[tokio::test]
+    async fn test_trie_walker_builds_valid_proof() {
         let temp_directory = setup_temp_dir().unwrap();
-        let mut state = State::new(
+        let mut trin_execution = TrinExecution::new(
             Some(temp_directory.path().to_path_buf()),
             StateConfig::default(),
         )
+        .await
         .unwrap();
-        let RootWithTrieDiff { trie_diff, .. } = state.initialize_genesis().unwrap();
-        let valid_proof = state
+        let RootWithTrieDiff { trie_diff, .. } = trin_execution.process_next_block().await.unwrap();
+        let valid_proof = trin_execution
             .get_proof(Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())
             .unwrap();
-        let root_hash = state.get_root().unwrap();
+        let root_hash = trin_execution.get_root().unwrap();
         let walk_diff = TrieWalker::new(root_hash, trie_diff);
 
         let last_node = valid_proof

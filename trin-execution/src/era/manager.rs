@@ -64,6 +64,17 @@ impl EraManager {
         self.next_block_number
     }
 
+    pub async fn last_fetched_block(&self) -> anyhow::Result<&ProcessedBlock> {
+        let Some(current_era) = &self.current_era else {
+            panic!("current_era should be initialized in EraManager::new");
+        };
+        ensure!(
+            self.next_block_number > 0,
+            "next_block_number should be greater than 0"
+        );
+        Ok(current_era.get_block(self.next_block_number - 1))
+    }
+
     pub async fn get_next_block(&mut self) -> anyhow::Result<&ProcessedBlock> {
         let processed_era = match &self.current_era {
             Some(processed_era) if processed_era.contains_block(self.next_block_number) => {

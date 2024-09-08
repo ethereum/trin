@@ -2850,6 +2850,7 @@ dependencies = [
 name = "ethportal-api"
 version = "0.2.2"
 dependencies = [
+ "alloy-consensus",
  "alloy-primitives",
  "alloy-rlp",
  "anyhow",

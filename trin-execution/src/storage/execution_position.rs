@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
-use alloy_rlp::{Decodable, RlpDecodable, RlpEncodable, EMPTY_STRING_CODE};
-use revm_primitives::{keccak256, B256};
+use alloy_consensus::EMPTY_ROOT_HASH;
+use alloy_rlp::{Decodable, RlpDecodable, RlpEncodable};
+use ethportal_api::Header;
+use revm_primitives::B256;
 use rocksdb::DB as RocksDB;
 use serde::{Deserialize, Serialize};
 
@@ -15,11 +17,8 @@ pub struct ExecutionPosition {
 
     state_root: B256,
 
-    /// The block number we are currently executing
-    block_execution_number: u64,
-
-    /// The index of the transaction we are currently executing
-    transaction_index: u64,
+    /// The next block number to be executed.
+    next_block_number: u64,
 }
 
 impl ExecutionPosition {
@@ -30,9 +29,8 @@ impl ExecutionPosition {
             }
             None => Self {
                 version: 0,
-                block_execution_number: 0,
-                state_root: keccak256([EMPTY_STRING_CODE]),
-                transaction_index: 0,
+                next_block_number: 0,
+                state_root: EMPTY_ROOT_HASH,
             },
         })
     }
@@ -41,32 +39,17 @@ impl ExecutionPosition {
         self.version
     }
 
-    pub fn block_execution_number(&self) -> u64 {
-        self.block_execution_number
+    pub fn next_block_number(&self) -> u64 {
+        self.next_block_number
     }
 
     pub fn state_root(&self) -> B256 {
         self.state_root
     }
 
-    pub fn transaction_index(&self) -> u64 {
-        self.transaction_index
-    }
-
-    pub fn increase_block_execution_number(
-        &mut self,
-        db: Arc<RocksDB>,
-        state_root: B256,
-    ) -> anyhow::Result<()> {
-        self.block_execution_number += 1;
-        self.state_root = state_root;
-        self.transaction_index = 0;
-        db.put(EXECUTION_POSITION_DB_KEY, alloy_rlp::encode(self))?;
-        Ok(())
-    }
-
-    pub fn increase_transaction_index(&mut self, db: Arc<RocksDB>) -> anyhow::Result<()> {
-        self.transaction_index += 1;
+    pub fn update_position(&mut self, db: Arc<RocksDB>, header: Header) -> anyhow::Result<()> {
+        self.next_block_number = header.number + 1;
+        self.state_root = header.state_root;
         db.put(EXECUTION_POSITION_DB_KEY, alloy_rlp::encode(self))?;
         Ok(())
     }

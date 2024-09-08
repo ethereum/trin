@@ -17,3 +17,4 @@ scrape_configs:
         - localhost:9091
         labels:
           instance: local_node
+
