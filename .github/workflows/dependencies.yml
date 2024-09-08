@@ -5,7 +5,7 @@ name: Dependency Management
 
 on:
   schedule:
-    # Run weekly on Sunday
+    # Run weekly
     - cron: "0 0 * * SUN"
   workflow_dispatch:
   # Allows for manual workflow execution
