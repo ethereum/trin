@@ -1,14 +1,14 @@
 # This workflow is borrowed from reth: https://github.com/paradigmxyz/reth/blob/e04292247fff14ea93b4b0f6cf427bc9e4365c75/.github/workflows/dependencies.yml
-# Automatically run `cargo update` periodically
+# Automatically manages dependencies with periodic updates and checks for unused dependencies
 
-name: Update Dependencies
+name: Dependency Management
 
 on:
   schedule:
-    # Run weekly
+    # Run weekly on Sunday
     - cron: "0 0 * * SUN"
   workflow_dispatch:
-  # Needed so we can run it manually
+  # Allows for manual workflow execution
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -28,35 +28,63 @@ env:
     </details>
 
 jobs:
-  update:
-    name: Update
+  update_dependencies:
+    name: Update Dependencies
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
 
       - name: cargo update
-        # Remove first line that always just says "Updating crates.io index"
-        run: cargo update --color never 2>&1 | sed '/crates.io index/d' | tee -a cargo_update.log
+        run: |
+          cargo update --color never 2>&1 | sed '/crates.io index/d' | tee -a cargo_update.log
 
-      - name: craft commit message and PR body
-        id: msg
+      - name: Craft commit message and PR body
+        id: craft_message
         run: |
           export cargo_update_log="$(cat cargo_update.log)"
-
-          echo "commit_message<<EOF" >> $GITHUB_OUTPUT
-          printf "$TITLE\n\n$cargo_update_log\n" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          echo "body<<EOF" >> $GITHUB_OUTPUT
-          echo "$BODY" | envsubst >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "commit_message<<EOF" >> $GITHUB_ENV
+          printf "$TITLE\n\n$cargo_update_log\n" >> $GITHUB_ENV
+          echo "EOF"
+          echo "body<<EOF" >> $GITHUB_ENV
+          echo "$BODY" | envsubst >> $GITHUB_ENV
+          echo "EOF"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
           add-paths: ./Cargo.lock
-          commit-message: ${{ steps.msg.outputs.commit_message }}
+          commit-message: ${{ steps.craft_message.outputs.commit_message }}
           title: ${{ env.TITLE }}
-          body: ${{ steps.msg.outputs.body }}
+          body: ${{ steps.craft_message.outputs.body }}
           branch: ${{ env.BRANCH }}
+
+  check_unused_deps:
+    name: Check Unused Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: cargo udeps
+        run: cargo +nightly udeps --output json
+
+      - name: Analyze unused dependencies
+        id: analyze_unused
+        run: |
+          export unused_deps="$(jq '.unused_deps' udeps_output.json)"
+          echo "unused_deps<<EOF" >> $GITHUB_ENV
+          echo "$unused_deps" >> $GITHUB_ENV
+          echo "EOF"
+
+      - name: Report Unused Dependencies
+        run: |
+          if [[ -z "${{ steps.analyze_unused.outputs.unused_deps }}" ]]; then
+            echo "No unused dependencies found."
+          else
+            echo "Unused dependencies detected, see below:"
+            echo "${{ steps.analyze_unused.outputs.unused_deps }}"
+          fi
+
+      
+
