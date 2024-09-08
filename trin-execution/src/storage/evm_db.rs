@@ -110,11 +110,11 @@ impl EvmDB {
         let plain_state_some_account_timer = start_commit_timer("account:plain_state_some_account");
 
         let timer = start_commit_timer("account:fetch_account_from_db");
-        let fetched_rocks_account = self.fetch_account(address_hash)?;
+        let existing_rocks_account = self.fetch_account(address_hash)?;
         stop_timer(timer);
 
-        let rocks_account = if let Some(decoded_account) = fetched_rocks_account {
-            RocksAccount::from_account_info(account_info, decoded_account.storage_root)
+        let rocks_account = if let Some(existing_rocks_account) = existing_rocks_account {
+            RocksAccount::from_account_info(account_info, existing_rocks_account.storage_root)
         } else {
             RocksAccount::from_account_info(account_info, EMPTY_ROOT_HASH)
         };
@@ -282,13 +282,6 @@ impl EvmDB {
 
         // Write Contract Code
         // TODO: Delete contract code if no accounts point to it: https://github.com/ethereum/trin/issues/1428
-        // This can happen in 1 of 2 cases
-        // - the account is deleted and the contract code is not used by any other accounts
-        // - we do a revert and the contract code is not used by any other accounts
-        // The solution would require keeping a count of how many accounts point to a contract code
-        // and deleting the contract code if the count is 0.
-        // This is very low priority due to this issue being very rare and it not taking up much
-        // storage
         let timer = start_commit_timer("contract:committing_contracts_total");
         for (hash, bytecode) in plain_state.contracts {
             let timer = start_commit_timer("committing_contract");

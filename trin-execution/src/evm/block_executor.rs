@@ -185,12 +185,7 @@ impl<'a> BlockExecutor<'a> {
         })
     }
 
-    fn process_genesis(&mut self, header: &Header) -> anyhow::Result<()> {
-        ensure!(
-            header.number == 0,
-            "Trying to initialize genesis but received block {}",
-            header.number,
-        );
+    fn process_genesis(&mut self) -> anyhow::Result<()> {
         let genesis_file = if Path::new(GENESIS_STATE_FILE).is_file() {
             File::open(GENESIS_STATE_FILE)?
         } else if Path::new(TEST_GENESIS_STATE_FILE).is_file() {
@@ -224,7 +219,7 @@ impl<'a> BlockExecutor<'a> {
         let execute_block_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["execute_block"]);
 
         if block.header.number == 0 {
-            self.process_genesis(&block.header)?;
+            self.process_genesis()?;
             return Ok(());
         }
 
@@ -254,17 +249,17 @@ impl<'a> BlockExecutor<'a> {
         self.cumulative_gas_used += block_gas_used;
 
         // update beneficiary
-        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["beneficiary_timer"]);
+        let beneficiary_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["update_beneficiary"]);
         let _ = self.increment_balances(get_block_reward(block));
 
         // check if dao fork, if it is drain accounts and transfer it to beneficiary
         if block.header.number == get_spec_block_number(SpecId::DAO_FORK) {
             self.process_dao_fork()?;
         }
+        stop_timer(beneficiary_timer);
 
         self.manage_block_hash_serve_window(&block.header)?;
 
-        stop_timer(timer);
         stop_timer(execute_block_timer);
         set_int_gauge_vec(&BLOCK_HEIGHT, block.header.number as i64, &[]);
         Ok(())

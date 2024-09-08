@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use alloy_consensus::EMPTY_ROOT_HASH;
 use alloy_rlp::{Decodable, RlpDecodable, RlpEncodable};
+use ethportal_api::Header;
 use revm_primitives::B256;
 use rocksdb::DB as RocksDB;
 use serde::{Deserialize, Serialize};
@@ -46,14 +47,9 @@ impl ExecutionPosition {
         self.state_root
     }
 
-    pub fn set_next_block_number(
-        &mut self,
-        db: Arc<RocksDB>,
-        block_number: u64,
-        state_root: B256,
-    ) -> anyhow::Result<()> {
-        self.next_block_number = block_number;
-        self.state_root = state_root;
+    pub fn update_position(&mut self, db: Arc<RocksDB>, header: Header) -> anyhow::Result<()> {
+        self.next_block_number = header.number + 1;
+        self.state_root = header.state_root;
         db.put(EXECUTION_POSITION_DB_KEY, alloy_rlp::encode(self))?;
         Ok(())
     }

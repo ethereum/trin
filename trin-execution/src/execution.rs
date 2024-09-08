@@ -2,7 +2,7 @@ use alloy_primitives::{keccak256, Address, Bytes, B256};
 use alloy_rlp::Decodable;
 use anyhow::{anyhow, bail, ensure};
 use eth_trie::{RootWithTrieDiff, Trie};
-use ethportal_api::types::state_trie::account_state::AccountState as AccountStateInfo;
+use ethportal_api::{types::state_trie::account_state::AccountState as AccountStateInfo, Header};
 use std::{
     collections::BTreeSet,
     path::PathBuf,
@@ -60,7 +60,8 @@ impl TrinExecution {
     }
 
     /// Processes up to end block number (inclusive) and returns the root with trie diff
-    /// If the state cache gets too big, we will commit the state to the database early
+    /// If the state cache gets too big, we will commit the state to the database early and return
+    /// the function early along with it
     pub async fn process_range_of_blocks(&mut self, end: u64) -> anyhow::Result<RootWithTrieDiff> {
         let start = self.execution_position.next_block_number();
         ensure!(
@@ -75,8 +76,7 @@ impl TrinExecution {
             self.node_data_directory.clone(),
         );
         let range_start = Instant::now();
-        let mut last_executed_block_number = u64::MAX;
-        let mut last_state_root = self.execution_position.state_root();
+        let mut last_executed_block_header: Option<Header> = None;
         for block_number in start..=end {
             let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
             let block = self
@@ -89,8 +89,7 @@ impl TrinExecution {
             stop_timer(timer);
 
             block_executor.execute_block(&block)?;
-            last_executed_block_number = block_number;
-            last_state_root = block.header.state_root;
+            last_executed_block_header = Some(block.header);
 
             // Commit the bundle if we have reached the limits, to prevent to much memory usage
             // We won't use this during the dos attack to avoid writing empty accounts to disk
@@ -106,27 +105,28 @@ impl TrinExecution {
             }
         }
 
+        let last_executed_block_header =
+            last_executed_block_header.expect("At least one block must have been executed");
+
         let root_with_trie_diff = block_executor.commit_bundle()?;
         ensure!(
-            root_with_trie_diff.root == last_state_root,
-            "State root doesn't match! Irreversible! Block number: {last_executed_block_number} | Generated root: {} | Expected root: {last_state_root}",
-            root_with_trie_diff.root
+            root_with_trie_diff.root == last_executed_block_header.state_root,
+            "State root doesn't match! Irreversible! Block number: {} | Generated root: {} | Expected root: {}",
+            last_executed_block_header.number,
+            root_with_trie_diff.root,
+            last_executed_block_header.state_root
         );
 
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["set_block_execution_number"]);
-        self.execution_position.set_next_block_number(
-            self.database.db.clone(),
-            last_executed_block_number + 1,
-            root_with_trie_diff.root,
-        )?;
+        self.execution_position
+            .update_position(self.database.db.clone(), last_executed_block_header)?;
         stop_timer(timer);
 
         Ok(root_with_trie_diff)
     }
 
     pub async fn process_next_block(&mut self) -> anyhow::Result<RootWithTrieDiff> {
-        self.process_range_of_blocks(self.execution_position.next_block_number())
-            .await
+        self.process_range_of_blocks(self.next_block_number()).await
     }
 
     pub fn next_block_number(&self) -> u64 {
