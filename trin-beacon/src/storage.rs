@@ -1,5 +1,4 @@
 use alloy_primitives::B256;
-use alloy_primitives::Bytes;
 use ethportal_api::{
     consensus::fork::ForkName,
     types::{

@@ -339,11 +339,7 @@ async fn offer(
 ) -> Result<Value, String> {
     match network
         .overlay
-        .send_offer(
-            enr,
-            content_key.to_bytes(),
-            content_value.encode().to_vec(),
-        )
+        .send_offer(enr, content_key.to_bytes(), content_value.encode().to_vec())
         .await
     {
         Ok(accept) => Ok(json!(AcceptInfo {
@@ -362,11 +358,7 @@ async fn trace_offer(
 ) -> Result<Value, String> {
     match network
         .overlay
-        .send_offer_trace(
-            enr,
-            content_key.to_bytes(),
-            content_value.encode().to_vec(),
-        )
+        .send_offer_trace(enr, content_key.to_bytes(), content_value.encode().to_vec())
         .await
     {
         Ok(accept) => Ok(json!(accept)),

@@ -309,11 +309,7 @@ async fn offer(
         "Offer",
         network
             .overlay
-            .send_offer(
-                enr,
-                content_key.to_bytes(),
-                content_value.encode().to_vec(),
-            )
+            .send_offer(enr, content_key.to_bytes(), content_value.encode().to_vec())
             .await
             .map(|accept| AcceptInfo {
                 content_keys: accept.content_keys,
@@ -331,11 +327,7 @@ async fn trace_offer(
         "TraceOffer",
         network
             .overlay
-            .send_offer_trace(
-                enr,
-                content_key.to_bytes(),
-                content_value.encode().to_vec(),
-            )
+            .send_offer_trace(enr, content_key.to_bytes(), content_value.encode().to_vec())
             .await,
     )
 }
