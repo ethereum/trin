@@ -523,11 +523,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             ))
         })();
 
-        if let Ok(is_valid) = res {
-            is_valid
-        } else {
-            false
-        }
+        res.unwrap_or_default()
     }
 
     fn compute_committee_sign_root(&self, header: Bytes32, slot: u64) -> Result<Node> {

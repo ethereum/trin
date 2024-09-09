@@ -37,11 +37,7 @@ pub fn is_proof_valid<L: TreeHash>(
         Ok(is_valid)
     })();
 
-    if let Ok(is_valid) = res {
-        is_valid
-    } else {
-        false
-    }
+    res.unwrap_or_default()
 }
 
 #[derive(SimpleSerialize, Default, Debug)]
