@@ -27,7 +27,6 @@ use crate::{
         history::{HEADER_SATURATION_DELAY, SERVE_BLOCK_TIMEOUT},
         utils::lookup_epoch_acc,
     },
-    census::EnrsRequest,
     gossip::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
     types::mode::{BridgeMode, FourFoursMode},
@@ -54,9 +53,6 @@ pub struct Era1Bridge {
     // to make sure we don't overwhelm the trin client
     pub gossip_semaphore: Arc<Semaphore>,
     pub execution_api: ExecutionApi,
-    // Used to request all interested enrs in the network from census process.
-    // If None, the bridge will use the default gossip mode.
-    pub census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
 }
 
 // todo: validate via checksum, so we don't have to validate content on a per-value basis
@@ -68,7 +64,6 @@ impl Era1Bridge {
         epoch_acc_path: PathBuf,
         gossip_limit: usize,
         execution_api: ExecutionApi,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<Self> {
         let http_client: Client = Config::new()
             .add_header("Content-Type", "application/xml")
@@ -87,7 +82,6 @@ impl Era1Bridge {
             metrics,
             gossip_semaphore,
             execution_api,
-            census_tx,
         })
     }
 
@@ -284,7 +278,6 @@ impl Era1Bridge {
                 permit,
                 self.metrics.clone(),
                 hunt,
-                self.census_tx.clone(),
             );
             serve_block_tuple_handles.push(serve_block_tuple_handle);
         }
@@ -308,16 +301,9 @@ impl Era1Bridge {
         debug!("Built EpochAccumulator for Epoch #{epoch_index:?}: now gossiping.");
         // spawn gossip in new thread to avoid blocking
         let portal_client = self.portal_client.clone();
-        let census_tx = self.census_tx.clone();
         tokio::spawn(async move {
-            if let Err(msg) = gossip_history_content(
-                portal_client,
-                content_key,
-                content_value,
-                block_stats,
-                census_tx,
-            )
-            .await
+            if let Err(msg) =
+                gossip_history_content(portal_client, content_key, content_value, block_stats).await
             {
                 warn!("Failed to gossip epoch accumulator: {msg}");
             }
@@ -334,7 +320,6 @@ impl Era1Bridge {
         permit: OwnedSemaphorePermit,
         metrics: BridgeMetricsReporter,
         hunt: bool,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> JoinHandle<()> {
         let number = block_tuple.header.header.number;
         info!("Spawning serve_block_tuple for block at height: {number}");
@@ -351,7 +336,6 @@ impl Era1Bridge {
                     block_stats.clone(),
                     metrics.clone(),
                     hunt,
-                    census_tx,
                 )).await
                 {
                 Ok(result) => match result {
@@ -379,7 +363,6 @@ impl Era1Bridge {
         block_stats: Arc<Mutex<HistoryBlockStats>>,
         metrics: BridgeMetricsReporter,
         hunt: bool,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
         info!(
             "Serving block tuple at height: {}",
@@ -411,7 +394,6 @@ impl Era1Bridge {
                 epoch_acc,
                 header_validator,
                 block_stats.clone(),
-                census_tx.clone(),
             )
             .await
             {
@@ -466,7 +448,6 @@ impl Era1Bridge {
                 portal_client.clone(),
                 block_tuple.clone(),
                 block_stats.clone(),
-                census_tx.clone(),
             )
             .await
             {
@@ -511,7 +492,6 @@ impl Era1Bridge {
                 portal_client.clone(),
                 block_tuple.clone(),
                 block_stats.clone(),
-                census_tx.clone(),
             )
             .await
             {
@@ -541,7 +521,6 @@ impl Era1Bridge {
         epoch_acc: Arc<EpochAccumulator>,
         header_validator: Arc<HeaderValidator>,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
         debug!(
             "Serving block header at height: {}",
@@ -573,21 +552,13 @@ impl Era1Bridge {
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
 
-        gossip_history_content(
-            portal_client,
-            content_key,
-            content_value,
-            block_stats,
-            census_tx,
-        )
-        .await
+        gossip_history_content(portal_client, content_key, content_value, block_stats).await
     }
 
     async fn construct_and_gossip_block_body(
         portal_client: HttpClient,
         block_tuple: BlockTuple,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
         debug!(
             "Serving block body at height: {}",
@@ -600,21 +571,13 @@ impl Era1Bridge {
         });
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockBody(block_tuple.body.body);
-        gossip_history_content(
-            portal_client,
-            content_key,
-            content_value,
-            block_stats,
-            census_tx,
-        )
-        .await
+        gossip_history_content(portal_client, content_key, content_value, block_stats).await
     }
 
     async fn construct_and_gossip_receipts(
         portal_client: HttpClient,
         block_tuple: BlockTuple,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
         debug!(
             "Serving block receipts at height: {}",
@@ -627,14 +590,7 @@ impl Era1Bridge {
         });
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::Receipts(block_tuple.receipts.receipts);
-        gossip_history_content(
-            portal_client,
-            content_key,
-            content_value,
-            block_stats,
-            census_tx,
-        )
-        .await
+        gossip_history_content(portal_client, content_key, content_value, block_stats).await
     }
 }
 

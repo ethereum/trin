@@ -100,52 +100,15 @@ pub async fn gossip_history_content(
     content_key: HistoryContentKey,
     content_value: HistoryContentValue,
     block_stats: Arc<Mutex<HistoryBlockStats>>,
-    // Indicates what gossip mode is being used
-    // if None, then the gossip mode is 'gossip'
-    // if Some, then the gossip mode is 'offer'
-    census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
 ) -> anyhow::Result<()> {
-    if let Some(census_tx) = census_tx {
-        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
-        let enrs_request = EnrsRequest {
-            content_key: ContentKey::History(content_key.clone()),
-            resp_tx,
-        };
-        census_tx.send(enrs_request)?;
-        let enrs = resp_rx.await?;
-        let total_enrs = enrs.len();
-        let mut success = 0;
-        for enr in enrs {
-            let result = HistoryNetworkApiClient::trace_offer(
-                &portal_client,
-                enr,
-                content_key.clone(),
-                content_value.encode(),
-            )
-            .await;
-            if let Ok(result) = result {
-                if result {
-                    success += 1;
-                }
-            }
-        }
-        debug!(
-            "Successfully offered history content to {}/{} peers on network. content key={:?}",
-            success,
-            total_enrs,
-            content_key.to_hex(),
-        );
+    let result = tokio::spawn(
+        history_trace_gossip(portal_client, content_key.clone(), content_value).in_current_span(),
+    )
+    .await?;
+    if let Ok(mut data) = block_stats.lock() {
+        data.update(content_key, result.into());
     } else {
-        let result = tokio::spawn(
-            history_trace_gossip(portal_client, content_key.clone(), content_value)
-                .in_current_span(),
-        )
-        .await?;
-        if let Ok(mut data) = block_stats.lock() {
-            data.update(content_key, result.into());
-        } else {
-            warn!("Error updating history gossip stats. Unable to acquire lock.");
-        }
+        warn!("Error updating history gossip stats. Unable to acquire lock.");
     }
     Ok(())
 }

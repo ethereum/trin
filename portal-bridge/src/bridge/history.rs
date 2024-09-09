@@ -5,7 +5,7 @@ use std::{
 
 use futures::future::join_all;
 use tokio::{
-    sync::{mpsc, OwnedSemaphorePermit, Semaphore},
+    sync::{OwnedSemaphorePermit, Semaphore},
     task::JoinHandle,
     time::{sleep, timeout, Duration},
 };
@@ -15,7 +15,6 @@ use trin_metrics::bridge::BridgeMetricsReporter;
 use crate::{
     api::execution::ExecutionApi,
     bridge::utils::lookup_epoch_acc,
-    census::EnrsRequest,
     gossip::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
     types::{full_header::FullHeader, mode::BridgeMode},
@@ -46,9 +45,6 @@ pub struct HistoryBridge {
     // Semaphore used to limit the amount of active gossip transfers
     // to make sure we don't overwhelm the trin client
     pub gossip_semaphore: Arc<Semaphore>,
-    // Used to request all interested enrs in the network from census process.
-    // If None, the bridge will use the default gossip mode.
-    pub census_tx: Option<mpsc::UnboundedSender<EnrsRequest>>,
 }
 
 impl HistoryBridge {
@@ -59,7 +55,6 @@ impl HistoryBridge {
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
         gossip_limit: usize,
-        census_tx: Option<mpsc::UnboundedSender<EnrsRequest>>,
     ) -> Self {
         let metrics = BridgeMetricsReporter::new("history".to_string(), &format!("{mode:?}"));
         let gossip_semaphore = Arc::new(Semaphore::new(gossip_limit));
@@ -71,7 +66,6 @@ impl HistoryBridge {
             epoch_acc_path,
             metrics,
             gossip_semaphore,
-            census_tx,
         }
     }
 }
@@ -102,7 +96,6 @@ impl HistoryBridge {
                 asset.content_key.clone(),
                 asset.content_value().expect("Error getting content value"),
                 block_stats.clone(),
-                self.census_tx.clone(),
             )
             .await;
             if let HistoryContentKey::BlockHeaderWithProof(_) = asset.content_key {
@@ -165,7 +158,6 @@ impl HistoryBridge {
                     self.execution_api.clone(),
                     permit,
                     self.metrics.clone(),
-                    self.census_tx.clone(),
                 );
             }
             block_index = latest_block + 1;
@@ -199,7 +191,7 @@ impl HistoryBridge {
             if height <= MERGE_BLOCK_NUMBER && current_epoch_index != height / EPOCH_SIZE {
                 current_epoch_index = height / EPOCH_SIZE;
                 epoch_acc = match self
-                    .construct_and_gossip_epoch_acc(current_epoch_index, self.census_tx.clone())
+                    .construct_and_gossip_epoch_acc(current_epoch_index)
                     .await
                 {
                     Ok(val) => Some(val),
@@ -220,7 +212,6 @@ impl HistoryBridge {
                 self.execution_api.clone(),
                 permit,
                 self.metrics.clone(),
-                self.census_tx.clone(),
             ));
         }
 
@@ -236,13 +227,12 @@ impl HistoryBridge {
         execution_api: ExecutionApi,
         permit: OwnedSemaphorePermit,
         metrics: BridgeMetricsReporter,
-        census_tx: Option<mpsc::UnboundedSender<EnrsRequest>>,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let timer = metrics.start_process_timer("spawn_serve_full_block");
             match timeout(
                 SERVE_BLOCK_TIMEOUT,
-                Self::serve_full_block(height, epoch_acc, portal_client, execution_api, metrics.clone(), census_tx)
+                Self::serve_full_block(height, epoch_acc, portal_client, execution_api, metrics.clone())
                     .in_current_span(),
             )
             .await {
@@ -263,7 +253,6 @@ impl HistoryBridge {
         portal_client: HttpClient,
         execution_api: ExecutionApi,
         metrics: BridgeMetricsReporter,
-        census_tx: Option<mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
         info!("Serving block: {height}");
         let timer = metrics.start_process_timer("construct_and_gossip_header");
@@ -279,7 +268,6 @@ impl HistoryBridge {
             header_content_key,
             header_content_value,
             block_stats.clone(),
-            census_tx.clone(),
         )
         .await
         {
@@ -296,7 +284,6 @@ impl HistoryBridge {
         let block_body_execution_api = execution_api.clone();
         let block_body_block_stats = block_stats.clone();
         let block_body_metrics = metrics.clone();
-        let census_tx_clone = census_tx.clone();
         let serve_block_body_task = tokio::spawn(async move {
             match timeout(
                 SERVE_CONTENT_TIMEOUT,
@@ -306,7 +293,6 @@ impl HistoryBridge {
                     &block_body_execution_api,
                     block_body_block_stats,
                     block_body_metrics,
-                    census_tx_clone,
                 ).in_current_span(),
             )
             .await {
@@ -318,7 +304,6 @@ impl HistoryBridge {
             };
         });
         let receipt_block_stats = block_stats.clone();
-        let census_tx_clone = census_tx.clone();
         let serve_receipt_task = tokio::spawn(async move {
             match timeout(
                 SERVE_CONTENT_TIMEOUT,
@@ -328,7 +313,6 @@ impl HistoryBridge {
                     &execution_api,
                     receipt_block_stats,
                     metrics,
-                    census_tx_clone,
                 ).in_current_span(),
             )
             .await {
@@ -355,7 +339,6 @@ impl HistoryBridge {
     async fn construct_and_gossip_epoch_acc(
         &self,
         epoch_index: u64,
-        census_tx: Option<mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<Arc<EpochAccumulator>> {
         let (epoch_hash, epoch_acc) = lookup_epoch_acc(
             epoch_index,
@@ -374,7 +357,6 @@ impl HistoryBridge {
             content_key,
             content_value,
             block_stats,
-            census_tx,
         )
         .await;
         Ok(Arc::new(epoch_acc))
@@ -386,7 +368,6 @@ impl HistoryBridge {
         execution_api: &ExecutionApi,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
         metrics: BridgeMetricsReporter,
-        census_tx: Option<mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
         let timer = metrics.start_process_timer("construct_and_gossip_receipt");
         let (content_key, content_value) = execution_api.get_receipts(full_header).await?;
@@ -399,7 +380,6 @@ impl HistoryBridge {
             content_key,
             content_value,
             block_stats,
-            census_tx,
         )
         .await;
         metrics.stop_process_timer(timer);
@@ -412,7 +392,6 @@ impl HistoryBridge {
         execution_api: &ExecutionApi,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
         metrics: BridgeMetricsReporter,
-        census_tx: Option<mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
         let timer = metrics.start_process_timer("construct_and_gossip_block_body");
         let (content_key, content_value) = execution_api.get_block_body(full_header).await?;
@@ -420,14 +399,8 @@ impl HistoryBridge {
             "Built and validated BlockBody for Block #{:?}: now gossiping.",
             full_header.header.number
         );
-        let result = gossip_history_content(
-            portal_client,
-            content_key,
-            content_value,
-            block_stats,
-            census_tx,
-        )
-        .await;
+        let result =
+            gossip_history_content(portal_client, content_key, content_value, block_stats).await;
         metrics.stop_process_timer(timer);
         result
     }
