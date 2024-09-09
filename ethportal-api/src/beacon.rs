@@ -1,4 +1,5 @@
 use crate::{
+    consensus::header::BeaconBlockHeader,
     types::{
         content_key::beacon::BeaconContentKey,
         enr::Enr,
@@ -47,6 +48,10 @@ pub trait BeaconNetworkApi {
     /// Get the finalized state root of the finalized beacon header.
     #[method(name = "beaconFinalizedStateRoot")]
     async fn finalized_state_root(&self) -> RpcResult<B256>;
+
+    /// Get the finalized beacon header
+    #[method(name = "beaconFinalizedHeader")]
+    async fn finalized_header(&self) -> RpcResult<BeaconBlockHeader>;
 
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the
     /// designated peer and wait for a response

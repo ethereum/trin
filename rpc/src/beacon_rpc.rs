@@ -2,7 +2,13 @@ use alloy_primitives::B256;
 use discv5::enr::NodeId;
 use tokio::sync::mpsc;
 
+use crate::{
+    errors::RpcServeError,
+    fetch::proxy_to_subnet,
+    jsonrpsee::core::{async_trait, RpcResult},
+};
 use ethportal_api::{
+    consensus::header::BeaconBlockHeader,
     types::{
         enr::Enr,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
@@ -13,12 +19,6 @@ use ethportal_api::{
     },
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiServer, ContentValue, RawContentValue,
     RoutingTableInfo,
-};
-
-use crate::{
-    errors::RpcServeError,
-    fetch::proxy_to_subnet,
-    jsonrpsee::core::{async_trait, RpcResult},
 };
 
 pub struct BeaconNetworkApi {
@@ -98,6 +98,12 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     /// Get the finalized state root of the finalized beacon header.
     async fn finalized_state_root(&self) -> RpcResult<B256> {
         let endpoint = BeaconEndpoint::FinalizedStateRoot;
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
+    }
+
+    /// Get the finalized beacon header.
+    async fn finalized_header(&self) -> RpcResult<BeaconBlockHeader> {
+        let endpoint = BeaconEndpoint::FinalizedHeader;
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
