@@ -456,8 +456,9 @@ mod tests {
     use discv5::enr::NodeId;
     use quickcheck::*;
     use rand::{thread_rng, Rng};
-    use std::time::Duration;
+    use std::{cmp::min, time::Duration};
     use test_log::test;
+    use tracing::debug;
 
     type TestQuery = FindContentQuery<NodeId>;
 
@@ -525,42 +526,44 @@ mod tests {
         }
     }
 
-    #[test]
+    #[test_log::test]
     fn termination_and_parallelism() {
         fn prop(mut query: TestQuery) {
             let now = Instant::now();
             let mut rng = thread_rng();
 
-            let mut expected = query
+            let mut remaining = query
                 .closest_peers
                 .values()
                 .map(|e| e.key().clone())
                 .collect::<Vec<_>>();
-            let num_known = expected.len();
+            let num_known = remaining.len();
             let max_parallelism = usize::min(query.config.parallelism, num_known);
 
             let target = query.target_key.clone();
-            let mut remaining;
+            let mut expected: Vec<_>;
             let mut num_failures = 0;
 
             let found_content: Vec<u8> = vec![0xef];
             let mut content_peer = None;
 
             'finished: loop {
-                if expected.is_empty() {
+                if remaining.is_empty() {
+                    debug!("ending test: no more peers to pull from");
                     break;
-                }
-                // Split off the next up to `parallelism` expected peers.
-                else if expected.len() < max_parallelism {
-                    remaining = Vec::new();
                 } else {
-                    remaining = expected.split_off(max_parallelism);
+                    // Split off the next (up to) `parallelism` peers, who we expect to poll.
+                    let num_expected = min(max_parallelism, remaining.len());
+                    expected = remaining.drain(..num_expected).collect();
                 }
 
                 // Advance the query for maximum parallelism.
                 for k in expected.iter() {
                     match query.poll(now) {
-                        QueryState::Finished => break 'finished,
+                        QueryState::Finished => {
+                            debug!("Ending test loop: query state is finished");
+                            break 'finished;
+                        }
                         QueryState::Waiting(Some(p)) => assert_eq!(&p, k.preimage()),
                         QueryState::Waiting(None) => panic!("Expected another peer."),
                         QueryState::WaitingAtCapacity => panic!("Unexpectedly reached capacity."),
@@ -602,8 +605,6 @@ mod tests {
 
                 // Re-sort the remaining expected peers for the next "round".
                 remaining.sort_by_key(|k| target.distance(k));
-
-                expected = remaining;
             }
 
             // The query must be finished.
@@ -613,12 +614,16 @@ mod tests {
             // Determine if all peers have been contacted by the query. This _must_ be
             // the case if the query finished without content and with fewer than the
             // requested number of results.
-            let all_contacted = query.closest_peers.values().all(|e| {
-                !matches!(
-                    e.state(),
-                    QueryPeerState::NotContacted | QueryPeerState::Waiting { .. }
-                )
-            });
+            let final_peers = query.closest_peers.clone();
+            let uncontacted: Vec<_> = final_peers
+                .values()
+                .filter(|e| {
+                    matches!(
+                        e.state(),
+                        QueryPeerState::NotContacted | QueryPeerState::Waiting { .. }
+                    )
+                })
+                .collect();
 
             let target_key = query.target_key.clone();
             let num_results = query.config.num_results;
@@ -652,7 +657,11 @@ mod tests {
                         // have been failures.
                         assert!(num_known < num_results || num_failures > 0);
                         // All peers must have been contacted.
-                        assert!(all_contacted, "Not all peers have been contacted.");
+                        assert_eq!(
+                            uncontacted.len(),
+                            0,
+                            "Not all peers have been contacted: {uncontacted:?}"
+                        );
                     } else {
                         assert_eq!(num_results, closest_nodes.len(), "Too  many results.");
                     }
