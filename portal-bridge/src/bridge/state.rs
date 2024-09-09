@@ -94,7 +94,7 @@ impl StateBridge {
                     .await
                     .expect("State bridge failed");
             }
-            _ => panic!("State bridge only supports State modes."),
+            _ => panic!("State bridge only supports backfill using 'single' mode to specify the terminating block number."),
         }
         info!("Bridge mode: {:?} complete.", self.mode);
     }

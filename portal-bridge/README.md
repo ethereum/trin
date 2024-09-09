@@ -25,6 +25,7 @@ To run Portal-Bridge, you must specify what kind of client exists at the provide
 Current options include `"trin"` / `"fluffy"`.
 
 ### Bridge modes
+#### History Subnetwork
 - `"--mode latest"`: follow the head of the chain and gossip latest blocks
 - `"--mode test:/path/to/test_data.json"`: gossip content keys & values found in test file.
 - `"--mode backfill:b100"`: start backfill at block #100
@@ -42,12 +43,19 @@ Current options include `"trin"` / `"fluffy"`.
     - before gossiping a individual piece of content, the bridge will perform a lookup to see if the content is already in the portal network. If it is, the content will not be gossiped.
 - `"--mode fourfours:single_hunter:10:50`: sample size = 10, threshold = 50
     - same as the above hunter mode, but it will only gossip a single era1 file before exiting
+#### Beacon Subnetwork
+- `"--mode latest"`: follow the head of the chain and gossip latest blocks
+- `"--mode test:/path/to/test_data.json"`: gossip content keys & values found in test file.
+#### State Subnetwork
+- `"--mode single:b100"`: backfill, always beginning from block #0 until the specified block (#100)
 
-### Network
-You can specify the `--network` flag for which network to run the bridge for
-- `"--network history"`: Default value. Run the bridge for the history network.
-- `"--network beacon"`: Run the bridge for the beacon network.
-`  "--network history,beacon"`: Run the bridge for the history and beacon network.
+### Subnetwork configuration
+You can specify the `--portal-subnetworks` flag for which network to run the bridge for
+- `"--portal-subnetworks history"`: Default value. Run the bridge for the history network.
+- `"--portal-subnetworks beacon"`: Run the bridge for the beacon network.
+- `"--portal-subnetworks history,beacon"`: Run the bridge for the history & beacon network.
+`  "--portal-subnetworks state"`: Run the bridge for the state network.
+  - Currently, the `"state"` network can only be run by itself!
 
 ###Test File example
 ```json
