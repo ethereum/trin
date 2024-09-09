@@ -258,6 +258,7 @@ async fn overlay() {
 async fn overlay_event_stream() {
     let portal_config = PortalnetConfig {
         no_stun: true,
+        no_upnp: true,
         ..Default::default()
     };
     let temp_dir = setup_temp_dir().unwrap().into_path();

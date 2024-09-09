@@ -2712,6 +2712,7 @@ mod tests {
     ) -> OverlayService<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore> {
         let portal_config = PortalnetConfig {
             no_stun: true,
+            no_upnp: true,
             ..Default::default()
         };
         let temp_dir = setup_temp_dir().unwrap().into_path();
