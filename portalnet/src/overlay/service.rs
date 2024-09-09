@@ -755,7 +755,7 @@ where
             let is_within_radius =
                 TMetric::distance(&node_id.raw(), &content_id) <= node.data_radius;
             if is_within_radius {
-                let content_items = vec![(content_key.clone().into(), content.clone())];
+                let content_items: Vec<(RawContentKey, Vec<u8>)> = vec![(content_key.clone().into().into(), content.clone())];
                 let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
 
                 // if we have met the max outbound utp transfer limit continue the loop as we aren't
@@ -1029,7 +1029,7 @@ where
         let content_keys: Vec<TContentKey> = request
             .content_keys
             .into_iter()
-            .map(|k| (TContentKey::try_from)(k))
+            .map(|k| (TContentKey::try_from)(k.as_ssz_bytes()))
             .collect::<Result<Vec<TContentKey>, _>>()
             .map_err(|_| {
                 OverlayRequestError::AcceptError(
@@ -2021,7 +2021,7 @@ where
         let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> =
             content_keys_offered
                 .into_iter()
-                .map(|key| TContentKey::try_from(key))
+                .map(|key| TContentKey::try_from(key.as_ssz_bytes()))
                 .collect();
 
         let content_keys_offered: Vec<TContentKey> = content_keys_offered

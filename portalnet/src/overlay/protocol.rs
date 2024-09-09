@@ -527,7 +527,7 @@ where
         let content_items = content_keys
             .into_iter()
             .map(|key| match self.store.read().get(&key) {
-                Ok(Some(content)) => Ok((key.into(), content.clone())),
+                Ok(Some(content)) => Ok((key.to_bytes().into(), content.clone())),
                 _ => Err(OverlayRequestError::ContentNotFound {
                     message: format!("Content key not found in local store: {key:02X?}"),
                     utp: false,
