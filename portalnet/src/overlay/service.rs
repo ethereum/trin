@@ -755,7 +755,8 @@ where
             let is_within_radius =
                 TMetric::distance(&node_id.raw(), &content_id) <= node.data_radius;
             if is_within_radius {
-                let content_items: Vec<(RawContentKey, Vec<u8>)> = vec![(content_key.clone().into().into(), content.clone())];
+                let content_items: Vec<(RawContentKey, Vec<u8>)> =
+                    vec![(content_key.clone().into().into(), content.clone())];
                 let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
 
                 // if we have met the max outbound utp transfer limit continue the loop as we aren't
