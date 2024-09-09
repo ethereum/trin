@@ -26,7 +26,10 @@ impl FromStr for NetworkKind {
             "beacon" => Ok(NetworkKind::Beacon),
             "history" => Ok(NetworkKind::History),
             "state" => Ok(NetworkKind::State),
-            _ => Err("Invalid network arg. Expected either 'beacon', 'history' or 'state'"),
+            _ => {
+                let msg = format!("Invalid network arg. Expected either 'beacon', 'history' or 'state' but got '{s}'");
+                Err(Box::leak(Box::new(msg)))
+            }
         }
     }
 }

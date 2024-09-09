@@ -18,14 +18,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let bridge_config = BridgeConfig::parse();
 
-    if bridge_config
-        .portal_subnetworks
-        .contains(&NetworkKind::State)
-        && bridge_config.portal_subnetworks.len() > 1
-    {
-        return Err("The State network doesn't support being ran with the other networks bridges at the same time".into());
-    }
-
     if let Some(addr) = bridge_config.metrics_url {
         prometheus_exporter::start(addr)?;
     }

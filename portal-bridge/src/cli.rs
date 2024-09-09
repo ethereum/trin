@@ -57,9 +57,9 @@ pub struct BridgeConfig {
         long = "portal-subnetworks",
         help = "Comma-separated list of which portal subnetworks to activate",
         default_value = DEFAULT_SUBNETWORK,
-        use_value_delimiter = true
+        value_parser = subnetwork_parser,
     )]
-    pub portal_subnetworks: Vec<NetworkKind>,
+    pub portal_subnetworks: Arc<Vec<NetworkKind>>,
 
     #[arg(
             long = "network",
@@ -189,6 +189,18 @@ pub fn url_to_client(url: Url) -> Result<Client, String> {
     Ok(client.with(Retry::default()))
 }
 
+// parser for subnetworks, makes sure that the state network is not ran alongside other subnetworks
+fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<NetworkKind>>, String> {
+    let active_subnetworks: Vec<NetworkKind> = subnetwork_string
+        .split(',')
+        .map(|subnetwork| NetworkKind::from_str(subnetwork).map_err(|e| e.to_string()))
+        .collect::<Result<Vec<NetworkKind>, String>>()?;
+    if active_subnetworks.contains(&NetworkKind::State) && active_subnetworks.len() > 1 {
+        return Err("The State network doesn't support being ran with other subnetwork bridges at the same time".to_string());
+    }
+    Ok(Arc::new(active_subnetworks))
+}
+
 #[derive(Debug)]
 pub struct Retry {
     attempts: u8,
@@ -316,7 +328,7 @@ mod test {
         );
         assert_eq!(
             bridge_config.portal_subnetworks,
-            vec![NetworkKind::History, NetworkKind::Beacon]
+            vec![NetworkKind::History, NetworkKind::Beacon].into()
         );
     }
 
@@ -344,7 +356,10 @@ mod test {
             BridgeMode::Backfill(ModeType::Epoch(100))
         );
         assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
-        assert_eq!(bridge_config.portal_subnetworks, vec![NetworkKind::History]);
+        assert_eq!(
+            bridge_config.portal_subnetworks,
+            vec![NetworkKind::History].into()
+        );
     }
 
     #[test]
