@@ -189,16 +189,20 @@ where
                 };
             }
             FindContentQueryResponse::Content(content) => {
-                self.content = Some(ContentAndPeer::Content(ContentAndPeerDetails {
-                    content,
-                    peer: peer.clone(),
-                }));
+                if self.content.is_none() {
+                    self.content = Some(ContentAndPeer::Content(ContentAndPeerDetails {
+                        content,
+                        peer: peer.clone(),
+                    }));
+                }
             }
             FindContentQueryResponse::ConnectionId(connection_id) => {
-                self.content = Some(ContentAndPeer::Utp(UtpAndPeerDetails {
-                    connection_id: u16::from_be(connection_id),
-                    peer: peer.clone(),
-                }));
+                if self.content.is_none() {
+                    self.content = Some(ContentAndPeer::Utp(UtpAndPeerDetails {
+                        connection_id: u16::from_be(connection_id),
+                        peer: peer.clone(),
+                    }));
+                }
             }
         }
     }
@@ -586,7 +590,11 @@ mod tests {
                                 k.preimage(),
                                 FindContentQueryResponse::Content(found_content.clone()),
                             );
-                            content_peer = Some(k.clone());
+                            // The first peer to return the content should be the one reported at
+                            // the end.
+                            if content_peer.is_none() {
+                                content_peer = Some(k.clone());
+                            }
                         } else {
                             let num_closer = rng.gen_range(0..query.config.num_results + 1);
                             let closer_peers = random_nodes(num_closer).collect::<Vec<_>>();
@@ -670,7 +678,7 @@ mod tests {
             }
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
+        QuickCheck::new().tests(100).quickcheck(prop as fn(_) -> _)
     }
 
     #[test]
