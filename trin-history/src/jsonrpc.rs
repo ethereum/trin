@@ -341,7 +341,7 @@ async fn offer(
         .overlay
         .send_offer(
             enr,
-            content_key.to_bytes().into(),
+            content_key.to_bytes(),
             content_value.encode().to_vec(),
         )
         .await
@@ -364,7 +364,7 @@ async fn trace_offer(
         .overlay
         .send_offer_trace(
             enr,
-            content_key.to_bytes().into(),
+            content_key.to_bytes(),
             content_value.encode().to_vec(),
         )
         .await
