@@ -1,3 +1,4 @@
+use alloy_primitives::B256;
 use ethportal_api::{
     consensus::fork::ForkName,
     types::{
@@ -31,9 +32,9 @@ use trin_storage::{
     sql::{
         HISTORICAL_SUMMARIES_EPOCH_LOOKUP_QUERY, HISTORICAL_SUMMARIES_LOOKUP_QUERY,
         INSERT_BOOTSTRAP_QUERY, INSERT_LC_UPDATE_QUERY,
-        INSERT_OR_REPLACE_HISTORICAL_SUMMARIES_QUERY, LC_BOOTSTRAP_LOOKUP_QUERY,
-        LC_BOOTSTRAP_ROOT_LOOKUP_QUERY, LC_UPDATE_LOOKUP_QUERY, LC_UPDATE_PERIOD_LOOKUP_QUERY,
-        TOTAL_DATA_SIZE_QUERY_BEACON,
+        INSERT_OR_REPLACE_HISTORICAL_SUMMARIES_QUERY, LC_BOOTSTRAP_LATEST_BLOCK_ROOT_QUERY,
+        LC_BOOTSTRAP_LOOKUP_QUERY, LC_BOOTSTRAP_ROOT_LOOKUP_QUERY, LC_UPDATE_LOOKUP_QUERY,
+        LC_UPDATE_PERIOD_LOOKUP_QUERY, TOTAL_DATA_SIZE_QUERY_BEACON,
     },
     utils::get_total_size_of_directory_in_bytes,
     ContentStore, DataSize, PortalStorageConfig, ShouldWeStoreContent,
@@ -585,6 +586,24 @@ impl BeaconStorage {
         Ok(content_data_sum as u64)
     }
 
+    /// Public method for looking up the latest block root in the light client bootstrap table
+    pub fn lookup_latest_block_root(&self) -> anyhow::Result<Option<B256>> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(LC_BOOTSTRAP_LATEST_BLOCK_ROOT_QUERY)?;
+        let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
+            .query_map([], |row| {
+                let row: Vec<u8> = row.get(0)?;
+                Ok(row)
+            })?
+            .map(|row| row.map_err(ContentStoreError::Rusqlite))
+            .collect();
+
+        match result?.first() {
+            Some(val) => Ok(Some(B256::try_from(val.as_slice())?)),
+            None => Ok(None),
+        }
+    }
+
     /// Public method for looking up a light client bootstrap by block root
     pub fn lookup_lc_bootstrap_block_root(
         &self,
@@ -592,16 +611,16 @@ impl BeaconStorage {
     ) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(LC_BOOTSTRAP_ROOT_LOOKUP_QUERY)?;
-        let result: Result<Vec<BeaconContentKey>, ContentStoreError> = query
+        let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
             .query_map([block_root], |row| {
                 let row: Vec<u8> = row.get(0)?;
                 Ok(row)
             })?
-            .map(|row| BeaconContentKey::try_from(row?).map_err(ContentStoreError::ContentKey))
+            .map(|row| row.map_err(ContentStoreError::Rusqlite))
             .collect();
 
         match result?.first() {
-            Some(val) => Ok(Some(val.into())),
+            Some(val) => Ok(Some(val.to_vec())),
             None => Ok(None),
         }
     }

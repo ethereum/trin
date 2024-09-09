@@ -1,8 +1,8 @@
-use std::sync::Arc;
-
+use alloy_primitives::B256;
 use parking_lot::RwLock as PLRwLock;
+use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use tracing::error;
+use tracing::{error, info};
 use utp_rs::socket::UtpSocket;
 
 use crate::{storage::BeaconStorage, sync::BeaconSync, validation::BeaconValidator};
@@ -47,6 +47,7 @@ impl BeaconNetwork {
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(BeaconStorage::new(storage_config)?));
+        let storage_clone = Arc::clone(&storage);
         let validator = Arc::new(BeaconValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,
@@ -63,16 +64,23 @@ impl BeaconNetwork {
         let beacon_client_clone = Arc::clone(&beacon_client);
 
         // Spawn the beacon sync task.
-        if portal_config.trusted_block_root.is_some() {
+        let trusted_block_root: Option<B256> = match portal_config.trusted_block_root {
+            Some(trusted_block_root) => Some(trusted_block_root),
+            None => {
+                // If no trusted block root is provided, we check for the latest block root in the
+                // database.
+                let block_root = storage_clone.read().lookup_latest_block_root()?;
+                if let Some(block_root) = block_root {
+                    info!(block_root = %block_root, "No trusted block root provided. Using latest block root from storage.");
+                }
+                block_root
+            }
+        };
+
+        if let Some(trusted_block_root) = trusted_block_root {
             tokio::spawn(async move {
                 let beacon_sync = BeaconSync::new(overlay_tx);
-                let beacon_sync = beacon_sync
-                    .start(
-                        portal_config
-                            .trusted_block_root
-                            .expect("Trusted block root should be available"),
-                    )
-                    .await;
+                let beacon_sync = beacon_sync.start(trusted_block_root).await;
                 match beacon_sync {
                     Ok(client) => {
                         let mut beacon_client = beacon_client_clone.lock().await;

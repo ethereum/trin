@@ -24,7 +24,7 @@ pub struct PortalnetConfig {
     pub disable_poke: bool,
     // gossip content as it gets dropped from local storage
     pub gossip_dropped: bool,
-    pub trusted_block_root: Option<String>,
+    pub trusted_block_root: Option<B256>,
     // the max number of concurrent utp transfers
     pub utp_transfer_limit: usize,
 }
@@ -59,7 +59,7 @@ impl PortalnetConfig {
             bootnodes: trin_config.bootnodes.clone(),
             disable_poke: trin_config.disable_poke,
             gossip_dropped: trin_config.gossip_dropped,
-            trusted_block_root: trin_config.trusted_block_root.clone(),
+            trusted_block_root: trin_config.trusted_block_root,
             utp_transfer_limit: trin_config.utp_transfer_limit,
             ..Default::default()
         }
