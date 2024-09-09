@@ -1,7 +1,9 @@
 use crate::{
     types::content_key::{error::ContentKeyError, overlay::OverlayContentKey},
     utils::bytes::hex_encode_compact,
+    RawContentKey,
 };
+use alloy_primitives::Bytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
@@ -81,22 +83,22 @@ pub struct HistoricalSummariesWithProofKey {
     pub epoch: u64,
 }
 
-impl From<&BeaconContentKey> for Vec<u8> {
+impl From<&BeaconContentKey> for Bytes {
     fn from(val: &BeaconContentKey) -> Self {
         val.to_bytes()
     }
 }
 
-impl From<BeaconContentKey> for Vec<u8> {
+impl From<BeaconContentKey> for Bytes {
     fn from(val: BeaconContentKey) -> Self {
         val.to_bytes()
     }
 }
 
-impl TryFrom<Vec<u8>> for BeaconContentKey {
+impl TryFrom<RawContentKey> for BeaconContentKey {
     type Error = ContentKeyError;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+    fn try_from(value: RawContentKey) -> Result<Self, Self::Error> {
         let Some((&selector, key)) = value.split_first() else {
             return Err(ContentKeyError::InvalidLength {
                 received: value.len(),
@@ -170,7 +172,7 @@ impl OverlayContentKey for BeaconContentKey {
         sha256.finalize().into()
     }
 
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> RawContentKey {
         let mut bytes: Vec<u8> = Vec::new();
 
         match self {
@@ -196,7 +198,7 @@ impl OverlayContentKey for BeaconContentKey {
             }
         }
 
-        bytes
+        bytes.into()
     }
 }
 

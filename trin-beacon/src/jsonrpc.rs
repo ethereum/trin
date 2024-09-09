@@ -289,7 +289,7 @@ async fn find_content(
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
     content_key: BeaconContentKey,
 ) -> Result<Value, String> {
-    match network.overlay.send_find_content(enr, content_key.into()).await {
+    match network.overlay.send_find_content(enr, content_key.to_bytes().to_vec()).await {
         Ok((content, utp_transfer)) => match content{
             Content::ConnectionId(id) => Err(format!(
                 "FindContent request returned a connection id ({id:?}) instead of conducting utp transfer."

@@ -5,13 +5,13 @@ use quickcheck::{Arbitrary, Gen};
 use crate::{
     types::content_key::error::ContentKeyError,
     utils::bytes::{hex_decode, hex_encode, hex_encode_compact},
+    RawContentKey,
 };
 
 /// Types whose values represent keys to lookup content items in an overlay network.
 /// Keys are serializable.
 pub trait OverlayContentKey:
-    Into<Vec<u8>>
-    + TryFrom<Vec<u8>, Error = ContentKeyError>
+    TryFrom<RawContentKey, Error = ContentKeyError>
     + Clone
     + fmt::Debug
     + fmt::Display
@@ -25,7 +25,7 @@ pub trait OverlayContentKey:
     fn content_id(&self) -> [u8; 32];
 
     /// Returns the bytes of the content key.
-    fn to_bytes(&self) -> Vec<u8>;
+    fn to_bytes(&self) -> RawContentKey;
 
     /// Returns the content key as a hex encoded "0x"-prefixed string.
     fn to_hex(&self) -> String {
@@ -34,8 +34,8 @@ pub trait OverlayContentKey:
 
     /// Returns the content key from a hex encoded "0x"-prefixed string.
     fn from_hex(data: &str) -> anyhow::Result<Self> {
-        let bytes = hex_decode(&data.to_lowercase())?;
-        Ok(Self::try_from(bytes)?)
+        let bytes = hex_decode(data)?;
+        Ok(Self::try_from(bytes.into())?)
     }
 }
 
@@ -67,10 +67,10 @@ impl Arbitrary for IdentityContentKey {
     }
 }
 
-impl TryFrom<Vec<u8>> for IdentityContentKey {
+impl TryFrom<RawContentKey> for IdentityContentKey {
     type Error = ContentKeyError;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+    fn try_from(value: RawContentKey) -> Result<Self, Self::Error> {
         // Require that length of input is equal to 32.
         if value.len() != 32 {
             return Err(ContentKeyError::InvalidLength {
@@ -116,7 +116,7 @@ impl OverlayContentKey for IdentityContentKey {
     fn content_id(&self) -> [u8; 32] {
         self.value
     }
-    fn to_bytes(&self) -> Vec<u8> {
-        self.value.to_vec()
+    fn to_bytes(&self) -> RawContentKey {
+        self.value.to_vec().into()
     }
 }

@@ -223,7 +223,7 @@ mod test {
     use super::*;
     use std::{fs, str::FromStr};
 
-    use alloy_primitives::{Address, Bloom, B256, U256};
+    use alloy_primitives::{Address, Bloom, Bytes, B256, U256};
     use alloy_rlp::Decodable;
     use rstest::*;
     use serde_json::{json, Value};
@@ -274,7 +274,7 @@ mod test {
         // Validate content_key decodes
         let raw_ck = obj.get("content_key").unwrap().as_str().unwrap();
         let raw_ck = hex_decode(raw_ck).unwrap();
-        let ck = HistoryContentKey::try_from(raw_ck).unwrap();
+        let ck = HistoryContentKey::try_from(Bytes::from(raw_ck)).unwrap();
         match ck {
             HistoryContentKey::BlockHeaderWithProof(_) => (),
             _ => panic!("Invalid test, content key decoded improperly"),

@@ -9,6 +9,7 @@ use std::{fmt, hash::Hash};
 use crate::{
     types::content_key::{error::ContentKeyError, overlay::OverlayContentKey},
     utils::bytes::hex_encode_compact,
+    RawContentKey,
 };
 
 // Prefixes for the different types of history content keys:
@@ -44,6 +45,7 @@ impl HistoryContentKey {
         .choose(&mut rand::thread_rng())
         .ok_or_else(|| anyhow::Error::msg("Failed to choose random prefix"))?;
         random_bytes.insert(0, *random_prefix);
+        let random_bytes: RawContentKey = random_bytes.into();
         Self::try_from(random_bytes).map_err(anyhow::Error::msg)
     }
 }
@@ -118,20 +120,20 @@ pub struct EpochAccumulatorKey {
 
 impl From<&HistoryContentKey> for Vec<u8> {
     fn from(val: &HistoryContentKey) -> Self {
-        val.to_bytes()
+        val.to_bytes().to_vec()
     }
 }
 
 impl From<HistoryContentKey> for Vec<u8> {
     fn from(val: HistoryContentKey) -> Self {
-        val.to_bytes()
+        val.to_bytes().to_vec()
     }
 }
 
-impl TryFrom<Vec<u8>> for HistoryContentKey {
+impl TryFrom<RawContentKey> for HistoryContentKey {
     type Error = ContentKeyError;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+    fn try_from(value: RawContentKey) -> Result<Self, Self::Error> {
         let Some((&selector, key)) = value.split_first() else {
             return Err(ContentKeyError::InvalidLength {
                 received: value.len(),
@@ -195,7 +197,7 @@ impl OverlayContentKey for HistoryContentKey {
         sha256.finalize().into()
     }
 
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> RawContentKey {
         let mut bytes: Vec<u8> = Vec::new();
 
         match self {
@@ -217,7 +219,7 @@ impl OverlayContentKey for HistoryContentKey {
             }
         }
 
-        bytes
+        bytes.into()
     }
 }
 
@@ -326,7 +328,7 @@ mod test {
         });
 
         // round trip
-        let decoded = HistoryContentKey::try_from(key.to_bytes().to_vec()).unwrap();
+        let decoded = HistoryContentKey::try_from(key.to_bytes()).unwrap();
         assert_eq!(decoded, key);
 
         assert_eq!(key.to_bytes(), expected_content_key);

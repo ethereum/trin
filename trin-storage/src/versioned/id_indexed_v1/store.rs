@@ -202,7 +202,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 named_params! { ":content_id": content_id.to_vec() },
                 |row| {
                     let bytes: Vec<u8> = row.get("content_key")?;
-                    TContentKey::try_from(bytes).map_err(|e| {
+                    TContentKey::try_from(bytes.into()).map_err(|e| {
                         rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
                     })
                 },
@@ -256,7 +256,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
         }
 
         let content_id = content_id.to_vec();
-        let content_key = content_key.to_bytes();
+        let content_key = content_key.to_bytes().to_vec();
         let content_size = content_id.len() + content_key.len() + content_value.len();
 
         let insert_timer = self.metrics.start_process_timer("insert");
@@ -337,7 +337,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 },
                 |row| {
                     let bytes = row.get::<&str, Vec<u8>>("content_key")?;
-                    TContentKey::try_from(bytes).map_err(|e| {
+                    TContentKey::try_from(bytes.into()).map_err(|e| {
                         rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
                     })
                 },
@@ -480,7 +480,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                     let key_bytes: Vec<u8> = row.get("content_key")?;
                     let value_bytes: Vec<u8> = row.get("content_value")?;
                     let size: u64 = row.get("content_size")?;
-                    TContentKey::try_from(key_bytes)
+                    TContentKey::try_from(key_bytes.into())
                         .map(|key| (key, value_bytes, size))
                         .map_err(|e| {
                             rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
@@ -611,7 +611,7 @@ mod tests {
                 .get()?
                 .execute(&sql::insert(&config.content_type), named_params! {
                     ":content_id": id.as_slice(),
-                    ":content_key": key.to_bytes(),
+                    ":content_key": key.to_bytes().to_vec(),
                     ":content_value": value,
                     ":distance_short": config.distance_fn.distance(&config.node_id, &id).big_endian_u32(),
                     ":content_size": content_size,

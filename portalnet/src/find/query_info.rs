@@ -73,7 +73,7 @@ impl<TContentKey: OverlayContentKey> QueryInfo<TContentKey> {
                 Request::FindNodes(FindNodes { distances })
             }
             QueryType::FindContent { ref target, .. } => Request::FindContent(FindContent {
-                content_key: target.clone().into(),
+                content_key: target.clone().to_bytes().to_vec(),
             }),
         };
 

@@ -109,7 +109,7 @@ mod tests {
                 INSERT_QUERY_HISTORY,
                 params![
                     content_id.as_slice(),
-                    key,
+                    key.to_vec(),
                     value,
                     distance_u32,
                     content_size
