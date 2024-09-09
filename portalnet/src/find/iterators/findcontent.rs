@@ -73,7 +73,7 @@ struct UtpAndPeerDetails<TNodeId> {
 }
 
 #[derive(Debug, Clone)]
-pub struct FindContentQuery<TNodeId> {
+pub struct FindContentQuery<TNodeId: std::fmt::Display> {
     /// The target key we are looking for
     target_key: Key<TNodeId>,
 
@@ -99,7 +99,7 @@ pub struct FindContentQuery<TNodeId> {
 
 impl<TNodeId> Query<TNodeId> for FindContentQuery<TNodeId>
 where
-    TNodeId: Into<Key<TNodeId>> + Eq + Clone,
+    TNodeId: Into<Key<TNodeId>> + Eq + Clone + std::fmt::Display,
 {
     type Response = FindContentQueryResponse<TNodeId>;
     type Result = FindContentQueryResult<TNodeId>;
@@ -361,7 +361,7 @@ where
 
 impl<TNodeId> FindContentQuery<TNodeId>
 where
-    TNodeId: Into<Key<TNodeId>> + Eq + Clone,
+    TNodeId: Into<Key<TNodeId>> + Eq + Clone + std::fmt::Display,
 {
     /// Creates a new query with the given configuration.
     pub fn with_config<I>(
