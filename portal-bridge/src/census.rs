@@ -26,6 +26,11 @@ use ethportal_api::{
 /// in the future based on performance
 const LIVENESS_CHECK_DELAY: Duration = Duration::from_secs(120);
 
+/// The maximum number of enrs to return in a response,
+/// limiting the number of OFFER requests spawned by the bridge
+/// for each piece of content
+const ENRS_RESPONSE_LIMIT: usize = 8;
+
 /// The census is responsible for maintaining a list of known peers in the network,
 /// checking their liveness, updating their data radius, iterating through their
 /// rfn to find new peers, and providing interested enrs for a given content key.
@@ -222,6 +227,7 @@ impl Network {
                     None
                 }
             })
+            .take(ENRS_RESPONSE_LIMIT)
             .collect()
     }
 }

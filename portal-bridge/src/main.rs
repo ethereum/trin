@@ -131,6 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         bridge_config.epoch_acc_path,
                         bridge_config.gossip_limit,
                         execution_api,
+                        census_tx.clone(),
                     )
                     .await?;
                     let bridge_handle = tokio::spawn(async move {
@@ -152,6 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             header_oracle,
                             bridge_config.epoch_acc_path,
                             bridge_config.gossip_limit,
+                            census_tx.clone(),
                         );
 
                         bridge
