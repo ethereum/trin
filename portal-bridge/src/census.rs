@@ -7,7 +7,7 @@ use tokio::{
     sync::mpsc,
     time::{Duration, Instant},
 };
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use ethportal_api::{
     generate_random_remote_enr,
@@ -54,22 +54,24 @@ impl Census {
 impl Census {
     pub async fn init(&mut self) {
         // currently, the census is only initialized for the state network
+        // only initialized networks will yield inside `run()` loop
         info!("Initializing state network census");
         self.state.init().await;
     }
 
     pub async fn run(&mut self) {
         loop {
+            // Randomly selects between what available task is ready
+            // and executes it. Ensures that the census will continue
+            // to update while it handles a stream of enr requests.
             tokio::select! {
                 // handle enrs request
-                biased;
                 Some(request) = self.census_rx.recv() => {
                     let enrs = self.get_interested_enrs(request.content_key).await;
                     if let Err(err) = request.resp_tx.send(enrs) {
                         error!("Error sending enrs response: {err:?}");
                     }
                 }
-                // network is not initialized, this will never yield
                 Some(Ok(known_enr)) = self.history.peers.next() => {
                     self.history.process_enr(known_enr.1.0).await;
                     info!("Updated history census: found peers: {}", self.history.peers.len());
@@ -79,7 +81,6 @@ impl Census {
                     self.state.process_enr(known_enr.1.0).await;
                     info!("Updated state census: found peers: {}", self.state.peers.len());
                 }
-                // network is not initialized, this will never yield
                 Some(Ok(known_enr)) = self.beacon.peers.next() => {
                     self.beacon.process_enr(known_enr.1.0).await;
                     info!("Updated beacon census: found peers: {}", self.beacon.peers.len());
@@ -112,7 +113,7 @@ impl Census {
 /// The network struct is responsible for maintaining a list of known peers
 /// in the given subnetwork.
 struct Network {
-    peers: HashMapDelay<[u8; 32], (Enr, U256)>,
+    peers: HashMapDelay<[u8; 32], (Enr, Distance)>,
     client: HttpClient,
     subnetwork: Subnetwork,
 }
@@ -134,7 +135,7 @@ impl Network {
     // peers. However, since the census continues to iterate through the peers after initialization,
     // the initialization is just to reach a critical mass of peers so that gossip can begin.
     async fn init(&mut self) {
-        let random_enr = generate_random_remote_enr().1;
+        let (_, random_enr) = generate_random_remote_enr();
         let Ok(initial_enrs) = self
             .subnetwork
             .recursive_find_nodes(&self.client, random_enr.node_id())
@@ -143,9 +144,23 @@ impl Network {
             panic!("Failed to initialize network census");
         };
 
+        // if this initialization is too slow, we can consider
+        // refactoring the peers structure so that it can be
+        // run in parallel
         for enr in initial_enrs {
-            self.iterate_peer_routing_table(enr.clone()).await;
+            self.process_enr(enr).await;
         }
+        if self.peers.is_empty() {
+            panic!(
+                "Failed to initialize {} census, couldn't find any peers.",
+                self.subnetwork
+            );
+        }
+        info!(
+            "Initialized {} census: found peers: {}",
+            self.subnetwork,
+            self.peers.len()
+        );
     }
 
     /// Only processes an enr (iterating through its rfn) if the enr's
@@ -155,18 +170,14 @@ impl Network {
         if !self.liveness_check(enr.clone()).await {
             return;
         }
-        // iterate through the peer's rfn
-        self.iterate_peer_routing_table(enr).await;
-    }
-
-    // iterate peers routing table via rfn over various distances
-    async fn iterate_peer_routing_table(&mut self, enr: Enr) {
+        // iterate peers routing table via rfn over various distances
         for distance in 245..257 {
             let Ok(result) = self
                 .subnetwork
                 .find_nodes(&self.client, enr.clone(), vec![distance])
                 .await
             else {
+                warn!("Find nodes request failed for enr: {}", enr);
                 continue;
             };
             for found_enr in result {
@@ -179,7 +190,7 @@ impl Network {
     // since the same enr might appear multiple times between the
     // routing tables of different peers.
     async fn liveness_check(&mut self, enr: Enr) -> bool {
-        // check if delay map deadline has expired
+        // if enr is already registered, check if delay map deadline has expired
         if let Some(deadline) = self.peers.deadline(&enr.node_id().raw()) {
             if Instant::now() < deadline {
                 return false;
@@ -188,8 +199,8 @@ impl Network {
 
         match self.subnetwork.ping(&self.client, enr.clone()).await {
             Ok(pong_info) => {
-                self.peers
-                    .insert(enr.node_id().raw(), (enr.clone(), pong_info.data_radius));
+                let data_radius = Distance::from(U256::from(pong_info.data_radius));
+                self.peers.insert(enr.node_id().raw(), (enr, data_radius));
                 true
             }
             Err(_) => {
@@ -201,12 +212,18 @@ impl Network {
 
     // Look up all known interested enrs for a given content id
     async fn get_interested_enrs(&self, content_id: [u8; 32]) -> Vec<Enr> {
+        if self.peers.is_empty() {
+            error!(
+                "No known peers in {} census, unable to offer.",
+                self.subnetwork
+            );
+            return Vec::new();
+        }
         self.peers
             .iter()
             .filter_map(|(node_id, (enr, data_radius))| {
                 let distance = XorMetric::distance(node_id, &content_id);
-                let data_radius = Distance::from(U256::from(*data_radius));
-                if data_radius >= distance {
+                if data_radius >= &distance {
                     Some(enr.clone())
                 } else {
                     None
@@ -224,6 +241,16 @@ enum Subnetwork {
     History,
     State,
     Beacon,
+}
+
+impl std::fmt::Display for Subnetwork {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Subnetwork::History => write!(f, "history"),
+            Subnetwork::State => write!(f, "state"),
+            Subnetwork::Beacon => write!(f, "beacon"),
+        }
+    }
 }
 
 impl Subnetwork {

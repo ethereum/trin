@@ -150,13 +150,12 @@ impl HistoryBridge {
             // from block_index to latest_block.
             for height in block_index..=latest_block {
                 self.metrics.report_current_block(height as i64);
-                let permit = self.acquire_gossip_permit().await;
                 Self::spawn_serve_full_block(
                     height,
                     None,
                     self.portal_client.clone(),
                     self.execution_api.clone(),
-                    permit,
+                    None,
                     self.metrics.clone(),
                 );
             }
@@ -210,7 +209,7 @@ impl HistoryBridge {
                 epoch_acc.clone(),
                 self.portal_client.clone(),
                 self.execution_api.clone(),
-                permit,
+                Some(permit),
                 self.metrics.clone(),
             ));
         }
@@ -225,7 +224,7 @@ impl HistoryBridge {
         epoch_acc: Option<Arc<EpochAccumulator>>,
         portal_client: HttpClient,
         execution_api: ExecutionApi,
-        permit: OwnedSemaphorePermit,
+        permit: Option<OwnedSemaphorePermit>,
         metrics: BridgeMetricsReporter,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
@@ -242,7 +241,9 @@ impl HistoryBridge {
                 },
                 Err(_) => error!("serve_full_block() timed out on height {height}: this is an indication a bug is present")
             };
-            drop(permit);
+            if let Some(permit) = permit {
+                drop(permit);
+            }
             metrics.stop_process_timer(timer);
         })
     }

@@ -16,8 +16,6 @@ const GOSSIP_RETRY_COUNT: u64 = 3;
 const RETRY_AFTER: Duration = Duration::from_secs(15);
 
 /// Gossip any given content key / value to the beacon network.
-/// We don't support an "offer" mode for beacon gossip, since beacon
-/// nodes have a 100% radius.
 pub async fn gossip_beacon_content(
     portal_client: HttpClient,
     content_key: BeaconContentKey,

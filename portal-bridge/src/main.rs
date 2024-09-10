@@ -44,37 +44,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| e.to_string())?;
 
     let mut bridge_tasks = Vec::new();
+    let mut census_handle = None;
 
     // Launch State Network portal bridge
     if bridge_config
         .portal_subnetworks
         .contains(&NetworkKind::State)
     {
-        // Initialize the census & add task to bridge_tasks
+        // Initialize the census
         let (census_tx, census_rx) = mpsc::unbounded_channel();
         let mut census = Census::new(portal_client.clone(), census_rx);
         // initialize the census to acquire critical threshold view of network before gossiping
         census.init().await;
-        let census_handle = tokio::spawn(async move {
+        census_handle = Some(tokio::spawn(async move {
             census
                 .run()
                 .instrument(tracing::trace_span!("census"))
                 .await;
-        });
-        bridge_tasks.push(census_handle);
+        }));
 
-        let header_oracle = HeaderOracle::default();
         let state_bridge = StateBridge::new(
             bridge_config.mode.clone(),
             portal_client.clone(),
-            header_oracle,
-            bridge_config.epoch_acc_path.clone(),
             bridge_config.gossip_limit,
             census_tx,
         )
         .await?;
 
-        // do we also need to push the state_bridge to the bridge_tasks?
         state_bridge
             .launch()
             .instrument(tracing::trace_span!("state"))
@@ -162,5 +158,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     futures::future::join_all(bridge_tasks).await;
     drop(handle);
+    if let Some(census_handle) = census_handle {
+        drop(census_handle);
+    }
     Ok(())
 }
