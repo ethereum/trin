@@ -3,7 +3,6 @@ use crate::{
     utils::bytes::hex_encode_compact,
     RawContentKey,
 };
-use alloy_primitives::Bytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
@@ -81,18 +80,6 @@ impl LightClientOptimisticUpdateKey {
 pub struct HistoricalSummariesWithProofKey {
     /// Epoch of the historical summaries.
     pub epoch: u64,
-}
-
-impl From<&BeaconContentKey> for Bytes {
-    fn from(val: &BeaconContentKey) -> Self {
-        val.to_bytes()
-    }
-}
-
-impl From<BeaconContentKey> for Bytes {
-    fn from(val: BeaconContentKey) -> Self {
-        val.to_bytes()
-    }
 }
 
 impl TryFrom<RawContentKey> for BeaconContentKey {

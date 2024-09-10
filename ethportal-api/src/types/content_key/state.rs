@@ -88,19 +88,19 @@ impl OverlayContentKey for StateContentKey {
             }
         }
 
-        bytes.into()
+        RawContentKey::from(bytes)
     }
 }
 
-impl From<&StateContentKey> for Vec<u8> {
+impl From<&StateContentKey> for RawContentKey {
     fn from(val: &StateContentKey) -> Self {
-        val.to_bytes().to_vec()
+        val.to_bytes()
     }
 }
 
-impl From<StateContentKey> for Vec<u8> {
+impl From<StateContentKey> for RawContentKey {
     fn from(val: StateContentKey) -> Self {
-        val.to_bytes().to_vec()
+        val.to_bytes()
     }
 }
 
@@ -242,7 +242,7 @@ mod test {
     #[test]
     fn decode_empty_key_should_fail() {
         assert_eq!(
-            StateContentKey::try_from(Bytes::new())
+            StateContentKey::try_from(RawContentKey::new())
                 .unwrap_err()
                 .to_string(),
             "Unable to decode key SSZ bytes 0x due to InvalidLengthPrefix { len: 0, expected: 1 }",
@@ -270,10 +270,10 @@ mod test {
         let yaml = read_yaml_file(filename)?;
         let yaml = yaml.as_mapping().unwrap();
 
-        let content_key_bytes = hex_decode(yaml["content_key"].as_str().unwrap())?;
-        let content_key = StateContentKey::try_from(Bytes::from(content_key_bytes.clone()))?;
+        let content_key_bytes = RawContentKey::from_str(yaml["content_key"].as_str().unwrap())?;
+        let content_key = StateContentKey::try_from(content_key_bytes.clone())?;
 
-        assert_eq!(content_key.to_bytes(), Bytes::from(content_key_bytes));
+        assert_eq!(content_key.to_bytes(), content_key_bytes);
         Ok(())
     }
 

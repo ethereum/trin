@@ -118,18 +118,6 @@ pub struct EpochAccumulatorKey {
     pub epoch_hash: B256,
 }
 
-impl From<&HistoryContentKey> for Vec<u8> {
-    fn from(val: &HistoryContentKey) -> Self {
-        val.to_bytes().to_vec()
-    }
-}
-
-impl From<HistoryContentKey> for Vec<u8> {
-    fn from(val: HistoryContentKey) -> Self {
-        val.to_bytes().to_vec()
-    }
-}
-
 impl TryFrom<RawContentKey> for HistoryContentKey {
     type Error = ContentKeyError;
 

@@ -4,9 +4,10 @@ use quickcheck::{Arbitrary, Gen};
 
 use crate::{
     types::content_key::error::ContentKeyError,
-    utils::bytes::{hex_decode, hex_encode, hex_encode_compact},
+    utils::bytes::{hex_encode, hex_encode_compact},
     RawContentKey,
 };
+use std::str::FromStr;
 
 /// Types whose values represent keys to lookup content items in an overlay network.
 /// Keys are serializable.
@@ -34,8 +35,7 @@ pub trait OverlayContentKey:
 
     /// Returns the content key from a hex encoded "0x"-prefixed string.
     fn from_hex(data: &str) -> anyhow::Result<Self> {
-        let bytes = hex_decode(data)?;
-        Ok(Self::try_from(bytes.into())?)
+        Ok(Self::try_from(RawContentKey::from_str(data)?)?)
     }
 }
 
@@ -117,6 +117,6 @@ impl OverlayContentKey for IdentityContentKey {
         self.value
     }
     fn to_bytes(&self) -> RawContentKey {
-        self.value.to_vec().into()
+        RawContentKey::from(self.value)
     }
 }

@@ -196,7 +196,7 @@ async fn find_content(
 ) -> Result<Value, String> {
     let result = network
     .overlay
-    .send_find_content(enr, content_key.into())
+    .send_find_content(enr, content_key.to_bytes().to_vec())
     .await
     .and_then(|(content, utp_transfer)| match content {
         Content::ConnectionId(id) => Err(OverlayRequestError::Failure(format!(
