@@ -1,7 +1,10 @@
-use crate::types::consensus::{
-    fork::ForkName,
-    light_client::header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
-    sync_committee::SyncCommittee,
+use crate::{
+    consensus::header::BeaconBlockHeader,
+    types::consensus::{
+        fork::ForkName,
+        light_client::header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
+        sync_committee::SyncCommittee,
+    },
 };
 use alloy_primitives::B256;
 use serde::{Deserialize, Serialize};
@@ -47,6 +50,15 @@ impl LightClientBootstrap {
                 LightClientBootstrapCapella::from_ssz_bytes(bytes).map(Self::Capella)
             }
             ForkName::Deneb => LightClientBootstrapDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
+        }
+    }
+
+    /// Returns the `BeaconBlockHeader` from the `LightClientBootstrap` object.
+    pub fn get_beacon_block_header(self) -> BeaconBlockHeader {
+        match self {
+            LightClientBootstrap::Bellatrix(bootstrap) => bootstrap.header.beacon,
+            LightClientBootstrap::Capella(bootstrap) => bootstrap.header.beacon,
+            LightClientBootstrap::Deneb(bootstrap) => bootstrap.header.beacon,
         }
     }
 }

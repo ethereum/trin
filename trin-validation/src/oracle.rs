@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 
 use crate::header_validator::HeaderValidator;
 use ethportal_api::{
+    consensus::header::BeaconBlockHeader,
     types::{
         execution::header_with_proof::HeaderWithProof,
         jsonrpc::{
@@ -195,6 +196,24 @@ impl HeaderOracle {
         let state_root: B256 = serde_json::from_value(state_root)?;
 
         Ok(state_root)
+    }
+
+    /// Return latest finalized beacon header.
+    pub async fn get_finalized_header(&self) -> anyhow::Result<BeaconBlockHeader> {
+        let endpoint = BeaconEndpoint::FinalizedHeader;
+        let (resp, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
+        let request = BeaconJsonRpcRequest { endpoint, resp };
+        let tx = self.beacon_jsonrpc_tx()?;
+        tx.send(request)?;
+
+        let header = match resp_rx.recv().await {
+            Some(val) => val.map_err(|err| anyhow!("Beacon network request error: {err:?}"))?,
+            None => return Err(anyhow!("No response from Beacon network")),
+        };
+
+        let header: BeaconBlockHeader = serde_json::from_value(header)?;
+
+        Ok(header)
     }
 }
 
