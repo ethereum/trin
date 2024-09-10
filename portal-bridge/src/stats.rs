@@ -84,10 +84,10 @@ impl StatsReporter<BeaconContentKey> for BeaconSlotStats {
 #[derive(Debug, Clone, Default)]
 pub struct HistoryBlockStats {
     pub block_number: u64,
-    pub header_with_proof: Option<ContentStats>,
+    pub header_by_hash_with_proof: Option<ContentStats>,
+    pub header_by_number_with_proof: Option<ContentStats>,
     pub block_body: Option<ContentStats>,
     pub receipts: Option<ContentStats>,
-    pub epoch_accumulator: Option<ContentStats>,
 }
 
 impl StatsReporter<HistoryContentKey> for HistoryBlockStats {
@@ -100,9 +100,13 @@ impl StatsReporter<HistoryContentKey> for HistoryBlockStats {
 
     fn report(&self) {
         let block_number = self.block_number;
-        if let Some(stats) = &self.header_with_proof {
-            info!("GossipReport: block#{block_number}: header_with_proof - {stats}");
-            debug!("GossipReport: block#{block_number}: header_with_proof - {stats:?}");
+        if let Some(stats) = &self.header_by_hash_with_proof {
+            info!("GossipReport: block#{block_number}: header_by_hash_with_proof - {stats}");
+            debug!("GossipReport: block#{block_number}: header_by_hash_with_proof - {stats:?}");
+        }
+        if let Some(stats) = &self.header_by_number_with_proof {
+            info!("GossipReport: block#{block_number}: header_by_number_with_proof - {stats}");
+            debug!("GossipReport: block#{block_number}: header_by_number_with_proof - {stats:?}");
         }
         if let Some(stats) = &self.block_body {
             info!("GossipReport: block#{block_number}: block_body - {stats}");
@@ -112,25 +116,21 @@ impl StatsReporter<HistoryContentKey> for HistoryBlockStats {
             info!("GossipReport: block#{block_number}: receipts - {stats}");
             debug!("GossipReport: block#{block_number}: receipts - {stats:?}");
         }
-        if let Some(stats) = &self.epoch_accumulator {
-            info!("GossipReport: block#{block_number}: epoch_accumulator - {stats}");
-            debug!("GossipReport: block#{block_number}: epoch_accumulator - {stats:?}");
-        }
     }
 
     fn update(&mut self, content_key: HistoryContentKey, results: ContentStats) {
         match content_key {
-            HistoryContentKey::BlockHeaderWithProof(_) => {
-                self.header_with_proof = Some(results);
+            HistoryContentKey::BlockHeaderByHashWithProof(_) => {
+                self.header_by_hash_with_proof = Some(results);
+            }
+            HistoryContentKey::BlockHeaderByNumberWithProof(_) => {
+                self.header_by_number_with_proof = Some(results);
             }
             HistoryContentKey::BlockBody(_) => {
                 self.block_body = Some(results);
             }
             HistoryContentKey::BlockReceipts(_) => {
                 self.receipts = Some(results);
-            }
-            HistoryContentKey::EpochAccumulator(_) => {
-                self.epoch_accumulator = Some(results);
             }
         }
     }

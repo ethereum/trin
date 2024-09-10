@@ -226,81 +226,20 @@ mod test {
     use alloy_primitives::{Address, Bloom, B256, U256};
     use alloy_rlp::Decodable;
     use rstest::*;
-    use serde_json::{json, Value};
+    use serde_json::Value;
     use ssz::{Decode, Encode};
-    use tokio::sync::mpsc;
     use tree_hash::TreeHash;
 
     use crate::constants::DEFAULT_PRE_MERGE_ACC_HASH;
     use ethportal_api::{
-        types::{
-            execution::{
-                accumulator::EpochAccumulator,
-                header_with_proof::{
-                    BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof, SszNone,
-                },
+        types::execution::{
+            accumulator::EpochAccumulator,
+            header_with_proof::{
+                BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof, SszNone,
             },
-            jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
         },
         utils::bytes::{hex_decode, hex_encode},
-        HistoryContentKey, RawContentKey,
     };
-
-    #[rstest]
-    #[case(1_000_001)]
-    #[case(1_000_002)]
-    #[case(1_000_003)]
-    #[case(1_000_004)]
-    #[case(1_000_005)]
-    #[case(1_000_006)]
-    #[case(1_000_007)]
-    #[case(1_000_008)]
-    #[case(1_000_009)]
-    #[case(1_000_010)]
-    #[tokio::test]
-    async fn generate_and_verify_header_with_proofs(#[case] block_number: u64) {
-        // Use fluffy's proofs as test data to validate that trin
-        // - generates proofs which match fluffy's
-        // - validates hwps
-        let file = fs::read_to_string("./src/assets/fluffy/header_with_proofs.json").unwrap();
-        let json: Value = serde_json::from_str(&file).unwrap();
-        let hwps = json.as_object().unwrap();
-        let header_validator = get_mainnet_header_validator();
-        let (tx, mut rx) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-        tokio::spawn(async move {
-            spawn_mock_epoch_acc_lookup(&mut rx).await;
-        });
-        let obj = hwps.get(&block_number.to_string()).unwrap();
-        // Validate content_key decodes
-        let raw_ck = obj.get("content_key").unwrap().as_str().unwrap();
-        let raw_ck = RawContentKey::from_str(raw_ck).unwrap();
-        let ck = HistoryContentKey::try_from(raw_ck).unwrap();
-        match ck {
-            HistoryContentKey::BlockHeaderWithProof(_) => (),
-            _ => panic!("Invalid test, content key decoded improperly"),
-        }
-        let raw_fluffy_hwp = obj.get("value").unwrap().as_str().unwrap();
-        let fluffy_hwp =
-            HeaderWithProof::from_ssz_bytes(&hex_decode(raw_fluffy_hwp).unwrap()).unwrap();
-        let header = get_header(block_number);
-        let trin_proof = header_validator
-            .pre_merge_acc
-            .generate_proof(&header, tx)
-            .await
-            .unwrap();
-        let fluffy_proof = match fluffy_hwp.proof {
-            BlockHeaderProof::PreMergeAccumulatorProof(val) => val,
-            _ => panic!("test reached invalid state"),
-        };
-        assert_eq!(trin_proof, fluffy_proof.proof);
-        let hwp = HeaderWithProof {
-            header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof {
-                proof: trin_proof,
-            }),
-        };
-        header_validator.validate_header_with_proof(&hwp).unwrap();
-    }
 
     #[rstest]
     #[case(HEADER_RLP_15_537_392, HWP_TEST_VECTOR_15_537_392, 15_537_392)]
@@ -326,31 +265,6 @@ mod test {
             .unwrap();
         let encoded_hwp = hex_encode(header_with_proof.as_ssz_bytes());
         assert_eq!(encoded_hwp, test_vector);
-    }
-
-    #[tokio::test]
-    async fn invalidate_invalid_proofs() {
-        let header_validator = get_mainnet_header_validator();
-        let (tx, mut rx) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-        tokio::spawn(async move {
-            spawn_mock_epoch_acc_lookup(&mut rx).await;
-        });
-        let header = get_header(1_000_001);
-        let mut proof = header_validator
-            .pre_merge_acc
-            .generate_proof(&header, tx)
-            .await
-            .unwrap();
-        proof.swap(0, 1);
-        let hwp = HeaderWithProof {
-            header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof { proof }),
-        };
-        assert!(header_validator
-            .validate_header_with_proof(&hwp)
-            .unwrap_err()
-            .to_string()
-            .contains("Merkle proof validation failed"));
     }
 
     #[tokio::test]
@@ -523,28 +437,6 @@ mod test {
             blob_gas_used: None,
             excess_blob_gas: None,
             parent_beacon_block_root: None,
-        }
-    }
-
-    async fn spawn_mock_epoch_acc_lookup(rx: &mut mpsc::UnboundedReceiver<HistoryJsonRpcRequest>) {
-        match rx.recv().await {
-            Some(request) => match request.endpoint {
-                HistoryEndpoint::RecursiveFindContent(content_key) => {
-                    let json_value = serde_json::to_value(content_key).unwrap();
-                    let response = json_value.as_str().unwrap();
-                    let epoch_acc_hash = response.trim_start_matches("0x03");
-                    let epoch_acc_hash = B256::from_str(epoch_acc_hash).unwrap();
-                    let epoch_acc_path = format!("./src/assets/epoch_accs/{epoch_acc_hash}.bin");
-                    let epoch_acc = fs::read(epoch_acc_path).unwrap();
-                    let epoch_acc = hex_encode(epoch_acc);
-                    let content: Value = json!(epoch_acc);
-                    let _ = request.resp.send(Ok(content));
-                }
-                _ => panic!("Unexpected request endpoint"),
-            },
-            None => {
-                panic!("Test run failed: Unable to get response from pre_merge_acc validation.")
-            }
         }
     }
 

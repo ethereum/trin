@@ -5,7 +5,7 @@ use crate::{
 use alloy_primitives::B256;
 use ethportal_api::{
     jsonrpsee::async_client::Client,
-    types::{content_key::history::BlockHeaderKey, enr::Enr, portal::ContentInfo},
+    types::{content_key::history::BlockHeaderByHashKey, enr::Enr, portal::ContentInfo},
     ContentValue, HistoryContentKey, HistoryNetworkApiClient,
 };
 use std::str::FromStr;
@@ -52,7 +52,7 @@ pub async fn test_invalidate_header_by_hash(peertest: &Peertest, target: &Client
 
     // store header_with_proof - doesn't perform validation
     let (_, content_value) = fixture_header_with_proof();
-    let invalid_content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
+    let invalid_content_key = HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
         block_hash: B256::random().into(),
     });
 

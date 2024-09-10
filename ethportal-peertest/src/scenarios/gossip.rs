@@ -4,8 +4,9 @@ use tracing::info;
 
 use crate::{
     utils::{
-        fixture_epoch_acc_1, fixture_epoch_acc_2, fixture_header_with_proof,
-        wait_for_history_content,
+        fixture_block_body_15040708, fixture_block_body_15040709,
+        fixture_header_by_hash_with_proof_15040708, fixture_header_by_hash_with_proof_15040709,
+        fixture_header_with_proof, fixture_receipts_15040708, wait_for_history_content,
     },
     Peertest,
 };
@@ -90,37 +91,99 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
         .unwrap();
     let fresh_enr = fresh_target.node_info().await.unwrap().enr;
 
-    // Store accumulator_1 locally in client that is not connected to the network
-    let (acc_key_1, acc_value_1) = fixture_epoch_acc_1();
+    // Store block_1 locally in client that is not connected to the network
+    let (header_key_1, header_value_1) = fixture_header_by_hash_with_proof_15040708();
+    let (body_key_1, body_value_1) = fixture_block_body_15040708();
+    let (receipts_key_1, receipts_value_1) = fixture_receipts_15040708();
+    let store_result = HistoryNetworkApiClient::store(
+        &fresh_target,
+        header_key_1.clone(),
+        header_value_1.encode(),
+    )
+    .await
+    .unwrap();
+    assert!(store_result);
     let store_result =
-        HistoryNetworkApiClient::store(&fresh_target, acc_key_1.clone(), acc_value_1.encode())
+        HistoryNetworkApiClient::store(&fresh_target, body_key_1.clone(), body_value_1.encode())
             .await
             .unwrap();
     assert!(store_result);
+    let store_result = HistoryNetworkApiClient::store(
+        &fresh_target,
+        receipts_key_1.clone(),
+        receipts_value_1.encode(),
+    )
+    .await
+    .unwrap();
+    assert!(store_result);
 
-    // check that fresh target has accumulator_1
+    // check that fresh target has block_1
     assert!(
-        HistoryNetworkApiClient::local_content(&fresh_target, acc_key_1.clone())
+        HistoryNetworkApiClient::local_content(&fresh_target, header_key_1.clone())
             .await
             .is_ok()
     );
-    // check that target does not have accumulator_1
     assert!(
-        HistoryNetworkApiClient::local_content(target, acc_key_1.clone())
+        HistoryNetworkApiClient::local_content(&fresh_target, body_key_1.clone())
+            .await
+            .is_ok()
+    );
+    assert!(
+        HistoryNetworkApiClient::local_content(&fresh_target, receipts_key_1.clone())
+            .await
+            .is_ok()
+    );
+    // check that target does not have block_1
+    assert!(
+        HistoryNetworkApiClient::local_content(target, header_key_1.clone())
             .await
             .is_err()
     );
-    // check that peertest node does not have accumulator_1
+    assert!(
+        HistoryNetworkApiClient::local_content(target, body_key_1.clone())
+            .await
+            .is_err()
+    );
+    assert!(
+        HistoryNetworkApiClient::local_content(target, receipts_key_1.clone())
+            .await
+            .is_err()
+    );
+    // check that peertest node does not have block_1
     assert!(HistoryNetworkApiClient::local_content(
         &peertest.nodes[0].ipc_client,
-        acc_key_1.clone()
+        header_key_1.clone()
+    )
+    .await
+    .is_err());
+    assert!(HistoryNetworkApiClient::local_content(
+        &peertest.nodes[0].ipc_client,
+        body_key_1.clone()
+    )
+    .await
+    .is_err());
+    assert!(HistoryNetworkApiClient::local_content(
+        &peertest.nodes[0].ipc_client,
+        receipts_key_1.clone()
     )
     .await
     .is_err());
     // check that peertest bootnode does not have accumulator_1
     assert!(HistoryNetworkApiClient::local_content(
         &peertest.bootnode.ipc_client,
-        acc_key_1.clone()
+        header_key_1.clone()
+    )
+    .await
+    .is_err());
+    assert!(HistoryNetworkApiClient::local_content(
+        &peertest.bootnode.ipc_client,
+        body_key_1.clone()
+    )
+    .await
+    .is_err());
+    assert!(HistoryNetworkApiClient::local_content(
+        &peertest.bootnode.ipc_client,
+        receipts_key_1.clone()
     )
     .await
     .is_err());
@@ -139,50 +202,105 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
         .await
         .unwrap();
 
-    // offer accumulator_2 from target to fresh target
+    // offer block_2 with receipt from target to fresh target
     // doesn't store the content locally in target
-    let (acc_key_2, acc_value_2) = fixture_epoch_acc_2();
+    let (header_key_2, header_value_2) = fixture_header_by_hash_with_proof_15040709();
+    let (body_key_2, body_value_2) = fixture_block_body_15040709();
     target
-        .offer(fresh_enr, acc_key_2.clone(), acc_value_2.encode())
+        .offer(
+            fresh_enr.clone(),
+            header_key_2.clone(),
+            header_value_2.encode(),
+        )
+        .await
+        .unwrap();
+    target
+        .offer(fresh_enr.clone(), body_key_2.clone(), body_value_2.encode())
         .await
         .unwrap();
 
-    // check that the fresh target has stored accumulator_2
+    // check that the fresh target has stored block_2
     assert_eq!(
-        acc_value_2,
-        wait_for_history_content(&fresh_target, acc_key_2.clone()).await
-    );
-    // check that the target has both accumulators
-    assert_eq!(
-        acc_value_1,
-        wait_for_history_content(target, acc_key_1.clone()).await
+        header_value_2,
+        wait_for_history_content(&fresh_target, header_key_2.clone()).await
     );
     assert_eq!(
-        acc_value_2,
-        wait_for_history_content(target, acc_key_2.clone()).await
+        body_value_2,
+        wait_for_history_content(&fresh_target, body_key_2.clone()).await
     );
-    // check that the peertest bootnode has both accumulators
+    // check that the target has block_2, block_1's header and receipts, but not the body
     assert_eq!(
-        acc_value_1,
-        wait_for_history_content(&peertest.bootnode.ipc_client, acc_key_1.clone()).await
-    );
-    assert_eq!(
-        acc_value_2,
-        wait_for_history_content(&peertest.bootnode.ipc_client, acc_key_2.clone()).await
-    );
-    // check that the peertest node has both accumulators
-    assert_eq!(
-        acc_value_1,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, acc_key_1.clone()).await
+        header_value_2,
+        wait_for_history_content(target, header_key_2.clone()).await
     );
     assert_eq!(
-        acc_value_2,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, acc_key_2.clone()).await
+        body_value_2,
+        wait_for_history_content(target, body_key_2.clone()).await
     );
-    // this must be at end of test, to guarantee that all propagation has concluded
-    // check that the fresh target has dropped accumulator_1
+    assert_eq!(
+        header_value_1,
+        wait_for_history_content(target, header_key_1.clone()).await
+    );
+    assert_eq!(
+        receipts_value_1,
+        wait_for_history_content(target, receipts_key_1.clone()).await
+    );
     assert!(
-        HistoryNetworkApiClient::local_content(&fresh_target, acc_key_1.clone())
+        HistoryNetworkApiClient::local_content(target, body_key_1.clone())
+            .await
+            .is_err()
+    );
+
+    // check that the peertest bootnode has block_2, block_1's header and receipts, but not the body
+    assert_eq!(
+        header_value_2,
+        wait_for_history_content(&peertest.bootnode.ipc_client, header_key_2.clone()).await
+    );
+    assert_eq!(
+        body_value_2,
+        wait_for_history_content(&peertest.bootnode.ipc_client, body_key_2.clone()).await
+    );
+    assert_eq!(
+        header_value_1,
+        wait_for_history_content(&peertest.bootnode.ipc_client, header_key_1.clone()).await
+    );
+    assert_eq!(
+        receipts_value_1,
+        wait_for_history_content(&peertest.bootnode.ipc_client, receipts_key_1.clone()).await
+    );
+    assert!(HistoryNetworkApiClient::local_content(
+        &peertest.bootnode.ipc_client,
+        body_key_1.clone()
+    )
+    .await
+    .is_err());
+    // check that the peertest node has block_2, block_1's header and receipts, but not the body
+    assert_eq!(
+        header_value_2,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, header_key_2.clone()).await
+    );
+    assert_eq!(
+        body_value_2,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, body_key_2.clone()).await
+    );
+    assert_eq!(
+        header_value_1,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, header_key_1.clone()).await
+    );
+    assert_eq!(
+        receipts_value_1,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, receipts_key_1.clone()).await
+    );
+    assert!(HistoryNetworkApiClient::local_content(
+        &peertest.nodes[0].ipc_client,
+        body_key_1.clone()
+    )
+    .await
+    .is_err());
+    // this must be at end of test, to guarantee that all propagation has concluded
+    // check that the fresh target has dropped block_receipt_1
+    assert!(
+        HistoryNetworkApiClient::local_content(&fresh_target, receipts_key_1.clone())
             .await
             .is_err()
     );
@@ -202,18 +320,42 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
         .await
         .unwrap();
 
-    // Store accumulator_1 locally in client that is not connected to the network
-    let (acc_key_1, acc_value_1) = fixture_epoch_acc_1();
+    // Store block_1 locally in client that is not connected to the network
+    let (header_key_1, header_value_1) = fixture_header_by_hash_with_proof_15040708();
+    let (body_key_1, body_value_1) = fixture_block_body_15040708();
+    let (receipts_key_1, receipts_value_1) = fixture_receipts_15040708();
+    let store_result = HistoryNetworkApiClient::store(
+        &fresh_target,
+        header_key_1.clone(),
+        header_value_1.encode(),
+    )
+    .await
+    .unwrap();
+    assert!(store_result);
     let store_result =
-        HistoryNetworkApiClient::store(&fresh_target, acc_key_1.clone(), acc_value_1.encode())
+        HistoryNetworkApiClient::store(&fresh_target, body_key_1.clone(), body_value_1.encode())
             .await
             .unwrap();
     assert!(store_result);
+    let store_result = HistoryNetworkApiClient::store(
+        &fresh_target,
+        receipts_key_1.clone(),
+        receipts_value_1.encode(),
+    )
+    .await
+    .unwrap();
+    assert!(store_result);
 
-    // Store accumulator_2 locally in target
-    let (acc_key_2, acc_value_2) = fixture_epoch_acc_2();
+    // Store block_2 minus receipts locally in target
+    let (header_key_2, header_value_2) = fixture_header_by_hash_with_proof_15040709();
+    let (body_key_2, body_value_2) = fixture_block_body_15040709();
     let store_result =
-        HistoryNetworkApiClient::store(target, acc_key_2.clone(), acc_value_2.encode())
+        HistoryNetworkApiClient::store(target, header_key_2.clone(), header_value_2.encode())
+            .await
+            .unwrap();
+    assert!(store_result);
+    let store_result =
+        HistoryNetworkApiClient::store(target, body_key_2.clone(), body_value_2.encode())
             .await
             .unwrap();
     assert!(store_result);
@@ -235,46 +377,89 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
     // send find_content request from fresh target to target
     let _result = fresh_target
         //.find_content(target.node_info().await.unwrap().enr, acc_key_2.clone())
-        .recursive_find_content(acc_key_2.clone())
+        .recursive_find_content(body_key_2.clone())
         .await
         .unwrap();
 
-    // check that the fresh target has stored accumulator_2
+    // check that the fresh target has stored block_body_2 stored
     assert_eq!(
-        acc_value_2,
-        wait_for_history_content(&fresh_target, acc_key_2.clone()).await
+        body_value_2,
+        wait_for_history_content(&fresh_target, body_key_2.clone()).await
     );
-    // check that the target has both accumulators
+    // check that the target has block_2, block_1's header and receipts, but not the body
     assert_eq!(
-        acc_value_1,
-        wait_for_history_content(target, acc_key_1.clone()).await
-    );
-    assert_eq!(
-        acc_value_2,
-        wait_for_history_content(target, acc_key_2.clone()).await
-    );
-    // check that the peertest bootnode has both accumulators
-    assert_eq!(
-        acc_value_1,
-        wait_for_history_content(&peertest.bootnode.ipc_client, acc_key_1.clone()).await
+        header_value_2,
+        wait_for_history_content(target, header_key_2.clone()).await
     );
     assert_eq!(
-        acc_value_2,
-        wait_for_history_content(&peertest.bootnode.ipc_client, acc_key_2.clone()).await
-    );
-    // check that the peertest node has both accumulators
-    assert_eq!(
-        acc_value_1,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, acc_key_1.clone()).await
+        body_value_2,
+        wait_for_history_content(target, body_key_2.clone()).await
     );
     assert_eq!(
-        acc_value_2,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, acc_key_2.clone()).await
+        header_value_1,
+        wait_for_history_content(target, header_key_1.clone()).await
     );
-    // this must be at end of test, to guarantee that all propagation has concluded
-    // check that the fresh target has dropped accumulator_1
+    assert_eq!(
+        receipts_value_1,
+        wait_for_history_content(target, receipts_key_1.clone()).await
+    );
     assert!(
-        HistoryNetworkApiClient::local_content(&fresh_target, acc_key_1.clone())
+        HistoryNetworkApiClient::local_content(target, body_key_1.clone())
+            .await
+            .is_err()
+    );
+    // check that the peertest bootnode has block_2, block_1's header and receipts, but not the body
+    assert_eq!(
+        header_value_2,
+        wait_for_history_content(&peertest.bootnode.ipc_client, header_key_2.clone()).await
+    );
+    assert_eq!(
+        body_value_2,
+        wait_for_history_content(&peertest.bootnode.ipc_client, body_key_2.clone()).await
+    );
+    assert_eq!(
+        header_value_1,
+        wait_for_history_content(&peertest.bootnode.ipc_client, header_key_1.clone()).await
+    );
+    assert_eq!(
+        receipts_value_1,
+        wait_for_history_content(&peertest.bootnode.ipc_client, receipts_key_1.clone()).await
+    );
+    assert!(HistoryNetworkApiClient::local_content(
+        &peertest.bootnode.ipc_client,
+        body_key_1.clone()
+    )
+    .await
+    .is_err());
+
+    // check that the peertest node has block_2, block_1's header and receipts, but not the body
+    assert_eq!(
+        header_value_2,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, header_key_2.clone()).await
+    );
+    assert_eq!(
+        body_value_2,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, body_key_2.clone()).await
+    );
+    assert_eq!(
+        header_value_1,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, header_key_1.clone()).await
+    );
+    assert_eq!(
+        receipts_value_1,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, receipts_key_1.clone()).await
+    );
+    assert!(HistoryNetworkApiClient::local_content(
+        &peertest.nodes[0].ipc_client,
+        body_key_1.clone()
+    )
+    .await
+    .is_err());
+
+    // this must be at end of test, to guarantee that all propagation has concluded
+    // check that the fresh target has dropped block_receipt_1
+    assert!(
+        HistoryNetworkApiClient::local_content(&fresh_target, receipts_key_1.clone())
             .await
             .is_err()
     );

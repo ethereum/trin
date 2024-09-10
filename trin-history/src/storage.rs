@@ -80,7 +80,7 @@ impl HistoryStorage {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod test {
-    use ethportal_api::{BlockHeaderKey, HistoryContentKey};
+    use ethportal_api::{types::content_key::history::BlockHeaderByHashKey, HistoryContentKey};
     use quickcheck::{QuickCheck, TestResult};
     use rand::RngCore;
     use serial_test::serial;
@@ -118,7 +118,8 @@ pub mod test {
         let (temp_dir, storage_config) =
             create_test_portal_storage_config_with_capacity(CAPACITY_MB).unwrap();
         let mut storage = HistoryStorage::new(storage_config)?;
-        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey::default());
+        let content_key =
+            HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey::default());
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.put(content_key.clone(), &value)?;
 

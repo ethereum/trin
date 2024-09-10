@@ -3,12 +3,9 @@ use std::path::PathBuf;
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
-use tokio::sync::mpsc;
-use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
 use crate::{
@@ -16,14 +13,7 @@ use crate::{
     merkle::proof::MerkleTree,
     TrinValidationAssets,
 };
-use ethportal_api::{
-    types::{
-        execution::{accumulator::EpochAccumulator, header::Header},
-        jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
-    },
-    utils::bytes::hex_decode,
-    EpochAccumulatorKey, HistoryContentKey,
-};
+use ethportal_api::types::execution::{accumulator::EpochAccumulator, header::Header};
 
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.
@@ -64,81 +54,6 @@ impl PreMergeAccumulator {
 
     pub(crate) fn get_epoch_index_of_header(&self, header: &Header) -> u64 {
         header.number / EPOCH_SIZE
-    }
-
-    pub async fn lookup_premerge_hash_by_number(
-        &self,
-        block_number: u64,
-        history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
-    ) -> anyhow::Result<B256> {
-        if block_number > MERGE_BLOCK_NUMBER {
-            return Err(anyhow!("Post-merge blocks are not supported."));
-        }
-        let rel_index = block_number % EPOCH_SIZE;
-        let epoch_index = block_number / EPOCH_SIZE;
-        let epoch_hash = self.historical_epochs[epoch_index as usize];
-        let epoch_acc = self
-            .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
-            .await?;
-        Ok(epoch_acc[rel_index as usize].block_hash)
-    }
-
-    pub async fn lookup_epoch_acc(
-        &self,
-        epoch_hash: B256,
-        history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
-    ) -> anyhow::Result<EpochAccumulator> {
-        let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
-        let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
-        let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
-        let request = HistoryJsonRpcRequest {
-            endpoint,
-            resp: resp_tx,
-        };
-        history_jsonrpc_tx.send(request)?;
-
-        let epoch_acc_ssz = match resp_rx.recv().await {
-            Some(val) => {
-                val.map_err(|msg| anyhow!("Chain history subnetwork request error: {:?}", msg))?
-            }
-            None => return Err(anyhow!("No response from chain history subnetwork")),
-        };
-        let epoch_acc_ssz = epoch_acc_ssz
-            .as_str()
-            .ok_or_else(|| anyhow!("Invalid epoch acc received from chain history network"))?;
-        let epoch_acc_ssz = hex_decode(epoch_acc_ssz)?;
-        EpochAccumulator::from_ssz_bytes(&epoch_acc_ssz).map_err(|msg| {
-            anyhow!(
-                "Invalid epoch acc received from chain history network: {:?}",
-                msg
-            )
-        })
-    }
-
-    pub async fn generate_proof(
-        &self,
-        header: &Header,
-        history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
-    ) -> anyhow::Result<[B256; 15]> {
-        if header.number > MERGE_BLOCK_NUMBER {
-            return Err(anyhow!("Unable to generate proof for post-merge header."));
-        }
-        // Fetch epoch accumulator for header
-        let epoch_index = self.get_epoch_index_of_header(header);
-        let epoch_hash = self.historical_epochs[epoch_index as usize];
-        let epoch_acc = self
-            .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
-            .await?;
-
-        // Validate epoch accumulator hash matches historical hash from pre-merge accumulator
-        let epoch_index = self.get_epoch_index_of_header(header);
-        let epoch_hash = self.historical_epochs[epoch_index as usize];
-        if epoch_acc.tree_hash_root() != epoch_hash {
-            return Err(anyhow!(
-                "Epoch acc hash sourced from network doesn't match historical hash in pre-merge acc."
-            ));
-        }
-        PreMergeAccumulator::construct_proof(header, &epoch_acc)
     }
 
     pub fn construct_proof(

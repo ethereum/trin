@@ -22,7 +22,7 @@ use crate::{
 };
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
-    EpochAccumulatorKey, HistoryContentKey, HistoryContentValue,
+    HistoryContentKey,
 };
 use trin_validation::{
     constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
@@ -98,7 +98,7 @@ impl HistoryBridge {
                 block_stats.clone(),
             )
             .await;
-            if let HistoryContentKey::BlockHeaderWithProof(_) = asset.content_key {
+            if let HistoryContentKey::BlockHeaderByHashWithProof(_) = asset.content_key {
                 sleep(Duration::from_millis(50)).await;
             }
         }
@@ -257,8 +257,12 @@ impl HistoryBridge {
     ) -> anyhow::Result<()> {
         info!("Serving block: {height}");
         let timer = metrics.start_process_timer("construct_and_gossip_header");
-        let (full_header, header_content_key, header_content_value) =
-            execution_api.get_header(height, epoch_acc).await?;
+        let (
+            full_header,
+            header_by_hash_content_key,
+            header_by_number_content_key,
+            header_content_value,
+        ) = execution_api.get_header(height, epoch_acc).await?;
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(
             full_header.header.number,
         )));
@@ -266,13 +270,23 @@ impl HistoryBridge {
         debug!("Built and validated HeaderWithProof for Block #{height:?}: now gossiping.");
         if let Err(msg) = gossip_history_content(
             portal_client.clone(),
-            header_content_key,
+            header_by_hash_content_key,
+            header_content_value.clone(),
+            block_stats.clone(),
+        )
+        .await
+        {
+            warn!("Error gossiping HeaderByHashWithProof #{height:?}: {msg:?}");
+        };
+        if let Err(msg) = gossip_history_content(
+            portal_client.clone(),
+            header_by_number_content_key,
             header_content_value,
             block_stats.clone(),
         )
         .await
         {
-            warn!("Error gossiping HeaderWithProof #{height:?}: {msg:?}");
+            warn!("Error gossiping HeaderByNumberWithProof #{height:?}: {msg:?}");
         };
         metrics.stop_process_timer(timer);
 
@@ -341,25 +355,12 @@ impl HistoryBridge {
         &self,
         epoch_index: u64,
     ) -> anyhow::Result<Arc<EpochAccumulator>> {
-        let (epoch_hash, epoch_acc) = lookup_epoch_acc(
+        let (_, epoch_acc) = lookup_epoch_acc(
             epoch_index,
             &self.header_oracle.header_validator.pre_merge_acc,
             &self.epoch_acc_path,
         )
         .await?;
-        // Gossip epoch acc to network if found locally
-        let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
-        let content_value = HistoryContentValue::EpochAccumulator(epoch_acc.clone());
-        // create unique stats for epoch accumulator, since it's rarely gossiped
-        let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(epoch_index * EPOCH_SIZE)));
-        debug!("Built EpochAccumulator for Epoch #{epoch_index:?}: now gossiping.");
-        let _ = gossip_history_content(
-            self.portal_client.clone(),
-            content_key,
-            content_value,
-            block_stats,
-        )
-        .await;
         Ok(Arc::new(epoch_acc))
     }
 

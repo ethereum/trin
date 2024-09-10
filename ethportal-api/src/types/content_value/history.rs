@@ -1,8 +1,7 @@
 use crate::{
     types::{
-        cli::HISTORY_NETWORK,
-        content_value::ContentValue,
-        execution::{accumulator::EpochAccumulator, header_with_proof::HeaderWithProof},
+        cli::HISTORY_NETWORK, content_value::ContentValue,
+        execution::header_with_proof::HeaderWithProof,
     },
     utils::bytes::hex_encode,
     BlockBody, ContentValueError, HistoryContentKey, RawContentValue, Receipts,
@@ -16,7 +15,6 @@ pub enum HistoryContentValue {
     BlockHeaderWithProof(HeaderWithProof),
     BlockBody(BlockBody),
     Receipts(Receipts),
-    EpochAccumulator(EpochAccumulator),
 }
 
 impl ContentValue for HistoryContentValue {
@@ -27,13 +25,13 @@ impl ContentValue for HistoryContentValue {
             Self::BlockHeaderWithProof(value) => value.as_ssz_bytes().into(),
             Self::BlockBody(value) => value.as_ssz_bytes().into(),
             Self::Receipts(value) => value.as_ssz_bytes().into(),
-            Self::EpochAccumulator(value) => value.as_ssz_bytes().into(),
         }
     }
 
     fn decode(key: &Self::TContentKey, buf: &[u8]) -> Result<Self, ContentValueError> {
         match key {
-            HistoryContentKey::BlockHeaderWithProof(_) => {
+            HistoryContentKey::BlockHeaderByHashWithProof(_)
+            | HistoryContentKey::BlockHeaderByNumberWithProof(_) => {
                 if let Ok(value) = HeaderWithProof::from_ssz_bytes(buf) {
                     return Ok(Self::BlockHeaderWithProof(value));
                 }
@@ -46,11 +44,6 @@ impl ContentValue for HistoryContentValue {
             HistoryContentKey::BlockReceipts(_) => {
                 if let Ok(value) = Receipts::from_ssz_bytes(buf) {
                     return Ok(Self::Receipts(value));
-                }
-            }
-            HistoryContentKey::EpochAccumulator(_) => {
-                if let Ok(value) = EpochAccumulator::from_ssz_bytes(buf) {
-                    return Ok(Self::EpochAccumulator(value));
                 }
             }
         }
@@ -71,9 +64,6 @@ mod test {
     use crate::{utils::bytes::hex_decode, HistoryContentValue};
     use std::fs;
 
-    /// Max number of blocks / epoch = 2 ** 13
-    pub const EPOCH_SIZE: usize = 8192;
-
     #[test]
     fn header_with_proof_encode_decode_fluffy() {
         let file =
@@ -93,15 +83,6 @@ mod test {
             let encoded = header_with_proof.as_ssz_bytes();
             assert_eq!(encoded, header_with_proof_encoded);
         }
-    }
-
-    #[test]
-    fn ssz_serde_encode_decode_fluffy_epoch_accumulator() {
-        // values sourced from: https://github.com/status-im/portal-spec-tests
-        let epoch_acc_ssz = fs::read("../trin-validation/src/assets/fluffy/epoch_acc.bin").unwrap();
-        let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc_ssz).unwrap();
-        assert_eq!(epoch_acc.len(), EPOCH_SIZE);
-        assert_eq!(epoch_acc.as_ssz_bytes(), epoch_acc_ssz);
     }
 
     #[test]

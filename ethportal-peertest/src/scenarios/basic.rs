@@ -1,8 +1,10 @@
 use crate::{utils::fixture_header_with_proof, Peertest, PeertestNode};
 use alloy_primitives::{B256, U256};
 use ethportal_api::{
-    types::{distance::Distance, portal_wire::ProtocolId},
-    BeaconNetworkApiClient, BlockHeaderKey, ContentValue, Discv5ApiClient, HistoryContentKey,
+    types::{
+        content_key::history::BlockHeaderByHashKey, distance::Distance, portal_wire::ProtocolId,
+    },
+    BeaconNetworkApiClient, ContentValue, Discv5ApiClient, HistoryContentKey,
     HistoryNetworkApiClient, StateNetworkApiClient, Web3ApiClient,
 };
 use jsonrpsee::async_client::Client;
@@ -184,7 +186,7 @@ pub async fn test_history_store(target: &Client) {
 
 pub async fn test_history_local_content_absent(target: &Client) {
     info!("Testing portal_historyLocalContent absent");
-    let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
+    let content_key = HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
         block_hash: B256::random().into(),
     });
     let error = HistoryNetworkApiClient::local_content(target, content_key)

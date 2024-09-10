@@ -32,9 +32,7 @@ pub use types::{
     content_key::{
         beacon::{BeaconContentKey, LightClientBootstrapKey, LightClientUpdatesByRangeKey},
         error::ContentKeyError,
-        history::{
-            BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
-        },
+        history::{BlockBodyKey, BlockReceiptsKey, HistoryContentKey},
         overlay::{IdentityContentKey, OverlayContentKey},
         state::StateContentKey,
     },

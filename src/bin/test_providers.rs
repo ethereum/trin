@@ -85,7 +85,7 @@ pub async fn main() -> Result<()> {
                         continue;
                     }
                 };
-                let (full_header, _, _) = match api.get_header(*block, epoch_acc).await {
+                let (full_header, _, _, _) = match api.get_header(*block, epoch_acc).await {
                     Ok(header) => header,
                     Err(_) => {
                         provider_failures += 3;

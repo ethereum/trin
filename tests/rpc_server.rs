@@ -121,7 +121,7 @@ async fn test_eth_get_block_by_hash() {
     };
 
     // Store header with proof in server
-    let content_key = HistoryContentKey::BlockHeaderWithProof(block_hash.into());
+    let content_key = HistoryContentKey::BlockHeaderByHashWithProof(block_hash.into());
     let content_value = HistoryContentValue::BlockHeaderWithProof(hwp);
     let result = native_client
         .store(content_key, content_value.encode())

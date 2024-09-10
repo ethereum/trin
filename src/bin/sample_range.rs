@@ -14,7 +14,8 @@ use url::Url;
 
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey, HistoryNetworkApiClient,
+    types::content_key::history::BlockHeaderByHashKey,
+    BlockBodyKey, BlockReceiptsKey, HistoryContentKey, HistoryNetworkApiClient,
 };
 use trin_utils::log::init_tracing_logger;
 use trin_validation::constants::MERGE_BLOCK_NUMBER;
@@ -138,7 +139,8 @@ async fn audit_block(
     metrics: Arc<Mutex<Metrics>>,
     client: HttpClient,
 ) -> anyhow::Result<()> {
-    let header_ck = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey { block_hash: hash.0 });
+    let header_ck =
+        HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey { block_hash: hash.0 });
     let body_ck = HistoryContentKey::BlockBody(BlockBodyKey { block_hash: hash.0 });
     let receipts_ck = HistoryContentKey::BlockReceipts(BlockReceiptsKey { block_hash: hash.0 });
     match client.recursive_find_content(header_ck).await {

@@ -1,4 +1,7 @@
-use ethportal_api::{BlockHeaderKey, ContentValue, HistoryContentKey, HistoryNetworkApiClient};
+use ethportal_api::{
+    types::content_key::history::BlockHeaderByHashKey, ContentValue, HistoryContentKey,
+    HistoryNetworkApiClient,
+};
 
 use crate::{utils::fixture_header_with_proof, Peertest};
 
@@ -11,9 +14,11 @@ pub async fn test_paginate_local_storage(peertest: &Peertest) {
 
     let mut content_keys: Vec<String> = (0..20_u8)
         .map(|_| {
-            serde_json::to_string(&HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-                block_hash: rand::random(),
-            }))
+            serde_json::to_string(&HistoryContentKey::BlockHeaderByHashWithProof(
+                BlockHeaderByHashKey {
+                    block_hash: rand::random(),
+                },
+            ))
             .unwrap()
         })
         .collect();
