@@ -70,6 +70,20 @@ impl FinalizedBeaconState {
     }
 }
 
+/// A helper struct to hold the finalized block root and whether the `LightClientBootstrap`
+/// generation is in progress.
+#[derive(Clone, Debug, Default)]
+pub struct FinalizedBootstrap {
+    pub finalized_block_root: String,
+    pub in_progress: bool,
+}
+
+impl FinalizedBootstrap {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 pub struct BeaconBridge {
     pub api: ConsensusApi,
     mode: BridgeMode,
@@ -123,7 +137,7 @@ impl BeaconBridge {
     ///  Get and serve the latest beacon data.
     async fn launch_latest(&self) {
         let current_period = Arc::new(Mutex::new(0));
-        let finalized_block_root = Arc::new(Mutex::new(String::new()));
+        let finalized_bootstrap = Arc::new(Mutex::new(FinalizedBootstrap::new()));
         let finalized_slot = Arc::new(Mutex::new(0));
         let finalized_state_root = Arc::new(Mutex::new(FinalizedBeaconState::new()));
 
@@ -151,7 +165,7 @@ impl BeaconBridge {
                 consensus_api,
                 portal_client,
                 current_period.clone(),
-                finalized_block_root.clone(),
+                finalized_bootstrap.clone(),
                 finalized_slot.clone(),
                 finalized_state_root.clone(),
             )
@@ -166,7 +180,7 @@ impl BeaconBridge {
         api: ConsensusApi,
         portal_client: HttpClient,
         current_period: Arc<Mutex<u64>>,
-        finalized_block_root: Arc<Mutex<String>>,
+        finalized_bootstrap: Arc<Mutex<FinalizedBootstrap>>,
         finalized_slot: Arc<Mutex<u64>>,
         finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
     ) {
@@ -183,12 +197,13 @@ impl BeaconBridge {
             if let Err(err) = Self::serve_light_client_bootstrap(
                 api_clone,
                 portal_client_clone,
-                &finalized_block_root,
+                finalized_bootstrap.clone(),
                 slot_stats_clone,
             )
             .in_current_span()
             .await
             {
+                finalized_bootstrap.lock().await.in_progress = false;
                 warn!("Failed to serve LightClientBootstrap: {err}");
             }
         });
@@ -275,20 +290,31 @@ impl BeaconBridge {
     async fn serve_light_client_bootstrap(
         api: ConsensusApi,
         portal_client: HttpClient,
-        finalized_block_root: &Arc<Mutex<String>>,
+        finalized_bootstrap: Arc<Mutex<FinalizedBootstrap>>,
         slot_stats: Arc<StdMutex<BeaconSlotStats>>,
     ) -> anyhow::Result<()> {
+        if finalized_bootstrap.lock().await.in_progress {
+            // If the `LightClientBootstrap` generation is in progress, do not serve a new
+            // bootstrap.
+            info!("LightClientBootstrap generation is in progress, skipping generation.");
+            return Ok(());
+        }
         let response = api.get_beacon_block_root("finalized".to_owned()).await?;
         let response: Value = serde_json::from_str(&response)?;
         let latest_finalized_block_root: String =
             serde_json::from_value(response["data"]["root"].clone())?;
 
         // If the latest finalized block root is the same, do not serve a new bootstrap
-        if latest_finalized_block_root.eq(&*finalized_block_root.lock().await) {
+        if latest_finalized_block_root.eq(&*finalized_bootstrap.lock().await.finalized_block_root) {
             return Ok(());
         }
 
         // finalized block root is different, so serve a new bootstrap
+        finalized_bootstrap.lock().await.in_progress = true;
+        // Delay bootstrap generation for 2 slots (24 seconds) to ensure LightClientFinalityUpdate
+        // is propagated first.
+        let duration = Duration::from_secs(24);
+        sleep(duration).await;
         let result = api.get_lc_bootstrap(&latest_finalized_block_root).await?;
         let result: Value = serde_json::from_str(&result)?;
         let bootstrap: LightClientBootstrapDeneb = serde_json::from_value(result["data"].clone())?;
@@ -307,7 +333,8 @@ impl BeaconBridge {
 
         // Return the latest finalized block root if we successfully gossiped the latest bootstrap.
         gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
-        *finalized_block_root.lock().await = latest_finalized_block_root;
+        finalized_bootstrap.lock().await.finalized_block_root = latest_finalized_block_root;
+        finalized_bootstrap.lock().await.in_progress = false;
 
         Ok(())
     }
