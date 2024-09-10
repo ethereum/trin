@@ -750,7 +750,7 @@ where
                     successfully_bonded_bootnode = true;
                 }
                 Err(err) => {
-                    error!(
+                    warn!(
                         alias = %bootnode.alias,
                         protocol = %self.protocol,
                         error = %err,
@@ -762,7 +762,7 @@ where
         if !successfully_bonded_bootnode {
             error!(
                 protocol = %self.protocol,
-                "Failed to bond with any bootnodes",
+                "Failed to bond with any bootnodes, unable to connect to subnetwork.",
             );
         }
     }
