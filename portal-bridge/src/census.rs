@@ -9,7 +9,6 @@ use tokio::{
 };
 use tracing::{error, info};
 
-use crate::types::network::NetworkKind;
 use ethportal_api::{
     generate_random_remote_enr,
     jsonrpsee::http_client::HttpClient,
@@ -53,21 +52,10 @@ impl Census {
 }
 
 impl Census {
-    pub async fn init(&mut self, subnetworks: Vec<NetworkKind>) {
-        let mut handles = vec![];
-        if subnetworks.contains(&NetworkKind::History) {
-            info!("Initializing history network census");
-            handles.push(self.history.init());
-        }
-        if subnetworks.contains(&NetworkKind::State) {
-            info!("Initializing state network census");
-            handles.push(self.state.init());
-        }
-        if subnetworks.contains(&NetworkKind::Beacon) {
-            info!("Initializing beacon network census");
-            handles.push(self.beacon.init());
-        }
-        futures::future::join_all(handles).await;
+    pub async fn init(&mut self) {
+        // currently, the census is only initialized for the state network
+        info!("Initializing state network census");
+        self.state.init().await;
     }
 
     pub async fn run(&mut self) {
@@ -81,20 +69,17 @@ impl Census {
                         error!("Error sending enrs response: {err:?}");
                     }
                 }
-                // yield next known history peer and ping for liveness
-                // if network is not initialized, this will never yield
+                // network is not initialized, this will never yield
                 Some(Ok(known_enr)) = self.history.peers.next() => {
                     self.history.process_enr(known_enr.1.0).await;
                     info!("Updated history census: found peers: {}", self.history.peers.len());
                 }
                 // yield next known state peer and ping for liveness
-                // if network is not initialized, this will never yield
                 Some(Ok(known_enr)) = self.state.peers.next() => {
                     self.state.process_enr(known_enr.1.0).await;
                     info!("Updated state census: found peers: {}", self.state.peers.len());
                 }
-                // yield next known beacon peer and ping for liveness
-                // if network is not initialized, this will never yield
+                // network is not initialized, this will never yield
                 Some(Ok(known_enr)) = self.beacon.peers.next() => {
                     self.beacon.process_enr(known_enr.1.0).await;
                     info!("Updated beacon census: found peers: {}", self.beacon.peers.len());

@@ -5,18 +5,14 @@ use e2store::utils::get_shuffled_era1_files;
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
-    types::state_trie::account_state::AccountState as AccountStateInfo, StateContentKey,
-    StateContentValue,
+    types::state_trie::account_state::AccountState as AccountStateInfo, ContentValue, Enr,
+    StateContentKey, StateNetworkApiClient,
 };
 use revm::Database;
 use revm_primitives::{keccak256, Bytecode, SpecId, B256};
 use surf::{Client, Config};
-use tokio::{
-    sync::{OwnedSemaphorePermit, Semaphore},
-    task::JoinHandle,
-    time::timeout,
-};
-use tracing::{debug, error, info, warn};
+use tokio::sync::{mpsc, OwnedSemaphorePermit, Semaphore};
+use tracing::{error, info};
 use trin_execution::{
     config::StateConfig,
     content::{
@@ -34,9 +30,8 @@ use trin_metrics::bridge::BridgeMetricsReporter;
 use trin_validation::oracle::HeaderOracle;
 
 use crate::{
-    bridge::history::SERVE_BLOCK_TIMEOUT,
-    census::EnrsRequest,
-    gossip::gossip_state_content,
+    //bridge::history::SERVE_BLOCK_TIMEOUT,
+    census::{ContentKey, EnrsRequest},
     types::mode::{BridgeMode, ModeType},
 };
 
@@ -53,7 +48,7 @@ pub struct StateBridge {
     pub gossip_semaphore: Arc<Semaphore>,
     // Used to request all interested enrs in the network from census process.
     // If None, the bridge will use the default gossip mode.
-    pub census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
+    pub census_tx: mpsc::UnboundedSender<EnrsRequest>,
 }
 
 impl StateBridge {
@@ -63,7 +58,7 @@ impl StateBridge {
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
         gossip_limit: usize,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
+        census_tx: mpsc::UnboundedSender<EnrsRequest>,
     ) -> anyhow::Result<Self> {
         let http_client: Client = Config::new()
             .add_header("Content-Type", "application/xml")
@@ -139,7 +134,7 @@ impl StateBridge {
                 let account_proof = walk_diff.get_proof(*node);
 
                 // gossip the account
-                self.gossip_account(&account_proof, block.header.hash(), self.census_tx.clone())
+                self.gossip_account(&account_proof, block.header.hash())
                     .await?;
 
                 let Some(encoded_last_node) = account_proof.proof.last() else {
@@ -172,7 +167,6 @@ impl StateBridge {
                         block.header.hash(),
                         account.code_hash,
                         code,
-                        self.census_tx.clone(),
                     )
                     .await?;
                 }
@@ -191,7 +185,6 @@ impl StateBridge {
                         &storage_proof,
                         address_hash,
                         block.header.hash(),
-                        self.census_tx.clone(),
                     )
                     .await?;
                 }
@@ -204,23 +197,69 @@ impl StateBridge {
         Ok(())
     }
 
+    async fn request_enrs(&self, content_key: &StateContentKey) -> anyhow::Result<Vec<Enr>> {
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let enrs_request = EnrsRequest {
+            content_key: ContentKey::State(content_key.clone()),
+            resp_tx,
+        };
+        self.census_tx.send(enrs_request)?;
+        Ok(resp_rx.await?)
+    }
+
     async fn gossip_account(
         &self,
         account_proof: &TrieProof,
         block_hash: B256,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
-        let permit = self.acquire_gossip_permit().await;
         let content_key = create_account_content_key(account_proof)?;
         let content_value = create_account_content_value(block_hash, account_proof)?;
-        Self::spawn_serve_state_proof(
-            self.portal_client.clone(),
-            content_key,
-            content_value,
-            permit,
-            self.metrics.clone(),
-            census_tx,
-        );
+        let enrs = self.request_enrs(&content_key).await?;
+        for enr in enrs {
+            let permit = self.acquire_gossip_permit().await;
+            let _result = StateNetworkApiClient::trace_offer(
+                &self.portal_client,
+                enr,
+                content_key.clone(),
+                content_value.encode(),
+            )
+            .await;
+            drop(permit);
+        }
+        Ok(())
+    }
+
+    async fn _gossip_account_async(
+        &self,
+        account_proof: &TrieProof,
+        block_hash: B256,
+    ) -> anyhow::Result<()> {
+        let content_key = create_account_content_key(account_proof)?;
+        let content_value = create_account_content_value(block_hash, account_proof)?;
+        let enrs = self.request_enrs(&content_key).await?;
+        let mut handles = Vec::new();
+        for enr in enrs {
+            let permit = self.acquire_gossip_permit().await;
+            let portal_client = self.portal_client.clone();
+            let content_key = content_key.clone();
+            let content_value = content_value.clone();
+            let handle = tokio::spawn(async move {
+                // todo: add timeout to trace_offer
+                let result = StateNetworkApiClient::trace_offer(
+                    &portal_client,
+                    enr,
+                    content_key.clone(),
+                    content_value.encode(),
+                )
+                .await;
+                drop(permit);
+                result
+            });
+            handles.push(handle);
+        }
+        for handle in handles {
+            let _result = handle.await?;
+        }
         Ok(())
     }
 
@@ -231,19 +270,21 @@ impl StateBridge {
         block_hash: B256,
         code_hash: B256,
         code: Bytecode,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
-        let permit = self.acquire_gossip_permit().await;
         let code_content_key = create_contract_content_key(address_hash, code_hash)?;
         let code_content_value = create_contract_content_value(block_hash, account_proof, code)?;
-        Self::spawn_serve_state_proof(
-            self.portal_client.clone(),
-            code_content_key,
-            code_content_value,
-            permit,
-            self.metrics.clone(),
-            census_tx,
-        );
+        let enrs = self.request_enrs(&code_content_key).await?;
+        for enr in enrs {
+            let permit = self.acquire_gossip_permit().await;
+            let _result = StateNetworkApiClient::trace_offer(
+                &self.portal_client,
+                enr,
+                code_content_key.clone(),
+                code_content_value.encode(),
+            )
+            .await;
+            drop(permit);
+        }
         Ok(())
     }
 
@@ -253,76 +294,22 @@ impl StateBridge {
         storage_proof: &TrieProof,
         address_hash: B256,
         block_hash: B256,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
     ) -> anyhow::Result<()> {
-        let permit = self.acquire_gossip_permit().await;
         let storage_content_key = create_storage_content_key(storage_proof, address_hash)?;
         let storage_content_value =
             create_storage_content_value(block_hash, account_proof, storage_proof)?;
-        Self::spawn_serve_state_proof(
-            self.portal_client.clone(),
-            storage_content_key,
-            storage_content_value,
-            permit,
-            self.metrics.clone(),
-            census_tx,
-        );
-        Ok(())
-    }
-
-    fn spawn_serve_state_proof(
-        portal_client: HttpClient,
-        content_key: StateContentKey,
-        content_value: StateContentValue,
-        permit: OwnedSemaphorePermit,
-        metrics: BridgeMetricsReporter,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
-    ) -> JoinHandle<()> {
-        info!("Spawning serve_state_proof for content key: {content_key}");
-        tokio::spawn(async move {
-            let timer = metrics.start_process_timer("spawn_serve_state_proof");
-            match timeout(
-                SERVE_BLOCK_TIMEOUT,
-                Self::serve_state_proof(
-                    portal_client,
-                    content_key.clone(),
-                    content_value,
-                    metrics.clone(),
-                    census_tx,
-                )).await
-                {
-                Ok(result) => match result {
-                    Ok(_) => {
-                        debug!("Done serving state proof: {content_key}");
-                    }
-                    Err(msg) => warn!("Error serving state proof: {content_key}: {msg:?}"),
-                },
-                Err(_) => error!("serve_state_proof() timed out on state proof {content_key}: this is an indication a bug is present")
-            };
+        let enrs = self.request_enrs(&storage_content_key).await?;
+        for enr in enrs {
+            let permit = self.acquire_gossip_permit().await;
+            let _result = StateNetworkApiClient::trace_offer(
+                &self.portal_client,
+                enr,
+                storage_content_key.clone(),
+                storage_content_value.encode(),
+            )
+            .await;
             drop(permit);
-            metrics.stop_process_timer(timer);
-        })
-    }
-
-    async fn serve_state_proof(
-        portal_client: HttpClient,
-        content_key: StateContentKey,
-        content_value: StateContentValue,
-        metrics: BridgeMetricsReporter,
-        census_tx: Option<tokio::sync::mpsc::UnboundedSender<EnrsRequest>>,
-    ) -> anyhow::Result<()> {
-        let timer = metrics.start_process_timer("gossip_state_content");
-        match gossip_state_content(portal_client, content_key.clone(), content_value, census_tx)
-            .await
-        {
-            Ok(_) => {
-                debug!("Successfully gossiped state proof: {content_key}")
-            }
-            Err(msg) => {
-                warn!("Error gossiping state proof: {content_key} {msg}",);
-            }
         }
-        metrics.stop_process_timer(timer);
         Ok(())
     }
 

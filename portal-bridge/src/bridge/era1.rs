@@ -311,7 +311,6 @@ impl Era1Bridge {
         Ok(Arc::new(epoch_acc))
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn spawn_serve_block_tuple(
         portal_client: HttpClient,
         block_tuple: BlockTuple,
@@ -354,7 +353,6 @@ impl Era1Bridge {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn serve_block_tuple(
         portal_client: HttpClient,
         block_tuple: BlockTuple,
