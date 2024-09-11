@@ -6146,6 +6146,7 @@ dependencies = [
  "portalnet",
  "reth-ipc",
  "reth-rpc-types",
+ "revm",
  "serde",
  "serde_json",
  "strum",
@@ -6154,6 +6155,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "trin-execution",
  "trin-utils",
  "trin-validation",
 ]
@@ -8141,6 +8143,7 @@ dependencies = [
  "parking_lot 0.11.2",
  "prometheus_exporter",
  "rayon",
+ "reth-rpc-types",
  "revm",
  "revm-inspectors",
  "revm-primitives",

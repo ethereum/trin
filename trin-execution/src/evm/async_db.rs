@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use revm::Database;
+use revm::{Database, Evm};
 use revm_primitives::{AccountInfo, Address, BlockEnv, Bytecode, EVMError, EVMResult, B256, U256};
 use tokio::{runtime, task};
 
@@ -40,7 +40,7 @@ pub trait AsyncDatabase {
 /// Wraps the [AsyncDatabase] to provide [revm::Database] implementation.
 ///
 /// This should only be used when blocking thread is allowed, e.g. from within spawn::blocking.
-pub(super) struct WrapAsyncDatabase<DB: AsyncDatabase> {
+pub struct WrapAsyncDatabase<DB: AsyncDatabase> {
     db: DB,
     rt: runtime::Runtime,
 }
@@ -81,10 +81,25 @@ where
     DBError: Send + 'static,
     Tx: TxEnvModifier + Send + 'static,
 {
+    execute_transaction_with_evm_modifier(block_env, tx, db, |_| {}).await
+}
+
+pub async fn execute_transaction_with_evm_modifier<DB, DBError, Tx>(
+    block_env: BlockEnv,
+    tx: Tx,
+    db: DB,
+    evm_modifier: impl FnOnce(&mut Evm<'_, (), &mut WrapAsyncDatabase<DB>>) + Send + 'static,
+) -> EVMResult<DB::Error>
+where
+    DB: AsyncDatabase<Error = DBError> + Send + 'static,
+    DBError: Send + 'static,
+    Tx: TxEnvModifier + Send + 'static,
+{
     task::spawn_blocking(move || {
         let rt = runtime::Runtime::new().expect("to create Runtime within spawn_blocking");
         let mut db = WrapAsyncDatabase::new(db, rt);
         let mut evm = create_evm(block_env, &tx, &mut db);
+        evm_modifier(&mut evm);
         evm.transact()
     })
     .await

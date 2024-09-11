@@ -1,31 +1,27 @@
-use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
-use alloy_rlp::Decodable;
-use eth_trie::node::Node;
-use reth_rpc_types::{Block, BlockId, BlockTransactions};
+use alloy_primitives::{Address, Bytes, B256, U256};
+use reth_rpc_types::{Block, BlockId, BlockTransactions, TransactionRequest};
 use tokio::sync::mpsc;
 
 use ethportal_api::{
     types::{
-        content_key::state::{AccountTrieNodeKey, ContractBytecodeKey, ContractStorageTrieNodeKey},
         execution::block_body::BlockBody,
         jsonrpc::{
-            endpoints::{HistoryEndpoint, StateEndpoint},
+            endpoints::HistoryEndpoint,
             request::{HistoryJsonRpcRequest, StateJsonRpcRequest},
         },
         portal::ContentInfo,
-        state_trie::{
-            account_state::AccountState,
-            nibbles::Nibbles,
-            trie_traversal::{NodeTraversal, TraversalResult},
-        },
     },
-    ContentValue, EthApiServer, Header, HistoryContentKey, HistoryContentValue, StateContentKey,
-    StateContentValue,
+    ContentValue, EthApiServer, Header, HistoryContentKey, HistoryContentValue,
+};
+use trin_execution::evm::{
+    async_db::{execute_transaction_with_evm_modifier, AsyncDatabase},
+    create_block_env,
 };
 use trin_validation::constants::CHAIN_ID;
 
 use crate::{
     errors::RpcServeError,
+    evm_state::EvmBlockState,
     fetch::proxy_to_subnet,
     jsonrpsee::core::{async_trait, RpcResult},
 };
@@ -91,57 +87,63 @@ impl EthApiServer for EthApi {
     }
 
     async fn get_balance(&self, address: Address, block: BlockId) -> RpcResult<U256> {
-        let address_hash = keccak256(address);
-        let block_hash = as_block_hash(block)?;
-        let header = self.fetch_header_by_hash(block_hash).await?;
+        let mut evm_block_state = self.evm_block_state(block).await?;
 
-        let account_state = self
-            .fetch_account_state(header.state_root, address_hash)
-            .await?;
-
-        match account_state {
-            Some(account_state) => Ok(account_state.balance),
-            None => Ok(U256::ZERO),
-        }
+        let Some(account_info) = evm_block_state.basic_async(address).await? else {
+            return Ok(U256::ZERO);
+        };
+        Ok(account_info.balance)
     }
-
-    async fn get_code(&self, address: Address, block: BlockId) -> RpcResult<Bytes> {
-        let address_hash = keccak256(address);
-        let block_hash = as_block_hash(block)?;
-        let header = self.fetch_header_by_hash(block_hash).await?;
-
-        let account_state = self
-            .fetch_account_state(header.state_root, address_hash)
-            .await?;
-
-        match account_state {
-            Some(account_state) => Ok(self
-                .fetch_contract_bytecode(address_hash, account_state.code_hash)
-                .await?),
-            None => Ok(Bytes::new()),
-        }
-    }
-
     async fn get_storage_at(
         &self,
         address: Address,
         slot: U256,
         block: BlockId,
     ) -> RpcResult<B256> {
-        let address_hash = keccak256(address);
-        let block_hash = as_block_hash(block)?;
-        let header = self.fetch_header_by_hash(block_hash).await?;
+        let mut evm_block_state = self.evm_block_state(block).await?;
 
-        let account_state = self
-            .fetch_account_state(header.state_root, address_hash)
-            .await?;
+        let value = evm_block_state.storage_async(address, slot).await?;
+        Ok(B256::from(value))
+    }
 
-        match account_state {
-            Some(account_state) => Ok(self
-                .fetch_contract_storage_at_slot(account_state.storage_root, address_hash, slot)
-                .await?),
-            None => Ok(B256::ZERO),
+    async fn get_code(&self, address: Address, block: BlockId) -> RpcResult<Bytes> {
+        let mut evm_block_state = self.evm_block_state(block).await?;
+
+        let Some(account_info) = evm_block_state.basic_async(address).await? else {
+            return Ok(Bytes::new());
+        };
+
+        if account_info.is_empty_code_hash() {
+            return Ok(Bytes::new());
         }
+
+        let bytecode = match account_info.code {
+            Some(code) => code,
+            None => {
+                evm_block_state
+                    .code_by_hash_async(account_info.code_hash())
+                    .await?
+            }
+        };
+        Ok(bytecode.original_bytes())
+    }
+
+    async fn call(&self, transaction: TransactionRequest, block: BlockId) -> RpcResult<Bytes> {
+        let evm_block_state = self.evm_block_state(block).await?;
+
+        let result_and_state = execute_transaction_with_evm_modifier(
+            create_block_env(evm_block_state.block_header()),
+            transaction,
+            evm_block_state,
+            |evm| {
+                // Allow unlimited gas
+                evm.cfg_mut().disable_block_gas_limit = true;
+            },
+        )
+        .await
+        .map_err(|err| RpcServeError::Message(err.to_string()))?;
+        let output = result_and_state.result.into_output().unwrap_or_default();
+        Ok(output)
     }
 }
 
@@ -190,144 +192,15 @@ impl EthApi {
 
     // State network related functions
 
-    async fn fetch_state_content(
-        &self,
-        content_key: StateContentKey,
-    ) -> Result<StateContentValue, RpcServeError> {
+    async fn evm_block_state(&self, block: BlockId) -> Result<EvmBlockState, RpcServeError> {
         let Some(state_network) = &self.state_network else {
-            return Err(RpcServeError::Message(format!(
-                "State network not enabled. Can't find: {content_key}"
-            )));
+            return Err(RpcServeError::Message(
+                "State network not enabled. Can't process request!".to_string(),
+            ));
         };
-
-        let endpoint = StateEndpoint::RecursiveFindContent(content_key.clone());
-        let response: ContentInfo = proxy_to_subnet(state_network, endpoint).await?;
-        let ContentInfo::Content { content, .. } = response else {
-            return Err(RpcServeError::Message(format!(
-                "Invalid response variant: State RecursiveFindContent should contain content value; got {response:?}"
-            )));
-        };
-
-        let content_value = StateContentValue::decode(&content_key, &content)?;
-        Ok(content_value)
-    }
-
-    async fn fetch_trie_node(&self, content_key: StateContentKey) -> Result<Node, RpcServeError> {
-        let content_value = self.fetch_state_content(content_key).await?;
-        let StateContentValue::TrieNode(trie_node) = content_value else {
-            return Err(RpcServeError::Message(format!(
-                "Invalid response: expected trie node; got {content_value:?}",
-            )));
-        };
-        trie_node
-            .node
-            .as_trie_node()
-            .map_err(|err| RpcServeError::Message(format!("Can't decode trie_node: {err}")))
-    }
-
-    async fn fetch_contract_bytecode(
-        &self,
-        address_hash: B256,
-        code_hash: B256,
-    ) -> Result<Bytes, RpcServeError> {
-        let content_key = StateContentKey::ContractBytecode(ContractBytecodeKey {
-            address_hash,
-            code_hash,
-        });
-        let content_value = self.fetch_state_content(content_key).await?;
-        let StateContentValue::ContractBytecode(contract_bytecode) = content_value else {
-            return Err(RpcServeError::Message(format!(
-                "Invalid response: expected contract bytecode; got {content_value:?}",
-            )));
-        };
-        let bytes = Vec::from(contract_bytecode.code);
-        Ok(Bytes::from(bytes))
-    }
-
-    async fn fetch_account_state(
-        &self,
-        state_root: B256,
-        address_hash: B256,
-    ) -> Result<Option<AccountState>, RpcServeError> {
-        self.traverse_trie(state_root, address_hash, |path, node_hash| {
-            StateContentKey::AccountTrieNode(AccountTrieNodeKey { path, node_hash })
-        })
-        .await
-    }
-
-    async fn fetch_contract_storage_at_slot(
-        &self,
-        storage_root: B256,
-        address_hash: B256,
-        storage_slot: U256,
-    ) -> Result<B256, RpcServeError> {
-        let path = keccak256(storage_slot.to_be_bytes::<32>());
-        let value = self
-            .traverse_trie::<Bytes>(storage_root, path, |path, node_hash| {
-                StateContentKey::ContractStorageTrieNode(ContractStorageTrieNodeKey {
-                    address_hash,
-                    path,
-                    node_hash,
-                })
-            })
-            .await?
-            .unwrap_or_default();
-        if value.len() > B256::len_bytes() {
-            return Err(RpcServeError::Message(format!(
-                "Storage value is too long. value: {value}"
-            )));
-        }
-
-        Ok(B256::left_padding_from(&value))
-    }
-
-    /// Utility function for fetching trie nodes and traversing the trie.
-    ///
-    /// This function works both with the account trie and the contract state trie.
-    async fn traverse_trie<T: Decodable>(
-        &self,
-        root: B256,
-        path: B256,
-        content_key_fn: impl Fn(Nibbles, B256) -> StateContentKey,
-    ) -> Result<Option<T>, RpcServeError> {
-        let path = Nibbles::unpack_nibbles(path.as_slice());
-
-        let mut node_hash = root;
-        let mut remaining_path = path.as_slice();
-
-        let value = loop {
-            let path_from_root = path
-                .strip_suffix(remaining_path)
-                .expect("Remaining path should be suffix of the path");
-
-            let content_key = content_key_fn(
-                Nibbles::try_from_unpacked_nibbles(path_from_root)
-                    .expect("we should be able to create Nibbles from path"),
-                node_hash,
-            );
-            let node = self.fetch_trie_node(content_key).await?;
-
-            match node.traverse(remaining_path) {
-                TraversalResult::Empty(_) => break None,
-                TraversalResult::Value(value) => break Some(value),
-                TraversalResult::Node(next_node) => {
-                    node_hash = next_node.hash;
-                    remaining_path = next_node.remaining_path;
-                }
-                TraversalResult::Error(err) => {
-                    return Err(RpcServeError::Message(format!(
-                        "Error traversing trie node: {err}"
-                    )))
-                }
-            }
-        };
-
-        value
-            .map(|value| T::decode(&mut value.as_ref()))
-            .transpose()
-            .map_err(|err| {
-                RpcServeError::Message(format!("Error decoding value from the leaf node: {err}"))
-            })
+        let block_hash = as_block_hash(block)?;
+        let header = self.fetch_header_by_hash(block_hash).await?;
+        Ok(EvmBlockState::new(header, state_network.clone()))
     }
 }
 
