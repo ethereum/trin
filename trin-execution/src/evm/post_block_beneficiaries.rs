@@ -5,11 +5,11 @@ use alloy_primitives::Address;
 use revm::{db::State, Evm};
 use revm_primitives::SpecId;
 
-use crate::{
+use crate::{era::types::ProcessedBlock, storage::evm_db::EvmDB};
+
+use super::{
     dao_fork::{DAO_HARDFORK_BENEFICIARY, DAO_HARDKFORK_ACCOUNTS},
-    era::types::ProcessedBlock,
     spec_id::get_spec_block_number,
-    storage::evm_db::EvmDB,
 };
 
 // Calculate block reward

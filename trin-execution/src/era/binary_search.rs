@@ -6,7 +6,7 @@ use e2store::{
 use revm_primitives::SpecId;
 use surf::Client;
 
-use crate::spec_id::get_spec_block_number;
+use crate::evm::spec_id::get_spec_block_number;
 
 use super::{
     constants::FIRST_ERA_EPOCH_WITH_EXECUTION_PAYLOAD,

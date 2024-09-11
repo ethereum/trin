@@ -7,36 +7,31 @@ use std::{
 
 use anyhow::{bail, ensure};
 use eth_trie::{RootWithTrieDiff, Trie};
-use ethportal_api::{
-    types::{
-        execution::transaction::Transaction,
-        state_trie::account_state::AccountState as AccountStateInfo,
-    },
-    Header,
-};
+use ethportal_api::{types::state_trie::account_state::AccountState as AccountStateInfo, Header};
 use revm::{
     db::{states::bundle_state::BundleRetention, State},
     inspectors::TracerEip3155,
     DatabaseCommit, Evm,
 };
-use revm_primitives::{keccak256, Address, Env, ResultAndState, SpecId, B256, U256};
+use revm_primitives::{keccak256, Address, ResultAndState, SpecId, B256, U256};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
     era::types::{ProcessedBlock, TransactionsWithSender},
-    evm::post_block_beneficiaries::get_post_block_beneficiaries,
     metrics::{
         set_int_gauge_vec, start_timer_vec, stop_timer, BLOCK_HEIGHT, BLOCK_PROCESSING_TIMES,
         TRANSACTION_PROCESSING_TIMES,
     },
-    spec_id::get_spec_id,
     storage::{account::Account as RocksAccount, evm_db::EvmDB},
-    transaction::TxEnvModifier,
     types::block_to_trace::BlockToTrace,
 };
 
-use super::blocking::execute_transaction_with_external_context;
+use super::{
+    create_block_env, create_evm_with_tracer,
+    post_block_beneficiaries::get_post_block_beneficiaries, spec_id::get_spec_id,
+    tx_env_modifier::TxEnvModifier,
+};
 
 const BLOCKHASH_SERVE_WINDOW: u64 = 256;
 const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";
@@ -86,54 +81,20 @@ impl<'a> BlockExecutor<'a> {
         }
     }
 
-    fn set_evm_environment_from_block(&mut self, header: &Header) {
-        let timer: prometheus_exporter::prometheus::HistogramTimer =
-            start_timer_vec(&BLOCK_PROCESSING_TIMES, &["initialize_evm"]);
-        if get_spec_id(header.number).is_enabled_in(SpecId::SPURIOUS_DRAGON) {
-            self.evm.db_mut().set_state_clear_flag(true);
-        } else {
-            self.evm.db_mut().set_state_clear_flag(false);
-        };
+    fn set_evm_environment(&mut self, header: &Header) {
+        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["initialize_evm"]);
+
+        // update spec id
+        let spec_id = get_spec_id(header.number);
+        self.evm.modify_spec_id(spec_id);
+        self.evm
+            .db_mut()
+            .set_state_clear_flag(spec_id.is_enabled_in(SpecId::SPURIOUS_DRAGON));
 
         // initialize evm environment
-        let mut env = Env::default();
-        env.block.number = U256::from(header.number);
-        env.block.coinbase = header.author;
-        env.block.timestamp = U256::from(header.timestamp);
-        if get_spec_id(header.number).is_enabled_in(SpecId::MERGE) {
-            env.block.difficulty = U256::ZERO;
-            env.block.prevrandao = header.mix_hash;
-        } else {
-            env.block.difficulty = header.difficulty;
-            env.block.prevrandao = None;
-        }
-        env.block.basefee = header.base_fee_per_gas.unwrap_or_default();
-        env.block.gas_limit = header.gas_limit;
+        *self.evm.block_mut() = create_block_env(header);
+        self.evm.tx_mut().clear();
 
-        // EIP-4844 excess blob gas of this block, introduced in Cancun
-        if let Some(excess_blob_gas) = header.excess_blob_gas {
-            env.block
-                .set_blob_excess_gas_and_price(u64::from_be_bytes(excess_blob_gas.to_be_bytes()));
-        }
-
-        self.evm.context.evm.env = Box::new(env);
-        self.evm.handler.modify_spec_id(get_spec_id(header.number));
-        stop_timer(timer);
-    }
-
-    fn set_transaction_evm_context(&mut self, tx: &TransactionsWithSender) {
-        let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["modify_tx"]);
-
-        let block_number = self.block_number();
-        let tx_env = &mut self.evm.context.evm.env.tx;
-
-        tx_env.caller = tx.sender_address;
-        match &tx.transaction {
-            Transaction::Legacy(tx) => tx.modify(block_number, tx_env),
-            Transaction::EIP1559(tx) => tx.modify(block_number, tx_env),
-            Transaction::AccessList(tx) => tx.modify(block_number, tx_env),
-            Transaction::Blob(tx) => tx.modify(block_number, tx_env),
-        }
         stop_timer(timer);
     }
 
@@ -211,7 +172,7 @@ impl<'a> BlockExecutor<'a> {
             return Ok(());
         }
 
-        self.set_evm_environment_from_block(&block.header);
+        self.set_evm_environment(&block.header);
 
         // execute transactions
         let cumulative_transaction_timer =
@@ -219,11 +180,14 @@ impl<'a> BlockExecutor<'a> {
         let mut block_gas_used = 0;
         for transaction in block.transactions.iter() {
             let transaction_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["transaction"]);
+
             let evm_result = self.execute_transaction(transaction)?;
             block_gas_used += evm_result.result.gas_used();
-            let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_state"]);
+
+            let commit_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_state"]);
             self.evm.db_mut().commit(evm_result.state);
-            stop_timer(timer);
+            stop_timer(commit_timer);
+
             stop_timer(transaction_timer);
         }
         stop_timer(cumulative_transaction_timer);
@@ -253,11 +217,15 @@ impl<'a> BlockExecutor<'a> {
         &mut self,
         tx: &TransactionsWithSender,
     ) -> anyhow::Result<ResultAndState> {
-        self.set_transaction_evm_context(tx);
-        let block_number = self.block_number();
+        let block_number = self.evm.block().number.to();
 
+        // Set transaction environment
+        let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["modify_tx"]);
+        tx.modify(block_number, self.evm.tx_mut());
+        stop_timer(timer);
+
+        // Execute transaction
         let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["transact"]);
-
         let result = if self.block_to_trace.should_trace(block_number) {
             let output_path = self
                 .node_data_directory
@@ -268,11 +236,9 @@ impl<'a> BlockExecutor<'a> {
             let output_file =
                 File::create(output_path.join(format!("tx_{}.json", tx.transaction.hash())))?;
             let tracer = TracerEip3155::new(Box::new(output_file));
-            execute_transaction_with_external_context(
-                *self.evm.context.evm.inner.env.clone(),
-                tracer,
-                &mut self.evm.context.evm.inner.db,
-            )?
+
+            create_evm_with_tracer(self.evm.block().clone(), tx, self.evm.db_mut(), tracer)
+                .transact()?
         } else {
             self.evm.transact()?
         };
@@ -307,9 +273,5 @@ impl<'a> BlockExecutor<'a> {
 
     pub fn bundle_size_hint(&self) -> usize {
         self.evm.db().bundle_size_hint()
-    }
-
-    fn block_number(&self) -> u64 {
-        self.evm.context.evm.env.block.number.to::<u64>()
     }
 }
