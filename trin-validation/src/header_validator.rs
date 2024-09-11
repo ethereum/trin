@@ -243,7 +243,7 @@ mod test {
             jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
         },
         utils::bytes::{hex_decode, hex_encode},
-        HistoryContentKey,
+        HistoryContentKey, RawContentKey,
     };
 
     #[rstest]
@@ -273,7 +273,7 @@ mod test {
         let obj = hwps.get(&block_number.to_string()).unwrap();
         // Validate content_key decodes
         let raw_ck = obj.get("content_key").unwrap().as_str().unwrap();
-        let raw_ck = hex_decode(raw_ck).unwrap();
+        let raw_ck = RawContentKey::from_str(raw_ck).unwrap();
         let ck = HistoryContentKey::try_from(raw_ck).unwrap();
         match ck {
             HistoryContentKey::BlockHeaderWithProof(_) => (),

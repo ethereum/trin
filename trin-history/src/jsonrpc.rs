@@ -269,7 +269,7 @@ async fn find_content(
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
     content_key: HistoryContentKey,
 ) -> Result<Value, String> {
-    match network.overlay.send_find_content(enr, content_key.into()).await {
+    match network.overlay.send_find_content(enr, content_key.to_bytes().to_vec()).await {
         Ok((content, utp_transfer)) => match content {
             Content::ConnectionId(id) => Err(format!(
                 "FindContent request returned a connection id ({id:?}) instead of conducting utp transfer."
@@ -339,7 +339,7 @@ async fn offer(
 ) -> Result<Value, String> {
     match network
         .overlay
-        .send_offer(enr, content_key.into(), content_value.encode().to_vec())
+        .send_offer(enr, content_key.to_bytes(), content_value.encode().to_vec())
         .await
     {
         Ok(accept) => Ok(json!(AcceptInfo {
@@ -358,7 +358,7 @@ async fn trace_offer(
 ) -> Result<Value, String> {
     match network
         .overlay
-        .send_offer_trace(enr, content_key.into(), content_value.encode().to_vec())
+        .send_offer_trace(enr, content_key.to_bytes(), content_value.encode().to_vec())
         .await
     {
         Ok(accept) => Ok(json!(accept)),

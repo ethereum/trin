@@ -94,7 +94,7 @@ impl<
         TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
     > OverlayProtocol<TContentKey, TMetric, TValidator, TStore>
 where
-    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug + Display + Send,
+    <TContentKey as TryFrom<RawContentKey>>::Error: Debug + Display + Send,
 {
     pub async fn new(
         config: OverlayConfig,
@@ -441,7 +441,7 @@ where
         let direction = RequestDirection::Outgoing {
             destination: enr.clone(),
         };
-        let content_key = TContentKey::try_from(content_key).map_err(|err| {
+        let content_key = TContentKey::try_from(content_key.into()).map_err(|err| {
             OverlayRequestError::FailedValidation(format!(
                 "Error decoding content key for received utp content: {err}"
             ))
@@ -527,7 +527,7 @@ where
         let content_items = content_keys
             .into_iter()
             .map(|key| match self.store.read().get(&key) {
-                Ok(Some(content)) => Ok((key.into(), content.clone())),
+                Ok(Some(content)) => Ok((key.to_bytes(), content.clone())),
                 _ => Err(OverlayRequestError::ContentNotFound {
                     message: format!("Content key not found in local store: {key:02X?}"),
                     utp: false,

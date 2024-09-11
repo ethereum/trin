@@ -165,7 +165,7 @@ impl<
         TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
     > OverlayService<TContentKey, TMetric, TValidator, TStore>
 where
-    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug,
+    <TContentKey as TryFrom<RawContentKey>>::Error: Debug,
 {
     /// Spawns the overlay network service.
     ///
@@ -192,7 +192,7 @@ where
         gossip_dropped: bool,
     ) -> UnboundedSender<OverlayCommand<TContentKey>>
     where
-        <TContentKey as TryFrom<Vec<u8>>>::Error: Send,
+        <TContentKey as TryFrom<RawContentKey>>::Error: Send,
     {
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let internal_command_tx = command_tx.clone();
@@ -755,7 +755,8 @@ where
             let is_within_radius =
                 TMetric::distance(&node_id.raw(), &content_id) <= node.data_radius;
             if is_within_radius {
-                let content_items = vec![(content_key.clone().into(), content.clone())];
+                let content_items: Vec<(RawContentKey, Vec<u8>)> =
+                    vec![(content_key.to_bytes(), content.clone())];
                 let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
 
                 // if we have met the max outbound utp transfer limit continue the loop as we aren't
@@ -932,7 +933,7 @@ where
             "Handling FindContent message",
         );
 
-        let content_key = match (TContentKey::try_from)(request.content_key) {
+        let content_key = match (TContentKey::try_from)(request.content_key.into()) {
             Ok(key) => key,
             Err(_) => {
                 return Err(OverlayRequestError::InvalidRequest(
@@ -1029,7 +1030,7 @@ where
         let content_keys: Vec<TContentKey> = request
             .content_keys
             .into_iter()
-            .map(|k| (TContentKey::try_from)(k))
+            .map(TContentKey::try_from)
             .collect::<Result<Vec<TContentKey>, _>>()
             .map_err(|_| {
                 OverlayRequestError::AcceptError(
@@ -1653,7 +1654,7 @@ where
             }
         };
         let request = Request::FindContent(FindContent {
-            content_key: content_key.clone().into(),
+            content_key: content_key.to_bytes().to_vec(),
         });
         let direction = RequestDirection::Outgoing {
             destination: fallback_peer.clone(),
@@ -2021,7 +2022,7 @@ where
         let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> =
             content_keys_offered
                 .into_iter()
-                .map(|key| TContentKey::try_from(key))
+                .map(TContentKey::try_from)
                 .collect();
 
         let content_keys_offered: Vec<TContentKey> = content_keys_offered

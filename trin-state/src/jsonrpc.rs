@@ -196,7 +196,7 @@ async fn find_content(
 ) -> Result<Value, String> {
     let result = network
     .overlay
-    .send_find_content(enr, content_key.into())
+    .send_find_content(enr, content_key.to_bytes().to_vec())
     .await
     .and_then(|(content, utp_transfer)| match content {
         Content::ConnectionId(id) => Err(OverlayRequestError::Failure(format!(
@@ -309,7 +309,7 @@ async fn offer(
         "Offer",
         network
             .overlay
-            .send_offer(enr, content_key.into(), content_value.encode().to_vec())
+            .send_offer(enr, content_key.to_bytes(), content_value.encode().to_vec())
             .await
             .map(|accept| AcceptInfo {
                 content_keys: accept.content_keys,
@@ -327,7 +327,7 @@ async fn trace_offer(
         "TraceOffer",
         network
             .overlay
-            .send_offer_trace(enr, content_key.into(), content_value.encode().to_vec())
+            .send_offer_trace(enr, content_key.to_bytes(), content_value.encode().to_vec())
             .await,
     )
 }

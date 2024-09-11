@@ -622,6 +622,7 @@ impl From<Accept> for Value {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
+    use alloy_primitives::bytes;
     use std::str::FromStr;
     use test_log::test;
 
@@ -821,7 +822,7 @@ mod test {
 
     #[test]
     fn message_encoding_offer() {
-        let content_keys = vec![hex_decode("0x010203").unwrap()];
+        let content_keys = vec![bytes!("010203")];
         let offer = Offer { content_keys };
         let offer = Message::Offer(offer);
 

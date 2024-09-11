@@ -135,7 +135,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
         // change content keys to raw content keys
         let interested_content = interested_content
             .into_iter()
-            .map(|(key, value)| (key.into(), value))
+            .map(|(key, value)| (key.to_bytes(), value))
             .collect();
         let offer_request = Request::PopulatedOffer(PopulatedOffer {
             content_items: interested_content,
@@ -197,7 +197,7 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
     for enr in interested_enrs.into_iter() {
         let (result_tx, mut result_rx) = tokio::sync::mpsc::unbounded_channel();
         let offer_request = Request::PopulatedOfferWithResult(PopulatedOfferWithResult {
-            content_item: (content_key.clone().into(), data.clone()),
+            content_item: (content_key.clone().to_bytes(), data.clone()),
             result_tx,
         });
 

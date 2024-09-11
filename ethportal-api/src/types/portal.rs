@@ -7,7 +7,7 @@ use crate::{types::enr::Enr, OverlayContentKey};
 use super::query_trace::QueryTrace;
 
 /// The SSZ encoded representation of content key.
-pub type RawContentKey = Vec<u8>;
+pub type RawContentKey = Bytes;
 /// The SSZ encoded representation of content value.
 pub type RawContentValue = Bytes;
 

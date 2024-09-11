@@ -8,7 +8,7 @@ use std::{fmt, hash::Hash};
 use crate::{
     types::{content_key::overlay::OverlayContentKey, state_trie::nibbles::Nibbles},
     utils::bytes::hex_encode_compact,
-    ContentKeyError,
+    ContentKeyError, RawContentKey,
 };
 
 // Prefixes for the different types of state content keys:
@@ -70,7 +70,7 @@ impl OverlayContentKey for StateContentKey {
         sha256.finalize().into()
     }
 
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> RawContentKey {
         let mut bytes: Vec<u8> = vec![];
 
         match self {
@@ -88,25 +88,13 @@ impl OverlayContentKey for StateContentKey {
             }
         }
 
-        bytes
+        RawContentKey::from(bytes)
     }
 }
 
-impl From<&StateContentKey> for Vec<u8> {
-    fn from(val: &StateContentKey) -> Self {
-        val.to_bytes()
-    }
-}
-
-impl From<StateContentKey> for Vec<u8> {
-    fn from(val: StateContentKey) -> Self {
-        val.to_bytes()
-    }
-}
-
-impl TryFrom<Vec<u8>> for StateContentKey {
+impl TryFrom<RawContentKey> for StateContentKey {
     type Error = ContentKeyError;
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+    fn try_from(value: RawContentKey) -> Result<Self, Self::Error> {
         let Some((&selector, key)) = value.split_first() else {
             return Err(ContentKeyError::from_decode_error(
                 DecodeError::InvalidLengthPrefix {
@@ -187,7 +175,7 @@ impl fmt::Display for StateContentKey {
 mod test {
     use std::{path::PathBuf, str::FromStr};
 
-    use alloy_primitives::{keccak256, Address};
+    use alloy_primitives::{bytes, keccak256, Address, Bytes};
     use anyhow::Result;
     use rstest::rstest;
     use serde_yaml::Value;
@@ -242,16 +230,20 @@ mod test {
     #[test]
     fn decode_empty_key_should_fail() {
         assert_eq!(
-            StateContentKey::try_from(vec![]).unwrap_err().to_string(),
+            StateContentKey::try_from(RawContentKey::new())
+                .unwrap_err()
+                .to_string(),
             "Unable to decode key SSZ bytes 0x due to InvalidLengthPrefix { len: 0, expected: 1 }",
         );
     }
 
     #[test]
     fn decode_key_with_invalid_selector_should_fail() {
-        let invalid_selector_content_key = "0x0024000000c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a4700005000000";
+        let invalid_selector_content_key = bytes!(
+            "0024000000c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a4700005000000"
+        );
         assert_eq!(
-            StateContentKey::try_from(hex_decode(invalid_selector_content_key).unwrap())
+            StateContentKey::try_from(invalid_selector_content_key.clone())
                 .unwrap_err()
                 .to_string(),
             format!("Unable to decode key SSZ bytes {invalid_selector_content_key} due to UnionSelectorInvalid(0)"),
@@ -266,7 +258,7 @@ mod test {
         let yaml = read_yaml_file(filename)?;
         let yaml = yaml.as_mapping().unwrap();
 
-        let content_key_bytes = hex_decode(yaml["content_key"].as_str().unwrap())?;
+        let content_key_bytes = RawContentKey::from_str(yaml["content_key"].as_str().unwrap())?;
         let content_key = StateContentKey::try_from(content_key_bytes.clone())?;
 
         assert_eq!(content_key.to_bytes(), content_key_bytes);
@@ -300,7 +292,7 @@ mod test {
         let yaml = yaml.as_mapping().unwrap();
 
         let content_key_bytes = hex_decode(yaml["content_key"].as_str().unwrap())?;
-        let content_key = StateContentKey::try_from(content_key_bytes)?;
+        let content_key = StateContentKey::try_from(Bytes::from(content_key_bytes))?;
         let expected_content_id = yaml_as_b256(&yaml["content_id"]);
 
         assert_eq!(B256::from(content_key.content_id()), expected_content_id);
@@ -337,7 +329,7 @@ mod test {
 
     fn assert_content_key(value: &Value, expected_content_key: StateContentKey) -> Result<()> {
         assert_eq!(
-            StateContentKey::try_from(yaml_as_hex(value))?,
+            StateContentKey::try_from(Bytes::from(yaml_as_hex(value)))?,
             expected_content_key,
             "decoding from bytes {value:?} didn't match expected key {expected_content_key:?}"
         );

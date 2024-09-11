@@ -16,7 +16,7 @@ use ethportal_api::{
         portal::PaginateLocalContentInfo,
         portal_wire::ProtocolId,
     },
-    BeaconContentKey, OverlayContentKey,
+    BeaconContentKey, OverlayContentKey, RawContentKey,
 };
 use r2d2::Pool;
 use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
@@ -125,7 +125,7 @@ impl ContentStore for BeaconStorage {
     type Key = BeaconContentKey;
 
     fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
-        let content_key: Vec<u8> = key.clone().into();
+        let content_key: RawContentKey = key.to_bytes();
         let beacon_content_key = BeaconContentKey::try_from(content_key).map_err(|err| {
             ContentStoreError::InvalidData {
                 message: format!("Error deserializing BeaconContentKey value: {err:?}"),
@@ -217,7 +217,7 @@ impl ContentStore for BeaconStorage {
         &self,
         key: &Self::Key,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
-        let content_key: Vec<u8> = key.clone().into();
+        let content_key: RawContentKey = key.to_bytes();
         let beacon_content_key = BeaconContentKey::try_from(content_key).map_err(|err| {
             ContentStoreError::InvalidData {
                 message: format!("Error deserializing BeaconContentKey value: {err:?}"),
@@ -379,7 +379,7 @@ impl BeaconStorage {
         value: &Vec<u8>,
     ) -> Result<(), ContentStoreError> {
         let content_id = key.content_id();
-        let content_key: Vec<u8> = key.clone().into();
+        let content_key: RawContentKey = key.to_bytes();
 
         match content_key.first() {
             Some(&LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX) => {
