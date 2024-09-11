@@ -1,6 +1,6 @@
 use ethportal_api::Header;
 use revm::{inspector_handle_register, inspectors::TracerEip3155, Database, Evm};
-use revm_primitives::{BlobExcessGasAndPrice, BlockEnv, U256};
+use revm_primitives::{BlobExcessGasAndPrice, BlockEnv, SpecId, U256};
 use spec_id::get_spec_id;
 use tx_env_modifier::TxEnvModifier;
 
@@ -13,10 +13,17 @@ pub mod tx_env_modifier;
 
 /// Creates [BlockEnv] based on data in the [Header].
 pub fn create_block_env(header: &Header) -> BlockEnv {
-    // EIP-4844 excess blob gas of this block, introduced in Cancun
+    // EIP-4844: Excess blob gas and blob gasprice, introduced in Cancun
     let blob_excess_gas_and_price = header
         .excess_blob_gas
         .map(|excess_blob_gas| BlobExcessGasAndPrice::new(excess_blob_gas.to()));
+
+    // EIP-4399: Expose beacon chain randomness in eth EVM, introduced in Paris (aka the Merge)
+    let prevrandao = if get_spec_id(header.number).is_enabled_in(SpecId::MERGE) {
+        header.mix_hash
+    } else {
+        None
+    };
 
     BlockEnv {
         number: U256::from(header.number),
@@ -25,7 +32,7 @@ pub fn create_block_env(header: &Header) -> BlockEnv {
         gas_limit: header.gas_limit,
         basefee: header.base_fee_per_gas.unwrap_or_default(),
         difficulty: header.difficulty,
-        prevrandao: header.mix_hash,
+        prevrandao,
         blob_excess_gas_and_price,
     }
 }
