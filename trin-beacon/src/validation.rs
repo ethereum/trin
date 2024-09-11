@@ -58,6 +58,17 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                         bootstrap_slot
                     ));
                 }
+
+                let finalized_header = self.header_oracle.read().await.get_finalized_header().await;
+                let bootstrap_block_header = bootstrap.bootstrap.get_beacon_block_header();
+
+                if let Ok(finalized_header) = finalized_header {
+                    if finalized_header != bootstrap_block_header {
+                        return Err(anyhow!(
+                            "Light client bootstrap header does not match the finalized header: {finalized_header:?} != {bootstrap_block_header:?}",
+                        ));
+                    }
+                }
             }
             BeaconContentKey::LightClientUpdatesByRange(key) => {
                 let lc_updates =
