@@ -92,18 +92,6 @@ impl OverlayContentKey for StateContentKey {
     }
 }
 
-impl From<&StateContentKey> for RawContentKey {
-    fn from(val: &StateContentKey) -> Self {
-        val.to_bytes()
-    }
-}
-
-impl From<StateContentKey> for RawContentKey {
-    fn from(val: StateContentKey) -> Self {
-        val.to_bytes()
-    }
-}
-
 impl TryFrom<RawContentKey> for StateContentKey {
     type Error = ContentKeyError;
     fn try_from(value: RawContentKey) -> Result<Self, Self::Error> {
