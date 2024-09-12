@@ -3,6 +3,10 @@ use anyhow::anyhow;
 use chrono::Duration;
 use ethportal_api::{
     consensus::fork::ForkName,
+    light_client::{
+        finality_update::LightClientFinalityUpdate, optimistic_update::LightClientOptimisticUpdate,
+        update::LightClientUpdate,
+    },
     types::{
         content_key::beacon::HistoricalSummariesWithProofKey,
         content_value::beacon::{
@@ -13,7 +17,12 @@ use ethportal_api::{
     },
     BeaconContentKey,
 };
-use light_client::consensus::rpc::portal_rpc::expected_current_slot;
+use light_client::{
+    config::Network,
+    consensus::{
+        rpc::portal_rpc::expected_current_slot, types::GenericUpdate, verify_generic_update,
+    },
+};
 use ssz::Decode;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -27,6 +36,22 @@ use trin_validation::{
 pub struct BeaconValidator {
     // TODO: HeaderOracle is not network agnostic name
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
+    pub genesis_root: Vec<u8>,
+    pub fork_version: Vec<u8>,
+}
+
+impl BeaconValidator {
+    pub fn new(header_oracle: Arc<RwLock<HeaderOracle>>) -> Self {
+        let light_client_network = Network::Mainnet;
+        let light_client_config = light_client_network.to_base_config();
+        let genesis_root = light_client_config.chain.genesis_root;
+        let fork_version = light_client_config.forks.deneb.fork_version;
+        Self {
+            header_oracle,
+            genesis_root,
+            fork_version,
+        }
+    }
 }
 
 impl Validator<BeaconContentKey> for BeaconValidator {
@@ -87,6 +112,33 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                         key.count
                     ));
                 }
+
+                if let Ok(light_client_store) = self
+                    .header_oracle
+                    .read()
+                    .await
+                    .get_light_client_store()
+                    .await
+                {
+                    let expected_slot = expected_current_slot();
+                    for update in lc_updates.0.iter() {
+                        match &update.update {
+                            LightClientUpdate::Deneb(update) => {
+                                let generic_update: GenericUpdate = update.into();
+                                verify_generic_update(
+                                    &light_client_store,
+                                    &generic_update,
+                                    expected_slot,
+                                    &self.genesis_root,
+                                    &self.fork_version,
+                                )?;
+                            }
+                            _ => {
+                                return Err(anyhow!("Unsupported light client update fork version"))
+                            }
+                        }
+                    }
+                }
             }
             BeaconContentKey::LightClientFinalityUpdate(key) => {
                 let lc_finality_update = ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(
@@ -118,6 +170,32 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                         key.finalized_slot
                     ));
                 }
+
+                match &lc_finality_update.update {
+                    LightClientFinalityUpdate::Deneb(update) => {
+                        if let Ok(light_client_store) = self
+                            .header_oracle
+                            .read()
+                            .await
+                            .get_light_client_store()
+                            .await
+                        {
+                            let generic_update: GenericUpdate = update.into();
+                            verify_generic_update(
+                                &light_client_store,
+                                &generic_update,
+                                expected_current_slot(),
+                                &self.genesis_root,
+                                &self.fork_version,
+                            )?;
+                        }
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "Unsupported light client finality update fork version"
+                        ))
+                    }
+                }
             }
             BeaconContentKey::LightClientOptimisticUpdate(key) => {
                 let lc_optimistic_update =
@@ -146,6 +224,33 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                         lc_optimistic_update.update.signature_slot(),
                         key.signature_slot
                     ));
+                }
+
+                match &lc_optimistic_update.update {
+                    LightClientOptimisticUpdate::Deneb(update) => {
+                        if let Ok(light_client_store) = self
+                            .header_oracle
+                            .read()
+                            .await
+                            .get_light_client_store()
+                            .await
+                        {
+                            let generic_update: GenericUpdate = update.into();
+
+                            verify_generic_update(
+                                &light_client_store,
+                                &generic_update,
+                                expected_current_slot(),
+                                &self.genesis_root,
+                                &self.fork_version,
+                            )?;
+                        }
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "Unsupported light client optimistic update fork version"
+                        ))
+                    }
                 }
             }
             BeaconContentKey::HistoricalSummariesWithProof(key) => {
@@ -249,9 +354,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_light_client_bootstrap() {
-        let validator = BeaconValidator {
-            header_oracle: Arc::new(RwLock::new(HeaderOracle::default())),
-        };
+        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::default())));
         let mut bootstrap = test_utils::get_light_client_bootstrap(0);
         let content = bootstrap.as_ssz_bytes();
         let content_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
@@ -285,9 +388,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_light_client_updates_by_range() {
-        let validator = BeaconValidator {
-            header_oracle: Arc::new(RwLock::new(HeaderOracle::default())),
-        };
+        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::default())));
         let lc_update_0 = test_utils::get_light_client_update(0);
         let updates = LightClientUpdatesByRange(VariableList::from(vec![lc_update_0.clone()]));
         let content = updates.as_ssz_bytes();
@@ -320,9 +421,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_light_client_finality_update() {
-        let validator = BeaconValidator {
-            header_oracle: Arc::new(RwLock::new(HeaderOracle::default())),
-        };
+        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::default())));
         let mut finality_update = test_utils::get_light_client_finality_update(0);
         let content = finality_update.as_ssz_bytes();
         let content_key =
@@ -368,9 +467,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_light_client_optimistic_update() {
-        let validator = BeaconValidator {
-            header_oracle: Arc::new(RwLock::new(HeaderOracle::default())),
-        };
+        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::default())));
         let mut optimistic_update = test_utils::get_light_client_optimistic_update(0);
         let content = optimistic_update.as_ssz_bytes();
         let content_key =

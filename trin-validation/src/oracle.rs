@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 use crate::header_validator::HeaderValidator;
 use ethportal_api::{
     consensus::header::BeaconBlockHeader,
+    light_client::store::LightClientStore,
     types::{
         execution::header_with_proof::HeaderWithProof,
         jsonrpc::{
@@ -214,6 +215,23 @@ impl HeaderOracle {
         let header: BeaconBlockHeader = serde_json::from_value(header)?;
 
         Ok(header)
+    }
+
+    /// Return current light client store
+    pub async fn get_light_client_store(&self) -> anyhow::Result<LightClientStore> {
+        let endpoint = BeaconEndpoint::LightClientStore;
+        let (resp, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
+        let request = BeaconJsonRpcRequest { endpoint, resp };
+        let tx = self.beacon_jsonrpc_tx()?;
+        tx.send(request)?;
+
+        let store = match resp_rx.recv().await {
+            Some(val) => val.map_err(|err| anyhow!("Beacon network request error: {err:?}"))?,
+            None => return Err(anyhow!("No response from Beacon network")),
+        };
+        let store: LightClientStore = serde_json::from_value(store)?;
+
+        Ok(store)
     }
 }
 

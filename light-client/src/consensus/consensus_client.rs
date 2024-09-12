@@ -1,7 +1,7 @@
 use std::{cmp, sync::Arc};
 
 use alloy_primitives::B256;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, ensure, Result};
 use chrono::Duration;
 use milagro_bls::PublicKey;
 use ssz_rs::prelude::*;
@@ -485,18 +485,13 @@ pub fn verify_generic_update(
     fork_version: &[u8],
 ) -> Result<()> {
     let bits = get_bits(&update.sync_aggregate.sync_committee_bits);
-    if bits == 0 {
-        return Err(ConsensusError::InsufficientParticipation.into());
-    }
+    ensure!(bits > 0, ConsensusError::InsufficientParticipation);
 
     let update_finalized_slot = update.finalized_header.clone().unwrap_or_default().slot;
     let valid_time = expected_slot >= update.signature_slot
         && update.signature_slot > update.attested_header.slot
         && update.attested_header.slot >= update_finalized_slot;
-
-    if !valid_time {
-        return Err(ConsensusError::InvalidTimestamp.into());
-    }
+    ensure!(valid_time, ConsensusError::InvalidTimestamp);
 
     let store_period = calc_sync_period(store.finalized_header.slot);
     let update_sig_period = calc_sync_period(update.signature_slot);
@@ -505,19 +500,16 @@ pub fn verify_generic_update(
     } else {
         update_sig_period == store_period
     };
-
-    if !valid_period {
-        return Err(ConsensusError::InvalidPeriod.into());
-    }
+    ensure!(valid_period, ConsensusError::InvalidPeriod);
 
     let update_attested_period = calc_sync_period(update.attested_header.slot);
     let update_has_next_committee = store.next_sync_committee.is_none()
         && update.next_sync_committee.is_some()
         && update_attested_period == store_period;
-
-    if update.attested_header.slot <= store.finalized_header.slot && !update_has_next_committee {
-        return Err(ConsensusError::NotRelevant.into());
-    }
+    ensure!(
+        update.attested_header.slot > store.finalized_header.slot || update_has_next_committee,
+        ConsensusError::NotRelevant
+    );
 
     if update.finalized_header.is_some() && update.finality_branch.is_some() {
         let is_valid = is_finality_proof_valid(
@@ -525,16 +517,13 @@ pub fn verify_generic_update(
             &mut update
                 .finalized_header
                 .clone()
-                .expect("we know that this is `Some`"),
+                .expect("finalized_header should be `Some`"),
             &update
                 .finality_branch
                 .clone()
-                .expect("we know that this is `Some`"),
+                .expect("finality_branch should be `Some`"),
         );
-
-        if !is_valid {
-            return Err(ConsensusError::InvalidFinalityProof.into());
-        }
+        ensure!(is_valid, ConsensusError::InvalidFinalityProof);
     }
 
     if update.next_sync_committee.is_some() && update.next_sync_committee_branch.is_some() {
@@ -543,16 +532,13 @@ pub fn verify_generic_update(
             &mut update
                 .next_sync_committee
                 .clone()
-                .expect("we know that this is `Some`"),
+                .expect("next_sync_committee should be `Some`"),
             &update
                 .next_sync_committee_branch
                 .clone()
-                .expect("we know that this is `Some`"),
+                .expect("next_sync_committee_branch ahould be`Some`"),
         );
-
-        if !is_valid {
-            return Err(ConsensusError::InvalidNextSyncCommitteeProof.into());
-        }
+        ensure!(is_valid, ConsensusError::InvalidNextSyncCommitteeProof);
     }
 
     let sync_committee = if update_sig_period == store_period {
@@ -564,19 +550,16 @@ pub fn verify_generic_update(
             .expect("we know that this is `Some` because we are in `valid_period`")
     };
 
-    let pks = get_participating_keys(sync_committee, &update.sync_aggregate.sync_committee_bits)?;
-
-    let is_valid_sig = verify_sync_committee_signature(
-        &pks,
+    let public_keys =
+        get_participating_keys(sync_committee, &update.sync_aggregate.sync_committee_bits)?;
+    let is_valid_signature = verify_sync_committee_signature(
+        &public_keys,
         &update.attested_header,
         &update.sync_aggregate.sync_committee_signature,
         genesis_root,
         fork_version,
     );
-
-    if !is_valid_sig {
-        return Err(ConsensusError::InvalidSignature.into());
-    }
+    ensure!(is_valid_signature, ConsensusError::InvalidSignature);
 
     Ok(())
 }
@@ -597,16 +580,16 @@ fn get_participating_keys(
     committee: &SyncCommittee,
     bitfield: &BitVector<typenum::U512>,
 ) -> Result<Vec<PublicKey>> {
-    let mut pks: Vec<PublicKey> = Vec::new();
+    let mut public_keys: Vec<PublicKey> = Vec::new();
     bitfield.iter().enumerate().for_each(|(i, bit)| {
         if bit {
             let pk = &committee.pubkeys[i];
             let pk = PublicKey::from_bytes_unchecked(pk.as_ref()).expect("invalid pubkey bytes");
-            pks.push(pk);
+            public_keys.push(pk);
         }
     });
 
-    Ok(pks)
+    Ok(public_keys)
 }
 
 fn get_bits(bitfield: &BitVector<typenum::U512>) -> u64 {
@@ -628,22 +611,18 @@ fn verify_sync_committee_signature(
     fork_version: &[u8],
 ) -> bool {
     let res: Result<bool> = (move || {
-        let pks: Vec<&PublicKey> = pks.iter().collect();
+        let public_keys: Vec<&PublicKey> = pks.iter().collect();
         let header_root = bytes_to_bytes32(attested_header.tree_hash_root().as_slice());
         let signing_root = compute_committee_sign_root(genesis_root, header_root, fork_version)?;
 
         Ok(is_aggregate_valid(
             signature,
             signing_root.r#as_bytes(),
-            &pks,
+            &public_keys,
         ))
     })();
 
-    if let Ok(is_valid) = res {
-        is_valid
-    } else {
-        false
-    }
+    res.unwrap_or_default()
 }
 
 fn is_finality_proof_valid(
