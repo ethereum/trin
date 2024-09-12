@@ -70,6 +70,7 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
         BeaconEndpoint::TraceGossip(content_key, content_value) => {
             gossip(network, content_key, content_value, true).await
         }
+        BeaconEndpoint::LightClientStore => light_client_store(&network).await,
         BeaconEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
         BeaconEndpoint::Offer(enr, content_key, content_value) => {
             offer(network, enr, content_key, content_value).await
@@ -428,4 +429,19 @@ async fn recursive_find_nodes(
 ) -> Result<Value, String> {
     let nodes = network.overlay.lookup_node(node_id).await;
     Ok(json!(nodes))
+}
+
+/// Constructs a JSON call for the LightClientStore method.
+async fn light_client_store(network: &Arc<BeaconNetwork>) -> Result<Value, String> {
+    let beacon_client = network.beacon_client.lock().await;
+    match beacon_client.as_ref() {
+        Some(client) => {
+            let light_client_store = client.get_light_client_store().await;
+            match light_client_store {
+                Ok(store) => Ok(json!(store)),
+                Err(err) => Err(err.to_string()),
+            }
+        }
+        None => Err("Beacon client not initialized".to_string()),
+    }
 }

@@ -24,6 +24,7 @@ use ethportal_api::{
         bootstrap::CurrentSyncCommitteeProofLen,
         finality_update::LightClientFinalityUpdateDeneb,
         optimistic_update::LightClientOptimisticUpdateDeneb,
+        store::LightClientStore,
         update::{FinalizedRootProofLen, LightClientUpdateDeneb},
     },
     utils::bytes::hex_encode,
@@ -42,16 +43,6 @@ pub struct ConsensusLightClient<R: ConsensusRpc> {
     initial_checkpoint: Vec<u8>,
     pub last_checkpoint: Option<Vec<u8>>,
     pub config: Arc<Config>,
-}
-
-#[derive(Debug, Default)]
-struct LightClientStore {
-    finalized_header: BeaconBlockHeader,
-    current_sync_committee: SyncCommittee,
-    next_sync_committee: Option<SyncCommittee>,
-    optimistic_header: BeaconBlockHeader,
-    previous_max_active_participants: u64,
-    current_max_active_participants: u64,
 }
 
 impl<R: ConsensusRpc> ConsensusLightClient<R> {
@@ -97,6 +88,10 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
     pub fn get_finalized_header(&self) -> &BeaconBlockHeader {
         &self.store.finalized_header
+    }
+
+    pub fn get_light_client_store(&self) -> &LightClientStore {
+        &self.store
     }
 
     pub async fn sync(&mut self) -> Result<()> {

@@ -9,6 +9,7 @@ use crate::{
 };
 use ethportal_api::{
     consensus::header::BeaconBlockHeader,
+    light_client::store::LightClientStore,
     types::{
         enr::Enr,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
@@ -55,6 +56,12 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     /// Delete Node ID from the overlay routing table.
     async fn delete_enr(&self, node_id: NodeId) -> RpcResult<bool> {
         let endpoint = BeaconEndpoint::DeleteEnr(node_id);
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
+    }
+
+    /// Returns the local store of the light client.
+    async fn light_client_store(&self) -> RpcResult<LightClientStore> {
+        let endpoint = BeaconEndpoint::LightClientStore;
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
