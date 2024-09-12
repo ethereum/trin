@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy_rlp::Decodable;
 use eth_trie::{node::Node, TrieError};
@@ -55,6 +57,8 @@ impl From<EvmStateError> for ErrorObjectOwned {
 pub struct EvmBlockState {
     block_header: Header,
     state_network: mpsc::UnboundedSender<StateJsonRpcRequest>,
+    cache: HashMap<StateContentKey, StateContentValue>,
+    code_hash_to_address_hash: HashMap<B256, B256>,
 }
 
 impl EvmBlockState {
@@ -65,6 +69,8 @@ impl EvmBlockState {
         Self {
             block_header,
             state_network,
+            cache: HashMap::new(),
+            code_hash_to_address_hash: HashMap::new(),
         }
     }
 
@@ -75,21 +81,32 @@ impl EvmBlockState {
     }
 
     pub async fn account_state(
-        &self,
+        &mut self,
         address_hash: B256,
     ) -> Result<Option<AccountState>, EvmStateError> {
-        self.traverse_trie(
-            self.block_header.state_root,
-            address_hash,
-            |path, node_hash| {
-                StateContentKey::AccountTrieNode(AccountTrieNodeKey { path, node_hash })
-            },
-        )
-        .await
+        let account_state = self
+            .traverse_trie::<AccountState>(
+                self.block_header.state_root,
+                address_hash,
+                |path, node_hash| {
+                    StateContentKey::AccountTrieNode(AccountTrieNodeKey { path, node_hash })
+                },
+            )
+            .await?;
+
+        if let Some(account_state) = &account_state {
+            if account_state.code_hash != KECCAK_EMPTY {
+                self.code_hash_to_address_hash
+                    .entry(account_state.code_hash)
+                    .or_insert(address_hash);
+            }
+        }
+
+        Ok(account_state)
     }
 
     pub async fn contract_storage_at_slot(
-        &self,
+        &mut self,
         storage_root: B256,
         address_hash: B256,
         storage_slot: U256,
@@ -113,7 +130,7 @@ impl EvmBlockState {
     }
 
     pub async fn contract_bytecode(
-        &self,
+        &mut self,
         address_hash: B256,
         code_hash: B256,
     ) -> Result<Bytes, EvmStateError> {
@@ -135,9 +152,13 @@ impl EvmBlockState {
     // Utility functions
 
     async fn fetch_content(
-        &self,
+        &mut self,
         content_key: StateContentKey,
     ) -> Result<StateContentValue, EvmStateError> {
+        if let Some(value) = self.cache.get(&content_key) {
+            return Ok(value.clone());
+        }
+
         let endpoint = StateEndpoint::RecursiveFindContent(content_key.clone());
         let response: ContentInfo = proxy_to_subnet(&self.state_network, endpoint)
             .await
@@ -149,10 +170,14 @@ impl EvmBlockState {
         };
 
         let content_value = StateContentValue::decode(&content_key, &content)?;
+        self.cache.insert(content_key, content_value.clone());
         Ok(content_value)
     }
 
-    async fn fetch_trie_node(&self, content_key: StateContentKey) -> Result<Node, EvmStateError> {
+    async fn fetch_trie_node(
+        &mut self,
+        content_key: StateContentKey,
+    ) -> Result<Node, EvmStateError> {
         let content_value = self.fetch_content(content_key.clone()).await?;
         let StateContentValue::TrieNode(trie_node) = content_value else {
             return Err(EvmStateError::InvalidContentValueType(
@@ -167,7 +192,7 @@ impl EvmBlockState {
     ///
     /// This function works both with the account trie and the contract state trie.
     async fn traverse_trie<T: Decodable>(
-        &self,
+        &mut self,
         root: B256,
         path: B256,
         content_key_fn: impl Fn(Nibbles, B256) -> StateContentKey,
@@ -213,30 +238,27 @@ impl AsyncDatabase for EvmBlockState {
         let address_hash = keccak256(address);
         let account_state = self.account_state(address_hash).await?;
 
-        let Some(account_state) = account_state else {
-            return Ok(None);
-        };
-
-        let code = if account_state.code_hash == KECCAK_EMPTY {
-            Bytecode::new()
-        } else {
-            let bytecode_raw = self
-                .contract_bytecode(address_hash, account_state.code_hash)
-                .await?;
-            Bytecode::new_raw(bytecode_raw)
-        };
-        Ok(Some(AccountInfo::new(
-            account_state.balance,
-            account_state.nonce,
-            account_state.code_hash,
-            code,
-        )))
+        Ok(account_state.map(|account_state| AccountInfo {
+            balance: account_state.balance,
+            nonce: account_state.nonce,
+            code_hash: account_state.code_hash,
+            code: None,
+        }))
     }
 
-    async fn code_by_hash_async(&mut self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
-        Err(EvmStateError::InternalError(
-            "The code_by_hash_async is not supported".to_string(),
-        ))
+    async fn code_by_hash_async(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        if code_hash == KECCAK_EMPTY {
+            return Ok(Bytecode::new());
+        }
+
+        let Some(address_hash) = self.code_hash_to_address_hash.get(&code_hash) else {
+            return Err(EvmStateError::InternalError(format!(
+                "Unknown code_hash: {code_hash}"
+            )));
+        };
+
+        let bytecode_raw = self.contract_bytecode(*address_hash, code_hash).await?;
+        Ok(Bytecode::new_raw(bytecode_raw))
     }
 
     async fn storage_async(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
