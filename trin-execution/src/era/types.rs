@@ -3,7 +3,7 @@ use ethportal_api::{
 };
 use revm_primitives::{Address, SpecId};
 
-use crate::spec_id::get_spec_block_number;
+use crate::evm::spec_id::get_spec_block_number;
 
 #[derive(Debug, Clone)]
 pub struct TransactionsWithSender {
