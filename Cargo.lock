@@ -2049,6 +2049,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "delay_map"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df941644b671f05f59433e481ba0d31ac10e3667de725236a4c0d587c496fba1"
+dependencies = [
+ "futures",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "der"
 version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2209,7 +2220,7 @@ dependencies = [
  "aes 0.7.5",
  "aes-gcm 0.9.4",
  "arrayvec 0.7.6",
- "delay_map",
+ "delay_map 0.3.0",
  "enr",
  "fnv",
  "futures",
@@ -5377,6 +5388,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "clap",
+ "delay_map 0.4.0",
  "discv5",
  "e2store",
  "env_logger 0.9.3",
@@ -5416,7 +5428,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bytes",
- "delay_map",
+ "delay_map 0.4.0",
  "directories",
  "discv5",
  "env_logger 0.9.3",
@@ -8507,7 +8519,7 @@ version = "0.1.0-alpha.8"
 source = "git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.14#d894487d80a650bffd9e511fd9071b05c1ddb40d"
 dependencies = [
  "async-trait",
- "delay_map",
+ "delay_map 0.3.0",
  "futures",
  "rand 0.8.5",
  "tokio",

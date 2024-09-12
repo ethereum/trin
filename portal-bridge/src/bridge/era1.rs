@@ -49,7 +49,9 @@ pub struct Era1Bridge {
     pub era1_files: Vec<String>,
     pub http_client: Client,
     pub metrics: BridgeMetricsReporter,
-    pub gossip_limit: usize,
+    // Semaphore used to limit the amount of active gossip transfers
+    // to make sure we don't overwhelm the trin client
+    pub gossip_semaphore: Arc<Semaphore>,
     pub execution_api: ExecutionApi,
 }
 
@@ -69,6 +71,7 @@ impl Era1Bridge {
             .try_into()?;
         let era1_files = get_shuffled_era1_files(&http_client).await?;
         let metrics = BridgeMetricsReporter::new("era1".to_string(), &format!("{mode:?}"));
+        let gossip_semaphore = Arc::new(Semaphore::new(gossip_limit));
         Ok(Self {
             mode,
             portal_client,
@@ -77,7 +80,7 @@ impl Era1Bridge {
             era1_files,
             http_client,
             metrics,
-            gossip_limit,
+            gossip_semaphore,
             execution_api,
         })
     }
@@ -228,9 +231,6 @@ impl Era1Bridge {
 
     async fn gossip_era1(&self, era1_path: String, gossip_range: Option<Range<u64>>, hunt: bool) {
         info!("Processing era1 file at path: {era1_path:?}");
-        // We are using a semaphore to limit the amount of active gossip transfers to make sure
-        // we don't overwhelm the trin client
-        let gossip_send_semaphore = Arc::new(Semaphore::new(self.gossip_limit));
 
         let raw_era1 = self
             .http_client
@@ -263,7 +263,8 @@ impl Era1Bridge {
                     continue;
                 }
             }
-            let permit = gossip_send_semaphore
+            let permit = self
+                .gossip_semaphore
                 .clone()
                 .acquire_owned()
                 .await

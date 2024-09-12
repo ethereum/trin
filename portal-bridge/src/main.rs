@@ -1,11 +1,15 @@
 use clap::Parser;
-use tokio::time::{sleep, Duration};
+use tokio::{
+    sync::mpsc,
+    time::{sleep, Duration},
+};
 use tracing::Instrument;
 
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, era1::Era1Bridge, history::HistoryBridge, state::StateBridge},
+    census::Census,
     cli::BridgeConfig,
     types::{mode::BridgeMode, network::NetworkKind},
 };
@@ -40,22 +44,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| e.to_string())?;
 
     let mut bridge_tasks = Vec::new();
+    let mut census_handle = None;
 
     // Launch State Network portal bridge
     if bridge_config
         .portal_subnetworks
         .contains(&NetworkKind::State)
     {
-        let bridge_mode = bridge_config.mode.clone();
-        let portal_client_clone = portal_client.clone();
-        let epoch_acc_path = bridge_config.epoch_acc_path.clone();
-        let header_oracle = HeaderOracle::default();
+        // Initialize the census
+        let (census_tx, census_rx) = mpsc::unbounded_channel();
+        let mut census = Census::new(portal_client.clone(), census_rx);
+        // initialize the census to acquire critical threshold view of network before gossiping
+        census.init().await;
+        census_handle = Some(tokio::spawn(async move {
+            census
+                .run()
+                .instrument(tracing::trace_span!("census"))
+                .await;
+        }));
+
         let state_bridge = StateBridge::new(
-            bridge_mode,
-            portal_client_clone,
-            header_oracle,
-            epoch_acc_path,
+            bridge_config.mode.clone(),
+            portal_client.clone(),
             bridge_config.gossip_limit,
+            census_tx,
         )
         .await?;
 
@@ -146,5 +158,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     futures::future::join_all(bridge_tasks).await;
     drop(handle);
+    if let Some(census_handle) = census_handle {
+        drop(census_handle);
+    }
     Ok(())
 }

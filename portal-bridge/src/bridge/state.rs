@@ -1,22 +1,19 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::{Arc, Mutex};
 
 use alloy_rlp::Decodable;
-use e2store::utils::get_shuffled_era1_files;
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
-    types::state_trie::account_state::AccountState as AccountStateInfo, StateContentKey,
-    StateContentValue,
+    types::state_trie::account_state::AccountState as AccountStateInfo, ContentValue, Enr,
+    OverlayContentKey, StateContentKey, StateContentValue, StateNetworkApiClient,
 };
 use revm::Database;
 use revm_primitives::{keccak256, Bytecode, SpecId, B256};
-use surf::{Client, Config};
 use tokio::{
-    sync::{OwnedSemaphorePermit, Semaphore},
-    task::JoinHandle,
+    sync::{mpsc, OwnedSemaphorePermit, Semaphore},
     time::timeout,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{debug, enabled, error, info, warn, Level};
 use trin_execution::{
     config::StateConfig,
     content::{
@@ -31,52 +28,39 @@ use trin_execution::{
     utils::full_nibble_path_to_address_hash,
 };
 use trin_metrics::bridge::BridgeMetricsReporter;
-use trin_validation::oracle::HeaderOracle;
 
 use crate::{
     bridge::history::SERVE_BLOCK_TIMEOUT,
-    gossip::gossip_state_content,
+    census::{ContentKey, EnrsRequest},
     types::mode::{BridgeMode, ModeType},
 };
 
 pub struct StateBridge {
-    pub mode: BridgeMode,
-    pub portal_client: HttpClient,
-    pub header_oracle: HeaderOracle,
-    pub epoch_acc_path: PathBuf,
-    pub era1_files: Vec<String>,
-    pub http_client: Client,
-    pub metrics: BridgeMetricsReporter,
-    pub gossip_limit_semaphore: Arc<Semaphore>,
+    mode: BridgeMode,
+    portal_client: HttpClient,
+    metrics: BridgeMetricsReporter,
+    // Semaphore used to limit the amount of active offer transfers
+    // to make sure we don't overwhelm the trin client
+    offer_semaphore: Arc<Semaphore>,
+    // Used to request all interested enrs in the network from census process.
+    census_tx: mpsc::UnboundedSender<EnrsRequest>,
 }
 
 impl StateBridge {
     pub async fn new(
         mode: BridgeMode,
         portal_client: HttpClient,
-        header_oracle: HeaderOracle,
-        epoch_acc_path: PathBuf,
-        gossip_limit: usize,
+        offer_limit: usize,
+        census_tx: mpsc::UnboundedSender<EnrsRequest>,
     ) -> anyhow::Result<Self> {
-        let http_client: Client = Config::new()
-            .add_header("Content-Type", "application/xml")
-            .expect("to be able to add header")
-            .try_into()?;
-        let era1_files = get_shuffled_era1_files(&http_client).await?;
         let metrics = BridgeMetricsReporter::new("state".to_string(), &format!("{mode:?}"));
-
-        // We are using a semaphore to limit the amount of active gossip transfers to make sure
-        // we don't overwhelm the trin client
-        let gossip_limit_semaphore = Arc::new(Semaphore::new(gossip_limit));
+        let offer_semaphore = Arc::new(Semaphore::new(offer_limit));
         Ok(Self {
             mode,
             portal_client,
-            header_oracle,
-            epoch_acc_path,
-            era1_files,
-            http_client,
             metrics,
-            gossip_limit_semaphore,
+            offer_semaphore,
+            census_tx,
         })
     }
 
@@ -202,21 +186,9 @@ impl StateBridge {
         account_proof: &TrieProof,
         block_hash: B256,
     ) -> anyhow::Result<()> {
-        let permit = self
-            .gossip_limit_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore");
         let content_key = create_account_content_key(account_proof)?;
         let content_value = create_account_content_value(block_hash, account_proof)?;
-        Self::spawn_serve_state_proof(
-            self.portal_client.clone(),
-            content_key,
-            content_value,
-            permit,
-            self.metrics.clone(),
-        );
+        self.spawn_offer_tasks(content_key, content_value).await;
         Ok(())
     }
 
@@ -228,21 +200,9 @@ impl StateBridge {
         code_hash: B256,
         code: Bytecode,
     ) -> anyhow::Result<()> {
-        let permit = self
-            .gossip_limit_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore");
-        let code_content_key = create_contract_content_key(address_hash, code_hash)?;
-        let code_content_value = create_contract_content_value(block_hash, account_proof, code)?;
-        Self::spawn_serve_state_proof(
-            self.portal_client.clone(),
-            code_content_key,
-            code_content_value,
-            permit,
-            self.metrics.clone(),
-        );
+        let content_key = create_contract_content_key(address_hash, code_hash)?;
+        let content_value = create_contract_content_value(block_hash, account_proof, code)?;
+        self.spawn_offer_tasks(content_key, content_value).await;
         Ok(())
     }
 
@@ -253,73 +213,143 @@ impl StateBridge {
         address_hash: B256,
         block_hash: B256,
     ) -> anyhow::Result<()> {
-        let permit = self
-            .gossip_limit_semaphore
+        let content_key = create_storage_content_key(storage_proof, address_hash)?;
+        let content_value = create_storage_content_value(block_hash, account_proof, storage_proof)?;
+        self.spawn_offer_tasks(content_key, content_value).await;
+        Ok(())
+    }
+
+    // request enrs interested in the content key from Census
+    async fn request_enrs(&self, content_key: &StateContentKey) -> anyhow::Result<Vec<Enr>> {
+        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
+        let enrs_request = EnrsRequest {
+            content_key: ContentKey::State(content_key.clone()),
+            resp_tx,
+        };
+        self.census_tx.send(enrs_request)?;
+        Ok(resp_rx.await?)
+    }
+
+    // spawn individual offer tasks of the content key for each interested enr found in Census
+    async fn spawn_offer_tasks(
+        &self,
+        content_key: StateContentKey,
+        content_value: StateContentValue,
+    ) {
+        let Ok(enrs) = self.request_enrs(&content_key).await else {
+            error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
+            return;
+        };
+        let offer_report = Arc::new(Mutex::new(OfferReport::new(
+            content_key.clone(),
+            enrs.len(),
+        )));
+        for enr in enrs.clone() {
+            let permit = self.acquire_offer_permit().await;
+            let portal_client = self.portal_client.clone();
+            let content_key = content_key.clone();
+            let content_value = content_value.clone();
+            let offer_report = offer_report.clone();
+            let metrics = self.metrics.clone();
+            tokio::spawn(async move {
+                let timer = metrics.start_process_timer("spawn_offer_state_proof");
+                match timeout(
+                    SERVE_BLOCK_TIMEOUT,
+                    StateNetworkApiClient::trace_offer(
+                        &portal_client,
+                        enr.clone(),
+                        content_key.clone(),
+                        content_value.encode(),
+                    ),
+                )
+                .await
+                {
+                    Ok(result) => match result {
+                        Ok(result) => {
+                            offer_report
+                                .lock()
+                                .expect("to acquire lock")
+                                .update(&enr, result);
+                        }
+                        Err(e) => {
+                            offer_report
+                                .lock()
+                                .expect("to acquire lock")
+                                .update(&enr, false);
+                            warn!("Error offering to: {enr}, error: {e:?}");
+                        }
+                    },
+                    Err(_) => {
+                        offer_report
+                            .lock()
+                            .expect("to acquire lock")
+                            .update(&enr, false);
+                        error!("trace_offer timed out on state proof {content_key}: indicating a bug is present");
+                    }
+                };
+                drop(permit);
+                metrics.stop_process_timer(timer);
+            });
+        }
+    }
+
+    async fn acquire_offer_permit(&self) -> OwnedSemaphorePermit {
+        self.offer_semaphore
             .clone()
             .acquire_owned()
             .await
-            .expect("to be able to acquire semaphore");
-        let storage_content_key = create_storage_content_key(storage_proof, address_hash)?;
-        let storage_content_value =
-            create_storage_content_value(block_hash, account_proof, storage_proof)?;
-        Self::spawn_serve_state_proof(
-            self.portal_client.clone(),
-            storage_content_key,
-            storage_content_value,
-            permit,
-            self.metrics.clone(),
-        );
-        Ok(())
+            .expect("to be able to acquire semaphore")
     }
+}
 
-    fn spawn_serve_state_proof(
-        portal_client: HttpClient,
-        content_key: StateContentKey,
-        content_value: StateContentValue,
-        permit: OwnedSemaphorePermit,
-        metrics: BridgeMetricsReporter,
-    ) -> JoinHandle<()> {
-        info!("Spawning serve_state_proof for content key: {content_key}");
-        tokio::spawn(async move {
-            let timer = metrics.start_process_timer("spawn_serve_state_proof");
-            match timeout(
-                SERVE_BLOCK_TIMEOUT,
-                Self::serve_state_proof(
-                    portal_client,
-                    content_key.clone(),
-                    content_value,
-                    metrics.clone()
-                )).await
-                {
-                Ok(result) => match result {
-                    Ok(_) => {
-                        debug!("Done serving state proof: {content_key}");
-                    }
-                    Err(msg) => warn!("Error serving state proof: {content_key}: {msg:?}"),
-                },
-                Err(_) => error!("serve_state_proof() timed out on state proof {content_key}: this is an indication a bug is present")
-            };
-            drop(permit);
-            metrics.stop_process_timer(timer);
-        })
-    }
+// Individual report for outcomes of offering a state content key
+struct OfferReport {
+    content_key: StateContentKey,
+    total: usize,
+    success: Vec<Enr>,
+    // includes both enrs that rejected offer and failed txs
+    // in the future we may want to differentiate between these cases
+    // and return a more detailed report from `trace_offer`
+    fail: Vec<Enr>,
+}
 
-    async fn serve_state_proof(
-        portal_client: HttpClient,
-        content_key: StateContentKey,
-        content_value: StateContentValue,
-        metrics: BridgeMetricsReporter,
-    ) -> anyhow::Result<()> {
-        let timer = metrics.start_process_timer("gossip_state_content");
-        match gossip_state_content(portal_client, content_key.clone(), content_value).await {
-            Ok(_) => {
-                debug!("Successfully gossiped state proof: {content_key}")
-            }
-            Err(msg) => {
-                warn!("Error gossiping state proof: {content_key} {msg}",);
-            }
+impl OfferReport {
+    fn new(content_key: StateContentKey, total: usize) -> Self {
+        Self {
+            content_key,
+            total,
+            success: Vec::new(),
+            fail: Vec::new(),
         }
-        metrics.stop_process_timer(timer);
-        Ok(())
+    }
+
+    fn update(&mut self, enr: &Enr, success: bool) {
+        if success {
+            self.success.push(enr.clone());
+        } else {
+            self.fail.push(enr.clone());
+        }
+        if self.total == self.success.len() + self.fail.len() {
+            self.report();
+        }
+    }
+
+    fn report(&self) {
+        if enabled!(Level::DEBUG) {
+            debug!(
+                "Successfully offered to {}/{} peers. Content key: {}. Failed: {:?}",
+                self.success.len(),
+                self.total,
+                self.content_key.to_hex(),
+                self.fail,
+            );
+        } else {
+            info!(
+                "Successfully offered to {}/{} peers. Content key: {}",
+                self.success.len(),
+                self.total,
+                self.content_key.to_hex(),
+            );
+        }
     }
 }

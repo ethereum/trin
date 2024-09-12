@@ -42,7 +42,9 @@ pub struct HistoryBridge {
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
     pub metrics: BridgeMetricsReporter,
-    pub gossip_limit: usize,
+    // Semaphore used to limit the amount of active gossip transfers
+    // to make sure we don't overwhelm the trin client
+    pub gossip_semaphore: Arc<Semaphore>,
 }
 
 impl HistoryBridge {
@@ -55,6 +57,7 @@ impl HistoryBridge {
         gossip_limit: usize,
     ) -> Self {
         let metrics = BridgeMetricsReporter::new("history".to_string(), &format!("{mode:?}"));
+        let gossip_semaphore = Arc::new(Semaphore::new(gossip_limit));
         Self {
             mode,
             portal_client,
@@ -62,7 +65,7 @@ impl HistoryBridge {
             header_oracle,
             epoch_acc_path,
             metrics,
-            gossip_limit,
+            gossip_semaphore,
         }
     }
 }
@@ -177,10 +180,6 @@ impl HistoryBridge {
         // epoch_acc gets set on the first iteration of the loop
         let mut current_epoch_index = u64::MAX;
 
-        // We are using a semaphore to limit the amount of active gossip transfers to make sure we
-        // don't overwhelm the trin client
-        let gossip_send_semaphore = Arc::new(Semaphore::new(self.gossip_limit));
-
         info!("fetching headers in range: {gossip_range:?}");
         let mut epoch_acc = None;
         let mut serve_full_block_handles = vec![];
@@ -203,9 +202,7 @@ impl HistoryBridge {
             } else if height > MERGE_BLOCK_NUMBER {
                 epoch_acc = None;
             }
-            let permit = gossip_send_semaphore.clone().acquire_owned().await.expect(
-                "acquire_owned() can only error on semaphore close, this should be impossible",
-            );
+            let permit = self.acquire_gossip_permit().await;
             self.metrics.report_current_block(height as i64);
             serve_full_block_handles.push(Self::spawn_serve_full_block(
                 height,
@@ -407,5 +404,13 @@ impl HistoryBridge {
             gossip_history_content(portal_client, content_key, content_value, block_stats).await;
         metrics.stop_process_timer(timer);
         result
+    }
+
+    async fn acquire_gossip_permit(&self) -> OwnedSemaphorePermit {
+        self.gossip_semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("to be able to acquire semaphore")
     }
 }

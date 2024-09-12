@@ -3,6 +3,7 @@
 
 pub mod api;
 pub mod bridge;
+pub mod census;
 pub mod cli;
 pub mod client_handles;
 pub mod constants;
