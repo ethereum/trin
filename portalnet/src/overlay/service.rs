@@ -650,7 +650,7 @@ where
                         let utp_processing = UtpProcessing::from(&*self);
                         tokio::spawn(async move {
                             Self::process_received_content(
-                                content.clone(),
+                                content,
                                 false,
                                 content_key,
                                 callback,
@@ -971,9 +971,9 @@ where
                     Ok(Content::ConnectionId(cid_send.to_be()))
                 }
             }
-            // If we don't have data to send back or can't obtain a permit, send the requester a
+            // If we can't obtain a permit or don't have data to send back, send the requester a
             // list of closer ENRs.
-            (Ok(Some(_)), _) | (Ok(None), _) => {
+            (Ok(_), None) | (Ok(None), _) => {
                 let mut enrs = self.find_nodes_close_to_content(content_key);
                 enrs.retain(|enr| source != &enr.node_id());
                 pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_CONTENT_PAYLOAD_SIZE);
