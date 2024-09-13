@@ -77,6 +77,17 @@ pub fn trin_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
         let url: String = client_metrics_url.to_string();
         command.args(["--enable-metrics-with-url", &url]);
     }
+    // we currently only set the utp transfer limit for state, since it uses
+    // offer mode, which corresponds 1:1 with the utp transfer limit
+    if bridge_config
+        .portal_subnetworks
+        .contains(&NetworkKind::State)
+    {
+        command.args([
+            "--utp-transfer-limit",
+            &bridge_config.offer_limit.to_string(),
+        ]);
+    }
     Ok(command.spawn()?)
 }
 
@@ -90,6 +101,7 @@ pub fn subnetworks_flag(bridge_config: &BridgeConfig) -> String {
         .flat_map(|subnetwork| match subnetwork {
             NetworkKind::Beacon => vec![NetworkKind::Beacon],
             NetworkKind::History => vec![NetworkKind::History],
+            // State requires both history and state
             NetworkKind::State => vec![NetworkKind::History, NetworkKind::State],
         })
         .map(|network_kind| network_kind.to_string())

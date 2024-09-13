@@ -18,8 +18,15 @@ pub const BEACON_GENESIS_TIME: u64 = 1606824023;
 // overloaded and not performing well
 pub const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
-// This is the maximum number of active blocks being gossiped
+// The maximum number of active blocks being gossiped. Note that this doesn't
+// exactly mean the number of concurrent gossip jsonrpc requests, as the gossip
+// requests are batched / block.
+// Currently, this is only used in the history & era1 bridges
 pub const DEFAULT_GOSSIP_LIMIT: usize = 32;
+
+// The maximum number of concurrent offer jsonrpc requests that can be made simultaneously.
+// Currently, this is only used in the state bridge.
+pub const DEFAULT_OFFER_LIMIT: usize = 64;
 
 // Number of seconds to wait before retrying a provider request
 pub const FALLBACK_RETRY_AFTER: Duration = Duration::from_secs(5);
