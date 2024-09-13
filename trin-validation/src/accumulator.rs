@@ -167,7 +167,7 @@ impl PreMergeAccumulator {
         // convert total difficulty to B256
         let header_difficulty = B256::from(header_record.total_difficulty.to_le_bytes());
         // calculate hash of the header record
-        let header_record_hash = B256::from_slice(&eth2_hashing::hash32_concat(
+        let header_record_hash = B256::from_slice(&ethereum_hashing::hash32_concat(
             header_record.block_hash.as_slice(),
             header_difficulty.as_slice(),
         ));
@@ -175,7 +175,7 @@ impl PreMergeAccumulator {
         let leaves = epoch_acc
             .iter()
             .map(|record| {
-                B256::from_slice(&eth2_hashing::hash32_concat(
+                B256::from_slice(&ethereum_hashing::hash32_concat(
                     record.block_hash.as_slice(),
                     record.total_difficulty.as_le_slice(),
                 ))
