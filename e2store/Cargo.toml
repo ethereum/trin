@@ -19,9 +19,9 @@ ethereum_ssz.workspace = true
 ethereum_ssz_derive.workspace = true
 ethportal-api.workspace = true
 rand.workspace = true
+reqwest.workspace = true
 scraper.workspace = true
 snap.workspace = true
-surf.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

@@ -5,7 +5,10 @@ use e2store::{
     era1::Era1,
     utils::{get_era1_files, get_era_files, ERA1_FILE_COUNT},
 };
-use surf::{Client, Config};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, CONTENT_TYPE},
+    Client,
+};
 use tokio::task::JoinHandle;
 use tracing::info;
 
@@ -30,10 +33,10 @@ pub struct EraManager {
 
 impl EraManager {
     pub async fn new(next_block_number: u64) -> anyhow::Result<Self> {
-        let http_client: Client = Config::new()
-            .add_header("Content-Type", "application/xml")
-            .expect("to be able to add header")
-            .try_into()?;
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/xml"));
+        let http_client: Client = Client::builder().default_headers(headers).build()?;
+
         let era1_files = get_era1_files(&http_client).await?;
         let era_files = get_era_files(&http_client).await?;
 
@@ -124,8 +127,8 @@ impl EraManager {
             };
             let raw_era = download_raw_era(next_era_path, http_client.clone()).await?;
             match next_era_type {
-                EraType::Era1 => process_era1_file(raw_era, next_epoch_index),
-                EraType::Era => process_era_file(raw_era, next_epoch_index),
+                EraType::Era1 => process_era1_file(raw_era.to_vec(), next_epoch_index),
+                EraType::Era => process_era_file(raw_era.to_vec(), next_epoch_index),
             }
         });
         self.next_era = Some(join_handle);
@@ -145,7 +148,7 @@ impl EraManager {
             };
             let raw_era1 = download_raw_era(era1_path, http_client.clone()).await?;
 
-            return process_era1_file(raw_era1, epoch_index);
+            return process_era1_file(raw_era1.to_vec(), epoch_index);
         }
 
         EraBinarySearch::find_era_file(http_client.clone(), block_number).await

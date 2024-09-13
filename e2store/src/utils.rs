@@ -1,9 +1,9 @@
 use std::{collections::HashMap, io};
 
-use anyhow::{anyhow, ensure, Error};
+use anyhow::{ensure, Error};
 use rand::{seq::SliceRandom, thread_rng};
+use reqwest::Client;
 use scraper::{Html, Selector};
-use surf::Client;
 
 const ERA_DIR_URL: &str = "https://mainnet.era.nimbus.team/";
 const ERA1_DIR_URL: &str = "https://era1.ethportal.net/";
@@ -22,11 +22,7 @@ pub async fn download_era_links(
     http_client: &Client,
     url: &str,
 ) -> anyhow::Result<HashMap<u64, String>> {
-    let index_html = http_client
-        .get(url)
-        .recv_string()
-        .await
-        .map_err(|e| anyhow!("{e}"))?;
+    let index_html = http_client.get(url).send().await?.text().await?;
     let index_html = Html::parse_document(&index_html);
     let selector = Selector::parse("a[href*='mainnet-']").expect("to be able to parse selector");
     let era_files: HashMap<u64, String> = index_html

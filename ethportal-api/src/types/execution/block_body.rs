@@ -263,9 +263,7 @@ impl ssz::Decode for BlockBodyLegacy {
                 ))
             })?;
         let uncles: Vec<Header> = Decodable::decode(&mut uncles.as_slice()).map_err(|e| {
-            ssz::DecodeError::BytesInvalid(
-                format!("Legacy block body contains invalid txs: {e:?}",),
-            )
+            ssz::DecodeError::BytesInvalid(format!("Legacy block body contains invalid txs: {e:?}"))
         })?;
         Ok(Self { txs, uncles })
     }
@@ -350,7 +348,7 @@ impl ssz::Decode for BlockBodyMerge {
                 ))
             })?;
         let uncles: Vec<Header> = Decodable::decode(&mut uncles.as_slice()).map_err(|e| {
-            ssz::DecodeError::BytesInvalid(format!("Merge block body contains invalid txs: {e:?}",))
+            ssz::DecodeError::BytesInvalid(format!("Merge block body contains invalid txs: {e:?}"))
         })?;
         if !uncles.is_empty() {
             return Err(ssz::DecodeError::BytesInvalid(

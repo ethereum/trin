@@ -3,15 +3,14 @@ use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 use alloy_primitives::B256;
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
-use surf::{
-    middleware::{Middleware, Next},
-    Body, Client, Config, Request, Response,
+use reqwest::{
+    header::{HeaderMap, HeaderValue, CONTENT_TYPE},
+    Client,
 };
-use tokio::{
-    process::Child,
-    time::{sleep, Duration},
-};
-use tracing::{error, warn};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
+use tokio::process::Child;
+use tracing::error;
 use url::Url;
 
 use crate::{
@@ -155,38 +154,49 @@ pub struct BridgeConfig {
     pub gossip_limit: usize,
 }
 
-pub fn url_to_client(url: Url) -> Result<Client, String> {
-    let mut config = Config::new()
-        .add_header("Content-Type", "application/json")
-        .expect("to be able to add content type header")
-        .set_timeout(Some(HTTP_REQUEST_TIMEOUT));
-    if url
-        .host_str()
-        .expect("to find host string")
-        .contains("pandaops.io")
-    {
-        let client_id = env::var("PANDAOPS_CLIENT_ID").unwrap_or_else(|_| {
-            error!("Pandoaps provider detected without PANDAOPS_CLIENT_ID set");
-            "null".to_string()
-        });
-        let client_secret = env::var("PANDAOPS_CLIENT_SECRET").unwrap_or_else(|_| {
-            error!("Pandoaps provider detected without PANDAOPS_CLIENT_SECRET set");
-            "null".to_string()
-        });
-        config = config
-            .clone()
-            .add_header("CF-Access-Client-Id", client_id)
-            .map_err(|_| "to be able to add client id header")?
-            .add_header("CF-Access-Client-Secret", client_secret)
-            .map_err(|_| "to be able to add client secret header")?
-            .set_base_url(url);
+pub fn url_to_client(url: Url) -> Result<ClientWithMiddleware, String> {
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+    if let Some(host) = url.host_str() {
+        if host.contains("pandaops.io") {
+            let client_id = env::var("PANDAOPS_CLIENT_ID").unwrap_or_else(|_| {
+                error!("Pandaops provider detected without PANDAOPS_CLIENT_ID set");
+                "null".to_string()
+            });
+
+            let client_secret = env::var("PANDAOPS_CLIENT_SECRET").unwrap_or_else(|_| {
+                error!("Pandaops provider detected without PANDAOPS_CLIENT_SECRET set");
+                "null".to_string()
+            });
+
+            headers.insert(
+                "CF-Access-Client-Id",
+                HeaderValue::from_str(&client_id).map_err(|_| "Invalid client id header value")?,
+            );
+
+            headers.insert(
+                "CF-Access-Client-Secret",
+                HeaderValue::from_str(&client_secret)
+                    .map_err(|_| "Invalid client secret header value")?,
+            );
+        }
     } else {
-        config = config.set_base_url(url);
+        return Err("Failed to find host string".into());
     }
-    let client: Client = config
-        .try_into()
-        .map_err(|_| "to convert config to client")?;
-    Ok(client.with(Retry::default()))
+
+    // Add retry middleware
+    let reqwest_client = Client::builder()
+        .default_headers(headers)
+        .timeout(HTTP_REQUEST_TIMEOUT)
+        .build()
+        .map_err(|_| "Failed to build HTTP client")?;
+    let retry_policy: ExponentialBackoff = ExponentialBackoff::builder().build_with_max_retries(3);
+    let client = ClientBuilder::new(reqwest_client)
+        .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+        .build();
+
+    Ok(client)
 }
 
 // parser for subnetworks, makes sure that the state network is not ran alongside other subnetworks
@@ -199,55 +209,6 @@ fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<NetworkKind>>, S
         return Err("The State network doesn't support being ran with other subnetwork bridges at the same time".to_string());
     }
     Ok(Arc::new(active_subnetworks))
-}
-
-#[derive(Debug)]
-pub struct Retry {
-    attempts: u8,
-}
-
-impl Retry {
-    pub fn new(attempts: u8) -> Self {
-        Retry { attempts }
-    }
-}
-
-#[async_trait::async_trait]
-impl Middleware for Retry {
-    async fn handle(
-        &self,
-        mut req: Request,
-        client: Client,
-        next: Next<'_>,
-    ) -> Result<Response, surf::Error> {
-        let mut retry_count: u8 = 0;
-        let body = req.take_body().into_bytes().await?;
-        while retry_count < self.attempts {
-            if retry_count > 0 {
-                warn!("Retrying request");
-            }
-            let mut new_req = req.clone();
-            new_req.set_body(Body::from_bytes(body.clone()));
-            if let Ok(val) = next.run(new_req, client.clone()).await {
-                if val.status().is_success() {
-                    return Ok(val);
-                }
-                tracing::error!("Execution client request failed with: {:?}", val);
-            };
-            retry_count += 1;
-            sleep(Duration::from_millis(100)).await;
-        }
-        Err(surf::Error::from_str(
-            500,
-            "Unable to fetch batch after 3 retries",
-        ))
-    }
-}
-
-impl Default for Retry {
-    fn default() -> Self {
-        Self { attempts: 3 }
-    }
 }
 
 type ParseError = &'static str;

@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use alloy_rlp::Bytes;
 use anyhow::anyhow;
 use e2store::{
     era::Era,
@@ -7,7 +8,7 @@ use e2store::{
 };
 use ethportal_api::BlockBody;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use surf::Client;
+use reqwest::Client;
 use tokio::time::sleep;
 use tracing::{info, warn};
 
@@ -82,11 +83,11 @@ pub fn process_era_file(raw_era: Vec<u8>, epoch_index: u64) -> anyhow::Result<Pr
     })
 }
 
-pub async fn download_raw_era(era_path: String, http_client: Client) -> anyhow::Result<Vec<u8>> {
+pub async fn download_raw_era(era_path: String, http_client: Client) -> anyhow::Result<Bytes> {
     info!("Downloading era file {era_path}");
     let mut attempts = 1u32;
     let raw_era1 = loop {
-        match http_client.get(&era_path).recv_bytes().await {
+        match http_client.get(&era_path).send().await?.bytes().await {
             Ok(raw_era1) => break raw_era1,
             Err(err) => {
                 warn!("Failed to download era1 file {attempts} times | Error: {err} | Path {era_path}");

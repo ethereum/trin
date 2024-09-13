@@ -102,15 +102,15 @@ impl StatsReporter<HistoryContentKey> for HistoryBlockStats {
         let block_number = self.block_number;
         if let Some(stats) = &self.header_with_proof {
             info!("GossipReport: block#{block_number}: header_with_proof - {stats}");
-            debug!("GossipReport: block#{block_number}: header_with_proof - {stats:?}",);
+            debug!("GossipReport: block#{block_number}: header_with_proof - {stats:?}");
         }
         if let Some(stats) = &self.block_body {
             info!("GossipReport: block#{block_number}: block_body - {stats}");
-            debug!("GossipReport: block#{block_number}: block_body - {stats:?}",);
+            debug!("GossipReport: block#{block_number}: block_body - {stats:?}");
         }
         if let Some(stats) = &self.receipts {
             info!("GossipReport: block#{block_number}: receipts - {stats}");
-            debug!("GossipReport: block#{block_number}: receipts - {stats:?}",);
+            debug!("GossipReport: block#{block_number}: receipts - {stats:?}");
         }
         if let Some(stats) = &self.epoch_accumulator {
             info!("GossipReport: block#{block_number}: epoch_accumulator - {stats}");

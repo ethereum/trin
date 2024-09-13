@@ -179,7 +179,7 @@ impl BeaconValidator {
     ) -> anyhow::Result<ForkVersionedHistoricalSummariesWithProof> {
         let fork_versioned_historical_summaries =
             ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(content).map_err(|err| {
-                anyhow!("Historical summaries with proof has invalid SSZ bytes: {err:?}",)
+                anyhow!("Historical summaries with proof has invalid SSZ bytes: {err:?}")
             })?;
 
         // Check if the historical summaries with proof epoch matches the content key epoch

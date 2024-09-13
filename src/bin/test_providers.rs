@@ -6,19 +6,17 @@ use rand::{
     distributions::{Distribution, Uniform},
     thread_rng,
 };
+use reqwest::{
+    header::{HeaderMap, HeaderValue, CONTENT_TYPE},
+    Client,
+};
 use serde_json::json;
 use ssz::Decode;
-use surf::{Client, Config};
 use tracing::{debug, info, warn};
 use url::Url;
 
 use ethportal_api::{
-    types::{
-        execution::accumulator::EpochAccumulator,
-        jsonrpc::{params::Params, request::JsonRequest},
-    },
-    utils::bytes::hex_encode,
-    Header,
+    types::execution::accumulator::EpochAccumulator, utils::bytes::hex_encode, Header,
 };
 use portal_bridge::api::execution::ExecutionApi;
 use trin_utils::log::init_tracing_logger;
@@ -425,24 +423,39 @@ impl Providers {
 }
 
 async fn get_latest_block_number() -> Result<u64> {
-    let config = Config::new()
-        .add_header("Content-Type", "application/json")
-        .unwrap()
-        .add_header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())
-        .unwrap()
-        .add_header(
-            "CF-Access-Client-Secret",
-            PANDAOPS_CLIENT_SECRET.to_string(),
-        )
-        .unwrap()
-        .set_base_url(Url::parse("https://geth-lighthouse.mainnet.eu1.ethpandaops.io/").unwrap());
-    let client: Client = config.try_into()?;
-    let params = Params::Array(vec![json!("latest"), json!(false)]);
-    let method = "eth_getBlockByNumber".to_string();
-    let request = JsonRequest::new(method, params, 1);
-    let response = client.post("").body_json(&request).unwrap();
-    let response = response.recv_string().await.unwrap();
-    let response = serde_json::from_str::<serde_json::Value>(&response)?;
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    headers.insert(
+        "CF-Access-Client-Id",
+        HeaderValue::from_str(&PANDAOPS_CLIENT_ID)
+            .map_err(|_| anyhow!("Invalid CF-Access-Client-Id header value"))?,
+    );
+    headers.insert(
+        "CF-Access-Client-Secret",
+        HeaderValue::from_str(&PANDAOPS_CLIENT_SECRET)
+            .map_err(|_| anyhow!("Invalid CF-Access-Client-Secret header value"))?,
+    );
+    let client = Client::builder()
+        .default_headers(headers)
+        .build()
+        .map_err(|e| anyhow!("Failed to build HTTP client: {:?}", e))?;
+    let request_body = json!({
+        "jsonrpc": "2.0",
+        "method": "eth_getBlockByNumber",
+        "params": ["latest", false],
+        "id": 1
+    });
+    let response = client
+        .post("https://geth-lighthouse.mainnet.eu1.ethpandaops.io/")
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| anyhow!("Request failed: {:?}", e))?;
+    let response_text = response
+        .text()
+        .await
+        .map_err(|e| anyhow!("Failed to read response text: {:?}", e))?;
+    let response = serde_json::from_str::<serde_json::Value>(&response_text)?;
     let result = response
         .get("result")
         .ok_or_else(|| anyhow!("Unable to fetch latest block"))?;
