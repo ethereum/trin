@@ -2,7 +2,10 @@ use alloy_primitives::{keccak256, Address, B256};
 
 pub fn full_nibble_path_to_address_hash(key_path: &[u8]) -> B256 {
     if key_path.len() != 64 {
-        panic!("Key path should always be 64 bytes long.")
+        panic!(
+            "Key path should always be 64 bytes long: {}",
+            key_path.len()
+        );
     }
 
     let mut raw_address_hash = vec![];

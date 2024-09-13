@@ -18,7 +18,6 @@ use crate::{
     evm::block_executor::BLOCKHASH_SERVE_WINDOW,
     execution::TrinExecution,
     storage::{account::Account, account_db::AccountDB},
-    utils::full_nibble_path_to_address_hash,
 };
 
 pub struct StateExporter {
@@ -47,11 +46,9 @@ impl StateExporter {
         info!("Era2 initiated");
         info!("Trie leaf iterator initiated");
         let mut accounts_processed = 0;
-        while let Some(nibble_and_leaf_value) =
-            self.trin_execution.database.trie.lock().iter().next()
-        {
-            let (raw_nibble_path, account_state) = nibble_and_leaf_value?;
-            let account_hash = full_nibble_path_to_address_hash(&raw_nibble_path);
+        for key_hash_and_leaf_value in self.trin_execution.database.trie.lock().iter() {
+            let (raw_account_hash, account_state) = key_hash_and_leaf_value?;
+            let account_hash = B256::from_slice(&raw_account_hash);
 
             let account_state: Account = Decodable::decode(&mut account_state.as_slice())?;
             let bytecode = if account_state.code_hash != KECCAK_EMPTY {
@@ -72,9 +69,9 @@ impl StateExporter {
                     Arc::new(account_db),
                     account_state.storage_root,
                 )?));
-                while let Some(nibble_and_leaf_value) = account_trie.lock().iter().next() {
-                    let (raw_nibble_path, storage_value) = nibble_and_leaf_value?;
-                    let storage_index_hash = full_nibble_path_to_address_hash(&raw_nibble_path);
+                for key_hash_and_leaf_value in account_trie.lock().iter() {
+                    let (raw_storage_index_hash, storage_value) = key_hash_and_leaf_value?;
+                    let storage_index_hash = B256::from_slice(&raw_storage_index_hash);
                     let storage_slot_value: U256 = Decodable::decode(&mut storage_value.as_slice())
                         .expect("Failed to decode storage slot value");
                     storage.push(StorageItem {

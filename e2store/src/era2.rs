@@ -1,4 +1,5 @@
 use std::{
+    fs,
     io::{ErrorKind, Read, Write},
     ops::Deref,
     path::{Path, PathBuf},
@@ -65,6 +66,7 @@ impl Era2 {
     }
 
     pub fn create(path: PathBuf, header: Header) -> anyhow::Result<Self> {
+        fs::create_dir_all(&path)?;
         ensure!(path.is_dir(), "era2 path is not a directory: {:?}", path);
         let path = path.join(format!(
             "mainnet-{:010}-{}.era2",
