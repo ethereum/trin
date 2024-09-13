@@ -3955,7 +3955,7 @@ dependencies = [
  "jsonrpsee",
  "log",
  "portalnet",
- "reqwest 0.11.27",
+ "reqwest 0.12.7",
  "serde",
  "serde-this-or-that",
  "serde_json",

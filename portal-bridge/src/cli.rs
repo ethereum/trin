@@ -5,9 +5,9 @@ use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
-    Client,
+    Client, IntoUrl, Request, Response,
 };
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use tokio::process::Child;
 use tracing::error;
@@ -154,7 +154,7 @@ pub struct BridgeConfig {
     pub gossip_limit: usize,
 }
 
-pub fn url_to_client(url: Url) -> Result<ClientWithMiddleware, String> {
+pub fn url_to_client(url: Url) -> Result<ClientWithBaseUrl, String> {
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
@@ -191,12 +191,47 @@ pub fn url_to_client(url: Url) -> Result<ClientWithMiddleware, String> {
         .timeout(HTTP_REQUEST_TIMEOUT)
         .build()
         .map_err(|_| "Failed to build HTTP client")?;
-    let retry_policy: ExponentialBackoff = ExponentialBackoff::builder().build_with_max_retries(3);
     let client = ClientBuilder::new(reqwest_client)
-        .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+        .with(RetryTransientMiddleware::new_with_policy(
+            ExponentialBackoff::builder().build_with_max_retries(3),
+        ))
         .build();
+    let client_with_base_url = ClientWithBaseUrl::new(client, url);
 
-    Ok(client)
+    Ok(client_with_base_url)
+}
+
+pub struct ClientWithBaseUrl {
+    client: ClientWithMiddleware,
+    base_url: Url,
+}
+
+impl ClientWithBaseUrl {
+    pub fn new(client: ClientWithMiddleware, base_url: Url) -> Self {
+        Self { client, base_url }
+    }
+
+    pub fn client(&self) -> &ClientWithMiddleware {
+        &self.client
+    }
+
+    pub fn base_url(&self) -> &Url {
+        &self.base_url
+    }
+
+    pub fn get<U: IntoUrl>(&self, url: U) -> anyhow::Result<RequestBuilder> {
+        let url = self.base_url.join(url.as_str())?;
+        Ok(self.client.get(url))
+    }
+
+    pub fn post<U: IntoUrl>(&self, url: U) -> anyhow::Result<RequestBuilder> {
+        let url = self.base_url.join(url.as_str())?;
+        Ok(self.client.post(url))
+    }
+
+    pub async fn execute(&self, request: Request) -> Result<Response, reqwest_middleware::Error> {
+        self.client.execute(request).await
+    }
 }
 
 // parser for subnetworks, makes sure that the state network is not ran alongside other subnetworks

@@ -2,6 +2,15 @@ use std::{fmt, fs, ops::Range, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use clap::Parser;
+use ethportal_api::{
+    types::{
+        execution::accumulator::EpochAccumulator,
+        jsonrpc::{params::Params, request::JsonRequest},
+    },
+    utils::bytes::hex_encode,
+    Header,
+};
+use portal_bridge::api::execution::ExecutionApi;
 use rand::{
     distributions::{Distribution, Uniform},
     thread_rng,
@@ -13,12 +22,6 @@ use reqwest::{
 use serde_json::json;
 use ssz::Decode;
 use tracing::{debug, info, warn};
-use url::Url;
-
-use ethportal_api::{
-    types::execution::accumulator::EpochAccumulator, utils::bytes::hex_encode, Header,
-};
-use portal_bridge::api::execution::ExecutionApi;
 use trin_utils::log::init_tracing_logger;
 use trin_validation::{
     accumulator::PreMergeAccumulator,
@@ -29,6 +32,7 @@ use trin_validation::{
     },
     header_validator::HeaderValidator,
 };
+use url::Url;
 
 lazy_static::lazy_static! {
     static ref PANDAOPS_CLIENT_ID: String = std::env::var("PANDAOPS_CLIENT_ID").unwrap();
@@ -435,27 +439,22 @@ async fn get_latest_block_number() -> Result<u64> {
         HeaderValue::from_str(&PANDAOPS_CLIENT_SECRET)
             .map_err(|_| anyhow!("Invalid CF-Access-Client-Secret header value"))?,
     );
-    let client = Client::builder()
-        .default_headers(headers)
-        .build()
-        .map_err(|e| anyhow!("Failed to build HTTP client: {:?}", e))?;
-    let request_body = json!({
-        "jsonrpc": "2.0",
-        "method": "eth_getBlockByNumber",
-        "params": ["latest", false],
-        "id": 1
-    });
-    let response = client
+    let request = JsonRequest::new(
+        "eth_getBlockByNumber".to_string(),
+        Params::Array(vec![json!("latest"), json!(false)]),
+        /* id= */ 1,
+    );
+    let response = Client::new()
         .post("https://geth-lighthouse.mainnet.eu1.ethpandaops.io/")
-        .json(&request_body)
+        .headers(headers)
+        .json(&request)
         .send()
         .await
         .map_err(|e| anyhow!("Request failed: {:?}", e))?;
-    let response_text = response
-        .text()
+    let response = response
+        .json::<serde_json::Value>()
         .await
         .map_err(|e| anyhow!("Failed to read response text: {:?}", e))?;
-    let response = serde_json::from_str::<serde_json::Value>(&response_text)?;
     let result = response
         .get("result")
         .ok_or_else(|| anyhow!("Unable to fetch latest block"))?;

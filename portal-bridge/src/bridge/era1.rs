@@ -68,9 +68,12 @@ impl Era1Bridge {
         gossip_limit: usize,
         execution_api: ExecutionApi,
     ) -> anyhow::Result<Self> {
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/xml"));
-        let http_client: Client = Client::builder().default_headers(headers).build()?;
+        let http_client = Client::builder()
+            .default_headers(HeaderMap::from_iter([(
+                CONTENT_TYPE,
+                HeaderValue::from_static("application/xml"),
+            )]))
+            .build()?;
         let era1_files = get_shuffled_era1_files(&http_client).await?;
         let metrics = BridgeMetricsReporter::new("era1".to_string(), &format!("{mode:?}"));
         let gossip_semaphore = Arc::new(Semaphore::new(gossip_limit));

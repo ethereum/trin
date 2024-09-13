@@ -1,12 +1,14 @@
 use std::fmt::Display;
 
 use anyhow::anyhow;
-use reqwest_middleware::ClientWithMiddleware;
 use tokio::time::sleep;
 use tracing::{debug, warn};
 use url::Url;
 
-use crate::{cli::url_to_client, constants::FALLBACK_RETRY_AFTER};
+use crate::{
+    cli::{url_to_client, ClientWithBaseUrl},
+    constants::FALLBACK_RETRY_AFTER,
+};
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug)]
@@ -89,7 +91,7 @@ impl ConsensusApi {
         let client = url_to_client(self.primary.clone()).map_err(|err| {
             anyhow!("Unable to create client for primary consensus data provider: {err:?}")
         })?;
-        match client.get(&endpoint).send().await?.text().await {
+        match client.get(&endpoint)?.send().await?.text().await {
             Ok(response) => Ok(response),
             Err(err) => {
                 warn!("Error requesting consensus data from provider, retrying with fallback provider: {err:?}");
@@ -98,7 +100,7 @@ impl ConsensusApi {
                     anyhow!("Unable to create client for fallback consensus data provider: {err:?}")
                 })?;
                 client
-                    .get(endpoint)
+                    .get(endpoint)?
                     .send()
                     .await?
                     .text()
@@ -112,9 +114,9 @@ impl ConsensusApi {
 }
 
 /// Check that provider is valid and accessible.
-async fn check_provider(client: &ClientWithMiddleware) -> anyhow::Result<()> {
+async fn check_provider(client: &ClientWithBaseUrl) -> anyhow::Result<()> {
     let endpoint = "/eth/v1/node/version".to_string();
-    match client.get(endpoint).send().await?.text().await {
+    match client.get(endpoint)?.send().await?.text().await {
         Ok(_) => Ok(()),
         Err(err) => Err(anyhow!(
             "Unable to request consensus data from provider: {err:?}"

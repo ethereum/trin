@@ -21,7 +21,6 @@ use ethportal_api::{
     Receipts,
 };
 use futures::future::join_all;
-use reqwest_middleware::ClientWithMiddleware;
 use serde_json::{json, Value};
 use tokio::time::sleep;
 use tracing::{debug, error, warn};
@@ -32,7 +31,7 @@ use trin_validation::{
 use url::Url;
 
 use crate::{
-    cli::url_to_client,
+    cli::{url_to_client, ClientWithBaseUrl},
     constants::{FALLBACK_RETRY_AFTER, GET_RECEIPTS_RETRY_AFTER},
     types::full_header::FullHeader,
 };
@@ -273,9 +272,6 @@ impl ExecutionApi {
         Ok(header.number)
     }
 
-    /// Used the "surf" library here instead of "ureq" since "surf" is much more capable of handling
-    /// multiple async requests. Using "ureq" consistently resulted in errors as soon as the number
-    /// of concurrent tasks increased significantly.
     async fn batch_requests(&self, obj: Vec<JsonRequest>) -> anyhow::Result<String> {
         let batched_request_futures = obj
             .chunks(BATCH_LIMIT)
@@ -320,24 +316,19 @@ impl ExecutionApi {
     }
 
     async fn send_batch_request(
-        client: &ClientWithMiddleware,
+        client: &ClientWithBaseUrl,
         requests: &Vec<JsonRequest>,
     ) -> anyhow::Result<Vec<Value>> {
-        let request =
-            client.post("").json(&requests).build().map_err(|e| {
-                anyhow!("Unable to construct JSON POST for batched requests: {e:?}")
-            })?;
         let response = client
-            .execute(request)
+            .post("")?
+            .json(&requests)
+            .send()
             .await
             .map_err(|err| anyhow!("Unable to request execution batch from provider: {err:?}"))?;
-        let response_text = response
-            .text()
+        response
+            .json::<Vec<Value>>()
             .await
-            .map_err(|e| anyhow!("Unable to read response body: {e:?}"))?;
-        serde_json::from_str::<Vec<Value>>(&response_text).map_err(|err| {
-            anyhow!("Unable to parse execution batch from provider: {err:?} response: {response_text:?}")
-        })
+            .map_err(|err| anyhow!("Unable to parse execution batch from provider: {err:?}"))
     }
 
     async fn try_request(&self, request: JsonRequest) -> anyhow::Result<Value> {
@@ -360,11 +351,11 @@ impl ExecutionApi {
     }
 
     async fn send_request(
-        client: &ClientWithMiddleware,
+        client: &ClientWithBaseUrl,
         request: &JsonRequest,
     ) -> anyhow::Result<Value> {
         let request = client
-            .post("")
+            .post("")?
             .json(&request)
             .build()
             .map_err(|e| anyhow!("Unable to construct JSON POST for single request: {e:?}"))?;
@@ -395,9 +386,9 @@ pub async fn construct_proof(
 }
 
 /// Check that provider is valid and accessible.
-async fn check_provider(client: &ClientWithMiddleware) -> anyhow::Result<()> {
+async fn check_provider(client: &ClientWithBaseUrl) -> anyhow::Result<()> {
     let request = client
-        .post("")
+        .post("")?
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "web3_clientVersion",

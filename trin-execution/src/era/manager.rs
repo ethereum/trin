@@ -33,10 +33,12 @@ pub struct EraManager {
 
 impl EraManager {
     pub async fn new(next_block_number: u64) -> anyhow::Result<Self> {
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/xml"));
-        let http_client: Client = Client::builder().default_headers(headers).build()?;
-
+        let http_client = Client::builder()
+            .default_headers(HeaderMap::from_iter([(
+                CONTENT_TYPE,
+                HeaderValue::from_static("application/xml"),
+            )]))
+            .build()?;
         let era1_files = get_era1_files(&http_client).await?;
         let era_files = get_era_files(&http_client).await?;
 
