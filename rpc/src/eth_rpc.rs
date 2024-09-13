@@ -170,9 +170,7 @@ impl EthApi {
 
     async fn fetch_header_by_hash(&self, block_hash: B256) -> Result<Header, RpcServeError> {
         let content_value = self
-            .fetch_history_content(HistoryContentKey::BlockHeaderByHashWithProof(
-                block_hash.into(),
-            ))
+            .fetch_history_content(HistoryContentKey::BlockHeaderByHash(block_hash.into()))
             .await?;
         let HistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value else {
             return Err(RpcServeError::Message(format!(

@@ -3,7 +3,7 @@ use ethportal_api::{
     HistoryNetworkApiClient,
 };
 
-use crate::{utils::fixture_header_with_proof, Peertest};
+use crate::{utils::fixture_header_by_hash, Peertest};
 
 pub async fn test_paginate_local_storage(peertest: &Peertest) {
     let ipc_client = &peertest.bootnode.ipc_client;
@@ -14,7 +14,7 @@ pub async fn test_paginate_local_storage(peertest: &Peertest) {
 
     let mut content_keys: Vec<String> = (0..20_u8)
         .map(|_| {
-            serde_json::to_string(&HistoryContentKey::BlockHeaderByHashWithProof(
+            serde_json::to_string(&HistoryContentKey::BlockHeaderByHash(
                 BlockHeaderByHashKey {
                     block_hash: rand::random(),
                 },
@@ -22,7 +22,7 @@ pub async fn test_paginate_local_storage(peertest: &Peertest) {
             .unwrap()
         })
         .collect();
-    let (_, content_value) = fixture_header_with_proof();
+    let (_, content_value) = fixture_header_by_hash();
     for content_key in content_keys.clone().into_iter() {
         // Store content to offer in the testnode db
         let store_result = ipc_client

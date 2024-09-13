@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use alloy_primitives::B256;
-use anyhow::anyhow;
+use anyhow::{anyhow, ensure};
 use ssz::Decode;
 use tokio::sync::RwLock;
 
@@ -29,18 +29,17 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
         content: &[u8],
     ) -> anyhow::Result<ValidationResult<HistoryContentKey>> {
         match content_key {
-            HistoryContentKey::BlockHeaderByHashWithProof(key) => {
+            HistoryContentKey::BlockHeaderByHash(key) => {
                 let header_with_proof =
                     HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
                         anyhow!("Header with proof content has invalid encoding: {err:?}")
                     })?;
                 let header_hash = header_with_proof.header.hash();
-                if header_hash != B256::from(key.block_hash) {
-                    return Err(anyhow!(
-                        "Content validation failed: Invalid header hash. Found: {header_hash:?} - Expected: {:?}",
-                        hex_encode(key.block_hash)
-                    ));
-                }
+                ensure!(
+                    header_hash == B256::from(key.block_hash),
+                    "Content validation failed: Invalid header hash. Found: {header_hash:?} - Expected: {:?}",
+                    hex_encode(header_hash)
+                );
                 self.header_oracle
                     .read()
                     .await
@@ -49,18 +48,17 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 
                 Ok(ValidationResult::new(true))
             }
-            HistoryContentKey::BlockHeaderByNumberWithProof(key) => {
+            HistoryContentKey::BlockHeaderByNumber(key) => {
                 let header_with_proof =
                     HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
                         anyhow!("Header with proof content has invalid encoding: {err:?}")
                     })?;
                 let header_number = header_with_proof.header.number;
-                if header_number != key.block_number {
-                    return Err(anyhow!(
+                ensure!(
+                    header_number == key.block_number,
                     "Content validation failed: Invalid header number. Found: {header_number} - Expected: {}",
                     key.block_number
-                ));
-                }
+                );
                 self.header_oracle
                     .read()
                     .await
@@ -153,7 +151,7 @@ mod tests {
         let hwp = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
+        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
             block_hash: hwp.header.hash().0,
         });
         chain_history_validator
@@ -174,7 +172,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
+        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
             block_hash: header.header.hash().0,
         });
         chain_history_validator
@@ -196,7 +194,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
+        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
             block_hash: header.header.hash().0,
         });
         chain_history_validator

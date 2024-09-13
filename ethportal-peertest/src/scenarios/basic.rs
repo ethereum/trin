@@ -1,4 +1,4 @@
-use crate::{utils::fixture_header_with_proof, Peertest, PeertestNode};
+use crate::{utils::fixture_header_by_hash, Peertest, PeertestNode};
 use alloy_primitives::{B256, U256};
 use ethportal_api::{
     types::{
@@ -177,7 +177,7 @@ pub async fn test_find_nodes_zero_distance(
 
 pub async fn test_history_store(target: &Client) {
     info!("Testing portal_historyStore");
-    let (content_key, content_value) = fixture_header_with_proof();
+    let (content_key, content_value) = fixture_header_by_hash();
     let result = HistoryNetworkApiClient::store(target, content_key, content_value.encode())
         .await
         .unwrap();
@@ -186,7 +186,7 @@ pub async fn test_history_store(target: &Client) {
 
 pub async fn test_history_local_content_absent(target: &Client) {
     info!("Testing portal_historyLocalContent absent");
-    let content_key = HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
+    let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
         block_hash: B256::random().into(),
     });
     let error = HistoryNetworkApiClient::local_content(target, content_key)

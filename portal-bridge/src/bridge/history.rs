@@ -98,7 +98,7 @@ impl HistoryBridge {
                 block_stats.clone(),
             )
             .await;
-            if let HistoryContentKey::BlockHeaderByHashWithProof(_) = asset.content_key {
+            if let HistoryContentKey::BlockHeaderByHash(_) = asset.content_key {
                 sleep(Duration::from_millis(50)).await;
             }
         }

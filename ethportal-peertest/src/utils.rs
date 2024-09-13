@@ -16,7 +16,8 @@ use ureq::serde::Deserialize;
 
 use ethportal_api::{
     types::{
-        content_key::history::BlockHeaderByHashKey, execution::header_with_proof::HeaderWithProof,
+        content_key::history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
+        execution::header_with_proof::HeaderWithProof,
     },
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, BlockBodyKey, BlockReceiptsKey,
     ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
@@ -117,14 +118,30 @@ fn read_fixture(file_name: &str) -> (HistoryContentKey, HistoryContentValue) {
 
 /// History HeaderWithProof content key & value
 /// Block #1000010
-pub fn fixture_header_with_proof_1000010() -> (HistoryContentKey, HistoryContentValue) {
+pub fn fixture_header_by_hash_1000010() -> (HistoryContentKey, HistoryContentValue) {
     read_fixture("portal-spec-tests/tests/mainnet/history/headers_with_proof/1000010.yaml")
 }
 
-/// History HeaderWithProof content key & value
+/// History HeaderByHash content key & value
 /// Block #14764013 (pre-merge)
-pub fn fixture_header_with_proof() -> (HistoryContentKey, HistoryContentValue) {
+pub fn fixture_header_by_hash() -> (HistoryContentKey, HistoryContentValue) {
     read_fixture("portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.yaml")
+}
+
+/// History HeaderByNumber content key & value
+/// Block #14764013 (pre-merge)
+pub fn fixture_header_by_number() -> (HistoryContentKey, HistoryContentValue) {
+    let (_, content_value) =
+        read_fixture("portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.yaml");
+
+    // Create a content key from the block number
+    let HistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value.clone() else {
+        panic!("Expected HistoryContentValue::BlockHeaderWithProof")
+    };
+    let content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
+        block_number: header_with_proof.header.number,
+    });
+    (content_key, content_value)
 }
 
 /// History BlockBody content key & value
@@ -154,6 +171,24 @@ impl Display for DependentType {
 }
 
 /// History HeaderWithProof content key & value
+/// Block #15040641 (pre-merge)
+pub fn fixture_header_by_hash_with_proof_15040641() -> (HistoryContentKey, HistoryContentValue) {
+    read_binary_history_fixture(15040641, None)
+}
+
+/// History BlockBody content key & value
+/// Block #15040641 (pre-merge)
+pub fn fixture_block_body_15040641() -> (HistoryContentKey, HistoryContentValue) {
+    read_binary_history_fixture(15040641, Some(DependentType::BlockBody))
+}
+
+/// History Receipts content key & value
+/// Block #15040641 (pre-merge)
+pub fn fixture_receipts_15040641() -> (HistoryContentKey, HistoryContentValue) {
+    read_binary_history_fixture(15040641, Some(DependentType::Receipts))
+}
+
+/// History HeaderWithProof content key & value
 /// Block #15040708 (pre-merge)
 pub fn fixture_header_by_hash_with_proof_15040708() -> (HistoryContentKey, HistoryContentValue) {
     read_binary_history_fixture(15040708, None)
@@ -171,30 +206,12 @@ pub fn fixture_receipts_15040708() -> (HistoryContentKey, HistoryContentValue) {
     read_binary_history_fixture(15040708, Some(DependentType::Receipts))
 }
 
-/// History HeaderWithProof content key & value
-/// Block #15040709 (pre-merge)
-pub fn fixture_header_by_hash_with_proof_15040709() -> (HistoryContentKey, HistoryContentValue) {
-    read_binary_history_fixture(15040709, None)
-}
-
-/// History BlockBody content key & value
-/// Block #15040709 (pre-merge)
-pub fn fixture_block_body_15040709() -> (HistoryContentKey, HistoryContentValue) {
-    read_binary_history_fixture(15040709, Some(DependentType::BlockBody))
-}
-
-/// History Receipts content key & value
-/// Block #15040709 (pre-merge)
-pub fn fixture_receipts_15040709() -> (HistoryContentKey, HistoryContentValue) {
-    read_binary_history_fixture(15040709, Some(DependentType::Receipts))
-}
-
 fn read_binary_history_fixture(
     block_number: u64,
     dependent: Option<DependentType>,
 ) -> (HistoryContentKey, HistoryContentValue) {
     let header_value = std::fs::read(format!(
-        "test_assets/mainnet/large_content/{block_number}/header_with_proof.bin"
+        "test_assets/mainnet/large_content/{block_number}/header.bin"
     ))
     .unwrap();
     let header_content_value: HeaderWithProof =
@@ -226,7 +243,7 @@ fn read_binary_history_fixture(
             }
         }
         None => {
-            let content_key = HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
+            let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
                 block_hash: header_content_value.header.hash().0,
             });
             let content_value = HistoryContentValue::BlockHeaderWithProof(header_content_value);

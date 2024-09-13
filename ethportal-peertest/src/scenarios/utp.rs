@@ -1,5 +1,5 @@
 use crate::{
-    utils::{fixture_block_body, fixture_header_with_proof},
+    utils::{fixture_block_body, fixture_header_by_hash},
     Peertest,
 };
 use discv5::enr::NodeId;
@@ -13,7 +13,7 @@ pub async fn test_recursive_utp(peertest: &Peertest) {
     info!("Test recursive utp");
 
     // store header_with_proof to validate block body
-    let (content_key, content_value) = fixture_header_with_proof();
+    let (content_key, content_value) = fixture_header_by_hash();
     let store_result = peertest.nodes[0]
         .ipc_client
         .store(content_key.clone(), content_value.encode())
@@ -54,7 +54,7 @@ pub async fn test_trace_recursive_utp(peertest: &Peertest) {
     info!("Test trace recursive utp");
 
     // store header_with_proof to validate block body
-    let (content_key, content_value) = fixture_header_with_proof();
+    let (content_key, content_value) = fixture_header_by_hash();
     let store_result = peertest.nodes[0]
         .ipc_client
         .store(content_key.clone(), content_value.encode())

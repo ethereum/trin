@@ -1,5 +1,7 @@
 use crate::{
-    utils::{fixture_block_body, fixture_header_with_proof, fixture_receipts},
+    utils::{
+        fixture_block_body, fixture_header_by_hash, fixture_header_by_number, fixture_receipts,
+    },
     Peertest,
 };
 use alloy_primitives::B256;
@@ -11,11 +13,47 @@ use ethportal_api::{
 use std::str::FromStr;
 use tracing::info;
 
-pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, target: &Client) {
-    info!("Test validating a pre-merge header-with-proof");
+pub async fn test_validate_pre_merge_header_by_hash(peertest: &Peertest, target: &Client) {
+    info!("Test validating a pre-merge header by block hash");
 
-    // store header_with_proof
-    let (content_key, content_value) = fixture_header_with_proof();
+    // store header_by_hash
+    let (content_key, content_value) = fixture_header_by_hash();
+
+    let store_result = peertest
+        .bootnode
+        .ipc_client
+        .store(content_key.clone(), content_value.encode())
+        .await
+        .unwrap();
+
+    assert!(store_result);
+
+    // calling find_content since it only returns the found data if validation was successful
+    let result = target
+        .find_content(
+            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
+            content_key.clone(),
+        )
+        .await
+        .unwrap();
+
+    match result {
+        ContentInfo::Content {
+            content,
+            utp_transfer,
+        } => {
+            assert_eq!(content, content_value.encode());
+            assert!(!utp_transfer);
+        }
+        _ => panic!("Content values should match"),
+    }
+}
+
+pub async fn test_validate_pre_merge_header_by_number(peertest: &Peertest, target: &Client) {
+    info!("Test validating a pre-merge header by block number");
+
+    // store header_by_number
+    let (content_key, content_value) = fixture_header_by_number();
 
     let store_result = peertest
         .bootnode
@@ -51,8 +89,8 @@ pub async fn test_invalidate_header_by_hash(peertest: &Peertest, target: &Client
     info!("Test invalidating a pre-merge header-with-proof by header hash");
 
     // store header_with_proof - doesn't perform validation
-    let (_, content_value) = fixture_header_with_proof();
-    let invalid_content_key = HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
+    let (_, content_value) = fixture_header_by_hash();
+    let invalid_content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
         block_hash: B256::random().into(),
     });
 
@@ -81,7 +119,7 @@ pub async fn test_invalidate_header_by_hash(peertest: &Peertest, target: &Client
 pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Client) {
     info!("Test validating a pre-merge block body");
     // store header_with_proof to validate block body
-    let (content_key, content_value) = fixture_header_with_proof();
+    let (content_key, content_value) = fixture_header_by_hash();
     let store_result = target
         .store(content_key, content_value.encode())
         .await
@@ -124,7 +162,7 @@ pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Cl
 pub async fn test_validate_pre_merge_receipts(peertest: &Peertest, target: &Client) {
     info!("Test validating pre-merge receipts");
     // store header_with_proof to validate block body
-    let (content_key, content_value) = fixture_header_with_proof();
+    let (content_key, content_value) = fixture_header_by_hash();
     let store_result = target
         .store(content_key, content_value.encode())
         .await

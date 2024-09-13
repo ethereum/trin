@@ -4,7 +4,7 @@ use discv5::enr::NodeId;
 use jsonrpsee::async_client::Client;
 use tracing::info;
 
-use crate::{utils::fixture_header_with_proof, Peertest};
+use crate::{utils::fixture_header_by_hash, Peertest};
 use ethportal_api::{
     types::{portal::ContentInfo, portal_wire::ProtocolId},
     utils::bytes::hex_decode,
@@ -45,7 +45,7 @@ pub async fn test_recursive_find_nodes_random(protocol: ProtocolId, peertest: &P
 pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) {
     info!("Testing find content returns enrs properly");
 
-    let (content_key, _) = fixture_header_with_proof();
+    let (content_key, _) = fixture_header_by_hash();
 
     // check if we can fetch data from routing table
     match HistoryNetworkApiClient::get_enr(
@@ -83,7 +83,7 @@ pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) 
 
 pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     info!("Testing trace recursive find content");
-    let (content_key, content_value) = fixture_header_with_proof();
+    let (content_key, content_value) = fixture_header_by_hash();
     let store_result = HistoryNetworkApiClient::store(
         &peertest.bootnode.ipc_client,
         content_key.clone(),
@@ -138,7 +138,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
 // This test ensures that when content is not found the correct response is returned.
 pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Peertest) {
     let client = &peertest.nodes[0].ipc_client;
-    let (content_key, _) = fixture_header_with_proof();
+    let (content_key, _) = fixture_header_by_hash();
 
     let error = HistoryNetworkApiClient::trace_recursive_find_content(client, content_key)
         .await
@@ -151,7 +151,7 @@ pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Pee
 }
 
 pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
-    let (content_key, content_value) = fixture_header_with_proof();
+    let (content_key, content_value) = fixture_header_by_hash();
 
     let store_result = HistoryNetworkApiClient::store(
         &peertest.bootnode.ipc_client,

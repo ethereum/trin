@@ -23,9 +23,9 @@ pub const HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX: u8 = 0x03;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HistoryContentKey {
     /// A block header with accumulator proof.
-    BlockHeaderByHashWithProof(BlockHeaderByHashKey),
+    BlockHeaderByHash(BlockHeaderByHashKey),
     /// A block header with accumulator proof.
-    BlockHeaderByNumberWithProof(BlockHeaderByNumberKey),
+    BlockHeaderByNumber(BlockHeaderByNumberKey),
     /// A block body.
     BlockBody(BlockBodyKey),
     /// The transaction receipts for a block.
@@ -142,7 +142,7 @@ impl TryFrom<RawContentKey> for HistoryContentKey {
         };
         match selector {
             HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX => BlockHeaderByHashKey::from_ssz_bytes(key)
-                .map(Self::BlockHeaderByHashWithProof)
+                .map(Self::BlockHeaderByHash)
                 .map_err(|e| ContentKeyError::from_decode_error(e, value)),
             HISTORY_BLOCK_BODY_KEY_PREFIX => BlockBodyKey::from_ssz_bytes(key)
                 .map(Self::BlockBody)
@@ -152,7 +152,7 @@ impl TryFrom<RawContentKey> for HistoryContentKey {
                 .map_err(|e| ContentKeyError::from_decode_error(e, value)),
             HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX => {
                 BlockHeaderByNumberKey::from_ssz_bytes(key)
-                    .map(Self::BlockHeaderByNumberWithProof)
+                    .map(Self::BlockHeaderByNumber)
                     .map_err(|e| ContentKeyError::from_decode_error(e, value))
             }
             _ => Err(ContentKeyError::from_decode_error(
@@ -166,8 +166,8 @@ impl TryFrom<RawContentKey> for HistoryContentKey {
 impl fmt::Display for HistoryContentKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            Self::BlockHeaderByHashWithProof(header) => format!(
-                "BlockHeaderByHashWithProof {{ block_hash: {} }}",
+            Self::BlockHeaderByHash(header) => format!(
+                "BlockHeaderByHash {{ block_hash: {} }}",
                 hex_encode_compact(header.block_hash)
             ),
             Self::BlockBody(body) => format!(
@@ -180,9 +180,9 @@ impl fmt::Display for HistoryContentKey {
                     hex_encode_compact(receipts.block_hash)
                 )
             }
-            Self::BlockHeaderByNumberWithProof(header) => {
+            Self::BlockHeaderByNumber(header) => {
                 format!(
-                    "BlockHeaderByNumberWithProof {{ block_number: {} }}",
+                    "BlockHeaderByNumber {{ block_number: {} }}",
                     header.block_number
                 )
             }
@@ -203,7 +203,7 @@ impl OverlayContentKey for HistoryContentKey {
         let mut bytes: Vec<u8> = Vec::new();
 
         match self {
-            HistoryContentKey::BlockHeaderByHashWithProof(k) => {
+            HistoryContentKey::BlockHeaderByHash(k) => {
                 bytes.push(HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX);
                 bytes.extend_from_slice(&k.block_hash);
             }
@@ -215,7 +215,7 @@ impl OverlayContentKey for HistoryContentKey {
                 bytes.push(HISTORY_BLOCK_RECEIPTS_KEY_PREFIX);
                 bytes.extend_from_slice(&k.block_hash);
             }
-            HistoryContentKey::BlockHeaderByNumberWithProof(k) => {
+            HistoryContentKey::BlockHeaderByNumber(k) => {
                 bytes.push(HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX);
                 bytes.extend_from_slice(&k.block_number.as_ssz_bytes());
             }
@@ -252,13 +252,13 @@ mod test {
             block_hash: BLOCK_HASH,
         };
 
-        let key = HistoryContentKey::BlockHeaderByHashWithProof(header);
+        let key = HistoryContentKey::BlockHeaderByHash(header);
 
         assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
         assert_eq!(
             key.to_string(),
-            "BlockHeaderByHashWithProof { block_hash: 0xd1c3..621d }"
+            "BlockHeaderByHash { block_hash: 0xd1c3..621d }"
         );
         assert_eq!(key.to_hex(), KEY_STR);
     }
@@ -278,13 +278,17 @@ mod test {
             block_number: BLOCK_NUMBER,
         };
 
-        let key = HistoryContentKey::BlockHeaderByNumberWithProof(header);
+        let key = HistoryContentKey::BlockHeaderByNumber(header);
+
+        // round trip
+        let decoded = HistoryContentKey::try_from(key.to_bytes()).unwrap();
+        assert_eq!(decoded, key);
 
         assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
         assert_eq!(
             key.to_string(),
-            "BlockHeaderByNumberWithProof { block_number: 12345678 }"
+            "BlockHeaderByNumber { block_number: 12345678 }"
         );
         assert_eq!(key.to_hex(), KEY_STR);
     }
@@ -305,6 +309,10 @@ mod test {
         };
 
         let key = HistoryContentKey::BlockBody(body);
+
+        // round trip
+        let decoded = HistoryContentKey::try_from(key.to_bytes()).unwrap();
+        assert_eq!(decoded, key);
 
         assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
@@ -339,13 +347,30 @@ mod test {
     }
 
     #[test]
-    fn ser_de_block_header() {
+    fn ser_de_block_header_by_hash() {
         let content_key_json =
             "\"0x00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
-        let expected_content_key =
-            HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
-                block_hash: BLOCK_HASH,
-            });
+        let expected_content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
+            block_hash: BLOCK_HASH,
+        });
+
+        let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
+
+        assert_eq!(content_key, expected_content_key);
+        assert_eq!(
+            serde_json::to_string(&content_key).unwrap(),
+            content_key_json
+        );
+    }
+
+    #[test]
+    fn ser_de_block_header_by_number() {
+        // let content_key_json = "12345678";
+        let content_key_json = "\"0x034e61bc0000000000\"";
+
+        let expected_content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
+            block_number: 12345678,
+        });
 
         let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 

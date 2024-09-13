@@ -4,10 +4,10 @@ use tracing::info;
 
 use crate::{
     utils::{
-        fixture_block_body, fixture_block_body_15040708, fixture_block_body_15040709,
-        fixture_header_by_hash_with_proof_15040708, fixture_header_by_hash_with_proof_15040709,
-        fixture_header_with_proof, fixture_receipts_15040708, fixture_receipts_15040709,
-        wait_for_history_content,
+        fixture_block_body, fixture_block_body_15040641, fixture_block_body_15040708,
+        fixture_header_by_hash, fixture_header_by_hash_with_proof_15040641,
+        fixture_header_by_hash_with_proof_15040708, fixture_receipts_15040641,
+        fixture_receipts_15040708, wait_for_history_content,
     },
     Peertest,
 };
@@ -19,7 +19,7 @@ use ethportal_api::{
 pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Unpopulated OFFER/ACCEPT flow");
 
-    let (content_key, content_value) = fixture_header_with_proof();
+    let (content_key, content_value) = fixture_header_by_hash();
     // Store content to offer in the testnode db
     let store_result = target
         .store(content_key.clone(), content_value.encode())
@@ -53,7 +53,7 @@ pub async fn test_unpopulated_offer_fails_with_missing_content(
 ) {
     info!("Testing Unpopulated OFFER/ACCEPT flow with missing content");
 
-    let (content_key, _content_value) = fixture_header_with_proof();
+    let (content_key, _content_value) = fixture_header_by_hash();
 
     // validate that wire offer fails if content not available locally
     match target
@@ -75,7 +75,7 @@ pub async fn test_unpopulated_offer_fails_with_missing_content(
 pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Populated Offer/ACCEPT flow");
 
-    let (content_key, content_value) = fixture_header_with_proof();
+    let (content_key, content_value) = fixture_header_by_hash();
     let result = target
         .offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
@@ -99,7 +99,7 @@ pub async fn test_populated_offer_with_trace(peertest: &Peertest, target: &Clien
     info!("Testing Populated Offer/ACCEPT flow with trace");
 
     // store header for validation
-    let (content_key, content_value) = fixture_header_with_proof();
+    let (content_key, content_value) = fixture_header_by_hash();
     let store_result = peertest
         .bootnode
         .ipc_client
@@ -133,7 +133,7 @@ pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) 
     info!("Testing populated offer propagates gossip");
 
     // get content values to gossip
-    let (content_key, content_value) = fixture_header_with_proof();
+    let (content_key, content_value) = fixture_header_by_hash();
     // use populated offer which means content will *not* be stored in the target's local db
     target
         .offer(
@@ -313,9 +313,9 @@ pub async fn test_offer_propagates_gossip_multiple_large_content_values(
         .unwrap();
     assert!(store_result);
 
-    let (header_key_2, header_value_2) = fixture_header_by_hash_with_proof_15040709();
-    let (body_key_2, body_value_2) = fixture_block_body_15040709();
-    let (receipts_key_2, receipts_value_2) = fixture_receipts_15040709();
+    let (header_key_2, header_value_2) = fixture_header_by_hash_with_proof_15040641();
+    let (body_key_2, body_value_2) = fixture_block_body_15040641();
+    let (receipts_key_2, receipts_value_2) = fixture_receipts_15040641();
 
     // Store content to offer in the testnode db
     let store_result = target

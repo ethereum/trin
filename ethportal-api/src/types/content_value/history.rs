@@ -30,8 +30,7 @@ impl ContentValue for HistoryContentValue {
 
     fn decode(key: &Self::TContentKey, buf: &[u8]) -> Result<Self, ContentValueError> {
         match key {
-            HistoryContentKey::BlockHeaderByHashWithProof(_)
-            | HistoryContentKey::BlockHeaderByNumberWithProof(_) => {
+            HistoryContentKey::BlockHeaderByHash(_) | HistoryContentKey::BlockHeaderByNumber(_) => {
                 if let Ok(value) = HeaderWithProof::from_ssz_bytes(buf) {
                     return Ok(Self::BlockHeaderWithProof(value));
                 }

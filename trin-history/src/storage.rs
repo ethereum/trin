@@ -118,8 +118,7 @@ pub mod test {
         let (temp_dir, storage_config) =
             create_test_portal_storage_config_with_capacity(CAPACITY_MB).unwrap();
         let mut storage = HistoryStorage::new(storage_config)?;
-        let content_key =
-            HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey::default());
+        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey::default());
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.put(content_key.clone(), &value)?;
 

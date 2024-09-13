@@ -120,10 +120,10 @@ impl StatsReporter<HistoryContentKey> for HistoryBlockStats {
 
     fn update(&mut self, content_key: HistoryContentKey, results: ContentStats) {
         match content_key {
-            HistoryContentKey::BlockHeaderByHashWithProof(_) => {
+            HistoryContentKey::BlockHeaderByHash(_) => {
                 self.header_by_hash_with_proof = Some(results);
             }
-            HistoryContentKey::BlockHeaderByNumberWithProof(_) => {
+            HistoryContentKey::BlockHeaderByNumber(_) => {
                 self.header_by_number_with_proof = Some(results);
             }
             HistoryContentKey::BlockBody(_) => {

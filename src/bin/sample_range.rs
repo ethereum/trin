@@ -140,7 +140,7 @@ async fn audit_block(
     client: HttpClient,
 ) -> anyhow::Result<()> {
     let header_ck =
-        HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey { block_hash: hash.0 });
+        HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey { block_hash: hash.0 });
     let body_ck = HistoryContentKey::BlockBody(BlockBodyKey { block_hash: hash.0 });
     let receipts_ck = HistoryContentKey::BlockReceipts(BlockReceiptsKey { block_hash: hash.0 });
     match client.recursive_find_content(header_ck).await {

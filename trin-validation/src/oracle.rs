@@ -55,7 +55,7 @@ impl HeaderOracle {
         &self,
         block_hash: B256,
     ) -> anyhow::Result<HeaderWithProof> {
-        let content_key = HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
+        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
             block_hash: block_hash.0,
         });
         let endpoint = HistoryEndpoint::RecursiveFindContent(content_key.clone());

@@ -136,7 +136,7 @@ async fn audit_block(
 ) -> Result<()> {
     metrics.lock().unwrap().active_audit_count += 3;
     let header_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey { block_hash: hash.0 }),
+        HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey { block_hash: hash.0 }),
         timestamp,
         timeout,
         backoff,

@@ -186,9 +186,9 @@ mod tests {
         });
         let history_jsonrpc_tx = MockJsonRpcBuilder::new()
             .with_response(
-                HistoryEndpoint::RecursiveFindContent(
-                    HistoryContentKey::BlockHeaderByHashWithProof(header.hash().into()),
-                ),
+                HistoryEndpoint::RecursiveFindContent(HistoryContentKey::BlockHeaderByHash(
+                    header.hash().into(),
+                )),
                 ContentInfo::Content {
                     content: history_content_value.encode(),
                     utp_transfer: false,

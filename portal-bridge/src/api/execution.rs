@@ -104,12 +104,12 @@ impl ExecutionApi {
         };
         // Construct header by hash content key / value pair.
         let header_by_hash_content_key =
-            HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
+            HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
                 block_hash: full_header.header.hash().0,
             });
         // Construct header by number content key / value pair.
         let header_by_number_content_key =
-            HistoryContentKey::BlockHeaderByNumberWithProof(BlockHeaderByNumberKey {
+            HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
                 block_number: full_header.header.number,
             });
         let content_value = match &full_header.epoch_acc {

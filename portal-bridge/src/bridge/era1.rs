@@ -153,7 +153,7 @@ impl Era1Bridge {
                 .iter()
                 .map(|hash| {
                     (
-                        HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
+                        HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
                             block_hash: hash.0,
                         }),
                         HistoryContentKey::BlockBody(BlockBodyKey { block_hash: hash.0 }),
@@ -258,13 +258,20 @@ impl Era1Bridge {
                 panic!("Failed to get epoch from era1 file: {e}");
             }
         };
-        let epoch_acc = match self.get_epoch_acc(epoch_index).await {
+        let (_, epoch_acc) = match lookup_epoch_acc(
+            epoch_index,
+            &self.header_oracle.header_validator.pre_merge_acc,
+            &self.epoch_acc_path,
+        )
+        .await
+        {
             Ok(epoch_acc) => epoch_acc,
             Err(e) => {
                 error!("Failed to get epoch acc for epoch: {epoch_index}, error: {e}");
                 return;
             }
         };
+        let epoch_acc = Arc::new(epoch_acc);
         let header_validator = Arc::new(self.header_oracle.header_validator.clone());
         info!("Era1 file read successfully, gossiping block tuples for epoch: {epoch_index}");
         let mut serve_block_tuple_handles = vec![];
@@ -296,16 +303,6 @@ impl Era1Bridge {
         // Wait till all block tuples are done gossiping.
         // This can't deadlock, because the tokio::spawn has a timeout.
         join_all(serve_block_tuple_handles).await;
-    }
-
-    async fn get_epoch_acc(&self, epoch_index: u64) -> anyhow::Result<Arc<EpochAccumulator>> {
-        let (_, epoch_acc) = lookup_epoch_acc(
-            epoch_index,
-            &self.header_oracle.header_validator.pre_merge_acc,
-            &self.epoch_acc_path,
-        )
-        .await?;
-        Ok(Arc::new(epoch_acc))
     }
 
     fn spawn_serve_block_tuple(
@@ -369,8 +366,7 @@ impl Era1Bridge {
             let header_by_hash_key = BlockHeaderByHashKey {
                 block_hash: header_hash.0,
             };
-            let header_content_key =
-                HistoryContentKey::BlockHeaderByHashWithProof(header_by_hash_key);
+            let header_content_key = HistoryContentKey::BlockHeaderByHash(header_by_hash_key);
             let header_content_info = portal_client
                 .recursive_find_content(header_content_key.clone())
                 .await;
@@ -545,7 +541,7 @@ impl Era1Bridge {
         let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
 
         // Construct HistoryContentKey for block header by hash and gossip it
-        let content_key = HistoryContentKey::BlockHeaderByHashWithProof(BlockHeaderByHashKey {
+        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
             block_hash: header.hash().0,
         });
 
@@ -558,7 +554,7 @@ impl Era1Bridge {
         .await?;
 
         // Construct HistoryContentKey for block header by number and gossip it
-        let content_key = HistoryContentKey::BlockHeaderByNumberWithProof(BlockHeaderByNumberKey {
+        let content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
             block_number: header.number,
         });
 
