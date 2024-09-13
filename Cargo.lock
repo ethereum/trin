@@ -70,7 +70,7 @@ checksum = "9e8b47f52ea9bae42228d07ec09eb676433d7c4ed1ebdf0f1d1c29ed446f1ab8"
 dependencies = [
  "cfg-if",
  "cipher 0.3.0",
- "cpufeatures 0.2.14",
+ "cpufeatures",
  "ctr 0.8.0",
  "opaque-debug",
 ]
@@ -83,7 +83,7 @@ checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
 dependencies = [
  "cfg-if",
  "cipher 0.4.4",
- "cpufeatures 0.2.14",
+ "cpufeatures",
 ]
 
 [[package]]
@@ -1660,7 +1660,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94fb8a24a26d37e1ffd45343323dc9fe6654ceea44c12f2fcb3d7ac29e610bc6"
 dependencies = [
  "cfg-if",
- "cpufeatures 0.2.14",
+ "cpufeatures",
  "hex",
  "proptest",
  "serde",
@@ -1737,15 +1737,6 @@ name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
-
-[[package]]
-name = "cpufeatures"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66c99696f6c9dd7f35d486b9d04d7e6e202aa3e8c40d553f2fdf5e7e0c6a71ef"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "cpufeatures"
@@ -1915,7 +1906,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
 dependencies = [
  "cfg-if",
- "cpufeatures 0.2.14",
+ "cpufeatures",
  "curve25519-dalek-derive",
  "digest 0.10.7",
  "fiat-crypto",
@@ -2488,18 +2479,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eth2_hashing"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b67737df7e3769e823d9d583eb5d60bcc4b2ef97ca674d1964ef287a02f8517"
-dependencies = [
- "cpufeatures 0.1.5",
- "lazy_static",
- "ring 0.16.20",
- "sha2 0.9.9",
-]
-
-[[package]]
 name = "eth_trie"
 version = "0.4.0"
 source = "git+https://github.com/ethereum/eth-trie.rs?tag=v0.1.0-alpha.1#dc8b95d40ded01396ba53bff10e1ea364bd5ed54"
@@ -2566,7 +2545,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c853bd72c9e5787f8aafc3df2907c2ed03cff3150c3acd94e2e53a98ab70a8ab"
 dependencies = [
- "cpufeatures 0.2.14",
+ "cpufeatures",
  "ring 0.17.8",
  "sha2 0.10.8",
 ]
@@ -4243,7 +4222,7 @@ version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ecc2af9a1119c51f12a14607e783cb977bde58bc069ff0c3da1095e635d70654"
 dependencies = [
- "cpufeatures 0.2.14",
+ "cpufeatures",
 ]
 
 [[package]]
@@ -5373,7 +5352,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8419d2b623c7c0896ff2d5d96e2cb4ede590fed28fcc34934f4c33c036e620a1"
 dependencies = [
  "cfg-if",
- "cpufeatures 0.2.14",
+ "cpufeatures",
  "opaque-debug",
  "universal-hash",
 ]
@@ -6838,7 +6817,7 @@ checksum = "99cd6713db3cf16b6c84e06321e049a9b9f699826e16096d23bbcc44d15d51a6"
 dependencies = [
  "block-buffer 0.9.0",
  "cfg-if",
- "cpufeatures 0.2.14",
+ "cpufeatures",
  "digest 0.9.0",
  "opaque-debug",
 ]
@@ -6859,7 +6838,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
 dependencies = [
  "cfg-if",
- "cpufeatures 0.2.14",
+ "cpufeatures",
  "digest 0.10.7",
 ]
 
@@ -6877,7 +6856,7 @@ checksum = "4d58a1e1bf39749807d89cf2d98ac2dfa0ff1cb3faa38fbb64dd88ac8013d800"
 dependencies = [
  "block-buffer 0.9.0",
  "cfg-if",
- "cpufeatures 0.2.14",
+ "cpufeatures",
  "digest 0.9.0",
  "opaque-debug",
 ]
@@ -6889,7 +6868,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "793db75ad2bcafc3ffa7c68b215fee268f537982cd901d132f89c6343f3a3dc8"
 dependencies = [
  "cfg-if",
- "cpufeatures 0.2.14",
+ "cpufeatures",
  "digest 0.10.7",
 ]
 
@@ -8278,7 +8257,7 @@ dependencies = [
  "alloy-rlp",
  "anyhow",
  "enr",
- "eth2_hashing",
+ "ethereum_hashing",
  "ethereum_ssz",
  "ethereum_ssz_derive",
  "ethportal-api",

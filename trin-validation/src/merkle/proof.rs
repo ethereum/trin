@@ -3,7 +3,7 @@
 /// https://github.com/sigp/lighthouse/blob/bf533c8e42/consensus/merkle_proof/src/lib.rs
 use crate::merkle::safe_arith::ArithError;
 use alloy_primitives::B256;
-use eth2_hashing::{hash, hash32_concat, ZERO_HASHES};
+use ethereum_hashing::{hash, hash32_concat, ZERO_HASHES};
 use lazy_static::lazy_static;
 
 const MAX_TREE_DEPTH: usize = 32;
