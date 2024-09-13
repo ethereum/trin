@@ -35,13 +35,13 @@ pub struct TrinExecutionConfig {
 #[allow(clippy::enum_variant_names)]
 pub enum TrinExecutionSubCommands {
     /// Import a era2 state snapshot from a file, useful for bootstrapping a new node quickly
-    ImportState(ImportState),
+    ImportState(ImportStateConfig),
     /// Export the current state of the node to a era2 file
-    ExportState(ExportState),
+    ExportState(ExportStateConfig),
 }
 
 #[derive(Args, Debug, Default, Clone, PartialEq)]
-pub struct ImportState {
+pub struct ImportStateConfig {
     #[arg(
         long = "path-to-era2",
         help = "path to where the era2 state snapshot is located"
@@ -50,7 +50,7 @@ pub struct ImportState {
 }
 
 #[derive(Args, Debug, Default, Clone, PartialEq)]
-pub struct ExportState {
+pub struct ExportStateConfig {
     #[arg(
         long = "path-to-era2",
         help = "path to where the era2 state snapshot is located"

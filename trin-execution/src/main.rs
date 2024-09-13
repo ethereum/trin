@@ -1,13 +1,10 @@
-use std::cmp::max;
-
-use anyhow::ensure;
 use clap::Parser;
-use revm_primitives::{keccak256, SpecId, B256, U256};
+use revm_primitives::SpecId;
 use tracing::info;
 use trin_execution::{
     cli::{TrinExecutionConfig, TrinExecutionSubCommands},
     era::manager::EraManager,
-    evm::{block_executor::BLOCKHASH_SERVE_WINDOW, spec_id::get_spec_block_number},
+    evm::spec_id::get_spec_block_number,
     execution::TrinExecution,
     storage::utils::setup_temp_dir,
     subcommands::era2::{StateExporter, StateImporter},
@@ -49,28 +46,7 @@ async fn main() -> anyhow::Result<()> {
             TrinExecutionSubCommands::ImportState(import_state) => {
                 let mut state_importer = StateImporter::new(trin_execution, import_state);
                 state_importer.import_state()?;
-
-                // insert the last 256 block hashes into the database
-                let first_block_hash_to_add = max(
-                    0,
-                    state_importer.trin_execution.next_block_number() - BLOCKHASH_SERVE_WINDOW,
-                );
-                let mut era_manager = EraManager::new(first_block_hash_to_add).await?;
-                for block_number in
-                    first_block_hash_to_add..state_importer.trin_execution.next_block_number()
-                {
-                    let block = era_manager.get_next_block().await?;
-                    ensure!(
-                        block.header.number == block_number,
-                        "Block number mismatch: {} != {}, well importing state",
-                        block.header.number,
-                        block_number
-                    );
-                    state_importer.trin_execution.database.db.put(
-                        keccak256(B256::from(U256::from(block_number))),
-                        block.header.hash(),
-                    )?
-                }
+                state_importer.import_last_256_block_hashes().await?;
 
                 info!(
                     "Imported state from era2: {} {}",

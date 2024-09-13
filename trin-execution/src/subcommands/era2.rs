@@ -1,156 +1,33 @@
 use std::sync::Arc;
 
-use alloy_rlp::{Decodable, EMPTY_STRING_CODE};
+use alloy_consensus::EMPTY_ROOT_HASH;
+use alloy_rlp::Decodable;
 use anyhow::{ensure, Error};
 use e2store::era2::{
     AccountEntry, AccountOrStorageEntry, Era2, StorageEntry, StorageItem, MAX_STORAGE_ITEMS,
 };
-use eth_trie::{
-    decode_node,
-    node::{LeafNode, Node},
-    EthTrie, Trie, DB,
-};
+use eth_trie::{EthTrie, Trie};
 use ethportal_api::Header;
 use parking_lot::Mutex;
 use revm_primitives::{keccak256, B256, KECCAK_EMPTY, U256};
 use tracing::info;
 
 use crate::{
-    cli::{ExportState, ImportState},
+    cli::{ExportStateConfig, ImportStateConfig},
+    era::manager::EraManager,
+    evm::block_executor::BLOCKHASH_SERVE_WINDOW,
     execution::TrinExecution,
     storage::{account::Account, account_db::AccountDB},
     utils::full_nibble_path_to_address_hash,
 };
 
-#[derive(Debug)]
-struct LeafNodeWithKeyHash {
-    key_hash: B256,
-    value: Vec<u8>,
-}
-
-#[derive(Debug)]
-struct TrieNode {
-    node_hash: B256,
-    path: Vec<u8>,
-}
-
-impl TrieNode {
-    fn new(node_hash: B256, path: Vec<u8>) -> Self {
-        Self { node_hash, path }
-    }
-}
-
-struct TrieLeafIterator<TrieDB: DB> {
-    trie: Arc<Mutex<EthTrie<TrieDB>>>,
-    stack: Vec<TrieNode>,
-    leafs_to_process: Vec<LeafNodeWithKeyHash>,
-}
-
-impl<TrieDB: DB> TrieLeafIterator<TrieDB> {
-    pub fn new(trie: Arc<Mutex<EthTrie<TrieDB>>>) -> anyhow::Result<Self> {
-        let stack = vec![TrieNode::new(trie.lock().root_hash()?, vec![])];
-        Ok(Self {
-            trie,
-            stack,
-            leafs_to_process: vec![],
-        })
-    }
-
-    fn process_leaf(&mut self, leaf: Arc<LeafNode>, path: Vec<u8>) {
-        // reconstruct the address hash from the path so that we can fetch the
-        // address from the database
-        let mut partial_key_path = leaf.key.get_data().to_vec();
-        partial_key_path.pop();
-        let full_key_path = [&path, partial_key_path.as_slice()].concat();
-        let address_hash = full_nibble_path_to_address_hash(&full_key_path);
-        self.leafs_to_process.push(LeafNodeWithKeyHash {
-            key_hash: address_hash,
-            value: leaf.value.clone(),
-        });
-    }
-
-    fn process_node(&mut self, node: Node, path: Vec<u8>) -> anyhow::Result<()> {
-        match node {
-            Node::Leaf(leaf) => self.process_leaf(leaf, path),
-            Node::Extension(extension) => {
-                let extension = extension.read().expect("Extension node must be readable");
-                let path_with_extension_prefix =
-                    [path, extension.prefix.get_data().to_vec()].concat();
-                match &extension.node {
-                    Node::Hash(hash) => {
-                        self.stack
-                            .push(TrieNode::new(hash.hash, path_with_extension_prefix));
-                    }
-                    Node::Leaf(leaf) => self.process_leaf(leaf.clone(), path_with_extension_prefix),
-                    _ => {
-                        panic!("Invalid extension node, must be either a leaf or a hash");
-                    }
-                }
-            }
-            Node::Branch(branch) => {
-                let branch = branch.read().expect("Branch node must be readable");
-                for (i, child) in branch.children.iter().enumerate() {
-                    let branch_path = [path.clone(), vec![i as u8]].concat();
-                    match child {
-                        Node::Leaf(leaf) => self.process_leaf(leaf.clone(), branch_path),
-                        Node::Hash(hash) => self.stack.push(TrieNode::new(hash.hash, branch_path)),
-                        Node::Empty => {} // Do nothing
-                        _ => {
-                            panic!("Invalid branch node, must be either a leaf or a hash")
-                        }
-                    }
-                }
-                if let Some(node) = &branch.value {
-                    let decoded_node = decode_node(&mut node.as_slice())?;
-                    if let Node::Leaf(leaf) = decoded_node {
-                        self.process_leaf(leaf, path);
-                    } else {
-                        panic!("Invalid branch value, must be a leaf");
-                    }
-                }
-            }
-            Node::Hash(_) => {}
-            Node::Empty => {}
-        }
-
-        Ok(())
-    }
-
-    pub fn next(&mut self) -> Result<Option<LeafNodeWithKeyHash>, Error> {
-        // Well process the storage trie, since values can be small, they may be inlined into
-        // branches, so we will process them here
-        if let Some(leaf_node) = self.leafs_to_process.pop() {
-            return Ok(Some(leaf_node));
-        }
-
-        while let Some(TrieNode { node_hash, path }) = self.stack.pop() {
-            let node = self
-                .trie
-                .lock()
-                .db
-                .get(node_hash.as_slice())
-                .expect("Unable to get node from trie db")
-                .unwrap_or_else(|| panic!("Node must exist, as we are walking a valid trie | node_hash: {} path: {:?}",
-                     node_hash, path));
-
-            self.process_node(decode_node(&mut node.as_slice())?, path)?;
-
-            if let Some(leaf_node) = self.leafs_to_process.pop() {
-                return Ok(Some(leaf_node));
-            }
-        }
-
-        Ok(None)
-    }
-}
-
 pub struct StateExporter {
     pub trin_execution: TrinExecution,
-    exporter_config: ExportState,
+    exporter_config: ExportStateConfig,
 }
 
 impl StateExporter {
-    pub fn new(trin_execution: TrinExecution, exporter_config: ExportState) -> Self {
+    pub fn new(trin_execution: TrinExecution, exporter_config: ExportStateConfig) -> Self {
         Self {
             trin_execution,
             exporter_config,
@@ -168,14 +45,14 @@ impl StateExporter {
         );
         let mut era2 = Era2::create(self.exporter_config.path_to_era2.clone(), header)?;
         info!("Era2 initiated");
-        let mut leaf_iterator = TrieLeafIterator::new(self.trin_execution.database.trie.clone())?;
         info!("Trie leaf iterator initiated");
         let mut accounts_processed = 0;
-        while let Ok(Some(LeafNodeWithKeyHash {
-            key_hash: account_hash,
-            value: account_state,
-        })) = leaf_iterator.next()
+        while let Some(nibble_and_leaf_value) =
+            self.trin_execution.database.trie.lock().iter().next()
         {
+            let (raw_nibble_path, account_state) = nibble_and_leaf_value?;
+            let account_hash = full_nibble_path_to_address_hash(&raw_nibble_path);
+
             let account_state: Account = Decodable::decode(&mut account_state.as_slice())?;
             let bytecode = if account_state.code_hash != KECCAK_EMPTY {
                 self.trin_execution
@@ -188,19 +65,16 @@ impl StateExporter {
             };
 
             let mut storage: Vec<StorageItem> = vec![];
-            if account_state.storage_root != keccak256([EMPTY_STRING_CODE]) {
+            if account_state.storage_root != EMPTY_ROOT_HASH {
                 let account_db =
                     AccountDB::new(account_hash, self.trin_execution.database.db.clone());
                 let account_trie = Arc::new(Mutex::new(EthTrie::from(
                     Arc::new(account_db),
                     account_state.storage_root,
                 )?));
-                let mut storage_iterator = TrieLeafIterator::new(account_trie)?;
-                while let Ok(Some(LeafNodeWithKeyHash {
-                    key_hash: storage_index_hash,
-                    value: storage_value,
-                })) = storage_iterator.next()
-                {
+                while let Some(nibble_and_leaf_value) = account_trie.lock().iter().next() {
+                    let (raw_nibble_path, storage_value) = nibble_and_leaf_value?;
+                    let storage_index_hash = full_nibble_path_to_address_hash(&raw_nibble_path);
                     let storage_slot_value: U256 = Decodable::decode(&mut storage_value.as_slice())
                         .expect("Failed to decode storage slot value");
                     storage.push(StorageItem {
@@ -211,8 +85,7 @@ impl StateExporter {
             }
 
             // Get the rounded up storage count
-            let storage_count = storage.len() / MAX_STORAGE_ITEMS
-                + (storage.len() % MAX_STORAGE_ITEMS != 0) as usize;
+            let storage_count = storage.len().div_ceil(MAX_STORAGE_ITEMS);
 
             era2.append_entry(&AccountOrStorageEntry::Account(AccountEntry {
                 address_hash: account_hash,
@@ -221,17 +94,16 @@ impl StateExporter {
                 storage_count: storage_count as u32,
             }))?;
 
-            for _ in 0..storage_count {
-                let amount_to_drain = std::cmp::min(storage.len(), MAX_STORAGE_ITEMS);
+            for storage_chunk in storage.chunks(MAX_STORAGE_ITEMS) {
                 era2.append_entry(&AccountOrStorageEntry::Storage(StorageEntry(
-                    storage.drain(..amount_to_drain).collect(),
+                    storage_chunk.to_vec(),
                 )))?;
             }
 
+            accounts_processed += 1;
             if accounts_processed % 10000 == 0 {
                 info!("Processed {} accounts", accounts_processed);
             }
-            accounts_processed += 1;
         }
 
         info!("Era2 snapshot exported");
@@ -242,11 +114,11 @@ impl StateExporter {
 
 pub struct StateImporter {
     pub trin_execution: TrinExecution,
-    importer_config: ImportState,
+    importer_config: ImportStateConfig,
 }
 
 impl StateImporter {
-    pub fn new(trin_execution: TrinExecution, importer_config: ImportState) -> Self {
+    pub fn new(trin_execution: TrinExecution, importer_config: ImportStateConfig) -> Self {
         Self {
             trin_execution,
             importer_config,
@@ -300,6 +172,10 @@ impl StateImporter {
 
             // Insert contract if available
             if !bytecode.is_empty() && account_state.code_hash != KECCAK_EMPTY {
+                ensure!(
+                    account_state.code_hash == keccak256(&bytecode),
+                    "Code hash mismatch, .era2 import failed"
+                );
                 self.trin_execution
                     .database
                     .db
@@ -329,7 +205,7 @@ impl StateImporter {
         }
 
         // Check if the state root matches, if this fails it means either the .era2 is wrong or we
-        // imported the state wrong, which is more probable
+        // imported the state wrong
         if era2.header.header.state_root != self.trin_execution.get_root()? {
             return Err(Error::msg("State root mismatch, .era2 import failed"));
         }
@@ -340,6 +216,30 @@ impl StateImporter {
             .update_position(self.trin_execution.database.db.clone(), era2.header.header)?;
 
         info!("Done importing State from .era2 file");
+
+        Ok(())
+    }
+
+    /// insert the last 256 block hashes into the database
+    pub async fn import_last_256_block_hashes(&mut self) -> anyhow::Result<()> {
+        let first_block_hash_to_add = self
+            .trin_execution
+            .next_block_number()
+            .saturating_sub(BLOCKHASH_SERVE_WINDOW);
+        let mut era_manager = EraManager::new(first_block_hash_to_add).await?;
+        for block_number in first_block_hash_to_add..self.trin_execution.next_block_number() {
+            let block = era_manager.get_next_block().await?;
+            ensure!(
+                block.header.number == block_number,
+                "Block number mismatch: {} != {}, well importing state",
+                block.header.number,
+                block_number
+            );
+            self.trin_execution.database.db.put(
+                keccak256(B256::from(U256::from(block_number))),
+                block.header.hash(),
+            )?
+        }
 
         Ok(())
     }
