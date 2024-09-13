@@ -53,12 +53,16 @@ impl RpcError {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RpcServeError {
     /// A generic error with no data
+    #[error("Error: {0}")]
     Message(String),
     /// Method not available
+    #[error("Method not available: {0}")]
     MethodNotFound(String),
     /// ContentNotFound
+    #[error("Content not found: {message}")]
     ContentNotFound {
         message: String,
         trace: Option<Box<QueryTrace>>,

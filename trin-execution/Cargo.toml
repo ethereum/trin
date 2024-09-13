@@ -29,6 +29,7 @@ rayon = "1.10.0"
 revm.workspace = true
 revm-inspectors = "0.6"
 revm-primitives.workspace = true
+reth-rpc-types.workspace = true
 rocksdb = "0.22.0"
 serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true

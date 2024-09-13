@@ -113,8 +113,8 @@ r2d2_sqlite = "0.24.0"
 rand = "0.8.5"
 reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
 reth-rpc-types = { tag = "v1.0.6", git = "https://github.com/paradigmxyz/reth.git"}
-revm = { version = "14.0.1", features = ["std", "secp256k1", "serde-json"], default-features = false }
-revm-primitives = { version = "9.0.1", features = ["std", "serde"], default-features = false }
+revm = { version = "14.0.1", default-features = false, features = ["std", "secp256k1", "serde-json"] }
+revm-primitives = { version = "9.0.1", default-features = false, features = ["std", "serde"] }
 rpc = { path = "rpc"}
 rstest = "0.18.2"
 rusqlite = { version = "0.31.0", features = ["bundled"] }

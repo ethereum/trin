@@ -40,7 +40,7 @@ pub trait AsyncDatabase {
 /// Wraps the [AsyncDatabase] to provide [revm::Database] implementation.
 ///
 /// This should only be used when blocking thread is allowed, e.g. from within spawn::blocking.
-pub(super) struct WrapAsyncDatabase<DB: AsyncDatabase> {
+pub struct WrapAsyncDatabase<DB: AsyncDatabase> {
     db: DB,
     rt: runtime::Runtime,
 }
