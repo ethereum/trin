@@ -14,7 +14,7 @@ use ethportal_api::{
     ContentValue, EthApiServer, Header, HistoryContentKey, HistoryContentValue,
 };
 use trin_execution::evm::{
-    async_db::{execute_transaction_with_evm_modifier, AsyncDatabase},
+    async_db::{execute_transaction, AsyncDatabase},
     create_block_env,
 };
 use trin_validation::constants::CHAIN_ID;
@@ -94,6 +94,7 @@ impl EthApiServer for EthApi {
         };
         Ok(account_info.balance)
     }
+
     async fn get_storage_at(
         &self,
         address: Address,
@@ -128,17 +129,18 @@ impl EthApiServer for EthApi {
         Ok(bytecode.original_bytes())
     }
 
-    async fn call(&self, transaction: TransactionRequest, block: BlockId) -> RpcResult<Bytes> {
+    async fn call(&self, mut transaction: TransactionRequest, block: BlockId) -> RpcResult<Bytes> {
         let evm_block_state = self.evm_block_state(block).await?;
 
-        let result_and_state = execute_transaction_with_evm_modifier(
+        // If gas limit is not set, set it to block's limit
+        if transaction.gas.is_none() {
+            transaction.gas = Some(evm_block_state.block_header().gas_limit.to());
+        }
+
+        let result_and_state = execute_transaction(
             create_block_env(evm_block_state.block_header()),
             transaction,
             evm_block_state,
-            |evm| {
-                // Allow unlimited gas
-                evm.cfg_mut().disable_block_gas_limit = true;
-            },
         )
         .await
         .map_err(|err| RpcServeError::Message(err.to_string()))?;
