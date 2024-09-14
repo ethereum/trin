@@ -47,7 +47,7 @@ impl ExecutionPosition {
         self.state_root
     }
 
-    pub fn update_position(&mut self, db: Arc<RocksDB>, header: Header) -> anyhow::Result<()> {
+    pub fn update_position(&mut self, db: Arc<RocksDB>, header: &Header) -> anyhow::Result<()> {
         self.next_block_number = header.number + 1;
         self.state_root = header.state_root;
         db.put(EXECUTION_POSITION_DB_KEY, alloy_rlp::encode(self))?;

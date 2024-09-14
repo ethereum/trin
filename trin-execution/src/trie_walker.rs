@@ -159,10 +159,10 @@ impl TrieWalker {
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::{keccak256, Address};
-    use anyhow::anyhow;
-    use eth_trie::RootWithTrieDiff;
-    use revm_primitives::hex::FromHex;
+    use std::str::FromStr;
+
+    use alloy_primitives::{keccak256, Address, Bytes};
+    use eth_trie::{RootWithTrieDiff, Trie};
 
     use crate::{
         config::StateConfig, execution::TrinExecution, storage::utils::setup_temp_dir,
@@ -179,18 +179,24 @@ mod tests {
         .await
         .unwrap();
         let RootWithTrieDiff { trie_diff, .. } = trin_execution.process_next_block().await.unwrap();
-        let valid_proof = trin_execution
-            .get_proof(Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())
-            .unwrap();
         let root_hash = trin_execution.get_root().unwrap();
         let walk_diff = TrieWalker::new(root_hash, trie_diff);
 
-        let last_node = valid_proof
-            .proof
-            .last()
-            .ok_or(anyhow!("Missing proof!"))
-            .unwrap();
+        let address = Address::from_str("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap();
+        let valid_proof = trin_execution
+            .database
+            .trie
+            .lock()
+            .get_proof(keccak256(address).as_slice())
+            .unwrap()
+            .into_iter()
+            .map(Bytes::from)
+            .collect::<Vec<_>>();
+        let last_node = valid_proof.last().expect("Missing proof!");
+
         let account_proof = walk_diff.get_proof(keccak256(last_node));
-        assert_eq!(valid_proof, account_proof);
+
+        assert_eq!(account_proof.path, [5, 9, 2, 13]);
+        assert_eq!(account_proof.proof, valid_proof);
     }
 }

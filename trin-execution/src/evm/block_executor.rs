@@ -1,13 +1,17 @@
 use std::{
     collections::HashMap,
-    fs::{self, File},
+    fs::File,
     io::BufReader,
-    path::{Path, PathBuf},
+    path::Path,
+    time::{Duration, Instant},
 };
 
 use anyhow::{bail, ensure};
 use eth_trie::{RootWithTrieDiff, Trie};
-use ethportal_api::{types::state_trie::account_state::AccountState, Header};
+use ethportal_api::{
+    types::{execution::transaction::Transaction, state_trie::account_state::AccountState},
+    Header,
+};
 use revm::{
     db::{states::bundle_state::BundleRetention, State},
     inspectors::TracerEip3155,
@@ -24,7 +28,6 @@ use crate::{
         TRANSACTION_PROCESSING_TIMES,
     },
     storage::evm_db::EvmDB,
-    types::block_to_trace::BlockToTrace,
 };
 
 use super::{
@@ -50,23 +53,24 @@ struct GenesisConfig {
 }
 
 /// BlockExecutor is a struct that is responsible for executing blocks or a block in memory.
+///
 /// The use case is
 /// - initialize the BlockExecutor with a database
 /// - execute blocks
 /// - commit the changes and retrieve the result
 pub struct BlockExecutor<'a> {
+    /// The evm used for block execution.
     evm: Evm<'a, (), State<EvmDB>>,
+    /// The time when BlockExecutor was created.
+    creation_time: Instant,
+    /// The number of executed blocks.
+    executed_blocks: u64,
+    /// Sum of gas used of all executed blocks.
     cumulative_gas_used: u64,
-    block_to_trace: BlockToTrace,
-    node_data_directory: PathBuf,
 }
 
 impl<'a> BlockExecutor<'a> {
-    pub fn new(
-        database: EvmDB,
-        block_to_trace: BlockToTrace,
-        node_data_directory: PathBuf,
-    ) -> Self {
+    pub fn new(database: EvmDB) -> Self {
         let state_database = State::builder()
             .with_database(database)
             .with_bundle_update()
@@ -75,9 +79,9 @@ impl<'a> BlockExecutor<'a> {
 
         Self {
             evm,
+            creation_time: Instant::now(),
+            executed_blocks: 0,
             cumulative_gas_used: 0,
-            block_to_trace,
-            node_data_directory,
         }
     }
 
@@ -115,10 +119,7 @@ impl<'a> BlockExecutor<'a> {
         stop_timer(timer);
 
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["get_root_with_trie_diff"]);
-        let RootWithTrieDiff {
-            root,
-            trie_diff: changed_nodes,
-        } = self
+        let root_with_trie_diff = self
             .evm
             .db_mut()
             .database
@@ -128,10 +129,7 @@ impl<'a> BlockExecutor<'a> {
 
         stop_timer(timer);
 
-        Ok(RootWithTrieDiff {
-            root,
-            trie_diff: changed_nodes,
-        })
+        Ok(root_with_trie_diff)
     }
 
     fn process_genesis(&mut self) -> anyhow::Result<()> {
@@ -165,6 +163,14 @@ impl<'a> BlockExecutor<'a> {
     }
 
     pub fn execute_block(&mut self, block: &ProcessedBlock) -> anyhow::Result<()> {
+        self.execute_block_with_tracer(block, |_| None)
+    }
+
+    pub fn execute_block_with_tracer(
+        &mut self,
+        block: &ProcessedBlock,
+        tx_tracer_fn: impl Fn(&Transaction) -> Option<TracerEip3155>,
+    ) -> anyhow::Result<()> {
         info!("State EVM processing block {}", block.header.number);
 
         let execute_block_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["execute_block"]);
@@ -183,7 +189,7 @@ impl<'a> BlockExecutor<'a> {
         for transaction in block.transactions.iter() {
             let transaction_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["transaction"]);
 
-            let evm_result = self.execute_transaction(transaction)?;
+            let evm_result = self.execute_transaction(transaction, &tx_tracer_fn)?;
             block_gas_used += evm_result.result.gas_used();
 
             let commit_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_state"]);
@@ -200,6 +206,7 @@ impl<'a> BlockExecutor<'a> {
             block_gas_used,
             block.header.gas_used
         );
+        self.executed_blocks += 1;
         self.cumulative_gas_used += block_gas_used;
 
         // update beneficiaries
@@ -218,6 +225,7 @@ impl<'a> BlockExecutor<'a> {
     fn execute_transaction(
         &mut self,
         tx: &TransactionsWithSender,
+        tracer_fn: impl Fn(&Transaction) -> Option<TracerEip3155>,
     ) -> anyhow::Result<ResultAndState> {
         let block_number = self.evm.block().number.to();
 
@@ -228,21 +236,12 @@ impl<'a> BlockExecutor<'a> {
 
         // Execute transaction
         let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["transact"]);
-        let result = if self.block_to_trace.should_trace(block_number) {
-            let output_path = self
-                .node_data_directory
-                .as_path()
-                .join("evm_traces")
-                .join(format!("block_{block_number}"));
-            fs::create_dir_all(&output_path)?;
-            let output_file =
-                File::create(output_path.join(format!("tx_{}.json", tx.transaction.hash())))?;
-            let tracer = TracerEip3155::new(Box::new(output_file));
-
-            create_evm_with_tracer(self.evm.block().clone(), tx, self.evm.db_mut(), tracer)
-                .transact()?
-        } else {
-            self.evm.transact()?
+        let result = match tracer_fn(&tx.transaction) {
+            Some(tracer) => {
+                create_evm_with_tracer(self.evm.block().clone(), tx, self.evm.db_mut(), tracer)
+                    .transact()?
+            }
+            None => self.evm.transact()?,
         };
         stop_timer(timer);
 
@@ -269,11 +268,19 @@ impl<'a> BlockExecutor<'a> {
         Ok(())
     }
 
-    pub fn cumulative_gas_used(&self) -> u64 {
-        self.cumulative_gas_used
-    }
-
-    pub fn bundle_size_hint(&self) -> usize {
-        self.evm.db().bundle_size_hint()
+    /// This function is used to determine if we should commit the block execution early.
+    ///
+    /// We want this for a few reasons
+    /// - To prevent memory usage from getting too high
+    /// - To cap the amount of time it takes to commit everything to the database, the bigger the
+    ///   changes the more time it takes.
+    ///
+    /// The various limits are arbitrary and can be adjusted as needed,
+    /// but are based on the current state of the network and what we have seen so far.
+    pub fn should_commit(&self) -> bool {
+        self.executed_blocks >= 500_000
+            || self.evm.db().bundle_size_hint() >= 5_000_000
+            || self.cumulative_gas_used >= 30_000_000 * 50_000
+            || self.creation_time.elapsed() >= Duration::from_secs(30 * 60)
     }
 }
