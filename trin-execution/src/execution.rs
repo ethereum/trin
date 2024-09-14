@@ -4,7 +4,7 @@ use eth_trie::{RootWithTrieDiff, Trie};
 use ethportal_api::{types::execution::transaction::Transaction, Header};
 use revm::inspectors::TracerEip3155;
 use std::{path::PathBuf, sync::Arc};
-use tokio::sync::Mutex;
+use tokio::sync::{oneshot::Receiver, Mutex};
 use tracing::{info, warn};
 
 use crate::{
@@ -58,26 +58,32 @@ impl TrinExecution {
     }
 
     pub async fn process_next_block(&mut self) -> anyhow::Result<RootWithTrieDiff> {
-        self.process_range_of_blocks(self.next_block_number()).await
+        self.process_range_of_blocks(self.next_block_number(), None)
+            .await
     }
 
-    /// Processes up to end block number (inclusive) and returns the root with trie diff
-    /// If the state cache gets too big, we will commit the state to the database early and return
-    /// the function early along with it
-    pub async fn process_range_of_blocks(&mut self, end: u64) -> anyhow::Result<RootWithTrieDiff> {
-        let start = self.execution_position.next_block_number();
+    /// Processes blocks up to last block number (inclusive) and returns the root with trie diff.
+    ///
+    /// If the state cache gets too big, we will commit the state and continue. Execution can be
+    /// interupted early by sending `stop_signal`, in which case we will commit and return.
+    pub async fn process_range_of_blocks(
+        &mut self,
+        last_block: u64,
+        mut stop_signal: Option<Receiver<()>>,
+    ) -> anyhow::Result<RootWithTrieDiff> {
+        let start_block = self.execution_position.next_block_number();
         ensure!(
-            end >= start,
-            "End block number {end} is less than start block number {start}",
+            last_block >= start_block,
+            "Last block number {last_block} is less than start block number {start_block}",
         );
 
-        info!("Processing blocks from {start} to {end} (inclusive)");
+        info!("Processing blocks from {start_block} to {last_block} (inclusive)");
 
         let mut block_executor = BlockExecutor::new(self.database.clone());
 
-        let mut last_executed_block_header: Option<Header> = None;
-        for block_number in start..=end {
-            let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
+        loop {
+            let fetching_block_timer =
+                start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
             let block = self
                 .era_manager
                 .lock()
@@ -85,42 +91,58 @@ impl TrinExecution {
                 .get_next_block()
                 .await?
                 .clone();
-            stop_timer(timer);
+            stop_timer(fetching_block_timer);
 
             block_executor
                 .execute_block_with_tracer(&block, |tx| self.create_tracer(&block.header, tx))?;
 
-            last_executed_block_header = Some(block.header);
+            // Commit and return if we reached last block or stop signal is received.
+            let stop_signal_received = stop_signal
+                .as_mut()
+                .is_some_and(|stop_signal| stop_signal.try_recv().is_ok());
+            if block.header.number == last_block || stop_signal_received {
+                if stop_signal_received {
+                    info!("Stop signal received. Committing now, please wait!");
+                }
+                return self.commit(&block.header, block_executor).await;
+            }
 
             // Commit early if we have reached the limits, to prevent too much memory usage.
             // We won't use this during the dos attack to avoid writing empty accounts to disk
-            if block_executor.should_commit() && !(2_200_000..2_700_000).contains(&block_number) {
-                break;
+            if block_executor.should_commit()
+                && !(2_200_000..2_700_000).contains(&block.header.number)
+            {
+                self.commit(&block.header, block_executor).await?;
+                block_executor = BlockExecutor::new(self.database.clone());
             }
         }
-
-        let last_executed_block_header =
-            last_executed_block_header.expect("At least one block must have been executed");
-
-        let root_with_trie_diff = block_executor.commit_bundle()?;
-        ensure!(
-            root_with_trie_diff.root == last_executed_block_header.state_root,
-            "State root doesn't match! Irreversible! Block number: {} | Generated root: {} | Expected root: {}",
-            last_executed_block_header.number,
-            root_with_trie_diff.root,
-            last_executed_block_header.state_root
-        );
-
-        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["set_block_execution_number"]);
-        self.execution_position
-            .update_position(self.database.db.clone(), &last_executed_block_header)?;
-        stop_timer(timer);
-
-        Ok(root_with_trie_diff)
     }
 
     pub fn get_root(&mut self) -> anyhow::Result<B256> {
         Ok(self.database.trie.lock().root_hash()?)
+    }
+
+    async fn commit(
+        &mut self,
+        header: &Header,
+        block_executor: BlockExecutor<'_>,
+    ) -> anyhow::Result<RootWithTrieDiff> {
+        let root_with_trie_diff = block_executor.commit_bundle()?;
+        ensure!(
+            root_with_trie_diff.root == header.state_root,
+            "State root doesn't match! Irreversible! Block number: {} | Generated root: {} | Expected root: {}",
+            header.number,
+            root_with_trie_diff.root,
+            header.state_root
+        );
+
+        let update_execution_position_timer =
+            start_timer_vec(&BLOCK_PROCESSING_TIMES, &["set_block_execution_number"]);
+        self.execution_position
+            .update_position(self.database.db.clone(), header)?;
+        stop_timer(update_execution_position_timer);
+
+        Ok(root_with_trie_diff)
     }
 
     fn create_tracer(&self, header: &Header, tx: &Transaction) -> Option<TracerEip3155> {
