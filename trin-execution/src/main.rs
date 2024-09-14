@@ -7,7 +7,7 @@ use trin_execution::{
     evm::spec_id::get_spec_block_number,
     execution::TrinExecution,
     storage::utils::setup_temp_dir,
-    subcommands::era2::{StateExporter, StateImporter},
+    subcommands::era2::{export::StateExporter, import::StateImporter},
 };
 use trin_utils::log::init_tracing_logger;
 

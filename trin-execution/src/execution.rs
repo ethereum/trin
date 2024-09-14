@@ -2,7 +2,7 @@ use alloy_primitives::{keccak256, Address, Bytes, B256};
 use alloy_rlp::Decodable;
 use anyhow::{anyhow, bail, ensure};
 use eth_trie::{RootWithTrieDiff, Trie};
-use ethportal_api::{types::state_trie::account_state::AccountState as AccountStateInfo, Header};
+use ethportal_api::{types::state_trie::account_state::AccountState, Header};
 use std::{
     collections::BTreeSet,
     path::PathBuf,
@@ -17,7 +17,6 @@ use crate::{
     evm::block_executor::BlockExecutor,
     metrics::{start_timer_vec, stop_timer, BLOCK_PROCESSING_TIMES},
     storage::{
-        account::Account,
         evm_db::EvmDB,
         execution_position::ExecutionPosition,
         utils::{get_default_data_dir, setup_rocksdb},
@@ -141,14 +140,14 @@ impl TrinExecution {
         Ok(self.database.trie.lock().root_hash_with_changed_nodes()?)
     }
 
-    pub fn get_account_state(&self, account: &Address) -> anyhow::Result<AccountStateInfo> {
+    pub fn get_account_state(&self, account: &Address) -> anyhow::Result<AccountState> {
         let account_state = self.database.db.get(keccak256(account))?;
         match account_state {
             Some(account) => {
-                let account: Account = Decodable::decode(&mut account.as_slice())?;
-                Ok(AccountStateInfo::from(&account))
+                let account = AccountState::decode(&mut account.as_slice())?;
+                Ok(account)
             }
-            None => Ok(AccountStateInfo::default()),
+            None => Ok(AccountState::default()),
         }
     }
 
