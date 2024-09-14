@@ -186,9 +186,9 @@ jobs:
           name: Build Trin workspace
           command: cargo build --workspace
       - save-sccache-cache
-  check-windows:
+  build-windows:
     description: |
-      Check the crate on Windows (Check will tell us if we can build on Windows without the need to codegen (which is the time consuming part)).
+      Build's Trin workspace on Windows
     executor:
       name: win/default
       size: xlarge
@@ -198,13 +198,13 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Check Trin workspace
+          name: Build Trin workspace
           # We are running all these together because this version of circleci windows has an environment variable bug
           # https://discuss.circleci.com/t/march-2022-beta-support-for-new-operating-system-for-windows-executors-windows-server-2022/43198/44
           command: |
             choco uninstall rust
             choco install rust-ms llvm -y
-            cargo check --workspace
+            cargo build --workspace
   test:
     description: |
       Run tests.
@@ -330,6 +330,6 @@ workflows:
       - cargo-clippy
       - build
       - test
-      - check-windows
+      - build-windows
       - utp-test
       - check-workspace-crates
