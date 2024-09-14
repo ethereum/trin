@@ -1,15 +1,18 @@
 use clap::Parser;
-
 use revm_primitives::SpecId;
 use tracing::info;
 use trin_execution::{
-    cli::TrinExecutionConfig, evm::spec_id::get_spec_block_number, execution::TrinExecution,
+    cli::{TrinExecutionConfig, TrinExecutionSubCommands},
+    era::manager::EraManager,
+    evm::spec_id::get_spec_block_number,
+    execution::TrinExecution,
     storage::utils::setup_temp_dir,
+    subcommands::era2::{export::StateExporter, import::StateImporter},
 };
 use trin_utils::log::init_tracing_logger;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> anyhow::Result<()> {
     init_tracing_logger();
 
     let trin_execution_config = TrinExecutionConfig::parse();
@@ -26,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut trin_execution = TrinExecution::new(
         directory.map(|temp_directory| temp_directory.path().to_path_buf()),
-        trin_execution_config.into(),
+        trin_execution_config.clone().into(),
     )
     .await?;
 
@@ -37,6 +40,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await
             .expect("signal ctrl_c should never fail");
     });
+
+    if let Some(command) = trin_execution_config.command {
+        match command {
+            TrinExecutionSubCommands::ImportState(import_state) => {
+                let mut state_importer = StateImporter::new(trin_execution, import_state);
+                state_importer.import_state()?;
+                state_importer.import_last_256_block_hashes().await?;
+
+                info!(
+                    "Imported state from era2: {} {}",
+                    state_importer.trin_execution.next_block_number() - 1,
+                    state_importer.trin_execution.get_root()?
+                );
+                return Ok(());
+            }
+            TrinExecutionSubCommands::ExportState(export_state) => {
+                let mut era_manager =
+                    EraManager::new(trin_execution.next_block_number() - 1).await?;
+                let header = era_manager.get_next_block().await?.clone();
+                let mut state_exporter = StateExporter::new(trin_execution, export_state);
+                state_exporter.export_state(header.header)?;
+                return Ok(());
+            }
+        }
+    }
 
     let mut block_number = trin_execution.next_block_number();
 

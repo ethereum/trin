@@ -11,7 +11,7 @@ use alloy_consensus::EMPTY_ROOT_HASH;
 use alloy_primitives::{Address, B256, U256};
 use alloy_rlp::Decodable;
 use eth_trie::{EthTrie, RootWithTrieDiff, Trie};
-use ethportal_api::types::state_trie::account_state::AccountState as AccountStateInfo;
+use ethportal_api::types::state_trie::account_state::AccountState;
 use hashbrown::{HashMap as BrownHashMap, HashSet};
 use parking_lot::Mutex;
 use prometheus_exporter::prometheus::HistogramTimer;
@@ -23,10 +23,7 @@ use revm_primitives::{keccak256, AccountInfo, Bytecode, HashMap, KECCAK_EMPTY};
 use rocksdb::DB as RocksDB;
 use tracing::info;
 
-use super::{
-    account::Account as RocksAccount, account_db::AccountDB, execution_position::ExecutionPosition,
-    trie_db::TrieRocksDB,
-};
+use super::{account_db::AccountDB, execution_position::ExecutionPosition, trie_db::TrieRocksDB};
 
 fn start_commit_timer(name: &str) -> HistogramTimer {
     start_timer_vec(&BUNDLE_COMMIT_PROCESSING_TIMES, &[name])
@@ -110,25 +107,35 @@ impl EvmDB {
         let plain_state_some_account_timer = start_commit_timer("account:plain_state_some_account");
 
         let timer = start_commit_timer("account:fetch_account_from_db");
-        let existing_rocks_account = self.fetch_account(address_hash)?;
+        let existing_account_state = self.fetch_account(address_hash)?;
         stop_timer(timer);
 
-        let rocks_account = if let Some(existing_rocks_account) = existing_rocks_account {
-            RocksAccount::from_account_info(account_info, existing_rocks_account.storage_root)
+        let account_state = if let Some(existing_account_state) = existing_account_state {
+            AccountState {
+                balance: account_info.balance,
+                nonce: account_info.nonce,
+                code_hash: account_info.code_hash,
+                storage_root: existing_account_state.storage_root,
+            }
         } else {
-            RocksAccount::from_account_info(account_info, EMPTY_ROOT_HASH)
+            AccountState {
+                balance: account_info.balance,
+                nonce: account_info.nonce,
+                code_hash: account_info.code_hash,
+                storage_root: EMPTY_ROOT_HASH,
+            }
         };
 
         let timer = start_commit_timer("account:insert_into_trie");
-        let _ = self.trie.lock().insert(
-            address_hash.as_ref(),
-            &alloy_rlp::encode(AccountStateInfo::from(&rocks_account)),
-        );
+        let _ = self
+            .trie
+            .lock()
+            .insert(address_hash.as_ref(), &alloy_rlp::encode(&account_state));
         stop_timer(timer);
 
         let timer = start_commit_timer("account:put_account_into_db");
         self.db
-            .put(address_hash, alloy_rlp::encode(rocks_account))?;
+            .put(address_hash, alloy_rlp::encode(account_state))?;
         stop_timer(timer);
 
         stop_timer(plain_state_some_account_timer);
@@ -142,17 +149,17 @@ impl EvmDB {
         timer_label: &str,
     ) -> anyhow::Result<()> {
         // load account from db
-        let Some(mut rocks_account) = self.fetch_account(address_hash)? else {
+        let Some(mut account_state) = self.fetch_account(address_hash)? else {
             return Ok(());
         };
         let timer = start_commit_timer(timer_label);
 
         // wipe storage trie and db
-        if rocks_account.storage_root != EMPTY_ROOT_HASH {
+        if account_state.storage_root != EMPTY_ROOT_HASH {
             let account_db = AccountDB::new(address_hash, self.db.clone());
-            let mut trie = EthTrie::from(Arc::new(account_db), rocks_account.storage_root)?;
+            let mut trie = EthTrie::from(Arc::new(account_db), account_state.storage_root)?;
             trie.clear_trie_from_db()?;
-            rocks_account.storage_root = EMPTY_ROOT_HASH;
+            account_state.storage_root = EMPTY_ROOT_HASH;
         }
 
         // update account trie and db
@@ -161,11 +168,11 @@ impl EvmDB {
             let _ = self.trie.lock().remove(address_hash.as_ref());
         } else {
             self.db
-                .put(address_hash, alloy_rlp::encode(&rocks_account))?;
-            let _ = self.trie.lock().insert(
-                address_hash.as_ref(),
-                &alloy_rlp::encode(AccountStateInfo::from(&rocks_account)),
-            );
+                .put(address_hash, alloy_rlp::encode(&account_state))?;
+            let _ = self
+                .trie
+                .lock()
+                .insert(address_hash.as_ref(), &alloy_rlp::encode(&account_state));
         }
 
         stop_timer(timer);
@@ -195,12 +202,12 @@ impl EvmDB {
         let timer = start_commit_timer("storage:apply_updates");
 
         let account_db = AccountDB::new(address_hash, self.db.clone());
-        let mut rocks_account = self.fetch_account(address_hash)?.unwrap_or_default();
+        let mut account_state = self.fetch_account(address_hash)?.unwrap_or_default();
 
-        let mut trie = if rocks_account.storage_root == EMPTY_ROOT_HASH {
+        let mut trie = if account_state.storage_root == EMPTY_ROOT_HASH {
             EthTrie::new(Arc::new(account_db))
         } else {
-            EthTrie::from(Arc::new(account_db), rocks_account.storage_root)?
+            EthTrie::from(Arc::new(account_db), account_state.storage_root)?
         };
 
         for (key, value) in storage {
@@ -225,15 +232,15 @@ impl EvmDB {
             }
         }
 
-        rocks_account.storage_root = storage_root;
+        account_state.storage_root = storage_root;
 
-        let _ = self.trie.lock().insert(
-            address_hash.as_ref(),
-            &alloy_rlp::encode(AccountStateInfo::from(&rocks_account)),
-        );
+        let _ = self
+            .trie
+            .lock()
+            .insert(address_hash.as_ref(), &alloy_rlp::encode(&account_state));
 
         self.db
-            .put(address_hash, alloy_rlp::encode(rocks_account))?;
+            .put(address_hash, alloy_rlp::encode(account_state))?;
         stop_timer(timer);
         Ok(())
     }
@@ -300,9 +307,9 @@ impl EvmDB {
         Ok(())
     }
 
-    fn fetch_account(&self, address_hash: B256) -> anyhow::Result<Option<RocksAccount>> {
+    fn fetch_account(&self, address_hash: B256) -> anyhow::Result<Option<AccountState>> {
         match self.db.get(address_hash)? {
-            Some(raw_account) => Ok(Some(RocksAccount::decode(&mut raw_account.as_slice())?)),
+            Some(raw_account) => Ok(Some(AccountState::decode(&mut raw_account.as_slice())?)),
             None => Ok(None),
         }
     }
@@ -359,7 +366,7 @@ impl DatabaseRef for EvmDB {
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
         let timer = start_processing_timer("database_get_storage");
         let address_hash = keccak256(address);
-        let account: RocksAccount = match self.fetch_account(address_hash)? {
+        let account: AccountState = match self.fetch_account(address_hash)? {
             Some(account) => account,
             None => return Err(Self::Error::NotFound("storage".to_string())),
         };

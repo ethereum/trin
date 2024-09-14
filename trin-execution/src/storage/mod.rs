@@ -1,4 +1,3 @@
-pub mod account;
 pub mod account_db;
 pub mod error;
 pub mod evm_db;

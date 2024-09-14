@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{bail, ensure};
 use eth_trie::{RootWithTrieDiff, Trie};
-use ethportal_api::{types::state_trie::account_state::AccountState as AccountStateInfo, Header};
+use ethportal_api::{types::state_trie::account_state::AccountState, Header};
 use revm::{
     db::{states::bundle_state::BundleRetention, State},
     inspectors::TracerEip3155,
@@ -23,7 +23,7 @@ use crate::{
         set_int_gauge_vec, start_timer_vec, stop_timer, BLOCK_HEIGHT, BLOCK_PROCESSING_TIMES,
         TRANSACTION_PROCESSING_TIMES,
     },
-    storage::{account::Account as RocksAccount, evm_db::EvmDB},
+    storage::evm_db::EvmDB,
     types::block_to_trace::BlockToTrace,
 };
 
@@ -33,7 +33,7 @@ use super::{
     tx_env_modifier::TxEnvModifier,
 };
 
-const BLOCKHASH_SERVE_WINDOW: u64 = 256;
+pub const BLOCKHASH_SERVE_WINDOW: u64 = 256;
 const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";
 const TEST_GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
 
@@ -146,12 +146,14 @@ impl<'a> BlockExecutor<'a> {
 
         for (address, alloc_balance) in genesis.alloc {
             let address_hash = keccak256(address);
-            let mut account = RocksAccount::default();
+            let mut account = AccountState::default();
             account.balance += alloc_balance.balance;
-            self.evm.db().database.trie.lock().insert(
-                address_hash.as_ref(),
-                &alloy_rlp::encode(AccountStateInfo::from(&account)),
-            )?;
+            self.evm
+                .db()
+                .database
+                .trie
+                .lock()
+                .insert(address_hash.as_ref(), &alloy_rlp::encode(&account))?;
             self.evm
                 .db()
                 .database
