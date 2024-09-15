@@ -6,9 +6,6 @@ The Portal Network is still in the research phase, and this client is experiment
 
 **Do not rely on Trin in a production setting.**
 
-**NOTE: Unix-only**
-
-Trin currently only runs on Unix-based platforms (Linux, macOS). We plan to eventually implement support for Windows, but until then do not expect any support for issues on Windows.
 
 ## How to use Trin
 
