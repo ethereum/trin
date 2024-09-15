@@ -113,7 +113,7 @@ impl StateImporter {
         // Save execution position
         self.trin_execution
             .execution_position
-            .update_position(self.trin_execution.database.db.clone(), era2.header.header)?;
+            .update_position(self.trin_execution.database.db.clone(), &era2.header.header)?;
 
         info!("Done importing State from .era2 file");
 
