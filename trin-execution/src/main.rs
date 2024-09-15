@@ -33,14 +33,6 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.unwrap();
-        tx.send(true)
-            .await
-            .expect("signal ctrl_c should never fail");
-    });
-
     if let Some(command) = trin_execution_config.command {
         match command {
             TrinExecutionSubCommands::ImportState(import_state) => {
@@ -66,23 +58,16 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let mut block_number = trin_execution.next_block_number();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.unwrap();
+        tx.send(()).expect("signal ctrl_c should never fail");
+    });
 
     let end_block = get_spec_block_number(SpecId::MERGE);
-    while block_number < end_block {
-        if rx.try_recv().is_ok() {
-            trin_execution.database.db.flush()?;
-            info!(
-                "Received SIGINT, stopping execution: {} {}",
-                block_number - 1,
-                trin_execution.get_root()?
-            );
-            break;
-        }
-
-        trin_execution.process_range_of_blocks(end_block).await?;
-        block_number = trin_execution.next_block_number();
-    }
+    trin_execution
+        .process_range_of_blocks(end_block, Some(rx))
+        .await?;
 
     Ok(())
 }
