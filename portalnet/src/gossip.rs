@@ -70,7 +70,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
         .collect();
 
     debug!(
-        "propagating validated content: found {} nodes",
+        "propagating validated content: found {} nodes (#1390)",
         all_nodes.len()
     );
     if all_nodes.is_empty() {
@@ -97,7 +97,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
     }
 
     let num_propagated_peers = enrs_and_content.len();
-    debug!("propagating validated content to {num_propagated_peers} peers");
+    debug!("propagating validated content to {num_propagated_peers} peers (#1390)");
 
     // Create and send OFFER overlay request to the interested nodes
     for (enr_string, mut interested_content) in enrs_and_content.into_iter() {
@@ -154,7 +154,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
         }
     }
 
-    debug!("finished propagating validated content");
+    debug!("finished propagating validated content (#1390)");
     num_propagated_peers
 }
 

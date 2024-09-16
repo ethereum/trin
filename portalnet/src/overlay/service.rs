@@ -1221,6 +1221,9 @@ where
                 })
                 .flatten()
                 .collect();
+            debug!(
+                "calling propagate_gossip_cross_thread from OverlayService::handle_offer (#1390)"
+            );
             propagate_gossip_cross_thread(
                 validated_content,
                 utp_processing.kbuckets,
@@ -1705,6 +1708,7 @@ where
             }
         };
 
+        debug!("calling propagate_gossip_cross_thread from OverlayService::fallback_find_content (#1390)");
         propagate_gossip_cross_thread(
             validated_content,
             utp_processing.kbuckets,
@@ -1896,6 +1900,7 @@ where
                             );
                             content_to_propagate.extend(dropped_content.clone());
                         }
+                        debug!("calling propagate_gossip_cross_thread from OverlayService::process_received_content (#1390)");
                         propagate_gossip_cross_thread(
                             content_to_propagate,
                             utp_processing.kbuckets.clone(),
