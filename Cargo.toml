@@ -14,14 +14,13 @@ description = "A Rust implementation of the Ethereum Portal Network"
 
 [dependencies]
 alloy-primitives.workspace = true
+alloy = { version = "=0.3.1", features = ["full"]}
 anyhow.workspace = true
 clap.workspace = true
 dirs = "5.0.1"
 discv5.workspace = true
 e2store.workspace = true
 ethereum_ssz.workspace = true
-ethers = { version = "2.0"}
-ethers-providers = { version = "2.0", features = ["ws"] }
 ethportal-api.workspace = true
 futures.workspace = true
 jsonrpsee.workspace = true
@@ -52,8 +51,6 @@ url.workspace = true
 utp-rs.workspace = true
 
 [dev-dependencies]
-ethers-core = { version = "2.0", default-features = false}
-ethers-providers = { version = "2.0", features = ["ipc"] }
 ethportal-peertest = { path = "ethportal-peertest" }
 serde_yaml.workspace = true
 serial_test.workspace = true

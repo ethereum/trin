@@ -1,13 +1,13 @@
+use alloy::providers::{Provider, ProviderBuilder, WsConnect};
 use alloy_primitives::B256;
 use anyhow::{anyhow, Result};
 use clap::Parser;
-use ethers::prelude::*;
-use ethers_providers::Ws;
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
     types::{content_key::overlay::OverlayContentKey, portal::ContentInfo},
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey, HistoryNetworkApiClient,
 };
+use futures::StreamExt;
 use std::{
     str::FromStr,
     sync::{Arc, Mutex},
@@ -101,18 +101,18 @@ pub async fn main() -> Result<()> {
         None => MAX_TIMEOUT,
     };
     let infura_project_id = std::env::var("TRIN_INFURA_PROJECT_ID")?;
-    let ws = Provider::<Ws>::connect(format!("wss://mainnet.infura.io/ws/v3/{infura_project_id}"))
-        .await?;
-    let mut stream = ws.subscribe_blocks().await?;
+    let ws = WsConnect::new(format!("wss://mainnet.infura.io/ws/v3/{infura_project_id}"));
+    let provider = ProviderBuilder::new().on_ws(ws).await?;
+    let mut stream = provider.subscribe_blocks().await?.into_stream();
     let client = HttpClientBuilder::default().build(audit_config.node_ip)?;
     let metrics = Arc::new(Mutex::new(Metrics::default()));
     while let Some(block) = stream.next().await {
-        let block_hash = block.hash.unwrap();
+        let block_hash = block.header.hash;
         info!("Found new block {block_hash}");
         let timestamp = Instant::now();
         let metrics = metrics.clone();
         tokio::spawn(audit_block(
-            B256::from_slice(block_hash.as_bytes()),
+            block_hash,
             timestamp,
             timeout,
             audit_config.backoff,
