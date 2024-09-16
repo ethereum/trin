@@ -130,10 +130,7 @@ mod tests {
     use serde_json::Value;
     use ssz::Encode;
 
-    use ethportal_api::{
-        types::content_key::history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
-        utils::bytes::hex_decode,
-    };
+    use ethportal_api::utils::bytes::hex_decode;
 
     fn get_header_with_proof_ssz() -> Vec<u8> {
         let file =
@@ -153,9 +150,8 @@ mod tests {
             HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
-            block_hash: header_with_proof.header.hash().0,
-        });
+        let content_key =
+            HistoryContentKey::BlockHeaderByHash(header_with_proof.header.hash().0.into());
         chain_history_validator
             .validate_content(&content_key, &header_with_proof_ssz)
             .await
@@ -175,9 +171,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
-            block_hash: header.header.hash().0,
-        });
+        let content_key = HistoryContentKey::BlockHeaderByHash(header.header.hash().0.into());
         chain_history_validator
             .validate_content(&content_key, &content_value)
             .await
@@ -198,9 +192,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
-            block_hash: header.header.hash().0,
-        });
+        let content_key = HistoryContentKey::BlockHeaderByHash(header.header.hash().0.into());
         chain_history_validator
             .validate_content(&content_key, &content_value)
             .await
@@ -214,9 +206,8 @@ mod tests {
             HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
-            block_number: header_with_proof.header.number,
-        });
+        let content_key =
+            HistoryContentKey::BlockHeaderByNumber(header_with_proof.header.number.into());
         chain_history_validator
             .validate_content(&content_key, &header_with_proof_ssz)
             .await
@@ -236,9 +227,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
-            block_number: header.header.number,
-        });
+        let content_key = HistoryContentKey::BlockHeaderByNumber(header.header.number.into());
         chain_history_validator
             .validate_content(&content_key, &content_value)
             .await
@@ -259,9 +248,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
-            block_number: header.header.number,
-        });
+        let content_key = HistoryContentKey::BlockHeaderByNumber(header.header.number.into());
         chain_history_validator
             .validate_content(&content_key, &content_value)
             .await

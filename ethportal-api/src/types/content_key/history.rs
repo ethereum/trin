@@ -87,6 +87,12 @@ pub struct BlockHeaderByHashKey {
     pub block_hash: [u8; 32],
 }
 
+impl From<[u8; 32]> for BlockHeaderByHashKey {
+    fn from(block_hash: [u8; 32]) -> Self {
+        Self { block_hash }
+    }
+}
+
 impl From<B256> for BlockHeaderByHashKey {
     fn from(block_hash: B256) -> Self {
         Self {
@@ -115,6 +121,12 @@ pub struct BlockBodyKey {
     pub block_hash: [u8; 32],
 }
 
+impl From<[u8; 32]> for BlockBodyKey {
+    fn from(block_hash: [u8; 32]) -> Self {
+        Self { block_hash }
+    }
+}
+
 impl From<B256> for BlockBodyKey {
     fn from(block_hash: B256) -> Self {
         Self {
@@ -128,6 +140,12 @@ impl From<B256> for BlockBodyKey {
 pub struct BlockReceiptsKey {
     /// Hash of the block.
     pub block_hash: [u8; 32],
+}
+
+impl From<[u8; 32]> for BlockReceiptsKey {
+    fn from(block_hash: [u8; 32]) -> Self {
+        Self { block_hash }
+    }
 }
 
 impl TryFrom<RawContentKey> for HistoryContentKey {
@@ -394,9 +412,7 @@ mod test {
     fn ser_de_block_body() {
         let content_key_json =
             "\"0x01d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
-        let expected_content_key = HistoryContentKey::BlockBody(BlockBodyKey {
-            block_hash: BLOCK_HASH,
-        });
+        let expected_content_key = HistoryContentKey::BlockBody(BLOCK_HASH.into());
 
         let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 
@@ -411,9 +427,7 @@ mod test {
     fn ser_de_block_receipts() {
         let content_key_json =
             "\"0x02d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
-        let expected_content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
-            block_hash: BLOCK_HASH,
-        });
+        let expected_content_key = HistoryContentKey::BlockReceipts(BLOCK_HASH.into());
 
         let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 

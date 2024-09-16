@@ -17,8 +17,7 @@ use url::Url;
 
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::content_key::history::BlockHeaderByHashKey,
-    BlockBodyKey, BlockReceiptsKey, HistoryContentKey, HistoryNetworkApiClient,
+    HistoryContentKey, HistoryNetworkApiClient,
 };
 use trin_utils::log::init_tracing_logger;
 use trin_validation::constants::MERGE_BLOCK_NUMBER;
@@ -35,7 +34,8 @@ use trin_validation::constants::MERGE_BLOCK_NUMBER;
 
 #[derive(Default)]
 struct Metrics {
-    header: Details,
+    header_by_hash: Details,
+    header_by_number: Details,
     block_body: Details,
     receipts: Details,
 }
@@ -43,15 +43,18 @@ struct Metrics {
 impl Metrics {
     fn display_stats(&self) {
         info!(
-            "Headers {:?}% // Bodies {:?}% // Receipts {:?}%",
-            self.header.success_rate(),
+            "HeaderByHash {:?}% // HeaderByNumber {:?}% // Bodies {:?}% // Receipts {:?}%",
+            self.header_by_hash.success_rate(),
+            self.header_by_number.success_rate(),
             self.block_body.success_rate(),
             self.receipts.success_rate(),
         );
         debug!(
-            "Headers: {:?}/{:?} // Bodies: {:?}/{:?} // Receipts: {:?}/{:?}",
-            self.header.success_count,
-            self.header.total_count(),
+            "HeaderByHash: {:?}/{:?} // HeaderByNumber: {:?}/{:?} // Bodies: {:?}/{:?} // Receipts: {:?}/{:?}",
+            self.header_by_hash.success_count,
+            self.header_by_hash.total_count(),
+            self.header_by_number.success_count,
+            self.header_by_number.total_count(),
             self.block_body.success_count,
             self.block_body.total_count(),
             self.receipts.success_count,
@@ -135,17 +138,26 @@ async fn audit_block(
     metrics: Arc<Mutex<Metrics>>,
     client: HttpClient,
 ) -> anyhow::Result<()> {
-    let header_ck =
-        HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey { block_hash: hash.0 });
-    let body_ck = HistoryContentKey::BlockBody(BlockBodyKey { block_hash: hash.0 });
-    let receipts_ck = HistoryContentKey::BlockReceipts(BlockReceiptsKey { block_hash: hash.0 });
-    match client.recursive_find_content(header_ck).await {
+    let header_by_hash_ck = HistoryContentKey::BlockHeaderByHash(hash.0.into());
+    let header_by_number_ck = HistoryContentKey::BlockHeaderByNumber(block_number.into());
+    let body_ck = HistoryContentKey::BlockBody(hash.0.into());
+    let receipts_ck = HistoryContentKey::BlockReceipts(hash.0.into());
+    match client.recursive_find_content(header_by_hash_ck).await {
         Ok(_) => {
-            metrics.lock().unwrap().header.success_count += 1;
+            metrics.lock().unwrap().header_by_hash.success_count += 1;
         }
         Err(_) => {
-            warn!("Header not found for block #{block_number} - {hash:?}");
-            metrics.lock().unwrap().header.failure_count += 1;
+            warn!("Header by hash not found for block #{block_number} - {hash:?}");
+            metrics.lock().unwrap().header_by_hash.failure_count += 1;
+        }
+    }
+    match client.recursive_find_content(header_by_number_ck).await {
+        Ok(_) => {
+            metrics.lock().unwrap().header_by_number.success_count += 1;
+        }
+        Err(_) => {
+            warn!("Header by number not found for block #{block_number} - {hash:?}");
+            metrics.lock().unwrap().header_by_number.failure_count += 1;
         }
     }
     match client.recursive_find_content(body_ck).await {

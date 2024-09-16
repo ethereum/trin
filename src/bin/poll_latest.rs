@@ -4,11 +4,8 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::{
-        content_key::{history::BlockHeaderByHashKey, overlay::OverlayContentKey},
-        portal::ContentInfo,
-    },
-    BlockBodyKey, BlockReceiptsKey, HistoryContentKey, HistoryNetworkApiClient,
+    types::{content_key::overlay::OverlayContentKey, portal::ContentInfo},
+    HistoryContentKey, HistoryNetworkApiClient,
 };
 use futures::StreamExt;
 use std::{
@@ -35,7 +32,8 @@ const DEFAULT_NODE_IP: &str = "http://127.0.0.1:8545";
 
 #[derive(Default)]
 struct Metrics {
-    header: Details,
+    header_by_hash: Details,
+    header_by_number: Details,
     block_body: Details,
     receipts: Details,
     // the active audit count measures every individual, active, RFC lookup
@@ -47,19 +45,23 @@ struct Metrics {
 impl Metrics {
     fn display_stats(&self) {
         info!(
-            "Audits (active/complete): {:?}/{:?} // Headers {:?}% @ {:.2?} // Bodies {:?}% @ {:.2?} // Receipts {:?}% @ {:.2?}",
+            "Audits (active/complete): {:?}/{:?} // HeaderByHash {:?}% @ {:.2?} // HeaderByNumber {:?}% @ {:.2?} // Bodies {:?}% @ {:.2?} // Receipts {:?}% @ {:.2?}",
             self.active_audit_count,
             self.complete_audit_count,
-            (self.header.success_count * 100) / self.header.total_count(),
-            self.header.average_time,
+            (self.header_by_hash.success_count * 100) / self.header_by_hash.total_count(),
+            self.header_by_hash.average_time,
+            (self.header_by_number.success_count * 100) / self.header_by_number.total_count(),
+            self.header_by_number.average_time,
             (self.block_body.success_count * 100) / self.block_body.total_count(),
             self.block_body.average_time,
             (self.receipts.success_count * 100) / self.receipts.total_count(),
             self.receipts.average_time);
         debug!(
-            "Headers: {:?}/{:?} // Bodies: {:?}/{:?} // Receipts: {:?}/{:?}",
-            self.header.success_count,
-            self.header.total_count(),
+            "HeaderByHash: {:?}/{:?} // HeaderByNumber: {:?}/{:?} // Bodies: {:?}/{:?} // Receipts: {:?}/{:?}",
+            self.header_by_hash.success_count,
+            self.header_by_hash.total_count(),
+            self.header_by_number.success_count,
+            self.header_by_number.total_count(),
             self.block_body.success_count,
             self.block_body.total_count(),
             self.receipts.success_count,
@@ -111,11 +113,13 @@ pub async fn main() -> Result<()> {
     let metrics = Arc::new(Mutex::new(Metrics::default()));
     while let Some(block) = stream.next().await {
         let block_hash = block.header.hash;
+        let block_number = block.header.number;
         info!("Found new block {block_hash}");
         let timestamp = Instant::now();
         let metrics = metrics.clone();
         tokio::spawn(audit_block(
             block_hash,
+            block_number,
             timestamp,
             timeout,
             audit_config.backoff,
@@ -128,6 +132,7 @@ pub async fn main() -> Result<()> {
 
 async fn audit_block(
     hash: B256,
+    block_number: u64,
     timestamp: Instant,
     timeout: Duration,
     backoff: Backoff,
@@ -135,38 +140,58 @@ async fn audit_block(
     client: HttpClient,
 ) -> Result<()> {
     metrics.lock().unwrap().active_audit_count += 3;
-    let header_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey { block_hash: hash.0 }),
+    let header_by_hash_handle = tokio::spawn(audit_content_key(
+        HistoryContentKey::BlockHeaderByHash(hash.0.into()),
+        timestamp,
+        timeout,
+        backoff,
+        client.clone(),
+    ));
+    let header_by_number_handle = tokio::spawn(audit_content_key(
+        HistoryContentKey::BlockHeaderByNumber(block_number.into()),
         timestamp,
         timeout,
         backoff,
         client.clone(),
     ));
     let block_body_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockBody(BlockBodyKey { block_hash: hash.0 }),
+        HistoryContentKey::BlockBody(hash.0.into()),
         timestamp,
         timeout,
         backoff,
         client.clone(),
     ));
     let receipts_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockReceipts(BlockReceiptsKey { block_hash: hash.0 }),
+        HistoryContentKey::BlockReceipts(hash.0.into()),
         timestamp,
         timeout,
         backoff,
         client.clone(),
     ));
-    match header_handle.await? {
+    match header_by_hash_handle.await? {
         Ok(found_time) => {
             let mut metrics = metrics.lock().unwrap();
             metrics.active_audit_count -= 1;
             let time_diff = found_time - timestamp;
-            metrics.header.report_success(time_diff);
+            metrics.header_by_hash.report_success(time_diff);
         }
         Err(_) => {
             let mut metrics = metrics.lock().unwrap();
             metrics.active_audit_count -= 1;
-            metrics.header.report_failure();
+            metrics.header_by_hash.report_failure();
+        }
+    }
+    match header_by_number_handle.await? {
+        Ok(found_time) => {
+            let mut metrics = metrics.lock().unwrap();
+            metrics.active_audit_count -= 1;
+            let time_diff = found_time - timestamp;
+            metrics.header_by_number.report_success(time_diff);
+        }
+        Err(_) => {
+            let mut metrics = metrics.lock().unwrap();
+            metrics.header_by_number.report_failure();
+            metrics.active_audit_count -= 1;
         }
     }
     match block_body_handle.await? {
