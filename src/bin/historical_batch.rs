@@ -2,13 +2,13 @@ use anyhow::ensure;
 use e2store::era::Era;
 use ethportal_api::{consensus::beacon_state::HistoricalBatch, utils::bytes::hex_encode};
 use regex::Regex;
+use reqwest::get;
 use ssz::Encode;
 use std::{
     fs::{File, OpenOptions},
     io,
     io::{BufRead, Write},
 };
-use surf::get;
 use tree_hash::TreeHash;
 
 const _BELLATRIX_SLOT: u64 = 4700013;
@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
     let download_dir = dirs::download_dir().unwrap();
     let file_path = download_dir.join("historical_batches");
 
-    let body = get(ERA_URL).recv_string().await.unwrap();
+    let body = get(ERA_URL).await?.text().await.unwrap();
     // Match era files with epoch between 00573 and 00759
     let re =
         Regex::new(r#"".*((0057[3-9])|(005[8-9][0-9])|006[0-9][0-9]|(007[0-5][0-9])).*\.era""#)
@@ -60,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
             continue;
         }
 
-        let res = get(url).recv_bytes().await.unwrap();
+        let res = get(url).await?.bytes().await.unwrap();
         let beacon_state = Era::deserialize_to_beacon_state(&res).unwrap();
         let historical_batch = HistoricalBatch {
             block_roots: beacon_state.block_roots().clone(),

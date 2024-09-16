@@ -3,8 +3,8 @@ use e2store::{
     era::{get_beacon_fork, CompressedSignedBeaconBlock, Era, SLOTS_PER_HISTORICAL_ROOT},
     utils::get_era_files,
 };
+use reqwest::Client;
 use revm_primitives::SpecId;
-use surf::Client;
 
 use crate::evm::spec_id::get_spec_block_number;
 
@@ -58,7 +58,7 @@ impl EraBinarySearch {
 
                 let decoded_era = Era::deserialize(&era_to_check)?;
                 if decoded_era.contains(block_number) {
-                    return process_era_file(era_to_check, mid);
+                    return process_era_file(era_to_check.to_vec(), mid);
                 }
                 return Err(anyhow::anyhow!("Block not found in any era file"));
             }
@@ -84,7 +84,7 @@ impl EraBinarySearch {
 
                 let decoded_era = Era::deserialize(&era_to_check)?;
                 if decoded_era.contains(block_number) {
-                    return process_era_file(era_to_check, mid);
+                    return process_era_file(era_to_check.to_vec(), mid);
                 }
             }
 
@@ -107,14 +107,18 @@ impl EraBinarySearch {
         let e2store_header = http_client
             .get(&era_path)
             .header("Range", "bytes=8-15")
-            .recv_bytes()
+            .send()
+            .await?
+            .bytes()
             .await
             .expect("to be able to download e2store header");
         let e2store_header = E2StoreHeader::deserialize(&e2store_header)?;
         let compressed_beacon_block = http_client
             .get(&era_path)
             .header("Range", format!("bytes=8-{}", 15 + e2store_header.length))
-            .recv_bytes()
+            .send()
+            .await?
+            .bytes()
             .await
             .expect("to be able to download compressed beacon block");
         let entry = Entry::deserialize(&compressed_beacon_block)?;

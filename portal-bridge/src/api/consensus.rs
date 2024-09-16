@@ -1,12 +1,14 @@
 use std::fmt::Display;
 
 use anyhow::anyhow;
-use surf::Client;
 use tokio::time::sleep;
 use tracing::{debug, warn};
 use url::Url;
 
-use crate::{cli::url_to_client, constants::FALLBACK_RETRY_AFTER};
+use crate::{
+    cli::{url_to_client, ClientWithBaseUrl},
+    constants::FALLBACK_RETRY_AFTER,
+};
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug)]
@@ -16,10 +18,9 @@ pub struct ConsensusApi {
 }
 
 impl ConsensusApi {
-    pub async fn new(primary: Url, fallback: Url) -> Result<Self, surf::Error> {
+    pub async fn new(primary: Url, fallback: Url) -> Result<Self, reqwest_middleware::Error> {
         debug!(
-            "Starting ConsensusApi with primary provider: {} and fallback provider: {}",
-            primary, fallback
+            "Starting ConsensusApi with primary provider: {primary} and fallback provider: {fallback}",
         );
         let client = url_to_client(primary.clone()).map_err(|err| {
             anyhow!("Unable to create primary client for consensus data provider: {err:?}")
@@ -90,7 +91,7 @@ impl ConsensusApi {
         let client = url_to_client(self.primary.clone()).map_err(|err| {
             anyhow!("Unable to create client for primary consensus data provider: {err:?}")
         })?;
-        match client.get(&endpoint).recv_string().await {
+        match client.get(&endpoint)?.send().await?.text().await {
             Ok(response) => Ok(response),
             Err(err) => {
                 warn!("Error requesting consensus data from provider, retrying with fallback provider: {err:?}");
@@ -98,18 +99,24 @@ impl ConsensusApi {
                 let client = url_to_client(self.fallback.clone()).map_err(|err| {
                     anyhow!("Unable to create client for fallback consensus data provider: {err:?}")
                 })?;
-                client.get(endpoint).recv_string().await.map_err(|err| {
-                    anyhow!("Unable to request consensus data from fallback provider: {err:?}")
-                })
+                client
+                    .get(endpoint)?
+                    .send()
+                    .await?
+                    .text()
+                    .await
+                    .map_err(|err| {
+                        anyhow!("Unable to request consensus data from fallback provider: {err:?}")
+                    })
             }
         }
     }
 }
 
 /// Check that provider is valid and accessible.
-async fn check_provider(client: &Client) -> anyhow::Result<()> {
+async fn check_provider(client: &ClientWithBaseUrl) -> anyhow::Result<()> {
     let endpoint = "/eth/v1/node/version".to_string();
-    match client.get(endpoint).recv_string().await {
+    match client.get(endpoint)?.send().await?.text().await {
         Ok(_) => Ok(()),
         Err(err) => Err(anyhow!(
             "Unable to request consensus data from provider: {err:?}"

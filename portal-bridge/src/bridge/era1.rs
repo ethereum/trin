@@ -12,7 +12,10 @@ use e2store::{
 };
 use futures::future::join_all;
 use rand::{seq::SliceRandom, thread_rng};
-use surf::{Client, Config};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, CONTENT_TYPE},
+    Client,
+};
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
     task::JoinHandle,
@@ -65,10 +68,12 @@ impl Era1Bridge {
         gossip_limit: usize,
         execution_api: ExecutionApi,
     ) -> anyhow::Result<Self> {
-        let http_client: Client = Config::new()
-            .add_header("Content-Type", "application/xml")
-            .expect("to be able to add header")
-            .try_into()?;
+        let http_client = Client::builder()
+            .default_headers(HeaderMap::from_iter([(
+                CONTENT_TYPE,
+                HeaderValue::from_static("application/xml"),
+            )]))
+            .build()?;
         let era1_files = get_shuffled_era1_files(&http_client).await?;
         let metrics = BridgeMetricsReporter::new("era1".to_string(), &format!("{mode:?}"));
         let gossip_semaphore = Arc::new(Semaphore::new(gossip_limit));
@@ -235,7 +240,10 @@ impl Era1Bridge {
         let raw_era1 = self
             .http_client
             .get(era1_path.clone())
-            .recv_bytes()
+            .send()
+            .await
+            .expect("to be able to send request")
+            .bytes()
             .await
             .unwrap_or_else(|err| {
                 panic!("unable to read era1 file at path: {era1_path:?} : {err}")
@@ -256,7 +264,7 @@ impl Era1Bridge {
         let header_validator = Arc::new(self.header_oracle.header_validator.clone());
         info!("Era1 file read successfully, gossiping block tuples for epoch: {epoch_index}");
         let mut serve_block_tuple_handles = vec![];
-        for block_tuple in Era1::iter_tuples(raw_era1) {
+        for block_tuple in Era1::iter_tuples(raw_era1.to_vec()) {
             let block_number = block_tuple.header.header.number;
             if let Some(range) = gossip_range.clone() {
                 if !range.contains(&block_number) {

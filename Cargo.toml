@@ -32,11 +32,11 @@ portalnet.workspace = true
 prometheus_exporter.workspace = true
 rand.workspace = true
 regex = "1.10.2"
+reqwest.workspace = true
 reth-ipc.workspace = true
 rpc.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"]}
 sha3.workspace = true
-surf.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -111,6 +111,7 @@ quickcheck = "1.0.3"
 r2d2 = "0.8.9"
 r2d2_sqlite = "0.24.0"
 rand = "0.8.5"
+reqwest = { version = "0.12.7", default-features = false, features = ["rustls-tls", "json"] }
 reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
 reth-rpc-types = { tag = "v1.0.6", git = "https://github.com/paradigmxyz/reth.git"}
 revm = { version = "14.0.1", default-features = false, features = ["std", "secp256k1", "serde-json"] }
@@ -128,7 +129,6 @@ sha3 = "0.9.1"
 snap = "1.1.1"
 ssz_types = "0.8.0"
 strum = { version = "0.26.1", features = ["derive"] }
-surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustls because OpenSSL cause issues compiling on aarch64
 tempfile = "3.3.0"
 test-log = { version = "0.2.11", features = ["trace"] }
 thiserror = "1.0.57"

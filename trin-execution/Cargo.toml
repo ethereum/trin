@@ -26,6 +26,7 @@ lazy_static.workspace = true
 parking_lot.workspace = true
 prometheus_exporter.workspace = true
 rayon = "1.10.0"
+reqwest.workspace = true
 revm.workspace = true
 revm-inspectors = "0.6"
 revm-primitives.workspace = true
@@ -33,7 +34,6 @@ reth-rpc-types.workspace = true
 rocksdb = "0.22.0"
 serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
-surf.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
