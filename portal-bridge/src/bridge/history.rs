@@ -189,11 +189,14 @@ impl HistoryBridge {
             // look up the epoch acc on a header by header basis
             if height <= MERGE_BLOCK_NUMBER && current_epoch_index != height / EPOCH_SIZE {
                 current_epoch_index = height / EPOCH_SIZE;
-                epoch_acc = match self
-                    .construct_and_gossip_epoch_acc(current_epoch_index)
-                    .await
+                epoch_acc = match lookup_epoch_acc(
+                    current_epoch_index,
+                    &self.header_oracle.header_validator.pre_merge_acc,
+                    &self.epoch_acc_path,
+                )
+                .await
                 {
-                    Ok(val) => Some(val),
+                    Ok(epoch_acc) => Some(Arc::new(epoch_acc)),
                     Err(msg) => {
                         warn!("Unable to find epoch acc for gossip range: {current_epoch_index}. Skipping iteration: {msg:?}");
                         continue;
@@ -347,21 +350,6 @@ impl HistoryBridge {
             warn!("Error displaying history gossip stats. Unable to acquire lock.");
         }
         Ok(())
-    }
-
-    /// Attempt to lookup an epoch accumulator from local portal-accumulators path provided via cli
-    /// arg. Gossip the epoch accumulator if found.
-    async fn construct_and_gossip_epoch_acc(
-        &self,
-        epoch_index: u64,
-    ) -> anyhow::Result<Arc<EpochAccumulator>> {
-        let (_, epoch_acc) = lookup_epoch_acc(
-            epoch_index,
-            &self.header_oracle.header_validator.pre_merge_acc,
-            &self.epoch_acc_path,
-        )
-        .await?;
-        Ok(Arc::new(epoch_acc))
     }
 
     async fn construct_and_gossip_receipt(

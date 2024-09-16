@@ -193,25 +193,13 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
 
     // check that the fresh target has stored block_2
     assert_eq!(
-        header_value_2,
-        wait_for_history_content(&fresh_target, header_key_2.clone()).await
-    );
-    assert_eq!(
         body_value_2,
         wait_for_history_content(&fresh_target, body_key_2.clone()).await
     );
     // check that the target has block_1 and block_2
     assert_eq!(
-        header_value_2,
-        wait_for_history_content(target, header_key_2.clone()).await
-    );
-    assert_eq!(
         body_value_2,
         wait_for_history_content(target, body_key_2.clone()).await
-    );
-    assert_eq!(
-        header_value_1,
-        wait_for_history_content(target, header_key_1.clone()).await
     );
     assert_eq!(
         receipts_value_1,
@@ -220,16 +208,8 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
 
     // check that the peertest bootnode has block_1 and block_2
     assert_eq!(
-        header_value_2,
-        wait_for_history_content(&peertest.bootnode.ipc_client, header_key_2.clone()).await
-    );
-    assert_eq!(
         body_value_2,
         wait_for_history_content(&peertest.bootnode.ipc_client, body_key_2.clone()).await
-    );
-    assert_eq!(
-        header_value_1,
-        wait_for_history_content(&peertest.bootnode.ipc_client, header_key_1.clone()).await
     );
     assert_eq!(
         receipts_value_1,
@@ -238,16 +218,8 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
 
     // check that the peertest node has block_1 and block_2
     assert_eq!(
-        header_value_2,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, header_key_2.clone()).await
-    );
-    assert_eq!(
         body_value_2,
         wait_for_history_content(&peertest.nodes[0].ipc_client, body_key_2.clone()).await
-    );
-    assert_eq!(
-        header_value_1,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, header_key_1.clone()).await
     );
     assert_eq!(
         receipts_value_1,
@@ -277,17 +249,8 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
         .await
         .unwrap();
 
-    // Store receipts_1 locally in client that is not connected to the network
-    let (header_key_1, header_value_1) = fixture_header_by_hash_with_proof_15040641();
+    // Store receipts_1 locally in client, without validation, that is not connected to the network
     let (receipts_key_1, receipts_value_1) = fixture_receipts_15040641();
-    let store_result = HistoryNetworkApiClient::store(
-        &fresh_target,
-        header_key_1.clone(),
-        header_value_1.encode(),
-    )
-    .await
-    .unwrap();
-    assert!(store_result);
     let store_result = HistoryNetworkApiClient::store(
         &fresh_target,
         receipts_key_1.clone(),
@@ -297,9 +260,15 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
     .unwrap();
     assert!(store_result);
 
-    // Store body_2 locally in target
+    // Store header_1, header_2, body_2 locally in target
+    let (header_key_1, header_value_1) = fixture_header_by_hash_with_proof_15040641();
     let (header_key_2, header_value_2) = fixture_header_by_hash_with_proof_15040708();
     let (body_key_2, body_value_2) = fixture_block_body_15040708();
+    let store_result =
+        HistoryNetworkApiClient::store(target, header_key_1.clone(), header_value_1.encode())
+            .await
+            .unwrap();
+    assert!(store_result);
     let store_result =
         HistoryNetworkApiClient::store(target, header_key_2.clone(), header_value_2.encode())
             .await
@@ -339,16 +308,8 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
     );
     // check that the target has block_1 and block_2
     assert_eq!(
-        header_value_2,
-        wait_for_history_content(target, header_key_2.clone()).await
-    );
-    assert_eq!(
         body_value_2,
         wait_for_history_content(target, body_key_2.clone()).await
-    );
-    assert_eq!(
-        header_value_1,
-        wait_for_history_content(target, header_key_1.clone()).await
     );
     assert_eq!(
         receipts_value_1,
@@ -356,16 +317,8 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
     );
     // check that the peertest bootnode has block_1 and block_2
     assert_eq!(
-        header_value_2,
-        wait_for_history_content(&peertest.bootnode.ipc_client, header_key_2.clone()).await
-    );
-    assert_eq!(
         body_value_2,
         wait_for_history_content(&peertest.bootnode.ipc_client, body_key_2.clone()).await
-    );
-    assert_eq!(
-        header_value_1,
-        wait_for_history_content(&peertest.bootnode.ipc_client, header_key_1.clone()).await
     );
     assert_eq!(
         receipts_value_1,
@@ -374,16 +327,8 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
 
     // check that the peertest node has block_1 and block_2
     assert_eq!(
-        header_value_2,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, header_key_2.clone()).await
-    );
-    assert_eq!(
         body_value_2,
         wait_for_history_content(&peertest.nodes[0].ipc_client, body_key_2.clone()).await
-    );
-    assert_eq!(
-        header_value_1,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, header_key_1.clone()).await
     );
     assert_eq!(
         receipts_value_1,

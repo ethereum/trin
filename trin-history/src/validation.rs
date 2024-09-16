@@ -32,7 +32,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
             HistoryContentKey::BlockHeaderByHash(key) => {
                 let header_with_proof =
                     HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
-                        anyhow!("Header with proof content has invalid encoding: {err:?}")
+                        anyhow!("Header by hash content has invalid encoding: {err:?}")
                     })?;
                 let header_hash = header_with_proof.header.hash();
                 ensure!(
@@ -51,7 +51,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
             HistoryContentKey::BlockHeaderByNumber(key) => {
                 let header_with_proof =
                     HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
-                        anyhow!("Header with proof content has invalid encoding: {err:?}")
+                        anyhow!("Header by number content has invalid encoding: {err:?}")
                     })?;
                 let header_number = header_with_proof.header.number;
                 ensure!(
@@ -131,10 +131,11 @@ mod tests {
     use ssz::Encode;
 
     use ethportal_api::{
-        types::content_key::history::BlockHeaderByHashKey, utils::bytes::hex_decode,
+        types::content_key::history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
+        utils::bytes::hex_decode,
     };
 
-    fn get_hwp_ssz() -> Vec<u8> {
+    fn get_header_with_proof_ssz() -> Vec<u8> {
         let file =
             fs::read_to_string("../trin-validation/src/assets/fluffy/header_with_proofs.json")
                 .unwrap();
@@ -146,25 +147,27 @@ mod tests {
     }
 
     #[test_log::test(tokio::test)]
-    async fn validate_header() {
-        let hwp_ssz = get_hwp_ssz();
-        let hwp = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
+    async fn validate_header_by_hash() {
+        let header_with_proof_ssz = get_header_with_proof_ssz();
+        let header_with_proof =
+            HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
-            block_hash: hwp.header.hash().0,
+            block_hash: header_with_proof.header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &hwp_ssz)
+            .validate_content(&content_key, &header_with_proof_ssz)
             .await
             .unwrap();
     }
 
     #[test_log::test(tokio::test)]
     #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
-    async fn invalidate_header_with_invalid_number() {
-        let hwp_ssz = get_hwp_ssz();
-        let mut header = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
+    async fn invalidate_header_by_hash_with_invalid_number() {
+        let header_with_proof_ssz = get_header_with_proof_ssz();
+        let mut header =
+            HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
 
         // set invalid block height
         header.header.number = 669052;
@@ -183,9 +186,10 @@ mod tests {
 
     #[test_log::test(tokio::test)]
     #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
-    async fn invalidate_header_with_invalid_gaslimit() {
-        let hwp_ssz = get_hwp_ssz();
-        let mut header = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
+    async fn invalidate_header_by_hash_with_invalid_gaslimit() {
+        let header_with_proof_ssz = get_header_with_proof_ssz();
+        let mut header =
+            HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
 
         // set invalid block gaslimit
         // valid gaslimit = 3141592
@@ -196,6 +200,67 @@ mod tests {
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
             block_hash: header.header.hash().0,
+        });
+        chain_history_validator
+            .validate_content(&content_key, &content_value)
+            .await
+            .unwrap();
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn validate_header_by_number() {
+        let header_with_proof_ssz = get_header_with_proof_ssz();
+        let header_with_proof =
+            HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
+        let header_oracle = default_header_oracle();
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
+        let content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
+            block_number: header_with_proof.header.number,
+        });
+        chain_history_validator
+            .validate_content(&content_key, &header_with_proof_ssz)
+            .await
+            .unwrap();
+    }
+
+    #[test_log::test(tokio::test)]
+    #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
+    async fn invalidate_header_by_number_with_invalid_number() {
+        let header_with_proof_ssz = get_header_with_proof_ssz();
+        let mut header =
+            HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
+
+        // set invalid block height
+        header.header.number = 669052;
+
+        let content_value = header.as_ssz_bytes();
+        let header_oracle = default_header_oracle();
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
+        let content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
+            block_number: header.header.number,
+        });
+        chain_history_validator
+            .validate_content(&content_key, &content_value)
+            .await
+            .unwrap();
+    }
+
+    #[test_log::test(tokio::test)]
+    #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
+    async fn invalidate_header_by_number_with_invalid_gaslimit() {
+        let header_with_proof_ssz: Vec<u8> = get_header_with_proof_ssz();
+        let mut header =
+            HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
+
+        // set invalid block gaslimit
+        // valid gaslimit = 3141592
+        header.header.gas_limit = U256::from(3141591);
+
+        let content_value = header.as_ssz_bytes();
+        let header_oracle = default_header_oracle();
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
+        let content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
+            block_number: header.header.number,
         });
         chain_history_validator
             .validate_content(&content_key, &content_value)

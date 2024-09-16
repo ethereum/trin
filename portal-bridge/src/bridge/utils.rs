@@ -1,4 +1,3 @@
-use alloy_primitives::B256;
 use anyhow::anyhow;
 use ethportal_api::{types::execution::accumulator::EpochAccumulator, utils::bytes::hex_encode};
 use ssz::Decode;
@@ -10,7 +9,7 @@ pub async fn lookup_epoch_acc(
     epoch_index: u64,
     pre_merge_acc: &PreMergeAccumulator,
     epoch_acc_path: &Path,
-) -> anyhow::Result<(B256, EpochAccumulator)> {
+) -> anyhow::Result<EpochAccumulator> {
     let epoch_hash = pre_merge_acc.historical_epochs[epoch_index as usize];
     let epoch_hash_pretty = hex_encode(epoch_hash);
     let epoch_hash_pretty = epoch_hash_pretty.trim_start_matches("0x");
@@ -26,5 +25,5 @@ pub async fn lookup_epoch_acc(
             ))
         }
     };
-    Ok((epoch_hash, epoch_acc))
+    Ok(epoch_acc)
 }

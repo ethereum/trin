@@ -258,7 +258,7 @@ impl Era1Bridge {
                 panic!("Failed to get epoch from era1 file: {e}");
             }
         };
-        let (_, epoch_acc) = match lookup_epoch_acc(
+        let epoch_acc = match lookup_epoch_acc(
             epoch_index,
             &self.header_oracle.header_validator.pre_merge_acc,
             &self.epoch_acc_path,

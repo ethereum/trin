@@ -69,15 +69,16 @@ impl ExecutionApi {
         })
     }
 
-    /// Return a validated FullHeader & content key / value pair for the given header.
+    /// Return a validated FullHeader & content by hash and number key / value pair for the given
+    /// header.
     pub async fn get_header(
         &self,
         height: u64,
         epoch_acc: Option<Arc<EpochAccumulator>>,
     ) -> anyhow::Result<(
         FullHeader,
-        HistoryContentKey,
-        HistoryContentKey,
+        HistoryContentKey, // BlockHeaderByHash
+        HistoryContentKey, // BlockHeaderByNumber
         HistoryContentValue,
     )> {
         // Geth requires block numbers to be formatted using the following padding.
