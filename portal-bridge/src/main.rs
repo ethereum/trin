@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let state_bridge = StateBridge::new(
             bridge_config.mode.clone(),
             portal_client.clone(),
-            bridge_config.gossip_limit,
+            bridge_config.offer_limit,
             census_tx,
         )
         .await?;

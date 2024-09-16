@@ -15,7 +15,7 @@ use url::Url;
 
 use crate::{
     client_handles::{fluffy_handle, trin_handle},
-    constants::{DEFAULT_GOSSIP_LIMIT, HTTP_REQUEST_TIMEOUT},
+    constants::{DEFAULT_GOSSIP_LIMIT, DEFAULT_OFFER_LIMIT, HTTP_REQUEST_TIMEOUT},
     types::{mode::BridgeMode, network::NetworkKind},
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
     FALLBACK_BASE_EL_ENDPOINT,
@@ -152,6 +152,13 @@ pub struct BridgeConfig {
         help = "The maximum number of active blocks being gossiped."
     )]
     pub gossip_limit: usize,
+
+    #[arg(
+        default_value_t = DEFAULT_OFFER_LIMIT,
+        long = "offer-limit",
+        help = "The maximum number of concurrent offer rpc requests for state bridge."
+    )]
+    pub offer_limit: usize,
 }
 
 pub fn url_to_client(url: Url) -> Result<ClientWithBaseUrl, String> {
