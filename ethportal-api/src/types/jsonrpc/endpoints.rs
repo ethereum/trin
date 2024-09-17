@@ -123,6 +123,8 @@ pub enum BeaconEndpoint {
     FinalizedStateRoot,
     /// params: node_id
     GetEnr(NodeId),
+    /// params: None
+    LightClientStore,
     /// params: content_key
     LocalContent(BeaconContentKey),
     /// params: node_id

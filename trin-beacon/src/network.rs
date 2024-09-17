@@ -48,7 +48,7 @@ impl BeaconNetwork {
         };
         let storage = Arc::new(PLRwLock::new(BeaconStorage::new(storage_config)?));
         let storage_clone = Arc::clone(&storage);
-        let validator = Arc::new(BeaconValidator { header_oracle });
+        let validator = Arc::new(BeaconValidator::new(header_oracle));
         let overlay = OverlayProtocol::new(
             config,
             discovery,

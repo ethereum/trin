@@ -1,5 +1,6 @@
 use crate::{
     consensus::header::BeaconBlockHeader,
+    light_client::store::LightClientStore,
     types::{
         content_key::beacon::BeaconContentKey,
         enr::Enr,
@@ -36,6 +37,10 @@ pub trait BeaconNetworkApi {
     /// Delete Node ID from the overlay routing table.
     #[method(name = "beaconDeleteEnr")]
     async fn delete_enr(&self, node_id: NodeId) -> RpcResult<bool>;
+
+    /// Returns the local store of the light client.
+    #[method(name = "beaconLightClientStore")]
+    async fn light_client_store(&self) -> RpcResult<LightClientStore>;
 
     /// Fetch the ENR representation associated with the given Node ID.
     #[method(name = "beaconLookupEnr")]

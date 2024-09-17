@@ -6,14 +6,13 @@ use crate::consensus::ConsensusLightClient;
 use log::{error, info, warn};
 use tokio::sync::RwLock;
 
-use ethportal_api::consensus::header::BeaconBlockHeader;
-use std::path::PathBuf;
-use tokio::{spawn, time::sleep};
-
 use crate::{
     config::{client_config::Config, CheckpointFallback, Network},
     consensus::{errors::ConsensusError, rpc::ConsensusRpc},
 };
+use ethportal_api::{consensus::header::BeaconBlockHeader, light_client::store::LightClientStore};
+use std::path::PathBuf;
+use tokio::{spawn, time::sleep};
 
 use crate::{database::Database, errors::NodeError, node::Node};
 
@@ -462,5 +461,9 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
 
     pub async fn get_finalized_header(&self) -> Result<BeaconBlockHeader> {
         self.node.read().await.get_finalized_header()
+    }
+
+    pub async fn get_light_client_store(&self) -> Result<LightClientStore> {
+        self.node.read().await.get_light_client_store()
     }
 }

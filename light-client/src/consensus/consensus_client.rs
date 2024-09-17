@@ -1,7 +1,7 @@
 use std::{cmp, sync::Arc};
 
 use alloy_primitives::B256;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, ensure, Result};
 use chrono::Duration;
 use milagro_bls::PublicKey;
 use ssz_rs::prelude::*;
@@ -24,6 +24,7 @@ use ethportal_api::{
         bootstrap::CurrentSyncCommitteeProofLen,
         finality_update::LightClientFinalityUpdateDeneb,
         optimistic_update::LightClientOptimisticUpdateDeneb,
+        store::LightClientStore,
         update::{FinalizedRootProofLen, LightClientUpdateDeneb},
     },
     utils::bytes::hex_encode,
@@ -42,16 +43,6 @@ pub struct ConsensusLightClient<R: ConsensusRpc> {
     initial_checkpoint: Vec<u8>,
     pub last_checkpoint: Option<Vec<u8>>,
     pub config: Arc<Config>,
-}
-
-#[derive(Debug, Default)]
-struct LightClientStore {
-    finalized_header: BeaconBlockHeader,
-    current_sync_committee: SyncCommittee,
-    next_sync_committee: Option<SyncCommittee>,
-    optimistic_header: BeaconBlockHeader,
-    previous_max_active_participants: u64,
-    current_max_active_participants: u64,
 }
 
 impl<R: ConsensusRpc> ConsensusLightClient<R> {
@@ -97,6 +88,10 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
     pub fn get_finalized_header(&self) -> &BeaconBlockHeader {
         &self.store.finalized_header
+    }
+
+    pub fn get_light_client_store(&self) -> &LightClientStore {
+        &self.store
     }
 
     pub async fn sync(&mut self) -> Result<()> {
@@ -239,121 +234,43 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         Ok(())
     }
 
-    // implements checks from validate_light_client_update and process_light_client_update in the
-    // specification
-    fn verify_generic_update(&self, update: &GenericUpdate) -> Result<()> {
-        let bits = get_bits(&update.sync_aggregate.sync_committee_bits);
-        if bits == 0 {
-            return Err(ConsensusError::InsufficientParticipation.into());
-        }
-
-        let update_finalized_slot = update.finalized_header.clone().unwrap_or_default().slot;
-        let valid_time = self.expected_current_slot() >= update.signature_slot
-            && update.signature_slot > update.attested_header.slot
-            && update.attested_header.slot >= update_finalized_slot;
-
-        if !valid_time {
-            return Err(ConsensusError::InvalidTimestamp.into());
-        }
-
-        let store_period = calc_sync_period(self.store.finalized_header.slot);
-        let update_sig_period = calc_sync_period(update.signature_slot);
-        let valid_period = if self.store.next_sync_committee.is_some() {
-            update_sig_period == store_period || update_sig_period == store_period + 1
-        } else {
-            update_sig_period == store_period
-        };
-
-        if !valid_period {
-            return Err(ConsensusError::InvalidPeriod.into());
-        }
-
-        let update_attested_period = calc_sync_period(update.attested_header.slot);
-        let update_has_next_committee = self.store.next_sync_committee.is_none()
-            && update.next_sync_committee.is_some()
-            && update_attested_period == store_period;
-
-        if update.attested_header.slot <= self.store.finalized_header.slot
-            && !update_has_next_committee
-        {
-            return Err(ConsensusError::NotRelevant.into());
-        }
-
-        if update.finalized_header.is_some() && update.finality_branch.is_some() {
-            let is_valid = is_finality_proof_valid(
-                &update.attested_header,
-                &mut update
-                    .finalized_header
-                    .clone()
-                    .expect("we know that this is `Some`"),
-                &update
-                    .finality_branch
-                    .clone()
-                    .expect("we know that this is `Some`"),
-            );
-
-            if !is_valid {
-                return Err(ConsensusError::InvalidFinalityProof.into());
-            }
-        }
-
-        if update.next_sync_committee.is_some() && update.next_sync_committee_branch.is_some() {
-            let is_valid = is_next_committee_proof_valid(
-                &update.attested_header,
-                &mut update
-                    .next_sync_committee
-                    .clone()
-                    .expect("we know that this is `Some`"),
-                &update
-                    .next_sync_committee_branch
-                    .clone()
-                    .expect("we know that this is `Some`"),
-            );
-
-            if !is_valid {
-                return Err(ConsensusError::InvalidNextSyncCommitteeProof.into());
-            }
-        }
-
-        let sync_committee = if update_sig_period == store_period {
-            &self.store.current_sync_committee
-        } else {
-            self.store
-                .next_sync_committee
-                .as_ref()
-                .expect("we know that this is `Some` because we are in `valid_period`")
-        };
-
-        let pks =
-            get_participating_keys(sync_committee, &update.sync_aggregate.sync_committee_bits)?;
-
-        let is_valid_sig = self.verify_sync_committee_signature(
-            &pks,
-            &update.attested_header,
-            &update.sync_aggregate.sync_committee_signature,
-            update.signature_slot,
-        );
-
-        if !is_valid_sig {
-            return Err(ConsensusError::InvalidSignature.into());
-        }
-
-        Ok(())
-    }
-
     fn verify_update(&self, update: &LightClientUpdateDeneb) -> Result<()> {
         let update = GenericUpdate::from(update);
-        self.verify_generic_update(&update)
+        let expected_current_slot = expected_current_slot();
+        let genesis_root = &self.config.chain.genesis_root;
+        verify_generic_update(
+            &self.store,
+            &update,
+            expected_current_slot,
+            genesis_root,
+            &self.config.fork_version(update.signature_slot),
+        )
     }
 
     fn verify_finality_update(&self, update: &LightClientFinalityUpdateDeneb) -> Result<()> {
         let update = GenericUpdate::from(update);
-        self.verify_generic_update(&update)
+        let expected_current_slot = expected_current_slot();
+        let genesis_root = &self.config.chain.genesis_root;
+        verify_generic_update(
+            &self.store,
+            &update,
+            expected_current_slot,
+            genesis_root,
+            &self.config.fork_version(update.signature_slot),
+        )
     }
 
     fn verify_optimistic_update(&self, update: &LightClientOptimisticUpdateDeneb) -> Result<()> {
         let update = GenericUpdate::from(update);
-        self.verify_generic_update(&update)
+        let expected_current_slot = expected_current_slot();
+        let genesis_root = &self.config.chain.genesis_root;
+        verify_generic_update(
+            &self.store,
+            &update,
+            expected_current_slot,
+            genesis_root,
+            &self.config.fork_version(update.signature_slot),
+        )
     }
 
     // implements state changes from apply_light_client_update and process_light_client_update in
@@ -504,36 +421,6 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         ) / 2
     }
 
-    fn verify_sync_committee_signature(
-        &self,
-        pks: &[PublicKey],
-        attested_header: &BeaconBlockHeader,
-        signature: &BlsSignature,
-        signature_slot: u64,
-    ) -> bool {
-        let res: Result<bool> = (move || {
-            let pks: Vec<&PublicKey> = pks.iter().collect();
-            let header_root = bytes_to_bytes32(attested_header.tree_hash_root().as_slice());
-            let signing_root = self.compute_committee_sign_root(header_root, signature_slot)?;
-
-            Ok(is_aggregate_valid(
-                signature,
-                signing_root.r#as_bytes(),
-                &pks,
-            ))
-        })();
-
-        res.unwrap_or_default()
-    }
-
-    fn compute_committee_sign_root(&self, header: Bytes32, slot: u64) -> Result<Node> {
-        let genesis_root = self.config.chain.genesis_root.to_vec().try_into()?;
-        let domain_type = &hex::decode("07000000")?[..];
-        let fork_version = Vector::from_iter(self.config.fork_version(slot));
-        let domain = compute_domain(domain_type, fork_version, genesis_root)?;
-        compute_signing_root(header, domain)
-    }
-
     fn age(&self, slot: u64) -> Duration {
         let expected_time = self.slot_timestamp(slot);
         let now = SystemTime::now()
@@ -588,20 +475,121 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     }
 }
 
+// implements checks from validate_light_client_update and process_light_client_update in the
+// specification
+pub fn verify_generic_update(
+    store: &LightClientStore,
+    update: &GenericUpdate,
+    expected_slot: u64,
+    genesis_root: &[u8],
+    fork_version: &[u8],
+) -> Result<()> {
+    let bits = get_bits(&update.sync_aggregate.sync_committee_bits);
+    ensure!(bits > 0, ConsensusError::InsufficientParticipation);
+
+    let update_finalized_slot = update.finalized_header.clone().unwrap_or_default().slot;
+    let valid_time = expected_slot >= update.signature_slot
+        && update.signature_slot > update.attested_header.slot
+        && update.attested_header.slot >= update_finalized_slot;
+    ensure!(valid_time, ConsensusError::InvalidTimestamp);
+
+    let store_period = calc_sync_period(store.finalized_header.slot);
+    let update_sig_period = calc_sync_period(update.signature_slot);
+    let valid_period = if store.next_sync_committee.is_some() {
+        update_sig_period == store_period || update_sig_period == store_period + 1
+    } else {
+        update_sig_period == store_period
+    };
+    ensure!(valid_period, ConsensusError::InvalidPeriod);
+
+    let update_attested_period = calc_sync_period(update.attested_header.slot);
+    let update_has_next_committee = store.next_sync_committee.is_none()
+        && update.next_sync_committee.is_some()
+        && update_attested_period == store_period;
+    ensure!(
+        update.attested_header.slot > store.finalized_header.slot || update_has_next_committee,
+        ConsensusError::NotRelevant
+    );
+
+    if update.finalized_header.is_some() && update.finality_branch.is_some() {
+        let is_valid = is_finality_proof_valid(
+            &update.attested_header,
+            &mut update
+                .finalized_header
+                .clone()
+                .expect("finalized_header should be `Some`"),
+            &update
+                .finality_branch
+                .clone()
+                .expect("finality_branch should be `Some`"),
+        );
+        ensure!(is_valid, ConsensusError::InvalidFinalityProof);
+    }
+
+    if update.next_sync_committee.is_some() && update.next_sync_committee_branch.is_some() {
+        let is_valid = is_next_committee_proof_valid(
+            &update.attested_header,
+            &mut update
+                .next_sync_committee
+                .clone()
+                .expect("next_sync_committee should be `Some`"),
+            &update
+                .next_sync_committee_branch
+                .clone()
+                .expect("next_sync_committee_branch ahould be`Some`"),
+        );
+        ensure!(is_valid, ConsensusError::InvalidNextSyncCommitteeProof);
+    }
+
+    let sync_committee = if update_sig_period == store_period {
+        &store.current_sync_committee
+    } else {
+        store
+            .next_sync_committee
+            .as_ref()
+            .expect("we know that this is `Some` because we are in `valid_period`")
+    };
+
+    let public_keys =
+        get_participating_keys(sync_committee, &update.sync_aggregate.sync_committee_bits)?;
+    let is_valid_signature = verify_sync_committee_signature(
+        &public_keys,
+        &update.attested_header,
+        &update.sync_aggregate.sync_committee_signature,
+        genesis_root,
+        fork_version,
+    );
+    ensure!(is_valid_signature, ConsensusError::InvalidSignature);
+
+    Ok(())
+}
+
+fn compute_committee_sign_root(
+    genesis_root: &[u8],
+    header: Bytes32,
+    fork_version: &[u8],
+) -> Result<Node> {
+    let genesis_root = genesis_root.to_vec().try_into()?;
+    let domain_type = &hex::decode("07000000")?[..];
+    let fork_version = Vector::from_iter(fork_version.to_vec());
+    let domain = compute_domain(domain_type, fork_version, genesis_root)?;
+    compute_signing_root(header, domain)
+}
+
 fn get_participating_keys(
     committee: &SyncCommittee,
     bitfield: &BitVector<typenum::U512>,
 ) -> Result<Vec<PublicKey>> {
-    let mut pks: Vec<PublicKey> = Vec::new();
+    let mut public_keys: Vec<PublicKey> = Vec::new();
     bitfield.iter().enumerate().for_each(|(i, bit)| {
         if bit {
             let pk = &committee.pubkeys[i];
             let pk = PublicKey::from_bytes_unchecked(pk.as_ref()).expect("invalid pubkey bytes");
-            pks.push(pk);
+            public_keys.push(pk);
         }
     });
 
-    Ok(pks)
+    Ok(public_keys)
 }
 
 fn get_bits(bitfield: &BitVector<typenum::U512>) -> u64 {
@@ -613,6 +601,28 @@ fn get_bits(bitfield: &BitVector<typenum::U512>) -> u64 {
     });
 
     count
+}
+
+fn verify_sync_committee_signature(
+    pks: &[PublicKey],
+    attested_header: &BeaconBlockHeader,
+    signature: &BlsSignature,
+    genesis_root: &[u8],
+    fork_version: &[u8],
+) -> bool {
+    let res: Result<bool> = (move || {
+        let public_keys: Vec<&PublicKey> = pks.iter().collect();
+        let header_root = bytes_to_bytes32(attested_header.tree_hash_root().as_slice());
+        let signing_root = compute_committee_sign_root(genesis_root, header_root, fork_version)?;
+
+        Ok(is_aggregate_valid(
+            signature,
+            signing_root.r#as_bytes(),
+            &public_keys,
+        ))
+    })();
+
+    res.unwrap_or_default()
 }
 
 fn is_finality_proof_valid(

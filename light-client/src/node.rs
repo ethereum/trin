@@ -1,12 +1,11 @@
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{Error, Result};
-use ethportal_api::consensus::header::BeaconBlockHeader;
-
 use crate::{
     config::client_config::Config,
     consensus::{rpc::ConsensusRpc, ConsensusLightClient},
 };
+use anyhow::{Error, Result};
+use ethportal_api::{consensus::header::BeaconBlockHeader, light_client::store::LightClientStore};
 
 use crate::errors::NodeError;
 
@@ -79,6 +78,10 @@ impl<R: ConsensusRpc> Node<R> {
 
     pub fn get_finalized_header(&self) -> Result<BeaconBlockHeader> {
         Ok(self.consensus.get_finalized_header().clone())
+    }
+
+    pub fn get_light_client_store(&self) -> Result<LightClientStore> {
+        Ok(self.consensus.get_light_client_store().clone())
     }
 
     pub fn get_header(&self) -> Result<BeaconBlockHeader> {
