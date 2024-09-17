@@ -3,11 +3,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use alloy::{
+    eips::BlockNumberOrTag,
+    providers::{Provider, ProviderBuilder},
+};
 use alloy_primitives::B256;
 use anyhow::Result;
 use clap::Parser;
-use ethers::prelude::*;
-use ethers_providers::Http;
+use futures::StreamExt;
 use rand::seq::SliceRandom;
 use tracing::{debug, info, warn};
 use url::Url;
@@ -86,11 +89,10 @@ pub async fn main() -> Result<()> {
     let audit_config = SampleConfig::parse();
     info!("Running Sample Range Audit: {:?}", audit_config.range);
     let infura_project_id = std::env::var("TRIN_INFURA_PROJECT_ID")?;
-    let provider =
-        Provider::<Http>::connect(&format!("https://mainnet.infura.io/v3/{infura_project_id}"))
-            .await;
+    let provider = ProviderBuilder::new()
+        .on_http(format!("https://mainnet.infura.io/v3/{infura_project_id}").parse()?);
     let client = HttpClientBuilder::default().build(audit_config.node_ip)?;
-    let latest_block: u64 = provider.get_block_number().await?.try_into().unwrap();
+    let latest_block: u64 = provider.get_block_number().await?;
     let (start, end) = match audit_config.range {
         SampleRange::Shanghai => (SHANGHAI_BLOCK_NUMBER, latest_block),
         SampleRange::FourFours => (0, MERGE_BLOCK_NUMBER),
@@ -110,19 +112,13 @@ pub async fn main() -> Result<()> {
         let provider = provider.clone();
         async move {
             let block_hash = provider
-                .get_block(block_number)
+                .get_block_by_number(BlockNumberOrTag::Number(block_number), false)
                 .await
                 .unwrap()
                 .unwrap()
-                .hash
-                .unwrap();
-            let _ = audit_block(
-                block_number,
-                B256::from_slice(block_hash.as_bytes()),
-                metrics,
-                client,
-            )
-            .await;
+                .header
+                .hash;
+            let _ = audit_block(block_number, block_hash, metrics, client).await;
         }
     }))
     .buffer_unordered(FUTURES_BUFFER_SIZE)
