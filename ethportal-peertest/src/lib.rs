@@ -9,7 +9,7 @@ use ethportal_api::{
     types::{
         cli::{TrinConfig, DEFAULT_DISCOVERY_PORT},
         enr::Enr,
-        network::Subnetwork,
+        network::{Network, Subnetwork},
     },
     utils::bytes::hex_encode,
     Discv5ApiClient,
@@ -58,7 +58,7 @@ async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
 
 fn generate_trin_config(
     id: u16,
-    network: &str,
+    network: &Network,
     subnetworks: &[Subnetwork],
     bootnode_enr: Option<&Enr>,
 ) -> TrinConfig {
@@ -87,11 +87,12 @@ fn generate_trin_config(
         .map(|sn| sn.to_string())
         .collect::<Vec<String>>()
         .join(",");
+    let network = network.to_string();
 
     let trin_config_args = vec![
         "trin",
         "--network",
-        network,
+        &network,
         "--portal-subnetworks",
         &subnetworks,
         "--bootnodes",
@@ -111,7 +112,7 @@ fn generate_trin_config(
 
 pub async fn launch_peertest_nodes(
     count: u16,
-    network: &str,
+    network: &Network,
     subnetworks: &[Subnetwork],
 ) -> Peertest {
     // Bootnode uses a peertest id of 1

@@ -1,5 +1,31 @@
 use std::fmt;
 
+/// Enum for different "core" networks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Network {
+    Mainnet,
+    Angelfood, // aka testnet
+}
+
+impl fmt::Display for Network {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Network::Mainnet => write!(f, "mainnet"),
+            Network::Angelfood => write!(f, "angelfood"),
+        }
+    }
+}
+
+impl From<Network> for String {
+    fn from(network: Network) -> String {
+        match network {
+            Network::Mainnet => "mainnet".to_string(),
+            Network::Angelfood => "angelfood".to_string(),
+        }
+    }
+}
+
+/// Enum for various different portal subnetworks in a "core" network.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subnetwork {
     Beacon,

@@ -22,6 +22,7 @@ use crate::{
         bytes::ByteList2048,
         distance::Distance,
         enr::{Enr, SszEnr},
+        network::Network,
     },
     utils::bytes::{hex_decode, hex_encode, ByteUtilsError},
     RawContentKey,
@@ -179,13 +180,13 @@ pub enum ProtocolId {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NetworkSpec {
-    network_name: String,
+    network: Network,
     portal_networks: BiHashMap<ProtocolId, String>,
 }
 
 impl NetworkSpec {
-    pub fn get_network_name(&self) -> &str {
-        &self.network_name
+    pub fn get_network_name(&self) -> String {
+        self.network.to_string()
     }
 
     pub fn get_protocol_id_from_hex(&self, hex: &str) -> Result<ProtocolId, ProtocolIdError> {
@@ -217,7 +218,7 @@ pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     portal_networks.insert(ProtocolId::Utp, "0x757470".to_string());
     NetworkSpec {
         portal_networks,
-        network_name: "mainnet".to_string(),
+        network: Network::Mainnet,
     }
     .into()
 });
@@ -233,7 +234,7 @@ pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     portal_networks.insert(ProtocolId::Utp, "0x757470".to_string());
     NetworkSpec {
         portal_networks,
-        network_name: "angelfood".to_string(),
+        network: Network::Angelfood,
     }
     .into()
 });

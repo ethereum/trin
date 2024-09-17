@@ -339,12 +339,7 @@ pub fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> 
 pub fn subnetwork_parser(subnetwork_string: &str) -> Result<Vec<Subnetwork>, String> {
     let subnetworks = subnetwork_string
         .split(',')
-        .map(|subnetwork| match Subnetwork::try_from(subnetwork) {
-            Ok(subnetwork) => Ok(subnetwork),
-            Err(_) => Err(format!(
-                "Not a valid subnetwork: {subnetwork}, must be 'history' / 'state' / 'beacon'"
-            )),
-        })
+        .map(Subnetwork::try_from)
         .collect::<Result<Vec<Subnetwork>, String>>()?;
 
     if subnetworks.is_empty() {

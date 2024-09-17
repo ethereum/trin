@@ -23,7 +23,7 @@ pub fn build_trin(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
         .args(["--no-upnp"])
         .args(["--mb", "0"])
         .args(["--web3-transport", "http"])
-        .args(["--network", bridge_config.network.get_network_name()])
+        .args(["--network", &bridge_config.network.get_network_name()])
         .args(["--portal-subnetworks", &subnetworks_flag(bridge_config)])
         .args(["--unsafe-private-key", &private_key])
         .args([
