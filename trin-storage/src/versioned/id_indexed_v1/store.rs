@@ -357,28 +357,33 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
 
     /// Removes content that doesn't pass the validation function. Returns the number of removed
     /// entries.
-    pub fn filter<K: ethportal_api::OverlayContentKey>(
+    /// This function will not work as expected if the node is connected to the network,
+    /// as content is constantly being added and removed. So, for it to work as expected, it should
+    /// be used before the node connects to the network or when the node is disconnected.
+    pub fn filter(
         &mut self,
-        validation_fn: fn(&K, &[u8]) -> bool,
+        validation_fn: fn(&TContentKey, &[u8]) -> bool,
     ) -> Result<u64, ContentStoreError> {
         let timer = self.metrics.start_process_timer("filter");
-        let total_entry_count = self.get_usage_stats_internal()?.entry_count;
-        let mut removed = 0;
+        let total_entry_count = self.usage_stats().entry_count;
+        let mut content_ids_to_remove = Vec::new();
         for offset in (0..total_entry_count).step_by(100) {
-            let paginate_result = self.paginate::<K>(offset, 100)?;
+            let paginate_result = self.paginate(offset, 100)?;
             for key in paginate_result.content_keys {
                 let content_id = ContentId::from(key.content_id());
                 let value = self.lookup_content_value(&content_id)?;
                 if let Some(value) = value {
                     if !validation_fn(&key, &value) {
-                        self.delete(&content_id)?;
-                        removed += 1;
+                        content_ids_to_remove.push(content_id);
                     }
                 }
             }
         }
+        for content_id in &content_ids_to_remove {
+            self.delete(content_id)?;
+        }
         self.metrics.stop_process_timer(timer);
-        Ok(removed)
+        Ok(content_ids_to_remove.len() as u64)
     }
 
     pub fn get_summary_info(&self) -> String {
@@ -1224,7 +1229,7 @@ mod tests {
     #[test]
     fn filter_removes() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
+        let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
         let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
 
         let (key_1, val_1) = generate_key_value(&config, 0);
@@ -1232,23 +1237,20 @@ mod tests {
         store.insert(&key_1, val_1).unwrap();
         store.insert(&key_2, val_2).unwrap();
 
-        fn validation_fn<K: OverlayContentKey>(_key: &K, _val: &[u8]) -> bool
-        where
-            K: OverlayContentKey,
-        {
+        fn validation_fn(_key: &IdentityContentKey, _val: &[u8]) -> bool {
             false
         }
 
-        let num_removed_items = store.filter::<IdentityContentKey>(validation_fn).unwrap();
+        let num_removed_items = store.filter(validation_fn).unwrap();
         assert_eq!(2, num_removed_items);
-        assert_eq!(0, store.get_usage_stats_internal()?.entry_count);
+        assert_eq!(0, store.usage_stats().entry_count);
         Ok(())
     }
 
     #[test]
     fn filter_filters() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
+        let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
         let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
 
         let (key_1, _) = generate_key_value(&config, 0);
@@ -1258,23 +1260,20 @@ mod tests {
         store.insert(&key_1, val_1).unwrap();
         store.insert(&key_2, val_2).unwrap();
 
-        fn validation_fn<K: OverlayContentKey>(_key: &K, val: &[u8]) -> bool
-        where
-            K: OverlayContentKey,
-        {
+        fn validation_fn(_key: &IdentityContentKey, val: &[u8]) -> bool {
             val.starts_with(&[0x00])
         }
 
-        let num_removed_items = store.filter::<IdentityContentKey>(validation_fn).unwrap();
+        let num_removed_items = store.filter(validation_fn).unwrap();
         assert_eq!(1, num_removed_items);
-        assert_eq!(1, store.get_usage_stats_internal()?.entry_count);
+        assert_eq!(1, store.usage_stats().entry_count);
         Ok(())
     }
 
     #[test]
     fn filter_filters_with_pagination() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
+        let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
         let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
 
         for _ in 0..100 {
@@ -1286,15 +1285,12 @@ mod tests {
         let test_val = vec![0x00, 0x01, 0x02, 0x03, 0x04];
         store.insert(&key, test_val).unwrap();
 
-        fn validation_fn<K: OverlayContentKey>(_key: &K, val: &[u8]) -> bool
-        where
-            K: OverlayContentKey,
-        {
+        fn validation_fn(_key: &IdentityContentKey, val: &[u8]) -> bool {
             val == [0x01, 0x01, 0x02, 0x03, 0x04]
         }
-        let num_removed_items = store.filter::<IdentityContentKey>(validation_fn).unwrap();
+        let num_removed_items = store.filter(validation_fn).unwrap();
         assert_eq!(1, num_removed_items);
-        assert_eq!(100, store.get_usage_stats_internal()?.entry_count);
+        assert_eq!(100, store.usage_stats().entry_count);
         Ok(())
     }
 }
