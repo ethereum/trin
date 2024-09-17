@@ -4,7 +4,6 @@ use crate::{
         optimistic_update::LightClientOptimisticUpdateDeneb, update::LightClientUpdateDeneb,
     },
     types::{
-        cli::BEACON_NETWORK,
         consensus::{
             fork::{ForkDigest, ForkName},
             historical_summaries::HistoricalSummariesWithProof,
@@ -25,6 +24,7 @@ use crate::{
             },
         },
         content_value::ContentValue,
+        network::Subnetwork,
     },
     utils::bytes::hex_encode,
     BeaconContentKey, ContentValueError, RawContentValue,
@@ -539,7 +539,7 @@ impl ContentValue for BeaconContentValue {
         }
         Err(ContentValueError::UnknownContent {
             bytes: hex_encode(buf),
-            network: BEACON_NETWORK.to_string(),
+            subnetwork: Subnetwork::Beacon,
         })
     }
 }

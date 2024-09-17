@@ -6,7 +6,7 @@ use std::sync::Arc;
 #[cfg(windows)]
 use ethportal_api::types::cli::Web3TransportType;
 use ethportal_api::{
-    types::cli::{TrinConfig, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK},
+    types::{cli::TrinConfig, network::Subnetwork},
     utils::bytes::hex_encode,
 };
 use portalnet::{
@@ -102,15 +102,12 @@ pub async fn run_trin(
 
     // Initialize state sub-network service and event handlers, if selected
     let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx, state_event_stream) =
-        if trin_config
-            .portal_subnetworks
-            .contains(&STATE_NETWORK.to_string())
-        {
+        if trin_config.portal_subnetworks.contains(&Subnetwork::State) {
             initialize_state_network(
                 &discovery,
                 utp_socket.clone(),
                 portalnet_config.clone(),
-                storage_config_factory.create(STATE_NETWORK),
+                storage_config_factory.create(&Subnetwork::State),
                 header_oracle.clone(),
             )
             .await?
@@ -125,15 +122,12 @@ pub async fn run_trin(
         beacon_event_tx,
         beacon_jsonrpc_tx,
         beacon_event_stream,
-    ) = if trin_config
-        .portal_subnetworks
-        .contains(&BEACON_NETWORK.to_string())
-    {
+    ) = if trin_config.portal_subnetworks.contains(&Subnetwork::Beacon) {
         initialize_beacon_network(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config_factory.create(BEACON_NETWORK),
+            storage_config_factory.create(&Subnetwork::Beacon),
             header_oracle.clone(),
         )
         .await?
@@ -150,13 +144,13 @@ pub async fn run_trin(
         history_event_stream,
     ) = if trin_config
         .portal_subnetworks
-        .contains(&HISTORY_NETWORK.to_string())
+        .contains(&Subnetwork::History)
     {
         initialize_history_network(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config_factory.create(HISTORY_NETWORK),
+            storage_config_factory.create(&Subnetwork::History),
             header_oracle.clone(),
         )
         .await?

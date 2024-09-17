@@ -1,3 +1,4 @@
+use crate::types::network::Subnetwork;
 use thiserror::Error;
 
 /// An error decoding a portal network content value.
@@ -8,8 +9,11 @@ pub enum ContentValueError {
         decode_error: ssz::DecodeError,
         input: String,
     },
-    #[error("could not determine content type of {bytes} from {network} network")]
-    UnknownContent { bytes: String, network: String },
+    #[error("could not determine content type of {bytes} from {subnetwork} subnetwork")]
+    UnknownContent {
+        bytes: String,
+        subnetwork: Subnetwork,
+    },
     /// The content value is the "0x" absent content message rather than data.
     ///
     /// This error implies that handling of the "content absent" response was skipped.
@@ -21,8 +25,14 @@ pub enum ContentValueError {
     /// This error implies that handling of the "content absent" response was skipped.
     #[error("attempted to decode the '0x' absent content message")]
     DecodeAbsentContent,
-    #[error("could not determine fork digest of {bytes} from {network} network")]
-    UnknownForkDigest { bytes: String, network: String },
-    #[error("could not determine fork name of {bytes} from {network} network")]
-    UnknownForkName { bytes: String, network: String },
+    #[error("could not determine fork digest of {bytes} from {subnetwork} subnetwork")]
+    UnknownForkDigest {
+        bytes: String,
+        subnetwork: Subnetwork,
+    },
+    #[error("could not determine fork name of {bytes} from {subnetwork} subnetwork")]
+    UnknownForkName {
+        bytes: String,
+        subnetwork: Subnetwork,
+    },
 }

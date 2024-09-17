@@ -4,7 +4,7 @@ use ssz_derive::{Decode, Encode};
 
 use crate::{
     types::{
-        cli::STATE_NETWORK,
+        network::Subnetwork,
         state_trie::{ByteCode, EncodedTrieNode, TrieProof},
     },
     utils::bytes::hex_encode,
@@ -68,7 +68,7 @@ impl ContentValue for StateContentValue {
         }
         Err(ContentValueError::UnknownContent {
             bytes: hex_encode(buf),
-            network: STATE_NETWORK.to_string(),
+            subnetwork: Subnetwork::State,
         })
     }
 }
