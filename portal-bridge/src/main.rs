@@ -11,6 +11,7 @@ use portal_bridge::{
     bridge::{beacon::BeaconBridge, era1::Era1Bridge, history::HistoryBridge, state::StateBridge},
     census::Census,
     cli::BridgeConfig,
+    handle::build_trin,
     types::{mode::BridgeMode, network::NetworkKind},
 };
 use trin_utils::log::init_tracing_logger;
@@ -28,10 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // start the bridge client, need to keep the handle alive
     // for bridge to work inside docker containers
-    let handle = bridge_config
-        .client_type
-        .build_handle(&bridge_config)
-        .map_err(|e| e.to_string())?;
+    let handle = build_trin(&bridge_config).map_err(|e| e.to_string())?;
 
     let web3_http_address = format!("http://127.0.0.1:{}", bridge_config.base_rpc_port);
     sleep(Duration::from_secs(5)).await;

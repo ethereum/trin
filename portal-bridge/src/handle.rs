@@ -1,55 +1,17 @@
-use std::{collections::HashSet, net::SocketAddr};
+use std::collections::HashSet;
 
 use tokio::process::{Child, Command};
 
 use crate::{cli::BridgeConfig, types::network::NetworkKind};
 use ethportal_api::utils::bytes::hex_encode;
-use portalnet::socket::stun_for_external;
 
-pub fn fluffy_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
-    let rpc_port = bridge_config.base_rpc_port;
-    let udp_port = bridge_config.base_discovery_port;
-    let private_key = hex_encode(bridge_config.private_key);
-    let mut command = Command::new(bridge_config.executable_path.clone());
-    let listen_all_ips = SocketAddr::new("0.0.0.0".parse().expect("to parse ip"), udp_port);
-    let ip = stun_for_external(&listen_all_ips).expect("to stun for external ip");
-
-    command
-        .kill_on_drop(true)
-        .arg("--storage-capacity:0")
-        .arg("--rpc")
-        .arg(format!("--rpc-port:{rpc_port}"))
-        .arg(format!("--udp-port:{udp_port}"))
-        .arg(format!("--nat:extip:{}", ip.ip()))
-        .arg(format!(
-            "--network:{}",
-            bridge_config.network.get_network_name()
-        ))
-        .arg(format!(
-            "--portal-subnetworks:{}",
-            subnetworks_flag(bridge_config)
-        ))
-        .arg(format!("--netkey-unsafe:{private_key}"));
-    if let Some(client_metrics_url) = bridge_config.client_metrics_url {
-        let address = client_metrics_url.ip().to_string();
-        let port = client_metrics_url.port();
-        command
-            .arg("--metrics")
-            .arg(format!("--metrics-address:{address}"))
-            .arg(format!("--metrics-port:{port}"));
+pub fn build_trin(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
+    if !bridge_config.executable_path.is_file() {
+        return Err(anyhow::anyhow!(
+            "Trin executable path is not a file: {:?}",
+            bridge_config.executable_path
+        ));
     }
-    if bridge_config.bootnodes != "default" {
-        for enr in bridge_config.bootnodes.split(',') {
-            command.args(["--bootstrap-node", enr]);
-        }
-    }
-    if let Some(ip) = bridge_config.external_ip.clone() {
-        command.arg(format!("--nat:extip:{ip}"));
-    }
-    Ok(command.spawn()?)
-}
-
-pub fn trin_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
     let rpc_port = bridge_config.base_rpc_port;
     let udp_port = bridge_config.base_discovery_port;
     let private_key = hex_encode(bridge_config.private_key);
@@ -91,7 +53,7 @@ pub fn trin_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
     Ok(command.spawn()?)
 }
 
-/// Returns the subnetwork flag to be passed to the trin/fluffy handle.
+/// Returns the subnetwork flag to be passed to the trin handle.
 ///
 /// This is a union of required subnetworks for each subnetwork from the config.
 pub fn subnetworks_flag(bridge_config: &BridgeConfig) -> String {
