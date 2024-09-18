@@ -226,21 +226,17 @@ mod test {
     use alloy_primitives::{Address, Bloom, B256, U256};
     use alloy_rlp::Decodable;
     use rstest::*;
-    use serde_json::{json, Value};
+    use serde_json::Value;
     use ssz::{Decode, Encode};
-    use tokio::sync::mpsc;
     use tree_hash::TreeHash;
 
     use crate::constants::DEFAULT_PRE_MERGE_ACC_HASH;
     use ethportal_api::{
-        types::{
-            execution::{
-                accumulator::EpochAccumulator,
-                header_with_proof::{
-                    BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof, SszNone,
-                },
+        types::execution::{
+            accumulator::EpochAccumulator,
+            header_with_proof::{
+                BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof, SszNone,
             },
-            jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
         },
         utils::bytes::{hex_decode, hex_encode},
         HistoryContentKey, RawContentKey,
@@ -262,32 +258,26 @@ mod test {
         // Use fluffy's proofs as test data to validate that trin
         // - generates proofs which match fluffy's
         // - validates hwps
+
         let file = fs::read_to_string("./src/assets/fluffy/header_with_proofs.json").unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let hwps = json.as_object().unwrap();
         let header_validator = get_mainnet_header_validator();
-        let (tx, mut rx) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-        tokio::spawn(async move {
-            spawn_mock_epoch_acc_lookup(&mut rx).await;
-        });
         let obj = hwps.get(&block_number.to_string()).unwrap();
         // Validate content_key decodes
         let raw_ck = obj.get("content_key").unwrap().as_str().unwrap();
         let raw_ck = RawContentKey::from_str(raw_ck).unwrap();
         let ck = HistoryContentKey::try_from(raw_ck).unwrap();
         match ck {
-            HistoryContentKey::BlockHeaderWithProof(_) => (),
+            HistoryContentKey::BlockHeaderByHash(_) => (),
             _ => panic!("Invalid test, content key decoded improperly"),
         }
         let raw_fluffy_hwp = obj.get("value").unwrap().as_str().unwrap();
         let fluffy_hwp =
             HeaderWithProof::from_ssz_bytes(&hex_decode(raw_fluffy_hwp).unwrap()).unwrap();
         let header = get_header(block_number);
-        let trin_proof = header_validator
-            .pre_merge_acc
-            .generate_proof(&header, tx)
-            .await
-            .unwrap();
+        let epoch_accumulator = read_epoch_accumulator_122();
+        let trin_proof = PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
         let fluffy_proof = match fluffy_hwp.proof {
             BlockHeaderProof::PreMergeAccumulatorProof(val) => val,
             _ => panic!("test reached invalid state"),
@@ -331,16 +321,9 @@ mod test {
     #[tokio::test]
     async fn invalidate_invalid_proofs() {
         let header_validator = get_mainnet_header_validator();
-        let (tx, mut rx) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-        tokio::spawn(async move {
-            spawn_mock_epoch_acc_lookup(&mut rx).await;
-        });
         let header = get_header(1_000_001);
-        let mut proof = header_validator
-            .pre_merge_acc
-            .generate_proof(&header, tx)
-            .await
-            .unwrap();
+        let epoch_accumulator = read_epoch_accumulator_122();
+        let mut proof = PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
         proof.swap(0, 1);
         let hwp = HeaderWithProof {
             header,
@@ -526,26 +509,12 @@ mod test {
         }
     }
 
-    async fn spawn_mock_epoch_acc_lookup(rx: &mut mpsc::UnboundedReceiver<HistoryJsonRpcRequest>) {
-        match rx.recv().await {
-            Some(request) => match request.endpoint {
-                HistoryEndpoint::RecursiveFindContent(content_key) => {
-                    let json_value = serde_json::to_value(content_key).unwrap();
-                    let response = json_value.as_str().unwrap();
-                    let epoch_acc_hash = response.trim_start_matches("0x03");
-                    let epoch_acc_hash = B256::from_str(epoch_acc_hash).unwrap();
-                    let epoch_acc_path = format!("./src/assets/epoch_accs/{epoch_acc_hash}.bin");
-                    let epoch_acc = fs::read(epoch_acc_path).unwrap();
-                    let epoch_acc = hex_encode(epoch_acc);
-                    let content: Value = json!(epoch_acc);
-                    let _ = request.resp.send(Ok(content));
-                }
-                _ => panic!("Unexpected request endpoint"),
-            },
-            None => {
-                panic!("Test run failed: Unable to get response from pre_merge_acc validation.")
-            }
-        }
+    fn read_epoch_accumulator_122() -> EpochAccumulator {
+        let epoch_acc_bytes = fs::read(
+            "../portal-spec-tests/tests/mainnet/history/accumulator/epoch-record-00122.ssz",
+        )
+        .unwrap();
+        EpochAccumulator::from_ssz_bytes(&epoch_acc_bytes).unwrap()
     }
 
     const HEADER_RLP_15_537_392: &str = "0xf90218a02f1dc309c7cc0a5a2e3b3dd9315fea0ffbc53c56f9237f3ca11b20de0232f153a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794ea674fdde714fd979de3edf0f56aa9716b898ec8a0fee48a40a2765ab31fcd06ab6956341d13dc2c4b9762f2447aa425bb1c089b30a082864b3a65d1ac1917c426d48915dca0fc966fbf3f30fd051659f35dc3fd9be1a013c10513b52358022f800e2f9f1c50328798427b1b4a1ebbbd20b7417fb9719db90100ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff872741c5e4f6c39283ed14f08401c9c3808401c9a028846322c95c8f617369612d65617374322d31763932a02df332ffb74ecd15c9873d3f6153b878e1c514495dfb6e89ad88e574582b02a488232b0043952c93d98508fb17c6ee";

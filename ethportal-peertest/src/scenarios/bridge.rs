@@ -1,5 +1,5 @@
 use crate::{
-    utils::{fixture_header_with_proof_1000010, wait_for_beacon_content, wait_for_history_content},
+    utils::{fixture_header_by_hash_1000010, wait_for_beacon_content, wait_for_history_content},
     Peertest,
 };
 use ethportal_api::{
@@ -38,7 +38,7 @@ pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient
         DEFAULT_GOSSIP_LIMIT,
     );
     bridge.launch().await;
-    let (content_key, content_value) = fixture_header_with_proof_1000010();
+    let (content_key, content_value) = fixture_header_by_hash_1000010();
     // Check if the stored content value in bootnode's DB matches the offered
     let received_content_value =
         wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await;

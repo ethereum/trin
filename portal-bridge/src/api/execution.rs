@@ -4,6 +4,7 @@ use alloy_primitives::B256;
 use anyhow::{anyhow, bail};
 use ethportal_api::{
     types::{
+        content_key::history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
         execution::{
             accumulator::EpochAccumulator,
             block_body::{
@@ -17,8 +18,7 @@ use ethportal_api::{
         jsonrpc::{params::Params, request::JsonRequest},
     },
     utils::bytes::{hex_decode, hex_encode},
-    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, Header, HistoryContentKey, HistoryContentValue,
-    Receipts,
+    BlockBodyKey, BlockReceiptsKey, Header, HistoryContentKey, HistoryContentValue, Receipts,
 };
 use futures::future::join_all;
 use serde_json::{json, Value};
@@ -69,12 +69,18 @@ impl ExecutionApi {
         })
     }
 
-    /// Return a validated FullHeader & content key / value pair for the given header.
+    /// Return a validated FullHeader & content by hash and number key / value pair for the given
+    /// header.
     pub async fn get_header(
         &self,
         height: u64,
         epoch_acc: Option<Arc<EpochAccumulator>>,
-    ) -> anyhow::Result<(FullHeader, HistoryContentKey, HistoryContentValue)> {
+    ) -> anyhow::Result<(
+        FullHeader,
+        HistoryContentKey, // BlockHeaderByHash
+        HistoryContentKey, // BlockHeaderByNumber
+        HistoryContentValue,
+    )> {
         // Geth requires block numbers to be formatted using the following padding.
         let block_param = format!("0x{height:01X}");
         let params = Params::Array(vec![json!(block_param), json!(true)]);
@@ -97,10 +103,16 @@ impl ExecutionApi {
         if let Err(msg) = full_header.validate() {
             bail!("Header validation failed: {msg}");
         };
-        // Construct content key / value pair.
-        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-            block_hash: full_header.header.hash().0,
-        });
+        // Construct header by hash content key / value pair.
+        let header_by_hash_content_key =
+            HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
+                block_hash: full_header.header.hash().0,
+            });
+        // Construct header by number content key / value pair.
+        let header_by_number_content_key =
+            HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
+                block_number: full_header.header.number,
+            });
         let content_value = match &full_header.epoch_acc {
             Some(epoch_acc) => {
                 // Construct HeaderWithProof
@@ -119,7 +131,12 @@ impl ExecutionApi {
                 HistoryContentValue::BlockHeaderWithProof(header_with_proof)
             }
         };
-        Ok((full_header, content_key, content_value))
+        Ok((
+            full_header,
+            header_by_hash_content_key,
+            header_by_number_content_key,
+            content_value,
+        ))
     }
 
     /// Return a validated BlockBody content key / value for the given FullHeader.

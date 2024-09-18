@@ -145,7 +145,7 @@ impl StateValidator {
     async fn get_state_root(&self, block_hash: B256) -> Result<B256, StateValidationError> {
         let header_oracle = self.header_oracle.read().await;
         let header = header_oracle
-            .recursive_find_header_with_proof(block_hash)
+            .recursive_find_header_by_hash_with_proof(block_hash)
             .await?;
         Ok(header.header.state_root)
     }
@@ -186,7 +186,7 @@ mod tests {
         });
         let history_jsonrpc_tx = MockJsonRpcBuilder::new()
             .with_response(
-                HistoryEndpoint::RecursiveFindContent(HistoryContentKey::BlockHeaderWithProof(
+                HistoryEndpoint::RecursiveFindContent(HistoryContentKey::BlockHeaderByHash(
                     header.hash().into(),
                 )),
                 ContentInfo::Content {

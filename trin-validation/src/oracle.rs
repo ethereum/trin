@@ -9,6 +9,7 @@ use ethportal_api::{
     consensus::header::BeaconBlockHeader,
     light_client::store::LightClientStore,
     types::{
+        content_key::history::BlockHeaderByHashKey,
         execution::header_with_proof::HeaderWithProof,
         jsonrpc::{
             endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint},
@@ -16,7 +17,7 @@ use ethportal_api::{
         },
         portal::ContentInfo,
     },
-    BlockHeaderKey, ContentValue, Enr, HistoryContentKey, HistoryContentValue,
+    ContentValue, Enr, HistoryContentKey, HistoryContentValue,
 };
 
 /// Responsible for dispatching cross-overlay-network requests
@@ -49,21 +50,13 @@ impl HeaderOracle {
         }
     }
 
-    // Only serves pre-block hashes aka. portal-network verified data only
-    pub async fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<B256> {
-        self.header_validator
-            .pre_merge_acc
-            .lookup_premerge_hash_by_number(block_number, self.history_jsonrpc_tx()?)
-            .await
-    }
-
     /// Returns the HeaderWithProof for the given block hash by performing a recursive find content
     /// request.
-    pub async fn recursive_find_header_with_proof(
+    pub async fn recursive_find_header_by_hash_with_proof(
         &self,
         block_hash: B256,
     ) -> anyhow::Result<HeaderWithProof> {
-        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
+        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
             block_hash: block_hash.0,
         });
         let endpoint = HistoryEndpoint::RecursiveFindContent(content_key.clone());

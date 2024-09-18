@@ -2,7 +2,7 @@ use alloy_primitives::B256;
 use rand::{seq::SliceRandom, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
-use ssz::{Decode, DecodeError};
+use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
 use std::{fmt, hash::Hash};
 
@@ -14,36 +14,41 @@ use crate::{
 
 // Prefixes for the different types of history content keys:
 // https://github.com/ethereum/portal-network-specs/blob/638aca50c913a749d0d762264d9a4ac72f1a9966/history-network.md
-pub const HISTORY_BLOCK_HEADER_KEY_PREFIX: u8 = 0x00;
+pub const HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX: u8 = 0x00;
 pub const HISTORY_BLOCK_BODY_KEY_PREFIX: u8 = 0x01;
 pub const HISTORY_BLOCK_RECEIPTS_KEY_PREFIX: u8 = 0x02;
-pub const HISTORY_BLOCK_EPOCH_ACCUMULATOR_KEY_PREFIX: u8 = 0x03;
+pub const HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX: u8 = 0x03;
 
 /// A content key in the history overlay network.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HistoryContentKey {
-    /// A block header with accumulator proof.
-    BlockHeaderWithProof(BlockHeaderKey),
+    /// A block header by hash.
+    BlockHeaderByHash(BlockHeaderByHashKey),
+    /// A block header by number.
+    BlockHeaderByNumber(BlockHeaderByNumberKey),
     /// A block body.
     BlockBody(BlockBodyKey),
     /// The transaction receipts for a block.
     BlockReceipts(BlockReceiptsKey),
-    /// An epoch header accumulator.
-    EpochAccumulator(EpochAccumulatorKey),
 }
 
 impl HistoryContentKey {
     pub fn random() -> anyhow::Result<Self> {
-        let mut random_bytes: Vec<u8> = vec![0u8; 32];
-        rand::thread_rng().fill_bytes(&mut random_bytes[..]);
         let random_prefix = [
-            HISTORY_BLOCK_HEADER_KEY_PREFIX,
+            HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX,
             HISTORY_BLOCK_BODY_KEY_PREFIX,
             HISTORY_BLOCK_RECEIPTS_KEY_PREFIX,
-            HISTORY_BLOCK_EPOCH_ACCUMULATOR_KEY_PREFIX,
+            HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX,
         ]
         .choose(&mut rand::thread_rng())
         .ok_or_else(|| anyhow::Error::msg("Failed to choose random prefix"))?;
+        let mut random_bytes: Vec<u8> =
+            if *random_prefix == HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX {
+                vec![0u8; 8]
+            } else {
+                vec![0u8; 32]
+            };
+        rand::thread_rng().fill_bytes(&mut random_bytes[..]);
         random_bytes.insert(0, *random_prefix);
         let random_bytes: RawContentKey = random_bytes.into();
         Self::try_from(random_bytes).map_err(anyhow::Error::msg)
@@ -75,18 +80,31 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
     }
 }
 
-/// A key for a block header.
+/// A key for a block header by hash.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Default)]
-pub struct BlockHeaderKey {
+pub struct BlockHeaderByHashKey {
     /// Hash of the block.
     pub block_hash: [u8; 32],
 }
 
-impl From<B256> for BlockHeaderKey {
+impl From<B256> for BlockHeaderByHashKey {
     fn from(block_hash: B256) -> Self {
         Self {
             block_hash: block_hash.0,
         }
+    }
+}
+
+/// A key for a block header by number.
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Default)]
+pub struct BlockHeaderByNumberKey {
+    /// Number of the block.
+    pub block_number: u64,
+}
+
+impl From<u64> for BlockHeaderByNumberKey {
+    fn from(block_number: u64) -> Self {
+        Self { block_number }
     }
 }
 
@@ -112,12 +130,6 @@ pub struct BlockReceiptsKey {
     pub block_hash: [u8; 32],
 }
 
-/// A key for an epoch header accumulator.
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
-pub struct EpochAccumulatorKey {
-    pub epoch_hash: B256,
-}
-
 impl TryFrom<RawContentKey> for HistoryContentKey {
     type Error = ContentKeyError;
 
@@ -129,8 +141,8 @@ impl TryFrom<RawContentKey> for HistoryContentKey {
             });
         };
         match selector {
-            HISTORY_BLOCK_HEADER_KEY_PREFIX => BlockHeaderKey::from_ssz_bytes(key)
-                .map(Self::BlockHeaderWithProof)
+            HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX => BlockHeaderByHashKey::from_ssz_bytes(key)
+                .map(Self::BlockHeaderByHash)
                 .map_err(|e| ContentKeyError::from_decode_error(e, value)),
             HISTORY_BLOCK_BODY_KEY_PREFIX => BlockBodyKey::from_ssz_bytes(key)
                 .map(Self::BlockBody)
@@ -138,9 +150,11 @@ impl TryFrom<RawContentKey> for HistoryContentKey {
             HISTORY_BLOCK_RECEIPTS_KEY_PREFIX => BlockReceiptsKey::from_ssz_bytes(key)
                 .map(Self::BlockReceipts)
                 .map_err(|e| ContentKeyError::from_decode_error(e, value)),
-            HISTORY_BLOCK_EPOCH_ACCUMULATOR_KEY_PREFIX => EpochAccumulatorKey::from_ssz_bytes(key)
-                .map(Self::EpochAccumulator)
-                .map_err(|e| ContentKeyError::from_decode_error(e, value)),
+            HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX => {
+                BlockHeaderByNumberKey::from_ssz_bytes(key)
+                    .map(Self::BlockHeaderByNumber)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, value))
+            }
             _ => Err(ContentKeyError::from_decode_error(
                 DecodeError::UnionSelectorInvalid(selector),
                 value,
@@ -152,8 +166,8 @@ impl TryFrom<RawContentKey> for HistoryContentKey {
 impl fmt::Display for HistoryContentKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            Self::BlockHeaderWithProof(header) => format!(
-                "BlockHeaderWithProof {{ block_hash: {} }}",
+            Self::BlockHeaderByHash(header) => format!(
+                "BlockHeaderByHash {{ block_hash: {} }}",
                 hex_encode_compact(header.block_hash)
             ),
             Self::BlockBody(body) => format!(
@@ -166,10 +180,10 @@ impl fmt::Display for HistoryContentKey {
                     hex_encode_compact(receipts.block_hash)
                 )
             }
-            Self::EpochAccumulator(acc) => {
+            Self::BlockHeaderByNumber(header) => {
                 format!(
-                    "EpochAccumulator {{ epoch_hash: {} }}",
-                    hex_encode_compact(acc.epoch_hash.0)
+                    "BlockHeaderByNumber {{ block_number: {} }}",
+                    header.block_number
                 )
             }
         };
@@ -189,8 +203,8 @@ impl OverlayContentKey for HistoryContentKey {
         let mut bytes: Vec<u8> = Vec::new();
 
         match self {
-            HistoryContentKey::BlockHeaderWithProof(k) => {
-                bytes.push(HISTORY_BLOCK_HEADER_KEY_PREFIX);
+            HistoryContentKey::BlockHeaderByHash(k) => {
+                bytes.push(HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX);
                 bytes.extend_from_slice(&k.block_hash);
             }
             HistoryContentKey::BlockBody(k) => {
@@ -201,9 +215,9 @@ impl OverlayContentKey for HistoryContentKey {
                 bytes.push(HISTORY_BLOCK_RECEIPTS_KEY_PREFIX);
                 bytes.extend_from_slice(&k.block_hash);
             }
-            HistoryContentKey::EpochAccumulator(k) => {
-                bytes.push(HISTORY_BLOCK_EPOCH_ACCUMULATOR_KEY_PREFIX);
-                bytes.extend_from_slice(&k.epoch_hash.0);
+            HistoryContentKey::BlockHeaderByNumber(k) => {
+                bytes.push(HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX);
+                bytes.extend_from_slice(&k.block_number.as_ssz_bytes());
             }
         }
 
@@ -224,7 +238,7 @@ mod test {
     ];
 
     #[test]
-    fn block_header() {
+    fn block_header_by_hash() {
         const KEY_STR: &str =
             "0x00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d";
         let expected_content_key = hex_decode(KEY_STR).unwrap();
@@ -234,17 +248,47 @@ mod test {
             0x6e, 0x38, 0x95, 0xfe,
         ];
 
-        let header = BlockHeaderKey {
+        let header = BlockHeaderByHashKey {
             block_hash: BLOCK_HASH,
         };
 
-        let key = HistoryContentKey::BlockHeaderWithProof(header);
+        let key = HistoryContentKey::BlockHeaderByHash(header);
 
         assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
         assert_eq!(
             key.to_string(),
-            "BlockHeaderWithProof { block_hash: 0xd1c3..621d }"
+            "BlockHeaderByHash { block_hash: 0xd1c3..621d }"
+        );
+        assert_eq!(key.to_hex(), KEY_STR);
+    }
+
+    #[test]
+    fn block_header_by_number() {
+        const BLOCK_NUMBER: u64 = 12345678;
+        const KEY_STR: &str = "0x034e61bc0000000000";
+        let expected_content_key = hex_decode(KEY_STR).unwrap();
+        let expected_content_id: [u8; 32] =
+            hex_decode("0x2113990747a85ab39785d21342fa5db1f68acc0011605c0c73f68fc331643dcf")
+                .unwrap()
+                .try_into()
+                .unwrap();
+
+        let header = BlockHeaderByNumberKey {
+            block_number: BLOCK_NUMBER,
+        };
+
+        let key = HistoryContentKey::BlockHeaderByNumber(header);
+
+        // round trip
+        let decoded = HistoryContentKey::try_from(key.to_bytes()).unwrap();
+        assert_eq!(decoded, key);
+
+        assert_eq!(key.to_bytes(), expected_content_key);
+        assert_eq!(key.content_id(), expected_content_id);
+        assert_eq!(
+            key.to_string(),
+            "BlockHeaderByNumber { block_number: 12345678 }"
         );
         assert_eq!(key.to_hex(), KEY_STR);
     }
@@ -265,6 +309,10 @@ mod test {
         };
 
         let key = HistoryContentKey::BlockBody(body);
+
+        // round trip
+        let decoded = HistoryContentKey::try_from(key.to_bytes()).unwrap();
+        assert_eq!(decoded, key);
 
         assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
@@ -298,42 +346,28 @@ mod test {
         assert_eq!(key.to_hex(), KEY_STR);
     }
 
-    // test values sourced from: https://github.com/ethereum/portal-network-specs/blob/master/content-keys-test-vectors.md
     #[test]
-    fn epoch_accumulator_key() {
-        let epoch_hash =
-            hex_decode("0xe242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
-                .unwrap();
-        const KEY_STR: &str =
-            "0x03e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491";
-        let expected_content_key = hex_decode(KEY_STR).unwrap();
-        let expected_content_id =
-            hex_decode("0x9fb2175e76c6989e0fdac3ee10c40d2a81eb176af32e1c16193e3904fe56896e")
-                .unwrap();
-
-        let key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
-            epoch_hash: B256::from_slice(&epoch_hash),
+    fn ser_de_block_header_by_hash() {
+        let content_key_json =
+            "\"0x00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
+        let expected_content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
+            block_hash: BLOCK_HASH,
         });
 
-        // round trip
-        let decoded = HistoryContentKey::try_from(key.to_bytes()).unwrap();
-        assert_eq!(decoded, key);
+        let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 
-        assert_eq!(key.to_bytes(), expected_content_key);
-        assert_eq!(key.content_id(), expected_content_id.as_ref() as &[u8]);
+        assert_eq!(content_key, expected_content_key);
         assert_eq!(
-            key.to_string(),
-            "EpochAccumulator { epoch_hash: 0xe242..c491 }"
+            serde_json::to_string(&content_key).unwrap(),
+            content_key_json
         );
-        assert_eq!(key.to_hex(), KEY_STR);
     }
 
     #[test]
-    fn ser_de_block_header() {
-        let content_key_json =
-            "\"0x00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
-        let expected_content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-            block_hash: BLOCK_HASH,
+    fn ser_de_block_header_by_number() {
+        let content_key_json = "\"0x034e61bc0000000000\"";
+        let expected_content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
+            block_number: 12345678,
         });
 
         let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
@@ -379,26 +413,6 @@ mod test {
             "\"0x02d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
         let expected_content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
             block_hash: BLOCK_HASH,
-        });
-
-        let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
-
-        assert_eq!(content_key, expected_content_key);
-        assert_eq!(
-            serde_json::to_string(&content_key).unwrap(),
-            content_key_json
-        );
-    }
-
-    #[test]
-    fn ser_de_epoch_accumulator() {
-        let content_key_json =
-            "\"0x03e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491\"";
-        let epoch_hash =
-            hex_decode("0xe242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
-                .unwrap();
-        let expected_content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
-            epoch_hash: B256::from_slice(&epoch_hash),
         });
 
         let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();

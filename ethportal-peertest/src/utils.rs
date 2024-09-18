@@ -1,9 +1,13 @@
-use std::fs;
+use std::{
+    fmt::{self, Display, Formatter},
+    fs,
+};
 
 use alloy_primitives::Bytes;
 use alloy_rlp::Decodable;
 use futures::{Future, TryFutureExt};
 use serde::Deserializer;
+use ssz::Decode;
 use tracing::error;
 
 use anyhow::Result;
@@ -11,9 +15,13 @@ use serde_yaml::Value;
 use ureq::serde::Deserialize;
 
 use ethportal_api::{
-    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, ContentValue, Header,
-    HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient, RawContentValue,
-    StateContentKey, StateContentValue, StateNetworkApiClient,
+    types::{
+        content_key::history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
+        execution::header_with_proof::HeaderWithProof,
+    },
+    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, BlockBodyKey, BlockReceiptsKey,
+    ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
+    RawContentValue, StateContentKey, StateContentValue, StateNetworkApiClient,
 };
 
 pub async fn wait_for_successful_result<Fut, O>(f: impl Fn() -> Fut) -> O
@@ -110,14 +118,30 @@ fn read_fixture(file_name: &str) -> (HistoryContentKey, HistoryContentValue) {
 
 /// History HeaderWithProof content key & value
 /// Block #1000010
-pub fn fixture_header_with_proof_1000010() -> (HistoryContentKey, HistoryContentValue) {
+pub fn fixture_header_by_hash_1000010() -> (HistoryContentKey, HistoryContentValue) {
     read_fixture("portal-spec-tests/tests/mainnet/history/headers_with_proof/1000010.yaml")
 }
 
-/// History HeaderWithProof content key & value
+/// History HeaderByHash content key & value
 /// Block #14764013 (pre-merge)
-pub fn fixture_header_with_proof() -> (HistoryContentKey, HistoryContentValue) {
+pub fn fixture_header_by_hash() -> (HistoryContentKey, HistoryContentValue) {
     read_fixture("portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.yaml")
+}
+
+/// History HeaderByNumber content key & value
+/// Block #14764013 (pre-merge)
+pub fn fixture_header_by_number() -> (HistoryContentKey, HistoryContentValue) {
+    let (_, content_value) =
+        read_fixture("portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.yaml");
+
+    // Create a content key from the block number
+    let HistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value.clone() else {
+        panic!("Expected HistoryContentValue::BlockHeaderWithProof")
+    };
+    let content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
+        block_number: header_with_proof.header.number,
+    });
+    (content_key, content_value)
 }
 
 /// History BlockBody content key & value
@@ -132,29 +156,100 @@ pub fn fixture_receipts() -> (HistoryContentKey, HistoryContentValue) {
     read_fixture("portal-spec-tests/tests/mainnet/history/receipts/14764013.yaml")
 }
 
-/// Epoch Accumulator #1659
-/// Content Key: 0x030013c08b64bf7e3afab80ad4f8ea9423f1a7d8b31a149fc3b832d7980719c60c
-/// Content ID: 0x61f6fd26ed4fb88cfae02ad691e4f41e0053e0305cb62f7cdfde5a7967ffbe65
-pub fn fixture_epoch_acc_1() -> (HistoryContentKey, HistoryContentValue) {
-    read_epoch_acc("0013c08b64bf7e3afab80ad4f8ea9423f1a7d8b31a149fc3b832d7980719c60c")
+enum DependentType {
+    BlockBody,
+    Receipts,
 }
 
-/// Epoch Accumulator #434
-/// Content Key: 0x03ed8823c84177d8ffabf104566f313a2b2a43d05304ba6c74c2f5555bae0ef329
-/// Content ID: 0x29e3c0966a85ee262ef4afeccd89721fda0962ae563a3818e81798fe28bdb37e
-pub fn fixture_epoch_acc_2() -> (HistoryContentKey, HistoryContentValue) {
-    read_epoch_acc("ed8823c84177d8ffabf104566f313a2b2a43d05304ba6c74c2f5555bae0ef329")
+impl Display for DependentType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            DependentType::BlockBody => write!(f, "body"),
+            DependentType::Receipts => write!(f, "receipts"),
+        }
+    }
 }
 
-fn read_epoch_acc(hash: &str) -> (HistoryContentKey, HistoryContentValue) {
-    let epoch_acc = std::fs::read(format!("test_assets/mainnet/0x03{hash}.portalcontent")).unwrap();
-    let epoch_acc_hash = ethportal_api::utils::bytes::hex_decode(&format!("0x{hash}")).unwrap();
-    let content_key =
-        ethportal_api::HistoryContentKey::EpochAccumulator(ethportal_api::EpochAccumulatorKey {
-            epoch_hash: alloy_primitives::B256::from_slice(&epoch_acc_hash),
-        });
-    let content_value = HistoryContentValue::decode(&content_key, &epoch_acc).unwrap();
-    (content_key, content_value)
+/// History HeaderWithProof content key & value
+/// Block #15040641 (pre-merge)
+pub fn fixture_header_by_hash_with_proof_15040641() -> (HistoryContentKey, HistoryContentValue) {
+    read_binary_history_fixture(15040641, None)
+}
+
+/// History BlockBody content key & value
+/// Block #15040641 (pre-merge)
+pub fn fixture_block_body_15040641() -> (HistoryContentKey, HistoryContentValue) {
+    read_binary_history_fixture(15040641, Some(DependentType::BlockBody))
+}
+
+/// History Receipts content key & value
+/// Block #15040641 (pre-merge)
+pub fn fixture_receipts_15040641() -> (HistoryContentKey, HistoryContentValue) {
+    read_binary_history_fixture(15040641, Some(DependentType::Receipts))
+}
+
+/// History HeaderWithProof content key & value
+/// Block #15040708 (pre-merge)
+pub fn fixture_header_by_hash_with_proof_15040708() -> (HistoryContentKey, HistoryContentValue) {
+    read_binary_history_fixture(15040708, None)
+}
+
+/// History BlockBody content key & value
+/// Block #15040708 (pre-merge)
+pub fn fixture_block_body_15040708() -> (HistoryContentKey, HistoryContentValue) {
+    read_binary_history_fixture(15040708, Some(DependentType::BlockBody))
+}
+
+/// History Receipts content key & value
+/// Block #15040708 (pre-merge)
+pub fn fixture_receipts_15040708() -> (HistoryContentKey, HistoryContentValue) {
+    read_binary_history_fixture(15040708, Some(DependentType::Receipts))
+}
+
+fn read_binary_history_fixture(
+    block_number: u64,
+    dependent: Option<DependentType>,
+) -> (HistoryContentKey, HistoryContentValue) {
+    let header_value = std::fs::read(format!(
+        "test_assets/mainnet/large_content/{block_number}/header.bin"
+    ))
+    .unwrap();
+    let header_content_value: HeaderWithProof =
+        HeaderWithProof::from_ssz_bytes(&header_value).unwrap();
+
+    match dependent {
+        Some(dependent_type) => {
+            let dependent_value = std::fs::read(format!(
+                "test_assets/mainnet/large_content/{block_number}/{dependent_type}.bin"
+            ))
+            .unwrap();
+            match dependent_type {
+                DependentType::BlockBody => {
+                    let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
+                        block_hash: header_content_value.header.hash().0,
+                    });
+                    let content_value =
+                        HistoryContentValue::decode(&content_key, &dependent_value).unwrap();
+                    (content_key, content_value)
+                }
+                DependentType::Receipts => {
+                    let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
+                        block_hash: header_content_value.header.hash().0,
+                    });
+                    let content_value =
+                        HistoryContentValue::decode(&content_key, &dependent_value).unwrap();
+                    (content_key, content_value)
+                }
+            }
+        }
+        None => {
+            let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
+                block_hash: header_content_value.header.hash().0,
+            });
+            let content_value = HistoryContentValue::BlockHeaderWithProof(header_content_value);
+            (content_key, content_value)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

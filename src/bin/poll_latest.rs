@@ -4,8 +4,11 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::{content_key::overlay::OverlayContentKey, portal::ContentInfo},
-    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey, HistoryNetworkApiClient,
+    types::{
+        content_key::{history::BlockHeaderByHashKey, overlay::OverlayContentKey},
+        portal::ContentInfo,
+    },
+    BlockBodyKey, BlockReceiptsKey, HistoryContentKey, HistoryNetworkApiClient,
 };
 use futures::StreamExt;
 use std::{
@@ -133,7 +136,7 @@ async fn audit_block(
 ) -> Result<()> {
     metrics.lock().unwrap().active_audit_count += 3;
     let header_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey { block_hash: hash.0 }),
+        HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey { block_hash: hash.0 }),
         timestamp,
         timeout,
         backoff,
