@@ -4,10 +4,10 @@ use clap::Parser;
 use discv5::enr::{CombinedKey, Enr};
 use tracing::info;
 
-use ethportal_api::{types::portal_wire::ProtocolId, HistoryContentKey};
+use ethportal_api::types::portal_wire::ProtocolId;
 use portalnet::utils::db::{configure_node_data_dir, configure_trin_data_dir};
 use trin_storage::{
-    versioned::{create_store, ContentType, IdIndexedV1Store, IdIndexedV1StoreConfig},
+    versioned::{ContentType, IdIndexedV1StoreConfig},
     PortalStorageConfigFactory,
 };
 use trin_utils::log::init_tracing_logger;
@@ -40,38 +40,40 @@ pub fn main() -> Result<()> {
     .create("history");
     let config = IdIndexedV1StoreConfig::new(ContentType::History, ProtocolId::History, config);
     let sql_connection_pool = config.sql_connection_pool.clone();
-    let store: IdIndexedV1Store<HistoryContentKey> =
-        create_store(ContentType::History, config, sql_connection_pool).unwrap();
-    let total_entry_count = store.usage_stats().entry_count;
-    info!("total entry count: {total_entry_count}");
-    let sql_connection_pool = store.config.sql_connection_pool.clone();
+    let total_count = sql_connection_pool
+        .get()
+        .unwrap()
+        .query_row(&lookup_all_query(), [], |row| row.get::<usize, u64>(0))
+        .expect("Failed to lookup history content");
+    info!("total entry count: {total_count}");
     let lookup_result = sql_connection_pool
         .get()
         .unwrap()
-        .query_row(&lookup_query(), [], |row| row.get::<usize, u64>(0))
+        .query_row(&lookup_epoch_acc_query(), [], |row| {
+            row.get::<usize, u64>(0)
+        })
         .expect("Failed to fetch history content");
     info!("found {} epoch accumulators", lookup_result);
     if script_config.evict {
-        let _: Vec<String> = sql_connection_pool
+        let removed_count = sql_connection_pool
             .get()
             .unwrap()
-            .prepare(&delete_query())
-            .unwrap()
-            .query_map([], |row| row.get::<usize, String>(0))
-            .unwrap()
-            .map(|r| r.unwrap())
-            .collect();
-        let changes = sql_connection_pool.get().unwrap().changes();
-        info!("removed {} invalid history content values", changes,);
+            .execute(&delete_epoch_acc_query(), [])
+            .unwrap();
+        info!("removed {} invalid history content values", removed_count);
     }
     Ok(())
 }
 
-fn lookup_query() -> String {
+fn lookup_all_query() -> String {
+    r#"SELECT COUNT(*) as count FROM ii1_history"#.to_string()
+}
+
+fn lookup_epoch_acc_query() -> String {
     r#"SELECT COUNT(*) as count FROM ii1_history WHERE hex(content_key) LIKE "03%""#.to_string()
 }
 
-fn delete_query() -> String {
+fn delete_epoch_acc_query() -> String {
     r#"DELETE FROM ii1_history WHERE hex(content_key) LIKE '03%'"#.to_string()
 }
 
