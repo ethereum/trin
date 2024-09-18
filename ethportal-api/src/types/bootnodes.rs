@@ -70,12 +70,20 @@ lazy_static! {
         Enr::from_str("enr:-IS4QA5hpJikeDFf1DD1_Le6_ylgrLGpdwn3SRaneGu9hY2HUI7peHep0f28UUMzbC0PvlWjN8zSfnqMG07WVcCyBhADgmlkgnY0gmlwhKRc9-KJc2VjcDI1NmsxoQJMpHmGj1xSP1O-Mffk_jYIHVcg6tY5_CjmWVg1gJEsPIN1ZHCCE4o").expect("Parsing static bootnode enr to work"),
             alias: "ultralight-4".to_string()
         }];
+
+    // AngelFood bootstrap nodes
+    pub static ref ANGELFOOD_BOOTNODES: Vec<Bootnode> = vec![
+        Bootnode{
+            enr: Enr::from_str("enr:-LC4QMnoW2m4YYQRPjZhJ5hEpcA6a3V7iQs3slQ1TepzKBIVWQtjpcHsPINc0TcheMCbx6I2n5aax8M3AtUObt74ySUCY6p0IDVhYzI2NzViNGRmMjNhNmEwOWVjNDFkZTRlYTQ2ODQxNjk2ZTQ1YzSCaWSCdjSCaXCEQONKaYlzZWNwMjU2azGhAvZgYbpA9G8NQ6X4agu-R7Ymtu0hcX6xBQ--UEel_b6Pg3VkcIIjKA").expect("Parsing static bootnode enr to work"),
+            alias: "angelfood-trin-1".to_string()
+        }];
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum Bootnodes {
     #[default]
     Default,
+    Angelfood,
     // use explicit None here instead of Option<Bootnodes>, since default value is
     // DEFAULT_BOOTNODES
     None,
@@ -100,6 +108,10 @@ impl From<Bootnodes> for Vec<Enr> {
     fn from(bootnodes: Bootnodes) -> Self {
         match bootnodes {
             Bootnodes::Default => DEFAULT_BOOTNODES.iter().map(|bn| bn.enr.clone()).collect(),
+            Bootnodes::Angelfood => ANGELFOOD_BOOTNODES
+                .iter()
+                .map(|bn| bn.enr.clone())
+                .collect(),
             Bootnodes::None => vec![],
             Bootnodes::Custom(bootnodes) => bootnodes.iter().map(|bn| bn.enr.clone()).collect(),
         }
@@ -112,6 +124,7 @@ impl FromStr for Bootnodes {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "default" => Ok(Bootnodes::Default),
+            "angelfood" => Ok(Bootnodes::Angelfood),
             "none" => Ok(Bootnodes::None),
             _ => {
                 let bootnodes: Result<Vec<Enr>, _> = s.split(',').map(Enr::from_str).collect();
@@ -135,11 +148,19 @@ mod test {
     use rstest::rstest;
 
     #[test_log::test]
-    fn test_bootnodes_default_with_angelfood_bootnodes() {
+    fn test_bootnodes_default_with_default_bootnodes() {
         let config = TrinConfig::new_from(["trin"].iter()).unwrap();
         assert_eq!(config.bootnodes, Bootnodes::Default);
         let bootnodes: Vec<Enr> = config.bootnodes.into();
         assert_eq!(bootnodes.len(), 11);
+    }
+
+    #[test_log::test]
+    fn test_bootnodes_default_with_angelfood_bootnodes() {
+        let config = TrinConfig::new_from(["trin", "--bootnodes", "angelfood"].iter()).unwrap();
+        assert_eq!(config.bootnodes, Bootnodes::Angelfood);
+        let bootnodes: Vec<Enr> = config.bootnodes.into();
+        assert_eq!(bootnodes.len(), 1);
     }
 
     #[test_log::test]
@@ -172,5 +193,30 @@ mod test {
         };
         let bootnodes: Vec<Enr> = config.bootnodes.into();
         assert_eq!(bootnodes.len(), expected_length);
+    }
+
+    #[rstest]
+    fn test_angelfood_network_defaults_to_correct_bootnodes() {
+        let config = TrinConfig::new_from(["trin", "--network", "angelfood"].iter()).unwrap();
+        assert_eq!(config.bootnodes, Bootnodes::Angelfood);
+        let bootnodes: Vec<Enr> = config.bootnodes.into();
+        assert_eq!(bootnodes.len(), 1);
+    }
+
+    #[rstest]
+    fn test_custom_bootnodes_override_angelfood_default() {
+        let enr = "enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg";
+        let config =
+            TrinConfig::new_from(["trin", "--network", "angelfood", "--bootnodes", enr].iter())
+                .unwrap();
+        assert_eq!(
+            config.bootnodes,
+            Bootnodes::Custom(vec![Bootnode {
+                enr: Enr::from_str(enr).unwrap(),
+                alias: "custom".to_string(),
+            }])
+        );
+        let bootnodes: Vec<Enr> = config.bootnodes.into();
+        assert_eq!(bootnodes.len(), 1);
     }
 }
