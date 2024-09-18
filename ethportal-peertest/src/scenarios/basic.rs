@@ -184,7 +184,7 @@ pub async fn test_history_store(target: &Client) {
 
 pub async fn test_history_local_content_absent(target: &Client) {
     info!("Testing portal_historyLocalContent absent");
-    let content_key = HistoryContentKey::BlockHeaderByHash(B256::random().into());
+    let content_key = HistoryContentKey::new_block_header_by_hash(B256::random());
     let error = HistoryNetworkApiClient::local_content(target, content_key)
         .await
         .unwrap_err();

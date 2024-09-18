@@ -55,7 +55,7 @@ impl HeaderOracle {
         &self,
         block_hash: B256,
     ) -> anyhow::Result<HeaderWithProof> {
-        let content_key = HistoryContentKey::BlockHeaderByHash(block_hash.0.into());
+        let content_key = HistoryContentKey::new_block_header_by_hash(block_hash);
         let endpoint = HistoryEndpoint::RecursiveFindContent(content_key.clone());
         let (resp, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
         let request = HistoryJsonRpcRequest { endpoint, resp };

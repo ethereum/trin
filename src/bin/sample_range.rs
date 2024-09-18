@@ -138,10 +138,10 @@ async fn audit_block(
     metrics: Arc<Mutex<Metrics>>,
     client: HttpClient,
 ) -> anyhow::Result<()> {
-    let header_by_hash_ck = HistoryContentKey::BlockHeaderByHash(hash.0.into());
-    let header_by_number_ck = HistoryContentKey::BlockHeaderByNumber(block_number.into());
-    let body_ck = HistoryContentKey::BlockBody(hash.0.into());
-    let receipts_ck = HistoryContentKey::BlockReceipts(hash.0.into());
+    let header_by_hash_ck = HistoryContentKey::new_block_header_by_hash(hash);
+    let header_by_number_ck = HistoryContentKey::new_block_header_by_number(block_number);
+    let body_ck = HistoryContentKey::new_block_body(hash);
+    let receipts_ck = HistoryContentKey::new_block_receipts(hash);
     match client.recursive_find_content(header_by_hash_ck).await {
         Ok(_) => {
             metrics.lock().unwrap().header_by_hash.success_count += 1;

@@ -11,8 +11,8 @@ pub async fn test_paginate_local_storage(peertest: &Peertest) {
 
     let mut content_keys: Vec<String> = (0..20_u8)
         .map(|_| {
-            serde_json::to_string(&HistoryContentKey::BlockHeaderByHash(
-                rand::random::<alloy_primitives::B256>().into(),
+            serde_json::to_string(&HistoryContentKey::new_block_header_by_hash(
+                rand::random::<alloy_primitives::B256>(),
             ))
             .unwrap()
         })

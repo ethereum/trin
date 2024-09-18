@@ -104,10 +104,10 @@ impl ExecutionApi {
         };
         // Construct header by hash content key / value pair.
         let header_by_hash_content_key =
-            HistoryContentKey::BlockHeaderByHash(full_header.header.hash().0.into());
+            HistoryContentKey::new_block_header_by_hash(full_header.header.hash());
         // Construct header by number content key / value pair.
         let header_by_number_content_key =
-            HistoryContentKey::BlockHeaderByNumber(full_header.header.number.into());
+            HistoryContentKey::new_block_header_by_number(full_header.header.number);
         let content_value = match &full_header.epoch_acc {
             Some(epoch_acc) => {
                 // Construct HeaderWithProof
@@ -141,7 +141,7 @@ impl ExecutionApi {
     ) -> anyhow::Result<(HistoryContentKey, HistoryContentValue)> {
         let block_body = self.get_trusted_block_body(full_header).await?;
         block_body.validate_against_header(&full_header.header)?;
-        let content_key = HistoryContentKey::BlockBody(full_header.header.hash().0.into());
+        let content_key = HistoryContentKey::new_block_body(full_header.header.hash());
         let content_value = HistoryContentValue::BlockBody(block_body);
         Ok((content_key, content_value))
     }
@@ -219,7 +219,7 @@ impl ExecutionApi {
                 full_header.header.receipts_root
             );
         }
-        let content_key = HistoryContentKey::BlockReceipts(full_header.header.hash().0.into());
+        let content_key = HistoryContentKey::new_block_receipts(full_header.header.hash());
         let content_value = HistoryContentValue::Receipts(receipts);
         Ok((content_key, content_value))
     }

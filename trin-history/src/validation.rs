@@ -151,7 +151,7 @@ mod tests {
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key =
-            HistoryContentKey::BlockHeaderByHash(header_with_proof.header.hash().0.into());
+            HistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash());
         chain_history_validator
             .validate_content(&content_key, &header_with_proof_ssz)
             .await
@@ -171,7 +171,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByHash(header.header.hash().0.into());
+        let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash());
         chain_history_validator
             .validate_content(&content_key, &content_value)
             .await
@@ -192,7 +192,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByHash(header.header.hash().0.into());
+        let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash());
         chain_history_validator
             .validate_content(&content_key, &content_value)
             .await
@@ -207,7 +207,7 @@ mod tests {
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key =
-            HistoryContentKey::BlockHeaderByNumber(header_with_proof.header.number.into());
+            HistoryContentKey::new_block_header_by_number(header_with_proof.header.number);
         chain_history_validator
             .validate_content(&content_key, &header_with_proof_ssz)
             .await
@@ -227,7 +227,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByNumber(header.header.number.into());
+        let content_key = HistoryContentKey::new_block_header_by_number(header.header.number);
         chain_history_validator
             .validate_content(&content_key, &content_value)
             .await
@@ -248,7 +248,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderByNumber(header.header.number.into());
+        let content_key = HistoryContentKey::new_block_header_by_number(header.header.number);
         chain_history_validator
             .validate_content(&content_key, &content_value)
             .await

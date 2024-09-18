@@ -141,28 +141,28 @@ async fn audit_block(
 ) -> Result<()> {
     metrics.lock().unwrap().active_audit_count += 3;
     let header_by_hash_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockHeaderByHash(hash.0.into()),
+        HistoryContentKey::new_block_header_by_hash(hash),
         timestamp,
         timeout,
         backoff,
         client.clone(),
     ));
     let header_by_number_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockHeaderByNumber(block_number.into()),
+        HistoryContentKey::new_block_header_by_number(block_number),
         timestamp,
         timeout,
         backoff,
         client.clone(),
     ));
     let block_body_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockBody(hash.0.into()),
+        HistoryContentKey::new_block_body(hash),
         timestamp,
         timeout,
         backoff,
         client.clone(),
     ));
     let receipts_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockReceipts(hash.0.into()),
+        HistoryContentKey::new_block_receipts(hash),
         timestamp,
         timeout,
         backoff,

@@ -90,7 +90,7 @@ pub async fn test_invalidate_header_by_hash(peertest: &Peertest, target: &Client
 
     // store header_with_proof - doesn't perform validation
     let (_, content_value) = fixture_header_by_hash();
-    let invalid_content_key = HistoryContentKey::BlockHeaderByHash(B256::random().into());
+    let invalid_content_key = HistoryContentKey::new_block_header_by_hash(B256::random());
 
     let store_result = peertest
         .bootnode
