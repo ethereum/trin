@@ -5,13 +5,11 @@ use anyhow::{anyhow, ensure};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-use ethportal_api::types::{
-    consensus::withdrawal::Withdrawal,
-    execution::{
-        accumulator::EpochAccumulator,
-        header::{Header, TxHashes},
-        transaction::Transaction,
-    },
+use ethportal_api::types::execution::{
+    accumulator::EpochAccumulator,
+    header::{Header, TxHashes},
+    transaction::Transaction,
+    withdrawal::Withdrawal,
 };
 use trin_validation::constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER};
 

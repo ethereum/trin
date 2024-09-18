@@ -107,12 +107,10 @@ impl TrinExecution {
 
                 let result = self.commit(&block.header, block_executor).await?;
 
-                if stop_signal_received {
-                    info!(
-                        "Commit done. Stopping execution. Last block executed number: {} state root: {}",
-                        block.header.number, block.header.state_root
-                    );
-                }
+                info!(
+                    "Commit done. Stopping execution. Last block executed number: {} state root: {}",
+                    block.header.number, block.header.state_root
+                );
 
                 return Ok(result);
             }

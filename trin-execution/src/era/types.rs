@@ -1,5 +1,6 @@
 use ethportal_api::{
-    consensus::withdrawal::Withdrawal, types::execution::transaction::Transaction, Header,
+    types::execution::{transaction::Transaction, withdrawal::Withdrawal},
+    Header,
 };
 use revm_primitives::{Address, SpecId};
 

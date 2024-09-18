@@ -1,16 +1,15 @@
 use alloy_primitives::{Bloom, B64, U64};
 use alloy_rlp::Decodable;
 use ethportal_api::{
-    calculate_root,
     consensus::{
         beacon_block::{
             SignedBeaconBlock, SignedBeaconBlockBellatrix, SignedBeaconBlockCapella,
             SignedBeaconBlockDeneb,
         },
         body::Transactions,
-        withdrawal::Withdrawal,
     },
-    types::execution::transaction::Transaction,
+    types::execution::{transaction::Transaction, withdrawal::Withdrawal},
+    utils::roots::calculate_merkle_patricia_root,
     Header,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -40,7 +39,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockBellatrix {
         let payload = &self.message.body.execution_payload;
 
         let transactions = process_transactions(&payload.transactions)?;
-        let transactions_root = calculate_root(
+        let transactions_root = calculate_merkle_patricia_root(
             transactions
                 .iter()
                 .map(|transaction| &transaction.transaction),
@@ -83,19 +82,15 @@ impl ProcessBeaconBlock for SignedBeaconBlockCapella {
         let payload = &self.message.body.execution_payload;
 
         let transactions = process_transactions(&payload.transactions)?;
-        let transactions_root = calculate_root(
+        let transactions_root = calculate_merkle_patricia_root(
             transactions
                 .iter()
                 .map(|transaction| &transaction.transaction),
         )?;
 
-        let withdrawals: Vec<Withdrawal> = payload
-            .withdrawals
-            .to_vec()
-            .iter()
-            .map(Withdrawal::from)
-            .collect();
-        let withdrawals_root = calculate_root(withdrawals.iter())?;
+        let withdrawals: Vec<Withdrawal> =
+            payload.withdrawals.iter().map(Withdrawal::from).collect();
+        let withdrawals_root = calculate_merkle_patricia_root(withdrawals.iter())?;
 
         let header = Header {
             parent_hash: payload.parent_hash,
@@ -134,19 +129,15 @@ impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
         let payload = &self.message.body.execution_payload;
 
         let transactions = process_transactions(&payload.transactions)?;
-        let transactions_root = calculate_root(
+        let transactions_root = calculate_merkle_patricia_root(
             transactions
                 .iter()
                 .map(|transaction| &transaction.transaction),
         )?;
 
-        let withdrawals: Vec<Withdrawal> = payload
-            .withdrawals
-            .to_vec()
-            .iter()
-            .map(Withdrawal::from)
-            .collect();
-        let withdrawals_root = calculate_root(withdrawals.iter())?;
+        let withdrawals: Vec<Withdrawal> =
+            payload.withdrawals.iter().map(Withdrawal::from).collect();
+        let withdrawals_root = calculate_merkle_patricia_root(withdrawals.iter())?;
 
         let header = Header {
             parent_hash: payload.parent_hash,
@@ -196,4 +187,80 @@ fn process_transactions(
                 })
         })
         .collect::<anyhow::Result<Vec<_>>>()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use alloy_primitives::{Address, Bloom, B256, B64, U256};
+    use ethportal_api::{
+        consensus::{beacon_block::SignedBeaconBlock, fork::ForkName},
+        Header,
+    };
+
+    use crate::era::beacon::ProcessBeaconBlock;
+
+    #[tokio::test]
+    async fn process_beacon_block() {
+        let signed_beacon_block_for_execution_block_15537397 =
+            std::fs::read("../test_assets/beacon/bellatrix/ValidSignedBeaconBlock/signed_beacon_block_15537397.ssz").unwrap();
+        let signed_beacon_block = SignedBeaconBlock::from_ssz_bytes(
+            &signed_beacon_block_for_execution_block_15537397,
+            ForkName::Bellatrix,
+        )
+        .unwrap();
+
+        let processed_block = signed_beacon_block.process_beacon_block().unwrap();
+        let expected: Header = Header {
+            parent_hash: B256::from_str(
+                "0x98c735877f2f30bad54fc46ba8bcd93a54da32a60b2905cb23ad6c7a70ebaa40",
+            )
+            .unwrap(),
+            uncles_hash: B256::from_str(
+                "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+            )
+            .unwrap(),
+            author: Address::from_str("0xe688b84b23f322a994a53dbf8e15fa82cdb71127").unwrap(),
+            state_root: B256::from_str(
+                "0x2c1728ed8e5d59c813fae703638b359fd13f0c58270f8f179f82478e72097684",
+            )
+            .unwrap(),
+            transactions_root: B256::from_str(
+                "0x165a029503ae62a153a3b9589a09db72646749266b2b5fa9ba3198eef453e670",
+            )
+            .unwrap(),
+            receipts_root: B256::from_str(
+                "0x20cebf97b0024253e3e959ed681c5c659d44a13e94eef442a23667efcba0ed67",
+            )
+            .unwrap(),
+            logs_bloom: Bloom::from_str("0x10000905a11025401e40204209111c0d8401a63a20024102066201864f8000081001004812102b4200400a0080001710666011200f48a08824201c0092a3e170d03e1800d65080186d21000908a00621100a260408d06384008711449148111002880a00e2002a1089491810a00249d80100113c04a506ccb69003b1a00c00c0009c8520012632848b090500012000889816342101cdc14d0512278204308004424061ca18107c08000882e084606902218042290a11122a58688e50184a0a0169820b436048301005180243488a040480249060802800582004451b1404212a141930280214d8140421110024a14e4816048703025147c48208499420a10328").unwrap(),
+            difficulty: U256::ZERO,
+            number: 15537397,
+            gas_limit: U256::from(30000000),
+            gas_used: U256::from(29997984),
+            timestamp: 1663224215,
+            extra_data: vec![],
+            mix_hash: Some(
+                B256::from_str(
+                    "0x314347f2c9e35686c6e62dc10c232b911a34b9f25db0f925a1b2207014fb67c5",
+                )
+                .unwrap(),
+            ),
+            nonce: Some(B64::ZERO),
+            base_fee_per_gas: Some(U256::from(69471578228_u128)),
+            withdrawals_root: None,
+            blob_gas_used: None,
+            excess_blob_gas: None,
+            parent_beacon_block_root: None,
+        };
+
+        assert_eq!(processed_block.header, expected);
+
+        assert_eq!(
+            processed_block.header.hash(),
+            B256::from_str("0x9797d65f12465ada68cdacf7e6b7c22fe43a4d09671187c1cb819e9b0e0dedf6")
+                .unwrap()
+        )
+    }
 }

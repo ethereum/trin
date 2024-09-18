@@ -1,16 +1,17 @@
-use std::{sync::Arc, vec};
+use std::vec;
 
 use alloy_primitives::B256;
 use alloy_rlp::{Decodable, Encodable, Error as RlpError, Header as RlpHeader};
 use anyhow::{anyhow, bail};
-use eth_trie::{EthTrie, MemoryDB, Trie};
 use serde::Deserialize;
 use sha3::{Digest, Keccak256};
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::Encode;
 
 use super::{header::Header, transaction::Transaction};
-use crate::types::consensus::withdrawal::Withdrawal;
+use crate::{
+    types::execution::withdrawal::Withdrawal, utils::roots::calculate_merkle_patricia_root,
+};
 
 pub const SHANGHAI_TIMESTAMP: u64 = 1681338455;
 // block 15537393 timestamp
@@ -72,25 +73,6 @@ impl ssz::Decode for BlockBody {
     }
 }
 
-/// Calculate the Merkle Patricia Trie root hash from a list of items
-pub fn calculate_root<'a, T: Encodable + 'a>(
-    items: impl Iterator<Item = &'a T>,
-) -> anyhow::Result<B256> {
-    let memdb = Arc::new(MemoryDB::new(true));
-    let mut trie = EthTrie::new(memdb);
-
-    // Insert items into merkle patricia trie
-    for (index, tx) in items.enumerate() {
-        let path = alloy_rlp::encode(index);
-        let encoded_tx = alloy_rlp::encode(tx);
-        trie.insert(&path, &encoded_tx)
-            .map_err(|err| anyhow!("Error inserting into merkle patricia trie: {err:?}"))?;
-    }
-
-    trie.root_hash()
-        .map_err(|err| anyhow!("Error calculating merkle patricia trie root: {err:?}"))
-}
-
 impl BlockBody {
     pub fn validate_against_header(&self, header: &Header) -> anyhow::Result<()> {
         // Validate uncles root
@@ -150,7 +132,7 @@ impl BlockBody {
     }
 
     pub fn transactions_root(&self) -> anyhow::Result<B256> {
-        calculate_root(self.transactions()?.iter())
+        calculate_merkle_patricia_root(self.transactions()?.iter())
     }
 
     pub fn uncles_root(&self) -> anyhow::Result<B256> {
@@ -161,7 +143,7 @@ impl BlockBody {
     }
 
     pub fn withdrawals_root(&self) -> anyhow::Result<B256> {
-        calculate_root(self.withdrawals()?.iter())
+        calculate_merkle_patricia_root(self.withdrawals()?.iter())
     }
 }
 
