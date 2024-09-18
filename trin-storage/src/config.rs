@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use discv5::enr::NodeId;
-use ethportal_api::types::cli::{BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK};
+use ethportal_api::types::network::Subnetwork;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 
@@ -25,14 +25,11 @@ impl PortalStorageConfigFactory {
 
     pub fn new(
         total_capacity_mb: u64,
-        subnetworks: &[String],
+        subnetworks: &[Subnetwork],
         node_id: NodeId,
         node_data_dir: PathBuf,
     ) -> Result<Self, ContentStoreError> {
-        let total_capacity_weight = subnetworks
-            .iter()
-            .map(|subnetwork| Self::get_capacity_weight(subnetwork))
-            .sum();
+        let total_capacity_weight = subnetworks.iter().map(Self::get_capacity_weight).sum();
 
         let sql_connection_pool = setup_sql(&node_data_dir)?;
 
@@ -45,7 +42,7 @@ impl PortalStorageConfigFactory {
         })
     }
 
-    pub fn create(&self, subnetwork: &str) -> PortalStorageConfig {
+    pub fn create(&self, subnetwork: &Subnetwork) -> PortalStorageConfig {
         let capacity_weight = Self::get_capacity_weight(subnetwork);
         let capacity_bytes = if self.total_capacity_weight == 0 {
             0
@@ -61,12 +58,11 @@ impl PortalStorageConfigFactory {
         }
     }
 
-    fn get_capacity_weight(subnetwork: &str) -> u64 {
+    fn get_capacity_weight(subnetwork: &Subnetwork) -> u64 {
         match subnetwork {
-            HISTORY_NETWORK => Self::HISTORY_CAPACITY_WEIGHT,
-            STATE_NETWORK => Self::STATE_CAPACITY_WEIGHT,
-            BEACON_NETWORK => Self::BEACON_CAPACITY_WEIGHT,
-            _ => panic!("Invalid subnetwork: {subnetwork}"),
+            Subnetwork::History => Self::HISTORY_CAPACITY_WEIGHT,
+            Subnetwork::State => Self::STATE_CAPACITY_WEIGHT,
+            Subnetwork::Beacon => Self::BEACON_CAPACITY_WEIGHT,
         }
     }
 }

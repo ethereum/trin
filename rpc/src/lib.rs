@@ -25,8 +25,9 @@ use eth_rpc::EthApi;
 use ethportal_api::{
     jsonrpsee,
     types::{
-        cli::{TrinConfig, Web3TransportType, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK},
+        cli::{TrinConfig, Web3TransportType},
         jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
+        network::Subnetwork,
     },
 };
 use history_rpc::HistoryNetworkApi;
@@ -53,14 +54,13 @@ pub async fn launch_jsonrpc_server(
     let mut modules = vec![PortalRpcModule::Discv5, PortalRpcModule::Web3];
 
     for network in trin_config.portal_subnetworks.iter() {
-        match network.as_str() {
-            HISTORY_NETWORK => {
+        match network {
+            Subnetwork::History => {
                 modules.push(PortalRpcModule::History);
                 modules.push(PortalRpcModule::Eth);
             }
-            STATE_NETWORK => modules.push(PortalRpcModule::State),
-            BEACON_NETWORK => modules.push(PortalRpcModule::Beacon),
-            _ => panic!("Unexpected network type: {network}"),
+            Subnetwork::State => modules.push(PortalRpcModule::State),
+            Subnetwork::Beacon => modules.push(PortalRpcModule::Beacon),
         }
     }
 

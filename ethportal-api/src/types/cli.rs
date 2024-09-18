@@ -8,7 +8,7 @@ use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr,
 use trin_utils::build_info;
 use url::Url;
 
-use crate::types::bootnodes::Bootnodes;
+use crate::types::{bootnodes::Bootnodes, network::Subnetwork};
 
 pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "http://127.0.0.1:8545/";
@@ -16,9 +16,6 @@ pub const DEFAULT_WEB3_HTTP_PORT: u16 = 8545;
 pub const DEFAULT_WEB3_WS_PORT: u16 = 8546;
 pub const DEFAULT_DISCOVERY_PORT: u16 = 9009;
 pub const DEFAULT_UTP_TRANSFER_LIMIT: usize = 50;
-pub const BEACON_NETWORK: &str = "beacon";
-pub const HISTORY_NETWORK: &str = "history";
-pub const STATE_NETWORK: &str = "state";
 const DEFAULT_SUBNETWORKS: &str = "history";
 pub const DEFAULT_NETWORK: &str = "mainnet";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "100";
@@ -152,9 +149,9 @@ pub struct TrinConfig {
     long = "portal-subnetworks",
         help = "Comma-separated list of which portal subnetworks to activate",
         default_value = DEFAULT_SUBNETWORKS,
-        use_value_delimiter = true
+        value_parser = subnetwork_parser,
     )]
-    pub portal_subnetworks: Vec<String>,
+    pub portal_subnetworks: Arc<Vec<Subnetwork>>,
 
     #[arg(
         long = "network",
@@ -234,10 +231,8 @@ impl Default for TrinConfig {
             no_upnp: false,
             private_key: None,
             trusted_block_root: None,
-            portal_subnetworks: DEFAULT_SUBNETWORKS
-                .split(',')
-                .map(|n| n.to_string())
-                .collect(),
+            portal_subnetworks: subnetwork_parser(DEFAULT_SUBNETWORKS)
+                .expect("Parsing static DEFAULT_SUBNETWORKS to work"),
             mb: DEFAULT_STORAGE_CAPACITY_MB
                 .parse()
                 .expect("Parsing static DEFAULT_STORAGE_CAPACITY_MB to work"),
@@ -308,12 +303,8 @@ impl TrinConfig {
             }
         }
 
-        if config
-            .portal_subnetworks
-            .contains(&STATE_NETWORK.to_string())
-            && !config
-                .portal_subnetworks
-                .contains(&HISTORY_NETWORK.to_string())
+        if config.portal_subnetworks.contains(&Subnetwork::State)
+            && !config.portal_subnetworks.contains(&Subnetwork::History)
         {
             return Err(Error::raw(
                 ErrorKind::ValueValidation,
@@ -343,6 +334,19 @@ pub fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> 
             "Not a valid network: {network_string}, must be 'angelfood' or 'mainnet'"
         )),
     }
+}
+
+pub fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>, String> {
+    let subnetworks = subnetwork_string
+        .split(',')
+        .map(Subnetwork::from_str)
+        .collect::<Result<Vec<Subnetwork>, String>>()?;
+
+    if subnetworks.is_empty() {
+        return Err("At least one subnetwork must be enabled".to_owned());
+    }
+
+    Ok(Arc::new(subnetworks))
 }
 
 fn check_trusted_block_root(trusted_root: &str) -> Result<B256, String> {

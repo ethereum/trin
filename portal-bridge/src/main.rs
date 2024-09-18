@@ -5,14 +5,17 @@ use tokio::{
 };
 use tracing::Instrument;
 
-use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use ethportal_api::{
+    jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
+    types::network::Subnetwork,
+};
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, era1::Era1Bridge, history::HistoryBridge, state::StateBridge},
     census::Census,
     cli::BridgeConfig,
     handle::build_trin,
-    types::{mode::BridgeMode, network::NetworkKind},
+    types::mode::BridgeMode,
 };
 use trin_utils::log::init_tracing_logger;
 use trin_validation::oracle::HeaderOracle;
@@ -47,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Launch State Network portal bridge
     if bridge_config
         .portal_subnetworks
-        .contains(&NetworkKind::State)
+        .contains(&Subnetwork::State)
     {
         // Initialize the census
         let (census_tx, census_rx) = mpsc::unbounded_channel();
@@ -77,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Launch Beacon Network portal bridge
         if bridge_config
             .portal_subnetworks
-            .contains(&NetworkKind::Beacon)
+            .contains(&Subnetwork::Beacon)
         {
             let bridge_mode = bridge_config.mode.clone();
             let consensus_api = ConsensusApi::new(
@@ -102,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Launch History Network portal bridge
         if bridge_config
             .portal_subnetworks
-            .contains(&NetworkKind::History)
+            .contains(&Subnetwork::History)
         {
             let execution_api = ExecutionApi::new(
                 bridge_config.el_provider,

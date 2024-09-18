@@ -13,7 +13,7 @@ use url::Url;
 
 use crate::{
     constants::{DEFAULT_GOSSIP_LIMIT, DEFAULT_OFFER_LIMIT, HTTP_REQUEST_TIMEOUT},
-    types::{mode::BridgeMode, network::NetworkKind},
+    types::mode::BridgeMode,
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
     FALLBACK_BASE_EL_ENDPOINT,
 };
@@ -22,6 +22,7 @@ use ethportal_api::types::{
         check_private_key_length, network_parser, DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK,
         DEFAULT_WEB3_HTTP_PORT,
     },
+    network::Subnetwork,
     portal_wire::NetworkSpec,
 };
 
@@ -55,7 +56,7 @@ pub struct BridgeConfig {
         default_value = DEFAULT_SUBNETWORK,
         value_parser = subnetwork_parser,
     )]
-    pub portal_subnetworks: Arc<Vec<NetworkKind>>,
+    pub portal_subnetworks: Arc<Vec<Subnetwork>>,
 
     #[arg(
             long = "network",
@@ -236,12 +237,12 @@ impl ClientWithBaseUrl {
 }
 
 // parser for subnetworks, makes sure that the state network is not ran alongside other subnetworks
-fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<NetworkKind>>, String> {
-    let active_subnetworks: Vec<NetworkKind> = subnetwork_string
+fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>, String> {
+    let active_subnetworks: Vec<Subnetwork> = subnetwork_string
         .split(',')
-        .map(|subnetwork| NetworkKind::from_str(subnetwork).map_err(|e| e.to_string()))
-        .collect::<Result<Vec<NetworkKind>, String>>()?;
-    if active_subnetworks.contains(&NetworkKind::State) && active_subnetworks.len() > 1 {
+        .map(Subnetwork::from_str)
+        .collect::<Result<Vec<Subnetwork>, String>>()?;
+    if active_subnetworks.contains(&Subnetwork::State) && active_subnetworks.len() > 1 {
         return Err("The State network doesn't support being ran with other subnetwork bridges at the same time".to_string());
     }
     Ok(Arc::new(active_subnetworks))
@@ -289,7 +290,7 @@ mod test {
         );
         assert_eq!(
             bridge_config.portal_subnetworks,
-            vec![NetworkKind::History, NetworkKind::Beacon].into()
+            vec![Subnetwork::History, Subnetwork::Beacon].into()
         );
     }
 
@@ -318,14 +319,12 @@ mod test {
         assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
         assert_eq!(
             bridge_config.portal_subnetworks,
-            vec![NetworkKind::History].into()
+            vec![Subnetwork::History].into()
         );
     }
 
     #[test]
-    #[should_panic(
-        expected = "Invalid network arg. Expected either 'beacon', 'history' or 'state'"
-    )]
+    #[should_panic(expected = "Unknown subnetwork: das")]
     fn test_invalid_network_arg() {
         BridgeConfig::try_parse_from(["bridge", "--portal-subnetworks", "das"].iter()).unwrap();
     }

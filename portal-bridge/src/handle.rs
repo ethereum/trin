@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use tokio::process::{Child, Command};
 
-use crate::{cli::BridgeConfig, types::network::NetworkKind};
-use ethportal_api::utils::bytes::hex_encode;
+use crate::cli::BridgeConfig;
+use ethportal_api::{types::network::Subnetwork, utils::bytes::hex_encode};
 
 pub fn build_trin(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
     if !bridge_config.executable_path.is_file() {
@@ -23,7 +23,7 @@ pub fn build_trin(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
         .args(["--no-upnp"])
         .args(["--mb", "0"])
         .args(["--web3-transport", "http"])
-        .args(["--network", bridge_config.network.get_network_name()])
+        .args(["--network", &bridge_config.network.get_network_name()])
         .args(["--portal-subnetworks", &subnetworks_flag(bridge_config)])
         .args(["--unsafe-private-key", &private_key])
         .args([
@@ -43,7 +43,7 @@ pub fn build_trin(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
     // offer mode, which corresponds 1:1 with the utp transfer limit
     if bridge_config
         .portal_subnetworks
-        .contains(&NetworkKind::State)
+        .contains(&Subnetwork::State)
     {
         command.args([
             "--utp-transfer-limit",
@@ -61,10 +61,10 @@ pub fn subnetworks_flag(bridge_config: &BridgeConfig) -> String {
         .portal_subnetworks
         .iter()
         .flat_map(|subnetwork| match subnetwork {
-            NetworkKind::Beacon => vec![NetworkKind::Beacon],
-            NetworkKind::History => vec![NetworkKind::History],
+            Subnetwork::Beacon => vec![Subnetwork::Beacon],
+            Subnetwork::History => vec![Subnetwork::History],
             // State requires both history and state
-            NetworkKind::State => vec![NetworkKind::History, NetworkKind::State],
+            Subnetwork::State => vec![Subnetwork::History, Subnetwork::State],
         })
         .map(|network_kind| network_kind.to_string())
         .collect::<HashSet<_>>();

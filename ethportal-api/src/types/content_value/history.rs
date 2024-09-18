@@ -1,7 +1,7 @@
 use crate::{
     types::{
-        cli::HISTORY_NETWORK, content_value::ContentValue,
-        execution::header_with_proof::HeaderWithProof,
+        content_value::ContentValue, execution::header_with_proof::HeaderWithProof,
+        network::Subnetwork,
     },
     utils::bytes::hex_encode,
     BlockBody, ContentValueError, HistoryContentKey, RawContentValue, Receipts,
@@ -49,7 +49,7 @@ impl ContentValue for HistoryContentValue {
 
         Err(ContentValueError::UnknownContent {
             bytes: hex_encode(buf),
-            network: HISTORY_NETWORK.to_string(),
+            subnetwork: Subnetwork::History,
         })
     }
 }
@@ -95,13 +95,13 @@ mod test {
             error,
             ContentValueError::UnknownContent {
                 bytes: "0x010203040506070809".to_string(),
-                network: "history".to_string()
+                subnetwork: Subnetwork::History,
             }
         );
         // Test the error Display representation.
         assert_eq!(
             error.to_string(),
-            "could not determine content type of 0x010203040506070809 from history network"
+            "could not determine content type of 0x010203040506070809 from history subnetwork"
         );
     }
 }

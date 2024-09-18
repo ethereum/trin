@@ -9,6 +9,7 @@ use ethportal_api::{
     types::{
         cli::{TrinConfig, DEFAULT_DISCOVERY_PORT},
         enr::Enr,
+        network::{Network, Subnetwork},
     },
     utils::bytes::hex_encode,
     Discv5ApiClient,
@@ -57,8 +58,8 @@ async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
 
 fn generate_trin_config(
     id: u16,
-    network: &str,
-    subnetworks: &str,
+    network: &Network,
+    subnetworks: &[Subnetwork],
     bootnode_enr: Option<&Enr>,
 ) -> TrinConfig {
     let bootnodes_arg = bootnode_enr
@@ -81,13 +82,19 @@ fn generate_trin_config(
     let mut private_key = vec![id as u8; 3];
     private_key.append(&mut vec![0u8; 29]);
     let private_key = hex_encode(private_key);
+    let subnetworks = subnetworks
+        .iter()
+        .map(|sn| sn.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
+    let network = network.to_string();
 
     let trin_config_args = vec![
         "trin",
         "--network",
-        network,
+        &network,
         "--portal-subnetworks",
-        subnetworks,
+        &subnetworks,
         "--bootnodes",
         bootnodes_arg.as_str(),
         "--discovery-port",
@@ -103,7 +110,11 @@ fn generate_trin_config(
     TrinConfig::new_from(trin_config_args.iter()).unwrap()
 }
 
-pub async fn launch_peertest_nodes(count: u16, network: &str, subnetworks: &str) -> Peertest {
+pub async fn launch_peertest_nodes(
+    count: u16,
+    network: &Network,
+    subnetworks: &[Subnetwork],
+) -> Peertest {
     // Bootnode uses a peertest id of 1
     let bootnode_config = generate_trin_config(1, network, subnetworks, None);
     let bootnode = launch_node(bootnode_config).await.unwrap();

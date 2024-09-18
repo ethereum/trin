@@ -9,6 +9,7 @@ pub mod distance;
 pub mod enr;
 pub mod execution;
 pub mod jsonrpc;
+pub mod network;
 pub mod node_id;
 pub mod portal;
 pub mod portal_wire;

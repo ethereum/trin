@@ -38,7 +38,7 @@ where
                 let error: ContentNotFoundJsonError = serde_json::from_str(&msg).map_err(|e| {
                     RpcServeError::Message(format!(
                         "Failed to parse error message from {} subnetwork: {e:?}",
-                        TEndpoint::subnetwork()
+                        TEndpoint::subnetwork(),
                     ))
                 })?;
                 Err(error.into())

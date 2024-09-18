@@ -10,7 +10,10 @@ use tokio_stream::wrappers::BroadcastStream;
 use tracing::{debug, error, trace, warn};
 
 use ethportal_api::{
-    types::portal_wire::{NetworkSpec, ProtocolId},
+    types::{
+        network::Subnetwork,
+        portal_wire::{NetworkSpec, ProtocolId},
+    },
     utils::bytes::{hex_encode, hex_encode_upper},
 };
 
@@ -131,17 +134,17 @@ impl PortalnetEvents {
                 ProtocolId::History => self.send_overlay_request(
                     self.history_handle.tx.as_ref(),
                     request.into(),
-                    "history",
+                    Subnetwork::History,
                 ),
                 ProtocolId::Beacon => self.send_overlay_request(
                     self.beacon_handle.tx.as_ref(),
                     request.into(),
-                    "beacon",
+                    Subnetwork::Beacon,
                 ),
                 ProtocolId::State => self.send_overlay_request(
                     self.state_handle.tx.as_ref(),
                     request.into(),
-                    "state",
+                    Subnetwork::State,
                 ),
                 ProtocolId::Utp => {
                     if let Err(err) = self.utp_talk_reqs.send(request) {
@@ -186,17 +189,21 @@ impl PortalnetEvents {
             self.send_overlay_request(
                 self.beacon_handle.tx.as_ref(),
                 Event(event.clone()),
-                "beacon",
+                Subnetwork::Beacon,
             );
         }
         if recipients.contains(&ProtocolId::State) {
-            self.send_overlay_request(self.state_handle.tx.as_ref(), Event(event.clone()), "state");
+            self.send_overlay_request(
+                self.state_handle.tx.as_ref(),
+                Event(event.clone()),
+                Subnetwork::State,
+            );
         }
         if recipients.contains(&ProtocolId::History) {
             self.send_overlay_request(
                 self.history_handle.tx.as_ref(),
                 Event(event.clone()),
-                "history",
+                Subnetwork::History,
             );
         }
     }
@@ -205,7 +212,7 @@ impl PortalnetEvents {
         &self,
         tx: Option<&mpsc::UnboundedSender<OverlayRequest>>,
         msg: OverlayRequest,
-        dest: &'static str,
+        dest: Subnetwork,
     ) {
         match tx {
             Some(tx) => {
