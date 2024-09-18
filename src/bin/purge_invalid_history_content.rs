@@ -2,17 +2,13 @@ use alloy_primitives::B256;
 use anyhow::Result;
 use clap::Parser;
 use discv5::enr::{CombinedKey, Enr};
-use ssz::Decode;
 use tracing::info;
 
-use ethportal_api::{
-    types::{execution::header_with_proof::HeaderWithProof, portal_wire::ProtocolId},
-    BlockBody, HistoryContentKey, OverlayContentKey, Receipts,
-};
+use ethportal_api::{types::portal_wire::ProtocolId, HistoryContentKey};
 use portalnet::utils::db::{configure_node_data_dir, configure_trin_data_dir};
 use trin_storage::{
     versioned::{create_store, ContentType, IdIndexedV1Store, IdIndexedV1StoreConfig},
-    ContentId, PortalStorageConfigFactory,
+    PortalStorageConfigFactory,
 };
 use trin_utils::log::init_tracing_logger;
 
@@ -44,47 +40,39 @@ pub fn main() -> Result<()> {
     .create("history");
     let config = IdIndexedV1StoreConfig::new(ContentType::History, ProtocolId::History, config);
     let sql_connection_pool = config.sql_connection_pool.clone();
-    let mut store: IdIndexedV1Store<HistoryContentKey> =
+    let store: IdIndexedV1Store<HistoryContentKey> =
         create_store(ContentType::History, config, sql_connection_pool).unwrap();
-
     let total_entry_count = store.usage_stats().entry_count;
-    let mut content_ids_to_remove = Vec::new();
-    for offset in (0..total_entry_count).step_by(100) {
-        let paginate_result = store.paginate(offset, 100)?;
-        for key in paginate_result.content_keys {
-            let content_id = ContentId::from(key.content_id());
-            let value = store.lookup_content_value(&content_id)?;
-            if let Some(value) = value {
-                if !is_content_valid(&key, &value) {
-                    content_ids_to_remove.push(content_id);
-                }
-            }
-        }
-    }
-    info!(
-        "found {} invalid history content values",
-        content_ids_to_remove.len()
-    );
+    info!("total entry count: {total_entry_count}");
+    let sql_connection_pool = store.config.sql_connection_pool.clone();
+    let lookup_result = sql_connection_pool
+        .get()
+        .unwrap()
+        .query_row(&lookup_query(), [], |row| row.get::<usize, u64>(0))
+        .expect("Failed to fetch history content");
+    info!("found {} epoch accumulators", lookup_result);
     if script_config.evict {
-        for content_id in &content_ids_to_remove {
-            store.delete(content_id)?;
-        }
-        info!(
-            "removed {} invalid history content values",
-            content_ids_to_remove.len()
-        );
+        let _: Vec<String> = sql_connection_pool
+            .get()
+            .unwrap()
+            .prepare(&delete_query())
+            .unwrap()
+            .query_map([], |row| row.get::<usize, String>(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        let changes = sql_connection_pool.get().unwrap().changes();
+        info!("removed {} invalid history content values", changes,);
     }
     Ok(())
 }
 
-fn is_content_valid(content_key: &HistoryContentKey, value: &[u8]) -> bool {
-    match content_key {
-        HistoryContentKey::BlockHeaderByHash(_) | HistoryContentKey::BlockHeaderByNumber(_) => {
-            HeaderWithProof::from_ssz_bytes(value).is_ok()
-        }
-        HistoryContentKey::BlockBody(_) => BlockBody::from_ssz_bytes(value).is_ok(),
-        HistoryContentKey::BlockReceipts(_) => Receipts::from_ssz_bytes(value).is_ok(),
-    }
+fn lookup_query() -> String {
+    r#"SELECT COUNT(*) as count FROM ii1_history WHERE hex(content_key) LIKE "03%""#.to_string()
+}
+
+fn delete_query() -> String {
+    r#"DELETE FROM ii1_history WHERE hex(content_key) LIKE '03%'"#.to_string()
 }
 
 // CLI Parameter Handling

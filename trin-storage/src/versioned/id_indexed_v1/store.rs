@@ -41,7 +41,7 @@ pub struct PaginateResult<TContentKey> {
 #[derive(Debug)]
 pub struct IdIndexedV1Store<TContentKey: OverlayContentKey> {
     /// The configuration.
-    config: IdIndexedV1StoreConfig,
+    pub config: IdIndexedV1StoreConfig,
     /// The maximum distance between `NodeId` and content id that store should keep. Updated
     /// dynamically after pruning to the farthest distance still stored.
     radius: Distance,
