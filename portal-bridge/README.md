@@ -1,10 +1,10 @@
 # Portal-Bridge
-Process to feed the portal network by gossiping data retrieved from a trusted provider. Currently, this is only compatible with `Trin` & `Fluffy` clients.
+Process to feed the portal network by gossiping data retrieved from a trusted provider. This is only compatible with `Trin` clients.
 
 ex.
 ```sh
 git clone https://github.com/ethereum/portal-accumulators.git
-cargo run -p portal-bridge -- --executable-path ./target/debug/trin --epoch-accumulator-path ./portal-accumulators trin
+cargo run -p portal-bridge -- --executable-path ./target/debug/trin --epoch-accumulator-path ./portal-accumulators
 ```
 
 ## Providers
@@ -19,10 +19,6 @@ cargo run -p portal-bridge -- --executable-path ./target/debug/trin --epoch-accu
   - This option has not been thoroughly tested against all possible providers, if you are unable to connect to a local client please open an issue.
   - To bridge "beacon" network data, specify the URL for your Consensus client.
 	- eg. `--cl-provider http://localhost:8551`
-
-## Must specify a client
-To run Portal-Bridge, you must specify what kind of client exists at the provided executable path.
-Current options include `"trin"` / `"fluffy"`.
 
 ### Bridge modes
 #### History Subnetwork

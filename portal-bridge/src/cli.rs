@@ -1,20 +1,17 @@
 use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy_primitives::B256;
-use anyhow::anyhow;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client, IntoUrl, Request, Response,
 };
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
-use tokio::process::Child;
 use tracing::error;
 use url::Url;
 
 use crate::{
-    client_handles::{fluffy_handle, trin_handle},
     constants::{DEFAULT_GOSSIP_LIMIT, DEFAULT_OFFER_LIMIT, HTTP_REQUEST_TIMEOUT},
     types::{mode::BridgeMode, network::NetworkKind},
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
@@ -92,9 +89,6 @@ pub struct BridgeConfig {
         help = "(Only use this if you are behind a NAT) The address which will be advertised to peers (in an ENR). Changing it does not change which address trin binds to, ex: 127.0.0.1"
     )]
     pub external_ip: Option<String>,
-
-    #[command(subcommand)]
-    pub client_type: ClientType,
 
     #[arg(
         long = "private-key",
@@ -253,41 +247,6 @@ fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<NetworkKind>>, S
     Ok(Arc::new(active_subnetworks))
 }
 
-type ParseError = &'static str;
-
-#[derive(Clone, Debug, PartialEq, Eq, Subcommand)]
-pub enum ClientType {
-    Fluffy,
-    Trin,
-}
-
-impl FromStr for ClientType {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "fluffy" => Ok(ClientType::Fluffy),
-            "trin" => Ok(ClientType::Trin),
-            _ => Err("Invalid client type"),
-        }
-    }
-}
-
-impl ClientType {
-    pub fn build_handle(&self, bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
-        if !bridge_config.executable_path.is_file() {
-            return Err(anyhow!(
-                "Invalid path executable doesn't exist: {:?}",
-                bridge_config.executable_path
-            ));
-        }
-        match self {
-            ClientType::Fluffy => fluffy_handle(bridge_config),
-            ClientType::Trin => trin_handle(bridge_config),
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -305,7 +264,6 @@ mod test {
             EPOCH_ACC_PATH,
             "--portal-subnetworks",
             "history,beacon",
-            "trin",
         ]);
         assert_eq!(
             bridge_config.executable_path,
@@ -348,7 +306,6 @@ mod test {
             EPOCH_ACC_PATH,
             "--mode",
             EPOCH,
-            "trin",
         ]);
         assert_eq!(
             bridge_config.executable_path,
@@ -370,20 +327,6 @@ mod test {
         expected = "Invalid network arg. Expected either 'beacon', 'history' or 'state'"
     )]
     fn test_invalid_network_arg() {
-        BridgeConfig::try_parse_from(["bridge", "--portal-subnetworks", "das", "trin"].iter())
-            .unwrap();
-    }
-
-    #[test]
-    #[should_panic(expected = "MissingSubcommand")]
-    fn test_config_requires_client_type_subcommand() {
-        BridgeConfig::try_parse_from([
-            "bridge",
-            "--executable-path",
-            "path/to/executable",
-            "--epoch-accumulator-path",
-            "path/to/epoch/accumulator",
-        ])
-        .unwrap();
+        BridgeConfig::try_parse_from(["bridge", "--portal-subnetworks", "das"].iter()).unwrap();
     }
 }
