@@ -1,5 +1,5 @@
 use ethportal_api::{
-    consensus::execution_payload::Withdrawal, types::execution::transaction::Transaction, Header,
+    consensus::withdrawal::Withdrawal, types::execution::transaction::Transaction, Header,
 };
 use revm_primitives::{Address, SpecId};
 
@@ -15,7 +15,7 @@ pub struct TransactionsWithSender {
 pub struct ProcessedBlock {
     pub header: Header,
     pub uncles: Option<Vec<Header>>,
-    pub withdraws: Option<Vec<Withdrawal>>,
+    pub withdrawals: Option<Vec<Withdrawal>>,
     pub transactions: Vec<TransactionsWithSender>,
 }
 

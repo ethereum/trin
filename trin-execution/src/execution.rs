@@ -104,7 +104,17 @@ impl TrinExecution {
                 if stop_signal_received {
                     info!("Stop signal received. Committing now, please wait!");
                 }
-                return self.commit(&block.header, block_executor).await;
+
+                let result = self.commit(&block.header, block_executor).await?;
+
+                if stop_signal_received {
+                    info!(
+                        "Commit done. Stopping execution. Last block executed number: {} state root: {}",
+                        block.header.number, block.header.state_root
+                    );
+                }
+
+                return Ok(result);
             }
 
             // Commit early if we have reached the limits, to prevent too much memory usage.

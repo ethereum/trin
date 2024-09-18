@@ -39,7 +39,7 @@ pub fn process_block_rewards(block: &ProcessedBlock, beneficiaries: &mut HashMap
 }
 
 pub fn process_withdrawals(block: &ProcessedBlock, beneficiaries: &mut HashMap<Address, u128>) {
-    if let Some(withdrawals) = &block.withdraws {
+    if let Some(withdrawals) = &block.withdrawals {
         for withdrawal in withdrawals.iter() {
             if withdrawal.amount == 0 {
                 continue;

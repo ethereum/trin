@@ -72,6 +72,25 @@ impl ssz::Decode for BlockBody {
     }
 }
 
+/// Calculate the Merkle Patricia Trie root hash from a list of items
+pub fn calculate_root<'a, T: Encodable + 'a>(
+    items: impl Iterator<Item = &'a T>,
+) -> anyhow::Result<B256> {
+    let memdb = Arc::new(MemoryDB::new(true));
+    let mut trie = EthTrie::new(memdb);
+
+    // Insert items into merkle patricia trie
+    for (index, tx) in items.enumerate() {
+        let path = alloy_rlp::encode(index);
+        let encoded_tx = alloy_rlp::encode(tx);
+        trie.insert(&path, &encoded_tx)
+            .map_err(|err| anyhow!("Error inserting into merkle patricia trie: {err:?}"))?;
+    }
+
+    trie.root_hash()
+        .map_err(|err| anyhow!("Error calculating merkle patricia trie root: {err:?}"))
+}
+
 impl BlockBody {
     pub fn validate_against_header(&self, header: &Header) -> anyhow::Result<()> {
         // Validate uncles root
@@ -131,19 +150,7 @@ impl BlockBody {
     }
 
     pub fn transactions_root(&self) -> anyhow::Result<B256> {
-        let memdb = Arc::new(MemoryDB::new(true));
-        let mut trie = EthTrie::new(memdb);
-
-        // Insert txs into tx tree
-        for (index, tx) in self.transactions()?.iter().enumerate() {
-            let path = alloy_rlp::encode(index);
-            let encoded_tx = alloy_rlp::encode(tx);
-            trie.insert(&path, &encoded_tx)
-                .map_err(|err| anyhow!("Error calculating transactions root: {err:?}"))?;
-        }
-
-        trie.root_hash()
-            .map_err(|err| anyhow!("Error calculating transactions root: {err:?}"))
+        calculate_root(self.transactions()?.iter())
     }
 
     pub fn uncles_root(&self) -> anyhow::Result<B256> {
@@ -154,18 +161,7 @@ impl BlockBody {
     }
 
     pub fn withdrawals_root(&self) -> anyhow::Result<B256> {
-        let memdb = Arc::new(MemoryDB::new(true));
-        let mut trie = EthTrie::new(memdb);
-
-        for (index, wd) in self.withdrawals()?.iter().enumerate() {
-            let path = alloy_rlp::encode(index);
-            let encoded_wd = alloy_rlp::encode(wd);
-            trie.insert(&path, &encoded_wd)
-                .map_err(|err| anyhow!("Error calculating withdrawals root: {err:?}"))?;
-        }
-
-        trie.root_hash()
-            .map_err(|err| anyhow!("Error calculating withdrawals root: {err:?}"))
+        calculate_root(self.withdrawals()?.iter())
     }
 }
 
