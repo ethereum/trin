@@ -707,6 +707,8 @@ where
                                         %e,
                                         "Failed to connect to inbound uTP stream for FindContent"
                                     );
+                                    // Indicate to the query that the content is invalid
+                                    let _ = valid_content_tx.send(None);
                                     return;
                                 }
                             };
@@ -1873,7 +1875,7 @@ where
         nodes_to_poke: Vec<NodeId>,
         utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
         sending_peer: NodeId,
-        valid_content_callback: Sender<ValidatedContent<NodeId>>,
+        valid_content_callback: Sender<Option<ValidatedContent<NodeId>>>,
     ) {
         let mut content = content;
         // Operate under assumption that all content in the store is valid
@@ -1900,6 +1902,8 @@ where
                         content.key = %content_key,
                         "Error validating content"
                     );
+                    // Indicate to the query that the content is invalid
+                    let _ = valid_content_callback.send(None);
                     return;
                 }
             };
@@ -1956,11 +1960,11 @@ where
         }
 
         if valid_content_callback
-            .send(ValidatedContent {
+            .send(Some(ValidatedContent {
                 content: content.clone(),
                 was_utp_transfer: utp_transfer,
                 sending_peer,
-            })
+            }))
             .is_err()
         {
             warn!("The content query has exited before the returned content could be marked as valid. Perhaps a timeout, or a parallel copy of the content was validated first.");
