@@ -36,13 +36,8 @@ use crate::{
 };
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
-    types::{
-        content_key::history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
-        execution::accumulator::EpochAccumulator,
-        portal::ContentInfo,
-    },
-    BlockBodyKey, BlockReceiptsKey, HistoryContentKey, HistoryContentValue,
-    HistoryNetworkApiClient,
+    types::{execution::accumulator::EpochAccumulator, portal::ContentInfo},
+    HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use trin_validation::{
     constants::EPOCH_SIZE, header_validator::HeaderValidator, oracle::HeaderOracle,
@@ -144,27 +139,38 @@ impl Era1Bridge {
             let blocks_to_sample = block_range.clone().collect::<Vec<u64>>();
             let blocks_to_sample =
                 blocks_to_sample.choose_multiple(&mut thread_rng(), sample_size as usize);
-            let mut hashes_to_sample: Vec<B256> = vec![];
+            let mut hashes_to_sample: Vec<(B256, u64)> = vec![];
             for block_number in blocks_to_sample {
                 let block_hash = self.execution_api.get_block_hash(*block_number).await?;
-                hashes_to_sample.push(block_hash);
+                hashes_to_sample.push((block_hash, *block_number));
             }
             let content_keys_to_sample = hashes_to_sample
-                .iter()
-                .map(|hash| {
+                .into_iter()
+                .map(|(hash, number)| {
                     (
-                        HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
-                            block_hash: hash.0,
-                        }),
-                        HistoryContentKey::BlockBody(BlockBodyKey { block_hash: hash.0 }),
-                        HistoryContentKey::BlockReceipts(BlockReceiptsKey { block_hash: hash.0 }),
+                        HistoryContentKey::new_block_header_by_hash(hash),
+                        HistoryContentKey::new_block_header_by_number(number),
+                        HistoryContentKey::new_block_body(hash),
+                        HistoryContentKey::new_block_receipts(hash),
                     )
                 })
-                .collect::<Vec<(HistoryContentKey, HistoryContentKey, HistoryContentKey)>>()
+                .collect::<Vec<(
+                    HistoryContentKey,
+                    HistoryContentKey,
+                    HistoryContentKey,
+                    HistoryContentKey,
+                )>>()
                 .iter()
-                .flat_map(|(header_key, body_key, receipts_key)| {
-                    vec![header_key.clone(), body_key.clone(), receipts_key.clone()]
-                })
+                .flat_map(
+                    |(header_by_hash_key, header_by_number_key, body_key, receipts_key)| {
+                        vec![
+                            header_by_hash_key.clone(),
+                            header_by_number_key.clone(),
+                            body_key.clone(),
+                            receipts_key.clone(),
+                        ]
+                    },
+                )
                 .collect::<Vec<HistoryContentKey>>();
             let mut found = 0;
             let hunter_threshold = (content_keys_to_sample.len() as u64 * threshold / 100) as usize;
@@ -360,46 +366,43 @@ impl Era1Bridge {
             "Serving block tuple at height: {}",
             block_tuple.header.header.number
         );
-        let mut gossip_header = true;
+        let mut gossip_header_by_hash = true;
         if hunt {
             let header_hash = block_tuple.header.header.hash();
-            let header_by_hash_key = BlockHeaderByHashKey {
-                block_hash: header_hash.0,
-            };
-            let header_content_key = HistoryContentKey::BlockHeaderByHash(header_by_hash_key);
+            let header_content_key = HistoryContentKey::new_block_header_by_hash(header_hash);
             let header_content_info = portal_client
                 .recursive_find_content(header_content_key.clone())
                 .await;
             if let Ok(ContentInfo::Content { .. }) = header_content_info {
                 info!(
-                    "Skipping header at height: {} as header already found",
+                    "Skipping header by hash at height: {} as header already found",
                     block_tuple.header.header.number
                 );
-                gossip_header = false;
+                gossip_header_by_hash = false;
             }
         }
-        if gossip_header {
-            let timer = metrics.start_process_timer("construct_and_gossip_header");
-            match Self::construct_and_gossip_header(
+        if gossip_header_by_hash {
+            let timer = metrics.start_process_timer("construct_and_gossip_header_by_hash");
+            match Self::construct_and_gossip_header_by_hash(
                 portal_client.clone(),
                 block_tuple.clone(),
-                epoch_acc,
-                header_validator,
+                epoch_acc.clone(),
+                header_validator.clone(),
                 block_stats.clone(),
             )
             .await
             {
                 Ok(_) => {
-                    metrics.report_gossip_success(true, "header");
+                    metrics.report_gossip_success(true, "header_by_hash");
                     info!(
-                        "Successfully served block tuple header at height: {:?}",
+                        "Successfully served block tuple header by hash at height: {:?}",
                         block_tuple.header.header.number
                     )
                 }
                 Err(msg) => {
-                    metrics.report_gossip_success(false, "header");
+                    metrics.report_gossip_success(false, "header_by_hash");
                     warn!(
-                        "Error serving block tuple header at height, will not gossip remaining block content: {:?} - {:?}",
+                        "Error serving block tuple header by hash at height, will not gossip remaining block content: {:?} - {:?}",
                         block_tuple.header.header.number, msg
                     );
                     // We actually do want to cut off the gossip for body / receipts if header
@@ -416,13 +419,53 @@ impl Era1Bridge {
             // since they must be available for body / receipt validation.
             sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
         }
+        let mut gossip_header_by_number = true;
+        if hunt {
+            let header_content_key =
+                HistoryContentKey::new_block_header_by_number(block_tuple.header.header.number);
+            let header_content_info = portal_client
+                .recursive_find_content(header_content_key.clone())
+                .await;
+            if let Ok(ContentInfo::Content { .. }) = header_content_info {
+                info!(
+                    "Skipping header by number at height: {} as header already found",
+                    block_tuple.header.header.number
+                );
+                gossip_header_by_number = false;
+            }
+        }
+        if gossip_header_by_number {
+            let timer = metrics.start_process_timer("construct_and_gossip_header_by_number");
+            match Self::construct_and_gossip_header_by_number(
+                portal_client.clone(),
+                block_tuple.clone(),
+                epoch_acc,
+                header_validator,
+                block_stats.clone(),
+            )
+            .await
+            {
+                Ok(_) => {
+                    metrics.report_gossip_success(true, "header_by_number");
+                    info!(
+                        "Successfully served block tuple header by number at height: {:?}",
+                        block_tuple.header.header.number
+                    )
+                }
+                Err(msg) => {
+                    metrics.report_gossip_success(false, "header_by_number");
+                    warn!(
+                        "Error serving block tuple header by number at height, will not gossip remaining block content: {:?} - {:?}",
+                        block_tuple.header.header.number, msg
+                    );
+                }
+            }
+            metrics.stop_process_timer(timer);
+        }
         let mut gossip_body = true;
         if hunt {
             let body_hash = block_tuple.header.header.hash();
-            let body_key = BlockBodyKey {
-                block_hash: body_hash.0,
-            };
-            let body_content_key = HistoryContentKey::BlockBody(body_key);
+            let body_content_key = HistoryContentKey::new_block_body(body_hash);
             let body_content_info = portal_client
                 .recursive_find_content(body_content_key.clone())
                 .await;
@@ -463,10 +506,7 @@ impl Era1Bridge {
         let mut gossip_receipts = true;
         if hunt {
             let receipts_hash = block_tuple.header.header.hash();
-            let receipts_key = BlockReceiptsKey {
-                block_hash: receipts_hash.0,
-            };
-            let receipts_content_key = HistoryContentKey::BlockReceipts(receipts_key);
+            let receipts_content_key = HistoryContentKey::new_block_receipts(receipts_hash);
             let receipts_content_info = portal_client
                 .recursive_find_content(receipts_content_key.clone())
                 .await;
@@ -507,7 +547,7 @@ impl Era1Bridge {
         Ok(())
     }
 
-    async fn construct_and_gossip_header(
+    async fn construct_and_gossip_header_by_hash(
         portal_client: HttpClient,
         block_tuple: BlockTuple,
         epoch_acc: Arc<EpochAccumulator>,
@@ -539,25 +579,47 @@ impl Era1Bridge {
         header_validator.validate_header_with_proof(&header_with_proof)?;
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
-
         // Construct HistoryContentKey for block header by hash and gossip it
-        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
-            block_hash: header.hash().0,
-        });
+        let content_key = HistoryContentKey::new_block_header_by_hash(header.hash());
+        gossip_history_content(portal_client, content_key, content_value, block_stats).await?;
 
-        gossip_history_content(
-            portal_client.clone(),
-            content_key,
-            content_value.clone(),
-            block_stats.clone(),
-        )
-        .await?;
+        Ok(())
+    }
 
+    async fn construct_and_gossip_header_by_number(
+        portal_client: HttpClient,
+        block_tuple: BlockTuple,
+        epoch_acc: Arc<EpochAccumulator>,
+        header_validator: Arc<HeaderValidator>,
+        block_stats: Arc<Mutex<HistoryBlockStats>>,
+    ) -> anyhow::Result<()> {
+        debug!(
+            "Serving block header by number at height: {}",
+            block_tuple.header.header.number
+        );
+        let header = block_tuple.header.header;
+        // Fetch HeaderRecord from EpochAccumulator for validation
+        let header_index = header.number % EPOCH_SIZE;
+        let header_record = &epoch_acc[header_index as usize];
+
+        // Validate Header
+        let actual_header_hash = header.hash();
+
+        ensure!(
+            header_record.block_hash == actual_header_hash,
+            "Header hash doesn't match record in local accumulator: {:?} - {:?}",
+            actual_header_hash,
+            header_record.block_hash
+        );
+
+        // Construct HeaderWithProof
+        let header_with_proof = construct_proof(header.clone(), &epoch_acc).await?;
+        // Double check that the proof is valid
+        header_validator.validate_header_with_proof(&header_with_proof)?;
+        // Construct HistoryContentValue
+        let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
         // Construct HistoryContentKey for block header by number and gossip it
-        let content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
-            block_number: header.number,
-        });
-
+        let content_key = HistoryContentKey::new_block_header_by_number(header.number);
         gossip_history_content(portal_client, content_key, content_value, block_stats).await?;
 
         Ok(())
@@ -574,9 +636,7 @@ impl Era1Bridge {
         );
         let header = block_tuple.header.header;
         // Construct HistoryContentKey
-        let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
-            block_hash: header.hash().0,
-        });
+        let content_key = HistoryContentKey::new_block_body(header.hash());
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockBody(block_tuple.body.body);
         gossip_history_content(portal_client, content_key, content_value, block_stats).await
@@ -593,9 +653,7 @@ impl Era1Bridge {
         );
         let header = block_tuple.header.header;
         // Construct HistoryContentKey
-        let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
-            block_hash: header.hash().0,
-        });
+        let content_key = HistoryContentKey::new_block_receipts(header.hash());
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::Receipts(block_tuple.receipts.receipts);
         gossip_history_content(portal_client, content_key, content_value, block_stats).await

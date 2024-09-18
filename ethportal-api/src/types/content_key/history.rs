@@ -1,4 +1,3 @@
-use alloy_primitives::B256;
 use rand::{seq::SliceRandom, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
@@ -53,6 +52,28 @@ impl HistoryContentKey {
         let random_bytes: RawContentKey = random_bytes.into();
         Self::try_from(random_bytes).map_err(anyhow::Error::msg)
     }
+
+    pub fn new_block_header_by_hash(block_hash: impl Into<[u8; 32]>) -> Self {
+        Self::BlockHeaderByHash(BlockHeaderByHashKey {
+            block_hash: block_hash.into(),
+        })
+    }
+
+    pub fn new_block_header_by_number(block_number: u64) -> Self {
+        Self::BlockHeaderByNumber(BlockHeaderByNumberKey { block_number })
+    }
+
+    pub fn new_block_body(block_hash: impl Into<[u8; 32]>) -> Self {
+        Self::BlockBody(BlockBodyKey {
+            block_hash: block_hash.into(),
+        })
+    }
+
+    pub fn new_block_receipts(block_hash: impl Into<[u8; 32]>) -> Self {
+        Self::BlockReceipts(BlockReceiptsKey {
+            block_hash: block_hash.into(),
+        })
+    }
 }
 
 impl Hash for HistoryContentKey {
@@ -87,14 +108,6 @@ pub struct BlockHeaderByHashKey {
     pub block_hash: [u8; 32],
 }
 
-impl From<B256> for BlockHeaderByHashKey {
-    fn from(block_hash: B256) -> Self {
-        Self {
-            block_hash: block_hash.0,
-        }
-    }
-}
-
 /// A key for a block header by number.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Default)]
 pub struct BlockHeaderByNumberKey {
@@ -102,25 +115,11 @@ pub struct BlockHeaderByNumberKey {
     pub block_number: u64,
 }
 
-impl From<u64> for BlockHeaderByNumberKey {
-    fn from(block_number: u64) -> Self {
-        Self { block_number }
-    }
-}
-
 /// A key for a block body.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct BlockBodyKey {
     /// Hash of the block.
     pub block_hash: [u8; 32],
-}
-
-impl From<B256> for BlockBodyKey {
-    fn from(block_hash: B256) -> Self {
-        Self {
-            block_hash: block_hash.0,
-        }
-    }
 }
 
 /// A key for the transaction receipts for a block.
@@ -394,9 +393,7 @@ mod test {
     fn ser_de_block_body() {
         let content_key_json =
             "\"0x01d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
-        let expected_content_key = HistoryContentKey::BlockBody(BlockBodyKey {
-            block_hash: BLOCK_HASH,
-        });
+        let expected_content_key = HistoryContentKey::new_block_body(BLOCK_HASH);
 
         let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 
@@ -411,9 +408,7 @@ mod test {
     fn ser_de_block_receipts() {
         let content_key_json =
             "\"0x02d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
-        let expected_content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
-            block_hash: BLOCK_HASH,
-        });
+        let expected_content_key = HistoryContentKey::new_block_receipts(BLOCK_HASH);
 
         let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 

@@ -1,9 +1,7 @@
 use crate::{utils::fixture_header_by_hash, Peertest, PeertestNode};
 use alloy_primitives::{B256, U256};
 use ethportal_api::{
-    types::{
-        content_key::history::BlockHeaderByHashKey, distance::Distance, portal_wire::ProtocolId,
-    },
+    types::{distance::Distance, portal_wire::ProtocolId},
     BeaconNetworkApiClient, ContentValue, Discv5ApiClient, HistoryContentKey,
     HistoryNetworkApiClient, StateNetworkApiClient, Web3ApiClient,
 };
@@ -186,9 +184,7 @@ pub async fn test_history_store(target: &Client) {
 
 pub async fn test_history_local_content_absent(target: &Client) {
     info!("Testing portal_historyLocalContent absent");
-    let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
-        block_hash: B256::random().into(),
-    });
+    let content_key = HistoryContentKey::new_block_header_by_hash(B256::random());
     let error = HistoryNetworkApiClient::local_content(target, content_key)
         .await
         .unwrap_err();

@@ -9,7 +9,6 @@ use ethportal_api::{
     consensus::header::BeaconBlockHeader,
     light_client::store::LightClientStore,
     types::{
-        content_key::history::BlockHeaderByHashKey,
         execution::header_with_proof::HeaderWithProof,
         jsonrpc::{
             endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint},
@@ -56,9 +55,7 @@ impl HeaderOracle {
         &self,
         block_hash: B256,
     ) -> anyhow::Result<HeaderWithProof> {
-        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
-            block_hash: block_hash.0,
-        });
+        let content_key = HistoryContentKey::new_block_header_by_hash(block_hash);
         let endpoint = HistoryEndpoint::RecursiveFindContent(content_key.clone());
         let (resp, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
         let request = HistoryJsonRpcRequest { endpoint, resp };

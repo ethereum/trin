@@ -4,7 +4,6 @@ use alloy_primitives::B256;
 use anyhow::{anyhow, bail};
 use ethportal_api::{
     types::{
-        content_key::history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
         execution::{
             accumulator::EpochAccumulator,
             block_body::{
@@ -18,7 +17,7 @@ use ethportal_api::{
         jsonrpc::{params::Params, request::JsonRequest},
     },
     utils::bytes::{hex_decode, hex_encode},
-    BlockBodyKey, BlockReceiptsKey, Header, HistoryContentKey, HistoryContentValue, Receipts,
+    Header, HistoryContentKey, HistoryContentValue, Receipts,
 };
 use futures::future::join_all;
 use serde_json::{json, Value};
@@ -105,14 +104,10 @@ impl ExecutionApi {
         };
         // Construct header by hash content key / value pair.
         let header_by_hash_content_key =
-            HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
-                block_hash: full_header.header.hash().0,
-            });
+            HistoryContentKey::new_block_header_by_hash(full_header.header.hash());
         // Construct header by number content key / value pair.
         let header_by_number_content_key =
-            HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
-                block_number: full_header.header.number,
-            });
+            HistoryContentKey::new_block_header_by_number(full_header.header.number);
         let content_value = match &full_header.epoch_acc {
             Some(epoch_acc) => {
                 // Construct HeaderWithProof
@@ -146,9 +141,7 @@ impl ExecutionApi {
     ) -> anyhow::Result<(HistoryContentKey, HistoryContentValue)> {
         let block_body = self.get_trusted_block_body(full_header).await?;
         block_body.validate_against_header(&full_header.header)?;
-        let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
-            block_hash: full_header.header.hash().0,
-        });
+        let content_key = HistoryContentKey::new_block_body(full_header.header.hash());
         let content_value = HistoryContentValue::BlockBody(block_body);
         Ok((content_key, content_value))
     }
@@ -226,9 +219,7 @@ impl ExecutionApi {
                 full_header.header.receipts_root
             );
         }
-        let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
-            block_hash: full_header.header.hash().0,
-        });
+        let content_key = HistoryContentKey::new_block_receipts(full_header.header.hash());
         let content_value = HistoryContentValue::Receipts(receipts);
         Ok((content_key, content_value))
     }
