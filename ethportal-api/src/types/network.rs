@@ -16,11 +16,14 @@ impl fmt::Display for Network {
     }
 }
 
-impl From<Network> for String {
-    fn from(network: Network) -> String {
-        match network {
-            Network::Mainnet => "mainnet".to_string(),
-            Network::Angelfood => "angelfood".to_string(),
+impl std::str::FromStr for Network {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "mainnet" => Ok(Network::Mainnet),
+            "angelfood" => Ok(Network::Angelfood),
+            _ => Err(format!("Unknown network: {s}")),
         }
     }
 }
@@ -43,25 +46,15 @@ impl fmt::Display for Subnetwork {
     }
 }
 
-impl From<Subnetwork> for String {
-    fn from(subnetwork: Subnetwork) -> String {
-        match subnetwork {
-            Subnetwork::Beacon => "beacon".to_string(),
-            Subnetwork::History => "history".to_string(),
-            Subnetwork::State => "state".to_string(),
-        }
-    }
-}
+impl std::str::FromStr for Subnetwork {
+    type Err = String;
 
-impl TryFrom<&str> for Subnetwork {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
             "beacon" => Ok(Subnetwork::Beacon),
             "history" => Ok(Subnetwork::History),
             "state" => Ok(Subnetwork::State),
-            _ => Err(format!("Unknown subnetwork: {value}")),
+            _ => Err(format!("Unknown subnetwork: {s}")),
         }
     }
 }

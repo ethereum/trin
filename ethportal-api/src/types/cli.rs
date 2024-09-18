@@ -151,7 +151,7 @@ pub struct TrinConfig {
         default_value = DEFAULT_SUBNETWORKS,
         value_parser = subnetwork_parser,
     )]
-    pub portal_subnetworks: Vec<Subnetwork>,
+    pub portal_subnetworks: Arc<Vec<Subnetwork>>,
 
     #[arg(
         long = "network",
@@ -336,17 +336,17 @@ pub fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> 
     }
 }
 
-pub fn subnetwork_parser(subnetwork_string: &str) -> Result<Vec<Subnetwork>, String> {
+pub fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>, String> {
     let subnetworks = subnetwork_string
         .split(',')
-        .map(Subnetwork::try_from)
+        .map(Subnetwork::from_str)
         .collect::<Result<Vec<Subnetwork>, String>>()?;
 
     if subnetworks.is_empty() {
         return Err("At least one subnetwork must be enabled".to_owned());
     }
 
-    Ok(subnetworks)
+    Ok(Arc::new(subnetworks))
 }
 
 fn check_trusted_block_root(trusted_root: &str) -> Result<B256, String> {

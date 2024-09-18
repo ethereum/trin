@@ -240,7 +240,7 @@ impl ClientWithBaseUrl {
 fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>, String> {
     let active_subnetworks: Vec<Subnetwork> = subnetwork_string
         .split(',')
-        .map(|subnetwork| Subnetwork::try_from(subnetwork).map_err(|e| e.to_string()))
+        .map(Subnetwork::from_str)
         .collect::<Result<Vec<Subnetwork>, String>>()?;
     if active_subnetworks.contains(&Subnetwork::State) && active_subnetworks.len() > 1 {
         return Err("The State network doesn't support being ran with other subnetwork bridges at the same time".to_string());
@@ -324,9 +324,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Invalid network arg. Expected either 'beacon', 'history' or 'state'"
-    )]
+    #[should_panic(expected = "Unknown subnetwork: das")]
     fn test_invalid_network_arg() {
         BridgeConfig::try_parse_from(["bridge", "--portal-subnetworks", "das"].iter()).unwrap();
     }

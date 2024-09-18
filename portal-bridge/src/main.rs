@@ -15,7 +15,7 @@ use portal_bridge::{
     census::Census,
     cli::BridgeConfig,
     handle::build_trin,
-    types::{mode::BridgeMode, network::NetworkKind},
+    types::mode::BridgeMode,
 };
 use trin_utils::log::init_tracing_logger;
 use trin_validation::oracle::HeaderOracle;

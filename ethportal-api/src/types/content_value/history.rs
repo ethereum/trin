@@ -101,7 +101,7 @@ mod test {
         // Test the error Display representation.
         assert_eq!(
             error.to_string(),
-            "could not determine content type of 0x010203040506070809 from history network"
+            "could not determine content type of 0x010203040506070809 from history subnetwork"
         );
     }
 }

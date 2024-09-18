@@ -158,7 +158,8 @@ async fn peertest_trace_recursive_find_content() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_validate_pre_merge_header_by_hash() {
-    let (peertest, target, handle) = setup_peertest("mainnet", &[HISTORY_NETWORK]).await;
+    let (peertest, target, handle) =
+        setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
     peertest::scenarios::validation::test_validate_pre_merge_header_by_hash(&peertest, &target)
         .await;
     peertest.exit_all_nodes();
@@ -168,7 +169,8 @@ async fn peertest_validate_pre_merge_header_by_hash() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_validate_pre_merge_header_by_number() {
-    let (peertest, target, handle) = setup_peertest("mainnet", &[HISTORY_NETWORK]).await;
+    let (peertest, target, handle) =
+        setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
     peertest::scenarios::validation::test_validate_pre_merge_header_by_number(&peertest, &target)
         .await;
     peertest.exit_all_nodes();
