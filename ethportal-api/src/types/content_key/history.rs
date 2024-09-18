@@ -22,9 +22,9 @@ pub const HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX: u8 = 0x03;
 /// A content key in the history overlay network.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HistoryContentKey {
-    /// A block header with accumulator proof.
+    /// A block header by hash.
     BlockHeaderByHash(BlockHeaderByHashKey),
-    /// A block header with accumulator proof.
+    /// A block header by number.
     BlockHeaderByNumber(BlockHeaderByNumberKey),
     /// A block body.
     BlockBody(BlockBodyKey),
@@ -365,9 +365,7 @@ mod test {
 
     #[test]
     fn ser_de_block_header_by_number() {
-        // let content_key_json = "12345678";
         let content_key_json = "\"0x034e61bc0000000000\"";
-
         let expected_content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
             block_number: 12345678,
         });
