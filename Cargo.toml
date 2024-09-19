@@ -14,7 +14,7 @@ description = "A Rust implementation of the Ethereum Portal Network"
 
 [dependencies]
 alloy-primitives.workspace = true
-alloy = { version = "=0.3.1", features = ["full"]}
+alloy = { version = "=0.3.6", features = ["full"]}
 anyhow.workspace = true
 clap.workspace = true
 dirs = "5.0.1"
@@ -76,8 +76,8 @@ members = [
 ]
 
 [workspace.dependencies]
-alloy-consensus = "0.3.1"
-alloy-primitives = "0.8.0" 
+alloy-consensus = "0.3.6"
+alloy-primitives = "0.8.3" 
 alloy-rlp = "0.3.8"
 anyhow = "1.0.68"
 async-trait = "0.1.68"
@@ -108,11 +108,11 @@ quickcheck = "1.0.3"
 r2d2 = "0.8.9"
 r2d2_sqlite = "0.24.0"
 rand = "0.8.5"
-reqwest = { version = "0.12.7", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.12.7", features = ["native-tls-vendored", "json"] }
 reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
 reth-rpc-types = { tag = "v1.0.6", git = "https://github.com/paradigmxyz/reth.git"}
-revm = { version = "14.0.1", default-features = false, features = ["std", "secp256k1", "serde-json"] }
-revm-primitives = { version = "9.0.1", default-features = false, features = ["std", "serde"] }
+revm = { version = "14.0.2", default-features = false, features = ["std", "secp256k1", "serde-json"] }
+revm-primitives = { version = "9.0.2", default-features = false, features = ["std", "serde"] }
 rpc = { path = "rpc"}
 rstest = "0.18.2"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
