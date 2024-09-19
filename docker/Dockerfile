@@ -1,5 +1,5 @@
 # select build image
-FROM rust:1.80.0 AS builder
+FROM rust:1.81.0 AS builder
 
 # create a new empty shell project
 RUN USER=root cargo new --bin trin
