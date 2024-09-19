@@ -90,7 +90,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockCapella {
 
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
-        let withdrawals_root = calculate_merkle_patricia_root(withdrawals.iter())?;
+        let withdrawals_root = calculate_merkle_patricia_root(&withdrawals)?;
 
         let header = Header {
             parent_hash: payload.parent_hash,
@@ -137,7 +137,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
 
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
-        let withdrawals_root = calculate_merkle_patricia_root(withdrawals.iter())?;
+        let withdrawals_root = calculate_merkle_patricia_root(&withdrawals)?;
 
         let header = Header {
             parent_hash: payload.parent_hash,

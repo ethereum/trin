@@ -132,7 +132,7 @@ impl BlockBody {
     }
 
     pub fn transactions_root(&self) -> anyhow::Result<B256> {
-        calculate_merkle_patricia_root(self.transactions()?.iter())
+        calculate_merkle_patricia_root(&self.transactions()?)
     }
 
     pub fn uncles_root(&self) -> anyhow::Result<B256> {
@@ -143,7 +143,7 @@ impl BlockBody {
     }
 
     pub fn withdrawals_root(&self) -> anyhow::Result<B256> {
-        calculate_merkle_patricia_root(self.withdrawals()?.iter())
+        calculate_merkle_patricia_root(&self.withdrawals()?)
     }
 }
 

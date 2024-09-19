@@ -9,13 +9,13 @@ use eth_trie::{EthTrie, MemoryDB, Trie};
 ///
 /// `(rlp(index), encoded(item))` pairs.
 pub fn calculate_merkle_patricia_root<'a, T: Encodable + 'a>(
-    items: impl Iterator<Item = &'a T>,
+    items: impl IntoIterator<Item = &'a T>,
 ) -> anyhow::Result<B256> {
     let memdb = Arc::new(MemoryDB::new(true));
     let mut trie = EthTrie::new(memdb);
 
     // Insert items into merkle patricia trie
-    for (index, tx) in items.enumerate() {
+    for (index, tx) in items.into_iter().enumerate() {
         let path = alloy_rlp::encode(index);
         let encoded_tx = alloy_rlp::encode(tx);
         trie.insert(&path, &encoded_tx)
