@@ -2,6 +2,8 @@ use alloy_primitives::Address;
 use alloy_rlp::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::consensus::execution_payload::Withdrawal as ConsensusWithdrawal;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, RlpDecodable, RlpEncodable)]
 #[serde(rename_all = "camelCase")]
 pub struct Withdrawal {
@@ -21,4 +23,15 @@ where
     let s: String = Deserialize::deserialize(deserializer)?;
     u64::from_str_radix(s.trim_start_matches("0x"), 16)
         .map_err(|_| serde::de::Error::custom("failed to parse hex string"))
+}
+
+impl From<&ConsensusWithdrawal> for Withdrawal {
+    fn from(withdrawal: &ConsensusWithdrawal) -> Self {
+        Self {
+            index: withdrawal.index,
+            validator_index: withdrawal.validator_index,
+            address: withdrawal.address,
+            amount: withdrawal.amount,
+        }
+    }
 }

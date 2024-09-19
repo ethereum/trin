@@ -12,4 +12,3 @@ pub mod pubkey;
 pub mod serde;
 pub mod signature;
 pub mod sync_committee;
-pub mod withdrawal;

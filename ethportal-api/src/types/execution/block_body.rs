@@ -1,16 +1,17 @@
-use std::{sync::Arc, vec};
+use std::vec;
 
 use alloy_primitives::B256;
 use alloy_rlp::{Decodable, Encodable, Error as RlpError, Header as RlpHeader};
 use anyhow::{anyhow, bail};
-use eth_trie::{EthTrie, MemoryDB, Trie};
 use serde::Deserialize;
 use sha3::{Digest, Keccak256};
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::Encode;
 
 use super::{header::Header, transaction::Transaction};
-use crate::types::consensus::withdrawal::Withdrawal;
+use crate::{
+    types::execution::withdrawal::Withdrawal, utils::roots::calculate_merkle_patricia_root,
+};
 
 pub const SHANGHAI_TIMESTAMP: u64 = 1681338455;
 // block 15537393 timestamp
@@ -131,19 +132,7 @@ impl BlockBody {
     }
 
     pub fn transactions_root(&self) -> anyhow::Result<B256> {
-        let memdb = Arc::new(MemoryDB::new(true));
-        let mut trie = EthTrie::new(memdb);
-
-        // Insert txs into tx tree
-        for (index, tx) in self.transactions()?.iter().enumerate() {
-            let path = alloy_rlp::encode(index);
-            let encoded_tx = alloy_rlp::encode(tx);
-            trie.insert(&path, &encoded_tx)
-                .map_err(|err| anyhow!("Error calculating transactions root: {err:?}"))?;
-        }
-
-        trie.root_hash()
-            .map_err(|err| anyhow!("Error calculating transactions root: {err:?}"))
+        calculate_merkle_patricia_root(&self.transactions()?)
     }
 
     pub fn uncles_root(&self) -> anyhow::Result<B256> {
@@ -154,18 +143,7 @@ impl BlockBody {
     }
 
     pub fn withdrawals_root(&self) -> anyhow::Result<B256> {
-        let memdb = Arc::new(MemoryDB::new(true));
-        let mut trie = EthTrie::new(memdb);
-
-        for (index, wd) in self.withdrawals()?.iter().enumerate() {
-            let path = alloy_rlp::encode(index);
-            let encoded_wd = alloy_rlp::encode(wd);
-            trie.insert(&path, &encoded_wd)
-                .map_err(|err| anyhow!("Error calculating withdrawals root: {err:?}"))?;
-        }
-
-        trie.root_hash()
-            .map_err(|err| anyhow!("Error calculating withdrawals root: {err:?}"))
+        calculate_merkle_patricia_root(&self.withdrawals()?)
     }
 }
 

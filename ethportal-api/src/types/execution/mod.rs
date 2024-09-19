@@ -4,3 +4,4 @@ pub mod header;
 pub mod header_with_proof;
 pub mod receipts;
 pub mod transaction;
+pub mod withdrawal;
