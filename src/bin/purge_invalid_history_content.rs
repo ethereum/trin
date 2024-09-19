@@ -4,7 +4,7 @@ use clap::Parser;
 use discv5::enr::{CombinedKey, Enr};
 use tracing::info;
 
-use ethportal_api::types::portal_wire::ProtocolId;
+use ethportal_api::types::{network::Subnetwork, portal_wire::ProtocolId};
 use portalnet::utils::db::{configure_node_data_dir, configure_trin_data_dir};
 use trin_storage::{
     versioned::{ContentType, IdIndexedV1StoreConfig},
@@ -32,12 +32,12 @@ pub fn main() -> Result<()> {
 
     let config = PortalStorageConfigFactory::new(
         script_config.capacity as u64,
-        &["history".to_string()],
+        &[Subnetwork::History],
         node_id,
         node_data_dir,
     )
     .unwrap()
-    .create("history");
+    .create(&Subnetwork::History);
     let config = IdIndexedV1StoreConfig::new(ContentType::History, ProtocolId::History, config);
     let sql_connection_pool = config.sql_connection_pool.clone();
     let total_count = sql_connection_pool
