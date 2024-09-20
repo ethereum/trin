@@ -19,7 +19,7 @@ use ethportal_api::{
 };
 use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
 use tokio::sync::mpsc;
-use trin_execution::evm::async_db::AsyncDatabase;
+use trin_evm::async_db::AsyncDatabase;
 
 use crate::{errors::RpcServeError, fetch::proxy_to_subnet};
 

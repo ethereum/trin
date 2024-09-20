@@ -1,10 +1,10 @@
 use clap::Parser;
 use revm_primitives::SpecId;
 use tracing::info;
+use trin_evm::spec_id::get_spec_block_number;
 use trin_execution::{
     cli::{TrinExecutionConfig, TrinExecutionSubCommands},
     era::manager::EraManager,
-    evm::spec_id::get_spec_block_number,
     execution::TrinExecution,
     storage::utils::setup_temp_dir,
     subcommands::era2::{export::StateExporter, import::StateImporter},

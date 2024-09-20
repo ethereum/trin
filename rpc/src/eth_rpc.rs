@@ -13,7 +13,7 @@ use ethportal_api::{
     },
     ContentValue, EthApiServer, Header, HistoryContentKey, HistoryContentValue,
 };
-use trin_execution::evm::{
+use trin_evm::{
     async_db::{execute_transaction, AsyncDatabase},
     create_block_env,
 };

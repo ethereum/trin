@@ -2,28 +2,13 @@ use alloy_primitives::U256;
 use alloy_rpc_types::TransactionRequest;
 use ethportal_api::types::execution::transaction::{
     AccessListTransaction, BlobTransaction, EIP1559Transaction, LegacyTransaction, ToAddress,
-    Transaction,
 };
 use revm_primitives::{AccessListItem, SpecId, TransactTo, TxEnv};
-
-use crate::era::types::TransactionsWithSender;
 
 use super::spec_id::get_spec_id;
 
 pub trait TxEnvModifier {
     fn modify(&self, block_number: u64, tx_env: &mut TxEnv);
-}
-
-impl TxEnvModifier for TransactionsWithSender {
-    fn modify(&self, block_number: u64, tx_env: &mut TxEnv) {
-        tx_env.caller = self.sender_address;
-        match &self.transaction {
-            Transaction::Legacy(tx) => tx.modify(block_number, tx_env),
-            Transaction::AccessList(tx) => tx.modify(block_number, tx_env),
-            Transaction::EIP1559(tx) => tx.modify(block_number, tx_env),
-            Transaction::Blob(tx) => tx.modify(block_number, tx_env),
-        }
-    }
 }
 
 impl TxEnvModifier for LegacyTransaction {

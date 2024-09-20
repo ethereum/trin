@@ -4,13 +4,11 @@ use alloy_consensus::constants::ETH_TO_WEI;
 use alloy_primitives::Address;
 use revm::{db::State, Evm};
 use revm_primitives::SpecId;
+use trin_evm::spec_id::get_spec_block_number;
 
 use crate::{era::types::ProcessedBlock, storage::evm_db::EvmDB};
 
-use super::{
-    dao_fork::{DAO_HARDFORK_BENEFICIARY, DAO_HARDKFORK_ACCOUNTS},
-    spec_id::get_spec_block_number,
-};
+use super::dao_fork::{DAO_HARDFORK_BENEFICIARY, DAO_HARDKFORK_ACCOUNTS};
 
 // Calculate block reward
 // https://github.com/paradigmxyz/reth/blob/v0.2.0-beta.6/crates/consensus/common/src/calc.rs

@@ -1,7 +1,8 @@
 use std::future::Future;
 
-use revm::Database;
-use revm_primitives::{AccountInfo, Address, BlockEnv, Bytecode, EVMError, EVMResult, B256, U256};
+use revm_primitives::{
+    db::Database, AccountInfo, Address, BlockEnv, Bytecode, EVMError, EVMResult, B256, U256,
+};
 use tokio::{runtime, task};
 
 use super::{create_evm, tx_env_modifier::TxEnvModifier};

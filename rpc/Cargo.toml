@@ -29,6 +29,6 @@ tokio.workspace = true
 tower = { version = "0.4.13", features = ["full"] }
 tower-http = { version = "0.4.4", features = ["full"] }
 tracing.workspace = true
-trin-execution.workspace = true
+trin-evm.workspace = true
 trin-utils.workspace = true
 trin-validation.workspace = true
