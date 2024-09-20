@@ -3,7 +3,7 @@ use std::{
     hash::{Hash, Hasher},
     io,
     net::{Ipv4Addr, SocketAddr},
-    path::PathBuf,
+    path::Path,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -84,7 +84,7 @@ impl fmt::Debug for Discovery {
 impl Discovery {
     pub fn new(
         portal_config: PortalnetConfig,
-        node_data_dir: PathBuf,
+        node_data_dir: &Path,
         network_spec: Arc<NetworkSpec>,
     ) -> Result<Self, String> {
         let listen_all_ips = SocketAddr::new(
@@ -521,17 +521,18 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::db::{configure_node_data_dir, configure_trin_data_dir};
+    use crate::utils::db::configure_node_data_dir;
     use ethportal_api::types::{bootnodes::Bootnodes, portal_wire::MAINNET};
+    use trin_utils::dir::create_temp_test_dir;
 
     #[test]
     fn test_enr_file() {
-        // Setup temp trin data directory if we're in ephemeral mode
-        let trin_data_dir = configure_trin_data_dir(true).unwrap();
+        // Setup temp trin data directory, as if we're in ephemeral mode
+        let temp_dir = create_temp_test_dir().unwrap();
 
         // Configure node data dir based on the provided private key
         let (node_data_dir, private_key) =
-            configure_node_data_dir(trin_data_dir, None, "test".to_string()).unwrap();
+            configure_node_data_dir(temp_dir.path(), None, MAINNET.network()).unwrap();
 
         let mut portalnet_config = PortalnetConfig {
             private_key,
@@ -544,12 +545,8 @@ mod tests {
         assert!(!trin_enr_file_location.is_file());
 
         // test trin.enr is made on first run
-        let discovery = Discovery::new(
-            portalnet_config.clone(),
-            node_data_dir.clone(),
-            MAINNET.clone(),
-        )
-        .unwrap();
+        let discovery =
+            Discovery::new(portalnet_config.clone(), &node_data_dir, MAINNET.clone()).unwrap();
         let data = fs::read_to_string(trin_enr_file_location.clone()).unwrap();
         let old_enr = Enr::from_str(&data).unwrap();
         assert_eq!(discovery.local_enr(), old_enr);
@@ -557,12 +554,8 @@ mod tests {
 
         // test if Enr changes the Enr sequence is increased and if it is written to disk
         portalnet_config.listen_port = 2424;
-        let discovery = Discovery::new(
-            portalnet_config.clone(),
-            node_data_dir.clone(),
-            MAINNET.clone(),
-        )
-        .unwrap();
+        let discovery =
+            Discovery::new(portalnet_config.clone(), &node_data_dir, MAINNET.clone()).unwrap();
         assert_ne!(discovery.local_enr(), old_enr);
         let data = fs::read_to_string(trin_enr_file_location.clone()).unwrap();
         let old_enr = Enr::from_str(&data).unwrap();
@@ -571,12 +564,15 @@ mod tests {
         assert_eq!(discovery.local_enr(), old_enr);
 
         // test if the enr isn't changed that it's sequence stays the same
-        let discovery = Discovery::new(portalnet_config, node_data_dir, MAINNET.clone()).unwrap();
+        let discovery = Discovery::new(portalnet_config, &node_data_dir, MAINNET.clone()).unwrap();
         assert_eq!(discovery.local_enr(), old_enr);
         let data = fs::read_to_string(trin_enr_file_location).unwrap();
         let old_enr = Enr::from_str(&data).unwrap();
         assert_eq!(discovery.local_enr().seq(), 2);
         assert_eq!(old_enr.seq(), 2);
         assert_eq!(discovery.local_enr(), old_enr);
+
+        // close and remove temp directory
+        temp_dir.close().unwrap();
     }
 }

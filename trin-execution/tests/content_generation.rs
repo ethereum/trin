@@ -12,11 +12,11 @@ use trin_execution::{
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
     execution::TrinExecution,
-    storage::utils::setup_temp_dir,
     trie_walker::TrieWalker,
     types::block_to_trace::BlockToTrace,
     utils::full_nibble_path_to_address_hash,
 };
+use trin_utils::dir::create_temp_test_dir;
 
 /// Tests that we can execute and generate content up to a specified block.
 ///
@@ -34,10 +34,10 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
     // set last block to test for
     let blocks = 1_000_000;
 
-    let temp_directory = setup_temp_dir()?;
+    let temp_directory = create_temp_test_dir()?;
 
     let mut trin_execution = TrinExecution::new(
-        Some(temp_directory.path().to_path_buf()),
+        temp_directory.path(),
         StateConfig {
             cache_contract_storage_changes: true,
             block_to_trace: BlockToTrace::None,
@@ -124,5 +124,6 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
         trin_execution.database.storage_cache.clear();
         println!("Block {block_number} finished. Total content key/value pairs: {content_pairs}");
     }
+    temp_directory.close()?;
     Ok(())
 }

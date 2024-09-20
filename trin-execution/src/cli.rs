@@ -8,9 +8,15 @@ use crate::types::block_to_trace::BlockToTrace;
 #[command(name = "Trin Execution", about = "Executing blocks with no devp2p")]
 pub struct TrinExecutionConfig {
     #[arg(
-        short = 'e',
-        long = "ephemeral",
-        help = "Use temporary data storage that is deleted on exit."
+        long,
+        help = "The directory for storing application data. If used together with --ephemeral, new child directory will be created."
+    )]
+    pub data_dir: Option<PathBuf>,
+
+    #[arg(
+        long,
+        short,
+        help = "Use new data directory, located in OS temporary directory. If used together with --data-dir, new directory will be created there instead."
     )]
     pub ephemeral: bool,
 
@@ -22,7 +28,7 @@ pub struct TrinExecutionConfig {
     pub block_to_trace: BlockToTrace,
 
     #[arg(
-        long = "enable-metrics-with-url",
+        long,
         help = "Enable prometheus metrics reporting (provide local IP/Port from which your Prometheus server is configured to fetch metrics)"
     )]
     pub enable_metrics_with_url: Option<SocketAddr>,
@@ -42,18 +48,12 @@ pub enum TrinExecutionSubCommands {
 
 #[derive(Args, Debug, Default, Clone, PartialEq)]
 pub struct ImportStateConfig {
-    #[arg(
-        long = "path-to-era2",
-        help = "path to where the era2 state snapshot is located"
-    )]
+    #[arg(long, help = "path to where the era2 state snapshot is located")]
     pub path_to_era2: PathBuf,
 }
 
 #[derive(Args, Debug, Default, Clone, PartialEq)]
 pub struct ExportStateConfig {
-    #[arg(
-        long = "path-to-era2",
-        help = "path to where the era2 state snapshot is located"
-    )]
+    #[arg(long, help = "path to where the era2 state snapshot is located")]
     pub path_to_era2: PathBuf,
 }

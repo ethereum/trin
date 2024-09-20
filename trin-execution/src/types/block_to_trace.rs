@@ -1,7 +1,7 @@
 use std::{
     fs::{self, File},
     io::{BufWriter, Write},
-    path::PathBuf,
+    path::Path,
     str::FromStr,
 };
 
@@ -29,7 +29,7 @@ impl BlockToTrace {
     /// Returns None if transaction shouldn't be traced.
     pub fn create_trace_writer(
         &self,
-        root_dir: PathBuf,
+        root_dir: &Path,
         header: &Header,
         tx: &Transaction,
     ) -> std::io::Result<Option<Box<dyn Write>>> {

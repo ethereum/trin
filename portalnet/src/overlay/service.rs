@@ -2754,12 +2754,12 @@ mod tests {
         time::timeout,
     };
     use tokio_test::{assert_pending, assert_ready, task};
+    use trin_utils::dir::create_temp_test_dir;
 
     use crate::{
         config::PortalnetConfig,
         discovery::{Discovery, NodeAddress},
         overlay::config::OverlayConfig,
-        utils::db::setup_temp_dir,
     };
     use ethportal_api::types::{
         cli::{DEFAULT_DISCOVERY_PORT, DEFAULT_UTP_TRANSFER_LIMIT},
@@ -2785,8 +2785,9 @@ mod tests {
             no_upnp: true,
             ..Default::default()
         };
-        let temp_dir = setup_temp_dir().unwrap().into_path();
-        let discovery = Arc::new(Discovery::new(portal_config, temp_dir, MAINNET.clone()).unwrap());
+        let temp_dir = create_temp_test_dir().unwrap().into_path();
+        let discovery =
+            Arc::new(Discovery::new(portal_config, &temp_dir, MAINNET.clone()).unwrap());
 
         let header_oracle = HeaderOracle::default();
         let header_oracle = Arc::new(TokioRwLock::new(header_oracle));

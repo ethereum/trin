@@ -4,74 +4,56 @@ use std::{
 };
 
 use alloy_primitives::B256;
-use anyhow::anyhow;
-use directories::ProjectDirs;
+use anyhow::{anyhow, bail};
 use discv5::enr::{CombinedKey, Enr, NodeId};
-use tempfile::TempDir;
-use tracing::debug;
 
 use ethportal_api::{
-    types::cli::DEFAULT_NETWORK,
+    types::network::Network,
     utils::bytes::{hex_decode, hex_encode},
 };
+use trin_utils::dir::setup_data_dir;
 
+const APP_NAME: &str = "trin";
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
-const TRIN_DATA_DIR: &str = "trin";
 const UNSAFE_PRIVATE_KEY_FILE_NAME: &str = "unsafe_private_key.hex";
 
-/// Create a directory on the file system that is deleted once it goes out of scope
-pub fn setup_temp_dir() -> anyhow::Result<TempDir> {
-    let mut os_temp = env::temp_dir();
-    os_temp.push(TRIN_DATA_DIR);
-    debug!("Creating temp dir: {os_temp:?}");
-    fs::create_dir_all(&os_temp)?;
-
-    let temp_dir = TempDir::new_in(&os_temp)?;
-    env::set_var(TRIN_DATA_ENV_VAR, temp_dir.path());
-
-    Ok(temp_dir)
-}
-
-pub fn configure_trin_data_dir(ephemeral: bool) -> anyhow::Result<PathBuf> {
-    if ephemeral {
-        setup_temp_dir().map(|temp_dir| temp_dir.into_path())
-    } else {
-        // Return the active trin data directory, either default or user specified.
-        let trin_data_dir = match env::var(TRIN_DATA_ENV_VAR) {
-            Ok(val) => PathBuf::from(val),
-            Err(_) => get_default_data_dir()?,
-        };
-        fs::create_dir_all(&trin_data_dir)?;
-        Ok(trin_data_dir)
+pub fn configure_trin_data_dir(
+    data_dir: Option<PathBuf>,
+    ephemeral: bool,
+) -> anyhow::Result<PathBuf> {
+    let env_path = env::var(TRIN_DATA_ENV_VAR).ok().map(PathBuf::from);
+    if data_dir.is_some() && env_path.is_some() {
+        bail!("Both --data_dir flag and {TRIN_DATA_ENV_VAR} env var are set.");
     }
+    Ok(setup_data_dir(APP_NAME, data_dir.or(env_path), ephemeral)?)
 }
 
 /// Configures active node data dir based on the provided private key.
 /// Returns the private key used to configure the node data dir.
 /// If no private key is provided, the application private key is used.
 pub fn configure_node_data_dir(
-    trin_data_dir: PathBuf,
+    trin_data_dir: &Path,
     private_key: Option<B256>,
-    network_name: String,
+    network: Network,
 ) -> anyhow::Result<(PathBuf, B256)> {
     let pk = match private_key {
         // user has provided a custom private key...
         Some(val) => CombinedKey::secp256k1_from_bytes(val.0.clone().as_mut_slice())
             .map_err(|e| anyhow!("When building server key pair: {e:?}"))?,
-        None => get_application_private_key(&trin_data_dir)?,
+        None => get_application_private_key(trin_data_dir)?,
     };
     let node_id = Enr::empty(&pk)?.node_id();
-    let node_data_dir = get_node_data_dir(trin_data_dir, node_id, network_name);
+    let node_data_dir = get_node_data_dir(trin_data_dir, node_id, network);
     fs::create_dir_all(&node_data_dir)?;
     Ok((node_data_dir, B256::from_slice(&pk.encode())))
 }
 
 /// Returns the node data directory associated with the provided node id.
-fn get_node_data_dir(trin_data_dir: PathBuf, node_id: NodeId, network_name: String) -> PathBuf {
+fn get_node_data_dir(trin_data_dir: &Path, node_id: NodeId, network: Network) -> PathBuf {
     // Append first 8 characters of Node ID
     let mut application_string = "".to_owned();
-    if network_name != DEFAULT_NETWORK {
-        application_string.push_str(&network_name);
+    if network != Network::Mainnet {
+        application_string.push_str(&network.to_string());
         application_string.push('_');
     }
     application_string.push_str("trin_");
@@ -79,19 +61,6 @@ fn get_node_data_dir(trin_data_dir: PathBuf, node_id: NodeId, network_name: Stri
     let suffix = &node_id_string[..8];
     application_string.push_str(suffix);
     trin_data_dir.join(application_string)
-}
-
-fn get_default_data_dir() -> anyhow::Result<PathBuf> {
-    // Windows: C:\Users\Username\AppData\Roaming\trin
-    // macOS: ~/Library/Application Support/trin
-    // Unix-like: $HOME/.local/share/trin
-    match ProjectDirs::from("", "", TRIN_DATA_DIR) {
-        Some(proj_dirs) => match proj_dirs.data_local_dir().to_str() {
-            Some(val) => Ok(PathBuf::from(val)),
-            None => Err(anyhow!("Unable to find default data directory")),
-        },
-        None => Err(anyhow!("Unable to find default data directory")),
-    }
 }
 
 /// Returns application private key.
@@ -114,53 +83,48 @@ pub mod test {
     use super::*;
 
     use serial_test::serial;
+    use trin_utils::dir::create_temp_test_dir;
 
     #[test]
     #[serial]
     fn app_private_key() {
-        let temp_dir = setup_temp_dir().unwrap();
+        let temp_dir = create_temp_test_dir().unwrap();
         let (_, active_pk) =
-            configure_node_data_dir(temp_dir.path().to_path_buf(), None, "test".to_string())
-                .unwrap();
+            configure_node_data_dir(temp_dir.path(), None, Network::Angelfood).unwrap();
         let app_pk = get_application_private_key(temp_dir.path()).unwrap();
         let app_pk = B256::from_slice(&app_pk.encode());
-        temp_dir.close().unwrap();
         assert_eq!(active_pk, app_pk);
+        temp_dir.close().unwrap();
     }
 
     #[test]
     #[serial]
     fn custom_private_key() {
-        let temp_dir = setup_temp_dir().unwrap();
+        let temp_dir = create_temp_test_dir().unwrap();
         let pk = CombinedKey::generate_secp256k1();
         let pk = B256::from_slice(&pk.encode());
         let (_, active_pk) =
-            configure_node_data_dir(temp_dir.path().to_path_buf(), Some(pk), "test".to_string())
-                .unwrap();
-        temp_dir.close().unwrap();
+            configure_node_data_dir(temp_dir.path(), Some(pk), Network::Angelfood).unwrap();
         assert_eq!(pk, active_pk);
+        temp_dir.close().unwrap();
     }
 
     #[test]
     #[serial]
     fn activated_private_key_persists_over_reconfigurations() {
-        let temp_dir = setup_temp_dir().unwrap();
+        let temp_dir = create_temp_test_dir().unwrap();
         let (_, app_pk) =
-            configure_node_data_dir(temp_dir.path().to_path_buf(), None, "test".to_string())
-                .unwrap();
+            configure_node_data_dir(temp_dir.path(), None, Network::Angelfood).unwrap();
 
         // configure data dir to use a custom pk
         let pk = CombinedKey::generate_secp256k1();
         let pk = B256::from_slice(&pk.encode());
-        let _ =
-            configure_node_data_dir(temp_dir.path().to_path_buf(), Some(pk), "test".to_string())
-                .unwrap();
+        let _ = configure_node_data_dir(temp_dir.path(), Some(pk), Network::Angelfood).unwrap();
 
         // reconfigure data dir with no pk, should use the original app pk
         let (_, app_pk_2) =
-            configure_node_data_dir(temp_dir.path().to_path_buf(), None, "test".to_string())
-                .unwrap();
-        temp_dir.close().unwrap();
+            configure_node_data_dir(temp_dir.path(), None, Network::Angelfood).unwrap();
         assert_eq!(app_pk, app_pk_2);
+        temp_dir.close().unwrap();
     }
 }

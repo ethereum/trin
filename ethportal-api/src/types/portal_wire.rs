@@ -185,8 +185,8 @@ pub struct NetworkSpec {
 }
 
 impl NetworkSpec {
-    pub fn get_network_name(&self) -> String {
-        self.network.to_string()
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     pub fn get_protocol_id_from_hex(&self, hex: &str) -> Result<ProtocolId, ProtocolIdError> {
