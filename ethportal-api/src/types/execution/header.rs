@@ -1,6 +1,6 @@
 use alloy_primitives::{keccak256, Address, Bloom, Bytes, B256, B64, U256, U64};
 use alloy_rlp::{Decodable, Encodable, Header as RlpHeader};
-use reth_rpc_types::Header as RpcHeader;
+use alloy_rpc_types::Header as RpcHeader;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::utils::bytes::{hex_decode, hex_encode};

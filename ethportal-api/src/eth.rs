@@ -1,6 +1,6 @@
 use alloy_primitives::{Address, Bytes, B256, U256};
+use alloy_rpc_types::{Block, BlockId, TransactionRequest};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
-use reth_rpc_types::{Block, BlockId, TransactionRequest};
 
 /// Web3 JSON-RPC endpoints
 #[rpc(client, server, namespace = "eth")]

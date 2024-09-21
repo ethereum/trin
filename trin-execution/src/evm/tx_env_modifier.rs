@@ -1,9 +1,9 @@
 use alloy_primitives::U256;
+use alloy_rpc_types::TransactionRequest;
 use ethportal_api::types::execution::transaction::{
     AccessListTransaction, BlobTransaction, EIP1559Transaction, LegacyTransaction, ToAddress,
     Transaction,
 };
-use reth_rpc_types::TransactionRequest;
 use revm_primitives::{AccessListItem, SpecId, TransactTo, TxEnv};
 
 use crate::era::types::TransactionsWithSender;

@@ -79,6 +79,7 @@ members = [
 alloy-consensus = "0.3.6"
 alloy-primitives = "0.8.3" 
 alloy-rlp = "0.3.8"
+alloy-rpc-types = "0.3.6"
 anyhow = "1.0.68"
 async-trait = "0.1.68"
 bytes = "1.3.0"
@@ -110,7 +111,6 @@ r2d2_sqlite = "0.24.0"
 rand = "0.8.5"
 reqwest = { version = "0.12.7", features = ["native-tls-vendored", "json"] }
 reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
-reth-rpc-types = { tag = "v1.0.6", git = "https://github.com/paradigmxyz/reth.git"}
 revm = { version = "14.0.2", default-features = false, features = ["std", "secp256k1", "serde-json"] }
 revm-primitives = { version = "9.0.2", default-features = false, features = ["std", "serde"] }
 rpc = { path = "rpc"}
