@@ -26,23 +26,24 @@ RUN apt-get update && apt-get install clang -y
 # copy over manifests and source to build image
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
-COPY ./portalnet ./portalnet
+COPY ./e2store ./e2store
+COPY ./ethportal-api ./ethportal-api
+COPY ./ethportal-peertest ./ethportal-peertest
 COPY ./light-client ./light-client
+COPY ./portalnet ./portalnet
+COPY ./portal-bridge ./portal-bridge
+COPY ./rpc ./rpc
 COPY ./src ./src 
 COPY ./trin-beacon ./trin-beacon
-COPY ./portal-bridge ./portal-bridge
+COPY ./trin-evm ./trin-evm
 COPY ./trin-execution ./trin-execution
 COPY ./trin-history ./trin-history
 COPY ./trin-metrics ./trin-metrics
 COPY ./trin-state ./trin-state
 COPY ./trin-storage ./trin-storage
 COPY ./trin-utils ./trin-utils
-COPY ./trin-validation ./trin-validation
-COPY ./e2store ./e2store
-COPY ./ethportal-peertest ./ethportal-peertest 
+COPY ./trin-validation ./trin-validation 
 COPY ./utp-testing ./utp-testing
-COPY ./ethportal-api ./ethportal-api
-COPY ./rpc ./rpc
 
 # build for release
 RUN cargo build -p trin -p portal-bridge --release
