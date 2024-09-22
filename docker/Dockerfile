@@ -18,13 +18,14 @@ COPY ./Cargo.toml ./Cargo.toml
 COPY ./e2store ./e2store
 COPY ./ethportal-api ./ethportal-api
 COPY ./ethportal-peertest ./ethportal-peertest
-COPY ./portalnet ./portalnet
 COPY ./light-client ./light-client
+COPY ./portalnet ./portalnet
+COPY ./portal-bridge ./portal-bridge
 COPY ./rpc ./rpc
 COPY ./src ./src 
 COPY ./trin-beacon ./trin-beacon
+COPY ./trin-evm ./trin-evm
 COPY ./trin-execution ./trin-execution
-COPY ./portal-bridge ./portal-bridge
 COPY ./trin-history ./trin-history
 COPY ./trin-metrics ./trin-metrics
 COPY ./trin-state ./trin-state
