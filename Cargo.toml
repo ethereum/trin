@@ -97,8 +97,7 @@ ethereum_ssz_derive = "0.7.1"
 ethportal-api = { path = "ethportal-api" }
 futures = "0.3.23"
 hex = "0.4.3"
-hyper = "0.14.28"
-jsonrpsee = "0.20.0"
+jsonrpsee = "0.24.4"
 keccak-hash = "0.10.0"
 lazy_static = "1.4.0"
 light-client = { path = "light-client" }
@@ -111,7 +110,7 @@ r2d2 = "0.8.9"
 r2d2_sqlite = "0.24.0"
 rand = "0.8.5"
 reqwest = { version = "0.12.7", features = ["native-tls-vendored", "json"] }
-reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
+reth-ipc = { tag = "v1.0.7", git = "https://github.com/paradigmxyz/reth.git"}
 revm = { version = "14.0.2", default-features = false, features = ["std", "secp256k1", "serde-json"] }
 revm-primitives = { version = "9.0.2", default-features = false, features = ["std", "serde"] }
 rpc = { path = "rpc"}

@@ -40,7 +40,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     let (fresh_ipc_path, trin_config) = fresh_node_config();
     let _test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
     let fresh_target = reth_ipc::client::IpcClientBuilder::default()
-        .build(fresh_ipc_path)
+        .build(&fresh_ipc_path)
         .await
         .unwrap();
     let fresh_enr = fresh_target.node_info().await.unwrap().enr;
@@ -86,7 +86,7 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
     let (fresh_ipc_path, trin_config) = fresh_node_config();
     let _test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
     let fresh_target = reth_ipc::client::IpcClientBuilder::default()
-        .build(fresh_ipc_path)
+        .build(&fresh_ipc_path)
         .await
         .unwrap();
     let fresh_enr = fresh_target.node_info().await.unwrap().enr;
@@ -245,7 +245,7 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
     let (fresh_ipc_path, trin_config) = fresh_node_config();
     let _test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
     let fresh_target = reth_ipc::client::IpcClientBuilder::default()
-        .build(fresh_ipc_path)
+        .build(&fresh_ipc_path)
         .await
         .unwrap();
 

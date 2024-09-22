@@ -1,56 +1,34 @@
 use crate::{
     jsonrpsee::{
-        core::Error as JsonRpseeError,
+        server::AlreadyStoppedError,
         types::{ErrorObject, ErrorObjectOwned},
     },
     rpc_server::ServerKind,
     PortalRpcModule,
 };
 use ethportal_api::{types::query_trace::QueryTrace, ContentValueError};
+use reth_ipc::server::IpcServerStartError;
 use serde::{Deserialize, Serialize};
 use std::io;
 
 /// Rpc Errors.
 #[derive(Debug, thiserror::Error)]
-#[allow(clippy::enum_variant_names)]
 pub enum RpcError {
-    /// Wrapper for `jsonrpsee::core::Error`.
-    #[error(transparent)]
-    RpcError(#[from] JsonRpseeError),
-    /// Address already in use.
-    #[error("Address {kind} is already in use (os error 98)")]
-    AddressAlreadyInUse {
-        /// Server kind.
-        kind: ServerKind,
-        /// IO error.
-        error: io::Error,
-    },
+    /// More descriptive io::Error.
+    #[error("IO Error: {0} for server kind: {1}")]
+    IoError(io::Error, ServerKind),
     /// Http and WS server configured on the same port but with conflicting settings.
     #[error(transparent)]
     WsHttpSamePortError(#[from] WsHttpSamePortError),
+    /// Error while starting ipc server.
+    #[error(transparent)]
+    IpcServerStartError(#[from] IpcServerStartError),
+    /// Server already stopped.
+    #[error(transparent)]
+    AlreadyStoppedError(#[from] AlreadyStoppedError),
     /// Custom error.
     #[error("{0}")]
     Custom(String),
-}
-
-impl RpcError {
-    /// Converts a `jsonrpsee::core::Error` to a more descriptive `RpcError`.
-    pub fn from_jsonrpsee_error(err: JsonRpseeError, kind: ServerKind) -> RpcError {
-        match err {
-            JsonRpseeError::Transport(err) => {
-                if let Some(io_error) = err.downcast_ref::<io::Error>() {
-                    if io_error.kind() == io::ErrorKind::AddrInUse {
-                        return RpcError::AddressAlreadyInUse {
-                            kind,
-                            error: io::Error::from(io_error.kind()),
-                        };
-                    }
-                }
-                RpcError::RpcError(JsonRpseeError::Transport(err))
-            }
-            _ => err.into(),
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
