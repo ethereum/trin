@@ -61,14 +61,16 @@ impl DB for AccountDB {
 #[cfg(test)]
 mod test_account_db {
 
-    use crate::storage::utils::{setup_rocksdb, setup_temp_dir};
+    use crate::storage::utils::setup_rocksdb;
 
     use super::*;
     use eth_trie::DB;
+    use trin_utils::dir::create_temp_test_dir;
 
     #[test]
     fn test_account_db_get() {
-        let rocksdb = setup_rocksdb(setup_temp_dir().unwrap().into_path()).unwrap();
+        let temp_directory = create_temp_test_dir().unwrap();
+        let rocksdb = setup_rocksdb(temp_directory.path()).unwrap();
         let accdb = AccountDB::new(B256::ZERO, Arc::new(rocksdb));
         accdb
             .insert(keccak256(b"test-key").as_slice(), b"test-value".to_vec())
@@ -77,18 +79,21 @@ mod test_account_db {
             .get(keccak256(b"test-key").as_slice())
             .unwrap()
             .unwrap();
-        assert_eq!(v, b"test-value")
+        assert_eq!(v, b"test-value");
+        temp_directory.close().unwrap();
     }
 
     #[test]
     fn test_account_db_remove() {
-        let rocksdb = setup_rocksdb(setup_temp_dir().unwrap().into_path()).unwrap();
+        let temp_directory = create_temp_test_dir().unwrap();
+        let rocksdb = setup_rocksdb(temp_directory.path()).unwrap();
         let accdb = AccountDB::new(B256::ZERO, Arc::new(rocksdb));
         accdb
             .insert(keccak256(b"test").as_slice(), b"test".to_vec())
             .unwrap();
         accdb.remove(keccak256(b"test").as_slice()).unwrap();
         let contains = accdb.get(keccak256(b"test").as_slice()).unwrap();
-        assert_eq!(contains, None)
+        assert_eq!(contains, None);
+        temp_directory.close().unwrap();
     }
 }

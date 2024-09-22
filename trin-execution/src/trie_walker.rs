@@ -163,21 +163,16 @@ mod tests {
 
     use alloy_primitives::{keccak256, Address, Bytes};
     use eth_trie::{RootWithTrieDiff, Trie};
+    use trin_utils::dir::create_temp_test_dir;
 
-    use crate::{
-        config::StateConfig, execution::TrinExecution, storage::utils::setup_temp_dir,
-        trie_walker::TrieWalker,
-    };
+    use crate::{config::StateConfig, execution::TrinExecution, trie_walker::TrieWalker};
 
     #[tokio::test]
     async fn test_trie_walker_builds_valid_proof() {
-        let temp_directory = setup_temp_dir().unwrap();
-        let mut trin_execution = TrinExecution::new(
-            Some(temp_directory.path().to_path_buf()),
-            StateConfig::default(),
-        )
-        .await
-        .unwrap();
+        let temp_directory = create_temp_test_dir().unwrap();
+        let mut trin_execution = TrinExecution::new(temp_directory.path(), StateConfig::default())
+            .await
+            .unwrap();
         let RootWithTrieDiff { trie_diff, .. } = trin_execution.process_next_block().await.unwrap();
         let root_hash = trin_execution.get_root().unwrap();
         let walk_diff = TrieWalker::new(root_hash, trie_diff);
@@ -198,5 +193,7 @@ mod tests {
 
         assert_eq!(account_proof.path, [5, 9, 2, 13]);
         assert_eq!(account_proof.proof, valid_proof);
+
+        temp_directory.close().unwrap();
     }
 }

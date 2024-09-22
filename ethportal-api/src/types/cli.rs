@@ -146,7 +146,7 @@ pub struct TrinConfig {
     pub trusted_block_root: Option<B256>,
 
     #[arg(
-    long = "portal-subnetworks",
+        long = "portal-subnetworks",
         help = "Comma-separated list of which portal subnetworks to activate",
         default_value = DEFAULT_SUBNETWORKS,
         value_parser = subnetwork_parser,
@@ -155,10 +155,10 @@ pub struct TrinConfig {
 
     #[arg(
         long = "network",
-            help = "Choose mainnet or angelfood",
-            default_value = DEFAULT_NETWORK,
-            value_parser = network_parser
-        )]
+        help = "Choose mainnet or angelfood",
+        default_value = DEFAULT_NETWORK,
+        value_parser = network_parser
+    )]
     pub network: Arc<NetworkSpec>,
 
     /// Storage capacity specified in megabytes.
@@ -176,9 +176,15 @@ pub struct TrinConfig {
     pub enable_metrics_with_url: Option<SocketAddr>,
 
     #[arg(
-        short = 'e',
-        long = "ephemeral",
-        help = "Use temporary data storage that is deleted on exit."
+        long,
+        help = "The directory for storing application data. If used together with --ephemeral, new child directory will be created. Can be alternatively set via TRIN_DATA_PATH env variable."
+    )]
+    pub data_dir: Option<PathBuf>,
+
+    #[arg(
+        long,
+        short,
+        help = "Use new data directory, located in OS temporary directory. If used together with --data-dir, new directory will be created there instead."
     )]
     pub ephemeral: bool,
 
@@ -237,6 +243,7 @@ impl Default for TrinConfig {
                 .parse()
                 .expect("Parsing static DEFAULT_STORAGE_CAPACITY_MB to work"),
             enable_metrics_with_url: None,
+            data_dir: None,
             ephemeral: false,
             disable_poke: false,
             ws: false,

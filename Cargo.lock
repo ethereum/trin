@@ -4396,7 +4396,6 @@ dependencies = [
  "bytes",
  "crossbeam-channel",
  "delay_map 0.4.0",
- "directories",
  "discv5",
  "env_logger 0.9.3",
  "ethereum_ssz",
@@ -4419,7 +4418,6 @@ dependencies = [
  "smallvec",
  "ssz_types",
  "stunclient",
- "tempfile",
  "test-log",
  "thiserror",
  "tokio",
@@ -6876,7 +6874,6 @@ dependencies = [
  "alloy-rpc-types-engine",
  "anyhow",
  "clap",
- "directories",
  "e2store",
  "eth_trie",
  "ethportal-api",
@@ -6893,7 +6890,6 @@ dependencies = [
  "rocksdb",
  "serde",
  "serde_json",
- "tempfile",
  "test-log",
  "thiserror",
  "tokio",
@@ -7000,7 +6996,10 @@ version = "0.1.1-alpha.1"
 dependencies = [
  "ansi_term",
  "atty",
+ "directories",
  "shadow-rs",
+ "tempfile",
+ "tracing",
  "tracing-subscriber 0.3.18",
 ]
 

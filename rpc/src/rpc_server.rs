@@ -616,8 +616,9 @@ mod tests {
     use super::*;
     use crate::{builder::RpcModuleSelection, PortalRpcModule, RpcModuleBuilder};
     use ethportal_api::types::portal_wire::MAINNET;
-    use portalnet::{discovery::Discovery, utils::db::setup_temp_dir};
+    use portalnet::discovery::Discovery;
     use std::{io, sync::Arc};
+    use trin_utils::dir::create_temp_test_dir;
 
     /// Localhost with port 0 so a free port is used.
     pub fn test_address() -> SocketAddr {
@@ -637,9 +638,9 @@ mod tests {
     pub fn test_rpc_builder() -> RpcModuleBuilder {
         let (history_tx, _) = tokio::sync::mpsc::unbounded_channel();
         let (beacon_tx, _) = tokio::sync::mpsc::unbounded_channel();
-        let temp_dir = setup_temp_dir().unwrap().into_path();
+        let temp_dir = create_temp_test_dir().unwrap().into_path();
         let discv5 =
-            Arc::new(Discovery::new(Default::default(), temp_dir, MAINNET.clone()).unwrap());
+            Arc::new(Discovery::new(Default::default(), &temp_dir, MAINNET.clone()).unwrap());
         RpcModuleBuilder::new(discv5)
             .with_history(history_tx)
             .with_beacon(beacon_tx)

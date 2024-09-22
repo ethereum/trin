@@ -12,7 +12,10 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 build = "build.rs"
 
 [dependencies]
+directories.workspace = true
 shadow-rs = "0.27"
+tempfile.workspace = true
+tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [build-dependencies]

@@ -3,7 +3,10 @@ use anyhow::ensure;
 use eth_trie::{RootWithTrieDiff, Trie};
 use ethportal_api::{types::execution::transaction::Transaction, Header};
 use revm::inspectors::TracerEip3155;
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::{oneshot::Receiver, Mutex};
 use tracing::{info, warn};
 
@@ -11,11 +14,7 @@ use crate::{
     era::manager::EraManager,
     evm::block_executor::BlockExecutor,
     metrics::{start_timer_vec, stop_timer, BLOCK_PROCESSING_TIMES},
-    storage::{
-        evm_db::EvmDB,
-        execution_position::ExecutionPosition,
-        utils::{get_default_data_dir, setup_rocksdb},
-    },
+    storage::{evm_db::EvmDB, execution_position::ExecutionPosition, utils::setup_rocksdb},
 };
 
 use super::config::StateConfig;
@@ -25,16 +24,12 @@ pub struct TrinExecution {
     pub config: StateConfig,
     pub execution_position: ExecutionPosition,
     pub era_manager: Arc<Mutex<EraManager>>,
-    pub node_data_directory: PathBuf,
+    pub data_directory: PathBuf,
 }
 
 impl TrinExecution {
-    pub async fn new(path: Option<PathBuf>, config: StateConfig) -> anyhow::Result<Self> {
-        let node_data_directory = match path {
-            Some(path_buf) => path_buf,
-            None => get_default_data_dir()?,
-        };
-        let db = Arc::new(setup_rocksdb(node_data_directory.clone())?);
+    pub async fn new(data_dir: &Path, config: StateConfig) -> anyhow::Result<Self> {
+        let db = Arc::new(setup_rocksdb(data_dir)?);
         let execution_position = ExecutionPosition::initialize_from_db(db.clone())?;
 
         let database = EvmDB::new(config.clone(), db, &execution_position)
@@ -49,7 +44,7 @@ impl TrinExecution {
             config,
             era_manager,
             database,
-            node_data_directory,
+            data_directory: data_dir.to_path_buf(),
         })
     }
 
@@ -156,7 +151,7 @@ impl TrinExecution {
     fn create_tracer(&self, header: &Header, tx: &Transaction) -> Option<TracerEip3155> {
         self.config
             .block_to_trace
-            .create_trace_writer(self.node_data_directory.clone(), header, tx)
+            .create_trace_writer(&self.data_directory, header, tx)
             .unwrap_or_else(|err| {
                 warn!("Error while creating trace file: {err}. Skipping.");
                 None
@@ -169,24 +164,24 @@ impl TrinExecution {
 mod tests {
     use std::fs;
 
-    use crate::{era::utils::process_era1_file, storage::utils::setup_temp_dir};
+    use trin_utils::dir::create_temp_test_dir;
+
+    use crate::era::utils::process_era1_file;
 
     use super::*;
 
     #[tokio::test]
     async fn test_we_generate_the_correct_state_root_for_the_first_8192_blocks() {
-        let temp_directory = setup_temp_dir().unwrap();
-        let mut trin_execution = TrinExecution::new(
-            Some(temp_directory.path().to_path_buf()),
-            StateConfig::default(),
-        )
-        .await
-        .unwrap();
+        let temp_directory = create_temp_test_dir().unwrap();
+        let mut trin_execution = TrinExecution::new(temp_directory.path(), StateConfig::default())
+            .await
+            .unwrap();
         let raw_era1 = fs::read("../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
         let processed_era = process_era1_file(raw_era1, 0).unwrap();
         for block in processed_era.blocks {
             trin_execution.process_next_block().await.unwrap();
             assert_eq!(trin_execution.get_root().unwrap(), block.header.state_root);
         }
+        temp_directory.close().unwrap();
     }
 }

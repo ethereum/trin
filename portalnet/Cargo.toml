@@ -17,7 +17,6 @@ async-trait.workspace = true
 bytes.workspace = true
 crossbeam-channel = "0.5.13"
 delay_map.workspace = true
-directories.workspace = true
 discv5.workspace = true
 ethereum_ssz.workspace = true
 ethportal-api.workspace = true
@@ -36,7 +35,6 @@ serde.workspace = true
 smallvec = "1.8.0"
 ssz_types.workspace = true
 stunclient = "0.4.1"
-tempfile.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-stream = { version = "0.1.14", features = ["sync"] }

@@ -22,12 +22,12 @@ use trin_execution::{
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
     execution::TrinExecution,
-    storage::utils::setup_temp_dir,
     trie_walker::TrieWalker,
     types::{block_to_trace::BlockToTrace, trie_proof::TrieProof},
     utils::full_nibble_path_to_address_hash,
 };
 use trin_metrics::bridge::BridgeMetricsReporter;
+use trin_utils::dir::create_temp_dir;
 
 use crate::{
     bridge::history::SERVE_BLOCK_TIMEOUT,
@@ -85,15 +85,14 @@ impl StateBridge {
 
     async fn launch_state(&self, last_block: u64) -> anyhow::Result<()> {
         info!("Gossiping state data from block 0 to {last_block}");
-        let temp_directory = setup_temp_dir()?;
+        let temp_directory = create_temp_dir("trin-bridge-state", None)?;
 
         // Enable contract storage changes caching required for gossiping the storage trie
         let state_config = StateConfig {
             cache_contract_storage_changes: true,
             block_to_trace: BlockToTrace::None,
         };
-        let mut trin_execution =
-            TrinExecution::new(Some(temp_directory.path().to_path_buf()), state_config).await?;
+        let mut trin_execution = TrinExecution::new(temp_directory.path(), state_config).await?;
         for block_number in 0..=last_block {
             info!("Gossipping state for block at height: {block_number}");
 
@@ -178,6 +177,7 @@ impl StateBridge {
             // This is used for gossiping storage trie diffs
             trin_execution.database.storage_cache.clear();
         }
+        temp_directory.close()?;
         Ok(())
     }
 

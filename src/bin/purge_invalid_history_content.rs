@@ -4,7 +4,10 @@ use clap::Parser;
 use discv5::enr::{CombinedKey, Enr};
 use tracing::info;
 
-use ethportal_api::types::{network::Subnetwork, portal_wire::ProtocolId};
+use ethportal_api::types::{
+    network::{Network, Subnetwork},
+    portal_wire::ProtocolId,
+};
 use portalnet::utils::db::{configure_node_data_dir, configure_trin_data_dir};
 use trin_storage::{
     versioned::{ContentType, IdIndexedV1StoreConfig},
@@ -17,12 +20,10 @@ pub fn main() -> Result<()> {
     init_tracing_logger();
     let script_config = PurgeConfig::parse();
 
-    let trin_data_dir = configure_trin_data_dir(false /* ephemeral */)?;
-    let (node_data_dir, mut private_key) = configure_node_data_dir(
-        trin_data_dir,
-        script_config.private_key,
-        "mainnet".to_string(),
-    )?;
+    let trin_data_dir =
+        configure_trin_data_dir(None /* data_dir */, false /* ephemeral */)?;
+    let (node_data_dir, mut private_key) =
+        configure_node_data_dir(&trin_data_dir, script_config.private_key, Network::Mainnet)?;
     let enr_key = CombinedKey::secp256k1_from_bytes(private_key.as_mut_slice())
         .expect("Failed to create ENR key");
     let enr = Enr::empty(&enr_key).unwrap();

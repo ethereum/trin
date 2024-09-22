@@ -22,13 +22,13 @@ use jsonrpsee::{
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
-    utils::db::setup_temp_dir,
 };
 use std::{io::ErrorKind, net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::{
     mpsc::{self, Receiver},
     RwLock,
 };
+use trin_utils::dir::create_temp_test_dir;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
@@ -170,8 +170,8 @@ pub async fn run_test_app(
         ..Default::default()
     };
 
-    let temp_dir = setup_temp_dir().unwrap().into_path();
-    let mut discovery = Discovery::new(config, temp_dir, MAINNET.clone()).unwrap();
+    let temp_dir = create_temp_test_dir()?.into_path();
+    let mut discovery = Discovery::new(config, &temp_dir, MAINNET.clone()).unwrap();
     let talk_req_rx = discovery.start().await.unwrap();
     let enr = discovery.local_enr();
     let discovery = Arc::new(discovery);

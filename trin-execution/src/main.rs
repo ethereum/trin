@@ -6,10 +6,11 @@ use trin_execution::{
     cli::{TrinExecutionConfig, TrinExecutionSubCommands},
     era::manager::EraManager,
     execution::TrinExecution,
-    storage::utils::setup_temp_dir,
     subcommands::era2::{export::StateExporter, import::StateImporter},
 };
-use trin_utils::log::init_tracing_logger;
+use trin_utils::{dir::setup_data_dir, log::init_tracing_logger};
+
+const APP_NAME: &str = "trin-execution";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -22,16 +23,14 @@ async fn main() -> anyhow::Result<()> {
         prometheus_exporter::start(addr)?;
     }
 
-    let directory = match trin_execution_config.ephemeral {
-        false => None,
-        true => Some(setup_temp_dir()?),
-    };
+    let data_dir = setup_data_dir(
+        APP_NAME,
+        trin_execution_config.data_dir.clone(),
+        trin_execution_config.ephemeral,
+    )?;
 
-    let mut trin_execution = TrinExecution::new(
-        directory.map(|temp_directory| temp_directory.path().to_path_buf()),
-        trin_execution_config.clone().into(),
-    )
-    .await?;
+    let mut trin_execution =
+        TrinExecution::new(&data_dir, trin_execution_config.clone().into()).await?;
 
     if let Some(command) = trin_execution_config.command {
         match command {

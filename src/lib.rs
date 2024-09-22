@@ -42,13 +42,14 @@ pub async fn run_trin(
     info!(config = %trin_config, "With:");
 
     // Setup temp trin data directory if we're in ephemeral mode
-    let trin_data_dir = configure_trin_data_dir(trin_config.ephemeral)?;
+    let trin_data_dir =
+        configure_trin_data_dir(trin_config.data_dir.clone(), trin_config.ephemeral)?;
 
     // Configure node data dir based on the provided private key
     let (node_data_dir, private_key) = configure_node_data_dir(
-        trin_data_dir,
+        &trin_data_dir,
         trin_config.private_key,
-        trin_config.network.get_network_name().to_string(),
+        trin_config.network.network(),
     )?;
 
     let portalnet_config = PortalnetConfig::new(&trin_config, private_key);
@@ -56,7 +57,7 @@ pub async fn run_trin(
     // Initialize base discovery protocol
     let mut discovery = Discovery::new(
         portalnet_config.clone(),
-        node_data_dir.clone(),
+        &node_data_dir,
         trin_config.network.clone(),
     )?;
     let talk_req_rx = discovery.start().await?;
