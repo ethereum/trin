@@ -4378,6 +4378,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-test",
+ "trin-evm",
  "trin-execution",
  "trin-metrics",
  "trin-utils",
@@ -5121,7 +5122,7 @@ dependencies = [
  "tower 0.4.13",
  "tower-http",
  "tracing",
- "trin-execution",
+ "trin-evm",
  "trin-utils",
  "trin-validation",
 ]
@@ -6852,6 +6853,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "trin-evm"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rlp",
+ "alloy-rpc-types",
+ "ethportal-api",
+ "revm",
+ "revm-primitives",
+ "tokio",
+]
+
+[[package]]
 name = "trin-execution"
 version = "0.1.0"
 dependencies = [
@@ -6885,6 +6899,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-test",
+ "trin-evm",
  "trin-utils",
 ]
 

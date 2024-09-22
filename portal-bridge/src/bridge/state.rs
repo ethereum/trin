@@ -14,13 +14,13 @@ use tokio::{
     time::timeout,
 };
 use tracing::{debug, enabled, error, info, warn, Level};
+use trin_evm::spec_id::get_spec_block_number;
 use trin_execution::{
     config::StateConfig,
     content::{
         create_account_content_key, create_account_content_value, create_contract_content_key,
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
-    evm::spec_id::get_spec_block_number,
     execution::TrinExecution,
     storage::utils::setup_temp_dir,
     trie_walker::TrieWalker,

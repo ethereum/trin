@@ -66,6 +66,7 @@ members = [
     "portal-bridge",
     "rpc",
     "trin-beacon",
+    "trin-evm",
     "trin-execution",
     "trin-history",
     "trin-state",
@@ -137,6 +138,7 @@ tracing-test = "0.1"
 tree_hash = "0.8.0"
 tree_hash_derive = "0.8.0"
 trin-beacon = { path = "trin-beacon" }
+trin-evm = { path = "trin-evm" }
 trin-execution = { path = "trin-execution" }
 trin-history = { path = "trin-history" }
 trin-metrics = { path = "trin-metrics" }

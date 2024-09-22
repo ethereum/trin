@@ -2,14 +2,25 @@ use ethportal_api::{
     types::execution::{transaction::Transaction, withdrawal::Withdrawal},
     Header,
 };
-use revm_primitives::{Address, SpecId};
-
-use crate::evm::spec_id::get_spec_block_number;
+use revm_primitives::{Address, SpecId, TxEnv};
+use trin_evm::{spec_id::get_spec_block_number, tx_env_modifier::TxEnvModifier};
 
 #[derive(Debug, Clone)]
 pub struct TransactionsWithSender {
     pub transaction: Transaction,
     pub sender_address: Address,
+}
+
+impl TxEnvModifier for TransactionsWithSender {
+    fn modify(&self, block_number: u64, tx_env: &mut TxEnv) {
+        tx_env.caller = self.sender_address;
+        match &self.transaction {
+            Transaction::Legacy(tx) => tx.modify(block_number, tx_env),
+            Transaction::AccessList(tx) => tx.modify(block_number, tx_env),
+            Transaction::EIP1559(tx) => tx.modify(block_number, tx_env),
+            Transaction::Blob(tx) => tx.modify(block_number, tx_env),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
