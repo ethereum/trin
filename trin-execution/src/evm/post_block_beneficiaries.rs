@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use alloy_consensus::constants::ETH_TO_WEI;
+use alloy_consensus::constants::{ETH_TO_WEI, GWEI_TO_WEI};
 use alloy_primitives::Address;
 use revm::{db::State, Evm};
 use revm_primitives::SpecId;
@@ -42,7 +42,8 @@ pub fn process_withdrawals(block: &ProcessedBlock, beneficiaries: &mut HashMap<A
             if withdrawal.amount == 0 {
                 continue;
             }
-            *beneficiaries.entry(withdrawal.address).or_default() += withdrawal.amount as u128;
+            *beneficiaries.entry(withdrawal.address).or_default() +=
+                withdrawal.amount as u128 * GWEI_TO_WEI as u128;
         }
     }
 }
