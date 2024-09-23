@@ -370,8 +370,6 @@ fn fresh_node_config() -> (String, TrinConfig) {
             "--unsafe-private-key",
             // node id: 0x27128939ed60d6f4caef0374da15361a2c1cd6baa1a5bccebac1acd18f485900
             "0x9ca7889c09ef1162132251b6284bd48e64bd3e71d75ea33b959c37be0582a2fd",
-            // gossip content as its dropped for the history network
-            "--gossip-dropped",
         ]
         .iter(),
     )

@@ -19,6 +19,10 @@ use trin_validation::oracle::HeaderOracle;
 use crate::validation::ChainHistoryValidator;
 use trin_storage::PortalStorageConfig;
 
+/// Gossip content as it gets dropped from local storage,
+/// enabled by default for the history network.
+const GOSSIP_DROPPED: bool = true;
+
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data
 /// and logic.
 #[derive(Clone)]
@@ -39,7 +43,7 @@ impl HistoryNetwork {
         let config = OverlayConfig {
             bootnode_enrs,
             disable_poke: portal_config.disable_poke,
-            gossip_dropped: portal_config.gossip_dropped,
+            gossip_dropped: GOSSIP_DROPPED,
             utp_transfer_limit: portal_config.utp_transfer_limit,
             ..Default::default()
         };
