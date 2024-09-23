@@ -1,4 +1,4 @@
-use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
+use std::{env, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use alloy_primitives::B256;
 use clap::Parser;
@@ -240,7 +240,7 @@ impl ClientWithBaseUrl {
 fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>, String> {
     let active_subnetworks: Vec<Subnetwork> = subnetwork_string
         .split(',')
-        .map(Subnetwork::from_str)
+        .map(Subnetwork::from_cli_arg)
         .collect::<Result<Vec<Subnetwork>, String>>()?;
     if active_subnetworks.contains(&Subnetwork::State) && active_subnetworks.len() > 1 {
         return Err("The State network doesn't support being ran with other subnetwork bridges at the same time".to_string());

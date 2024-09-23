@@ -1,4 +1,7 @@
-use ethportal_api::types::portal_wire::{ProtocolId, Request, Response};
+use ethportal_api::types::{
+    network::Subnetwork,
+    portal_wire::{Request, Response},
+};
 
 pub type MetricLabel = &'static str;
 
@@ -118,16 +121,16 @@ pub enum MessageLabel {
     Accept,
 }
 
-impl From<&ProtocolId> for ProtocolLabel {
-    fn from(protocol: &ProtocolId) -> Self {
-        match protocol {
-            ProtocolId::State => Self::State,
-            ProtocolId::VerkleState => Self::VerkleState,
-            ProtocolId::History => Self::History,
-            ProtocolId::TransactionGossip => Self::TransactionGossip,
-            ProtocolId::CanonicalIndices => Self::CanonicalIndices,
-            ProtocolId::Beacon => Self::Beacon,
-            ProtocolId::Utp => Self::Utp,
+impl From<&Subnetwork> for ProtocolLabel {
+    fn from(subnetwork: &Subnetwork) -> Self {
+        match subnetwork {
+            Subnetwork::State => Self::State,
+            Subnetwork::VerkleState => Self::VerkleState,
+            Subnetwork::History => Self::History,
+            Subnetwork::TransactionGossip => Self::TransactionGossip,
+            Subnetwork::CanonicalIndices => Self::CanonicalIndices,
+            Subnetwork::Beacon => Self::Beacon,
+            Subnetwork::Utp => Self::Utp,
         }
     }
 }

@@ -7,7 +7,7 @@ use utp_rs::socket::UtpSocket;
 
 use crate::{storage::BeaconStorage, sync::BeaconSync, validation::BeaconValidator};
 use ethportal_api::{
-    types::{distance::XorMetric, enr::Enr, portal_wire::ProtocolId},
+    types::{distance::XorMetric, enr::Enr, network::Subnetwork},
     BeaconContentKey,
 };
 use light_client::{consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client};
@@ -54,7 +54,7 @@ impl BeaconNetwork {
             discovery,
             utp_socket,
             storage,
-            ProtocolId::Beacon,
+            Subnetwork::Beacon,
             validator,
         )
         .await;

@@ -70,9 +70,10 @@ use ethportal_api::{
     types::{
         distance::{Distance, Metric},
         enr::{Enr, SszEnr},
+        network::Subnetwork,
         portal_wire::{
             Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping,
-            Pong, PopulatedOffer, ProtocolId, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
+            Pong, PopulatedOffer, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
             MAX_PORTAL_NODES_ENRS_SIZE,
         },
         query_trace::QueryTrace,
@@ -112,7 +113,7 @@ where
     /// The routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The protocol identifier.
-    protocol: ProtocolId,
+    protocol: Subnetwork,
     /// A queue of peers that require regular ping to check connectivity.
     /// Inserted entries expire after a fixed time. Nodes to be pinged are inserted with a timeout
     /// duration equal to some ping interval, and we continuously poll the queue to check for
@@ -183,7 +184,7 @@ where
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
-        protocol: ProtocolId,
+        protocol: Subnetwork,
         utp_controller: Arc<UtpController>,
         metrics: OverlayMetricsReporter,
         validator: Arc<TValidator>,
@@ -464,7 +465,7 @@ where
     /// result is recorded when a pending bucket entry replaces a disconnected entry in the
     /// respective bucket.
     async fn bucket_maintenance_poll(
-        protocol: ProtocolId,
+        protocol: Subnetwork,
         kbuckets: &Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     ) {
         future::poll_fn(move |_cx| {
@@ -2620,7 +2621,7 @@ where
 
     /// Send `OverlayEvent` to the event stream.
     #[allow(dead_code)] // TODO: remove when used
-    fn send_event(&self, event: OverlayEvent, to: Option<Vec<ProtocolId>>) {
+    fn send_event(&self, event: OverlayEvent, to: Option<Vec<Subnetwork>>) {
         trace!(
             "Sending event={:?} to event-stream from protocol {}",
             event,
@@ -2823,7 +2824,7 @@ mod tests {
             overlay_config.bucket_filter,
         )));
 
-        let protocol = ProtocolId::History;
+        let protocol = Subnetwork::History;
         let active_outgoing_requests = Arc::new(RwLock::new(HashMap::new()));
         let peers_to_ping = HashSetDelay::default();
         let (command_tx, command_rx) = mpsc::unbounded_channel();

@@ -6,39 +6,39 @@ use tracing::info;
 
 use crate::{utils::fixture_header_by_hash, Peertest};
 use ethportal_api::{
-    types::{portal::ContentInfo, portal_wire::ProtocolId},
+    types::{network::Subnetwork, portal::ContentInfo},
     utils::bytes::hex_decode,
     BeaconNetworkApiClient, ContentValue, Enr, HistoryNetworkApiClient, OverlayContentKey,
     StateNetworkApiClient,
 };
 
-pub async fn test_recursive_find_nodes_self(protocol: ProtocolId, peertest: &Peertest) {
-    info!("Testing recursive find nodes self for {protocol}");
+pub async fn test_recursive_find_nodes_self(subnetwork: Subnetwork, peertest: &Peertest) {
+    info!("Testing recursive find nodes self for {subnetwork}");
     let target_enr = peertest.bootnode.enr.clone();
     let target_node_id = NodeId::from(target_enr.node_id().raw());
     let result =
-        call_recursive_find_nodes(protocol, &peertest.bootnode.ipc_client, target_node_id).await;
+        call_recursive_find_nodes(subnetwork, &peertest.bootnode.ipc_client, target_node_id).await;
     assert_eq!(result, vec![target_enr]);
 }
 
-pub async fn test_recursive_find_nodes_peer(protocol: ProtocolId, peertest: &Peertest) {
-    info!("Testing recursive find nodes peer for {protocol}");
+pub async fn test_recursive_find_nodes_peer(subnetwork: Subnetwork, peertest: &Peertest) {
+    info!("Testing recursive find nodes peer for {subnetwork}");
     let target_enr = peertest.nodes[0].enr.clone();
     let target_node_id = NodeId::from(target_enr.node_id().raw());
     let result =
-        call_recursive_find_nodes(protocol, &peertest.bootnode.ipc_client, target_node_id).await;
+        call_recursive_find_nodes(subnetwork, &peertest.bootnode.ipc_client, target_node_id).await;
     assert_eq!(result, vec![target_enr]);
 }
 
-pub async fn test_recursive_find_nodes_random(protocol: ProtocolId, peertest: &Peertest) {
-    info!("Testing recursive find nodes random for {protocol}");
+pub async fn test_recursive_find_nodes_random(subnetwork: Subnetwork, peertest: &Peertest) {
+    info!("Testing recursive find nodes random for {subnetwork}");
     let mut bytes = [0u8; 32];
     let random_node_id =
         hex_decode("0xcac75e7e776d84fba55a3104bdccfd716537bca3ad8465113f67f04d62694183").unwrap();
     bytes.copy_from_slice(&random_node_id);
     let target_node_id = NodeId::from(bytes);
     let result =
-        call_recursive_find_nodes(protocol, &peertest.bootnode.ipc_client, target_node_id).await;
+        call_recursive_find_nodes(subnetwork, &peertest.bootnode.ipc_client, target_node_id).await;
     assert_eq!(result.len(), 2);
 }
 
@@ -180,15 +180,15 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
 }
 
 async fn call_recursive_find_nodes(
-    protocol: ProtocolId,
+    subnetwork: Subnetwork,
     client: &Client,
     node_id: NodeId,
 ) -> Vec<Enr> {
-    match protocol {
-        ProtocolId::Beacon => BeaconNetworkApiClient::recursive_find_nodes(client, node_id),
-        ProtocolId::History => HistoryNetworkApiClient::recursive_find_nodes(client, node_id),
-        ProtocolId::State => StateNetworkApiClient::recursive_find_nodes(client, node_id),
-        _ => panic!("Unexpected protocol: {protocol}"),
+    match subnetwork {
+        Subnetwork::Beacon => BeaconNetworkApiClient::recursive_find_nodes(client, node_id),
+        Subnetwork::History => HistoryNetworkApiClient::recursive_find_nodes(client, node_id),
+        Subnetwork::State => StateNetworkApiClient::recursive_find_nodes(client, node_id),
+        _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
     .unwrap()

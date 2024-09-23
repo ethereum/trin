@@ -6,7 +6,7 @@ use utp_rs::socket::UtpSocket;
 
 use crate::storage::StateStorage;
 use ethportal_api::{
-    types::{distance::XorMetric, portal_wire::ProtocolId},
+    types::{distance::XorMetric, network::Subnetwork},
     StateContentKey,
 };
 use portalnet::{
@@ -58,7 +58,7 @@ impl StateNetwork {
             discovery,
             utp_socket,
             storage,
-            ProtocolId::State,
+            Subnetwork::State,
             validator,
         )
         .await;

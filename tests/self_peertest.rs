@@ -8,7 +8,6 @@ use std::{
 use ethportal_api::types::{
     cli::{TrinConfig, DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH},
     network::{Network, Subnetwork},
-    portal_wire::ProtocolId,
 };
 use ethportal_peertest as peertest;
 use ethportal_peertest::Peertest;
@@ -39,20 +38,20 @@ async fn peertest_stateless() {
     peertest::scenarios::basic::test_discv5_routing_table_info(&target).await;
     peertest::scenarios::eth_rpc::test_eth_chain_id(&peertest).await;
 
-    for protocol in [ProtocolId::History, ProtocolId::Beacon, ProtocolId::State] {
-        peertest::scenarios::basic::test_routing_table_info(protocol, &target).await;
-        peertest::scenarios::basic::test_radius(protocol, &target).await;
-        peertest::scenarios::basic::test_add_enr(protocol, &target, &peertest).await;
-        peertest::scenarios::basic::test_get_enr(protocol, &target, &peertest).await;
-        peertest::scenarios::basic::test_delete_enr(protocol, &target, &peertest).await;
-        peertest::scenarios::basic::test_lookup_enr(protocol, &peertest).await;
-        peertest::scenarios::basic::test_ping(protocol, &target, &peertest).await;
-        peertest::scenarios::basic::test_find_nodes(protocol, &target, &peertest).await;
-        peertest::scenarios::basic::test_find_nodes_zero_distance(protocol, &target, &peertest)
+    for subnetwork in [Subnetwork::History, Subnetwork::Beacon, Subnetwork::State] {
+        peertest::scenarios::basic::test_routing_table_info(subnetwork, &target).await;
+        peertest::scenarios::basic::test_radius(subnetwork, &target).await;
+        peertest::scenarios::basic::test_add_enr(subnetwork, &target, &peertest).await;
+        peertest::scenarios::basic::test_get_enr(subnetwork, &target, &peertest).await;
+        peertest::scenarios::basic::test_delete_enr(subnetwork, &target, &peertest).await;
+        peertest::scenarios::basic::test_lookup_enr(subnetwork, &peertest).await;
+        peertest::scenarios::basic::test_ping(subnetwork, &target, &peertest).await;
+        peertest::scenarios::basic::test_find_nodes(subnetwork, &target, &peertest).await;
+        peertest::scenarios::basic::test_find_nodes_zero_distance(subnetwork, &target, &peertest)
             .await;
-        peertest::scenarios::find::test_recursive_find_nodes_self(protocol, &peertest).await;
-        peertest::scenarios::find::test_recursive_find_nodes_peer(protocol, &peertest).await;
-        peertest::scenarios::find::test_recursive_find_nodes_random(protocol, &peertest).await;
+        peertest::scenarios::find::test_recursive_find_nodes_self(subnetwork, &peertest).await;
+        peertest::scenarios::find::test_recursive_find_nodes_peer(subnetwork, &peertest).await;
+        peertest::scenarios::find::test_recursive_find_nodes_random(subnetwork, &peertest).await;
     }
 
     peertest::scenarios::basic::test_history_store(&target).await;
@@ -345,7 +344,7 @@ async fn peertest_ping_cross_discv5_protocol_id() {
             "--network",
             &Network::Mainnet.to_string(),
             "--portal-subnetworks",
-            &Subnetwork::History.to_string(),
+            &Subnetwork::History.to_cli_arg(),
             "--external-address",
             external_addr.as_str(),
             "--web3-ipc-path",
@@ -399,7 +398,7 @@ async fn setup_peertest(
             "--portal-subnetworks",
             &subnetworks
                 .iter()
-                .map(|s| s.to_string())
+                .map(|s| s.to_cli_arg())
                 .collect::<Vec<String>>()
                 .join(","),
             "--external-address",
@@ -441,7 +440,7 @@ async fn setup_peertest_bridge(
     let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
     let subnetworks = subnetworks
         .iter()
-        .map(|s| s.to_string())
+        .map(|s| s.to_cli_arg())
         .collect::<Vec<String>>()
         .join(",");
 

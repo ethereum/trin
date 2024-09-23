@@ -25,11 +25,7 @@ use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 use super::config::PortalnetConfig;
 use crate::socket;
 use ethportal_api::{
-    types::{
-        discv5::RoutingTableInfo,
-        enr::Enr,
-        portal_wire::{NetworkSpec, ProtocolId},
-    },
+    types::{discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec},
     utils::bytes::{hex_decode, hex_encode},
     NodeInfo,
 };
@@ -339,14 +335,19 @@ impl Discovery {
     pub async fn send_talk_req(
         &self,
         enr: Enr,
-        protocol: ProtocolId,
+        subnetwork: Subnetwork,
         request: ProtocolRequest,
     ) -> Result<Vec<u8>, RequestError> {
         // Send empty protocol id if unable to convert it to bytes
-        let protocol = match self.network_spec.get_protocol_hex_from_id(&protocol) {
+        let protocol = match self
+            .network_spec
+            .get_protocol_identifier_from_subnetwork(&subnetwork)
+        {
             Ok(protocol_id) => hex_decode(&protocol_id).unwrap_or_default(),
             Err(err) => {
-                unreachable!("send_talk_req() should never receive an invalid ProtocolId protocol: err={err}");
+                unreachable!(
+                    "send_talk_req() should never receive an invalid Subnetwork: err={err}"
+                );
             }
         };
 
@@ -484,7 +485,7 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
         let target = target.0.clone();
         let data = buf.to_vec();
         tokio::spawn(async move {
-            match discv5.send_talk_req(target, ProtocolId::Utp, data).await {
+            match discv5.send_talk_req(target, Subnetwork::Utp, data).await {
                 // We drop the talk response because it is ignored in the uTP protocol.
                 Ok(..) => {}
                 Err(err) => match err {

@@ -17,7 +17,8 @@ use ethportal_api::{
         content_key::overlay::IdentityContentKey,
         distance::XorMetric,
         enr::{Enr, SszEnr},
-        portal_wire::{Content, Message, ProtocolId, MAINNET},
+        network::Subnetwork,
+        portal_wire::{Content, Message, MAINNET},
     },
     utils::bytes::hex_encode_upper,
 };
@@ -31,7 +32,7 @@ use trin_validation::{oracle::HeaderOracle, validator::MockValidator};
 
 async fn init_overlay(
     discovery: Arc<Discovery>,
-    protocol: ProtocolId,
+    subnetwork: Subnetwork,
 ) -> OverlayProtocol<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore> {
     let overlay_config = OverlayConfig::default();
 
@@ -53,7 +54,7 @@ async fn init_overlay(
         discovery,
         utp_socket,
         store,
-        protocol,
+        subnetwork,
         validator,
     )
     .await
@@ -68,17 +69,17 @@ async fn spawn_overlay(
     let overlay_protocol = *overlay.protocol();
     tokio::spawn(async move {
         while let Some(talk_req) = talk_req_rx.recv().await {
-            let req_protocol =
-                MAINNET.get_protocol_id_from_hex(&hex_encode_upper(talk_req.protocol()));
+            let req_subnetwork = MAINNET
+                .get_subnetwork_from_protocol_identifier(&hex_encode_upper(talk_req.protocol()));
 
-            if let Ok(req_protocol) = req_protocol {
-                match (req_protocol, overlay_protocol) {
-                    (ProtocolId::History, ProtocolId::History)
-                    | (ProtocolId::State, ProtocolId::State) => overlay_tx.send(talk_req).unwrap(),
-                    _ => panic!("Unexpected protocol"),
+            if let Ok(req_subnetwork) = req_subnetwork {
+                match (req_subnetwork, overlay_protocol) {
+                    (Subnetwork::History, Subnetwork::History)
+                    | (Subnetwork::State, Subnetwork::State) => overlay_tx.send(talk_req).unwrap(),
+                    _ => panic!("Unexpected subnetwork"),
                 }
             } else {
-                panic!("Invalid protocol");
+                panic!("Invalid subnetwork");
             }
         }
     });
@@ -102,7 +103,7 @@ async fn spawn_overlay(
 // Use sleeps to give time for background routing table processes.
 #[test_log::test(tokio::test)]
 async fn overlay() {
-    let protocol = ProtocolId::History;
+    let protocol = Subnetwork::History;
     let sleep_duration = Duration::from_millis(5);
     let ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 
@@ -268,7 +269,7 @@ async fn overlay_event_stream() {
     let temp_dir = create_temp_test_dir().unwrap();
     let discovery =
         Arc::new(Discovery::new(portal_config, temp_dir.path(), MAINNET.clone()).unwrap());
-    let overlay = init_overlay(discovery, ProtocolId::Beacon).await;
+    let overlay = init_overlay(discovery, Subnetwork::Beacon).await;
 
     overlay.event_stream().await.unwrap();
     temp_dir.close().unwrap();

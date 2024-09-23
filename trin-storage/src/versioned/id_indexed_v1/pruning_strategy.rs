@@ -197,7 +197,7 @@ mod tests {
     use std::path::PathBuf;
 
     use discv5::enr::NodeId;
-    use ethportal_api::types::portal_wire::ProtocolId;
+    use ethportal_api::types::network::Subnetwork;
     use r2d2::Pool;
     use r2d2_sqlite::SqliteConnectionManager;
     use rstest::rstest;
@@ -215,7 +215,7 @@ mod tests {
     fn create_pruning_strategy(storage_capacity_bytes: u64) -> PruningStrategy {
         let config = IdIndexedV1StoreConfig {
             content_type: ContentType::State,
-            network: ProtocolId::State,
+            subnetwork: Subnetwork::State,
             node_id: NodeId::random(),
             node_data_dir: PathBuf::default(),
             storage_capacity_bytes,

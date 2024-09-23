@@ -10,10 +10,7 @@ use tokio_stream::wrappers::BroadcastStream;
 use tracing::{debug, error, trace, warn};
 
 use ethportal_api::{
-    types::{
-        network::Subnetwork,
-        portal_wire::{NetworkSpec, ProtocolId},
-    },
+    types::{network::Subnetwork, portal_wire::NetworkSpec},
     utils::bytes::{hex_encode, hex_encode_upper},
 };
 
@@ -125,35 +122,35 @@ impl PortalnetEvents {
 
     /// Dispatch Discv5 TalkRequest event to overlay networks or uTP socket
     fn dispatch_discv5_talk_req(&self, request: TalkRequest) {
-        let protocol_id = self
+        let subnetwork = self
             .network_spec
-            .get_protocol_id_from_hex(&hex_encode_upper(request.protocol()));
+            .get_subnetwork_from_protocol_identifier(&hex_encode_upper(request.protocol()));
 
-        match protocol_id {
-            Ok(protocol) => match protocol {
-                ProtocolId::History => self.send_overlay_request(
+        match subnetwork {
+            Ok(subnetwork) => match subnetwork {
+                Subnetwork::History => self.send_overlay_request(
                     self.history_handle.tx.as_ref(),
                     request.into(),
                     Subnetwork::History,
                 ),
-                ProtocolId::Beacon => self.send_overlay_request(
+                Subnetwork::Beacon => self.send_overlay_request(
                     self.beacon_handle.tx.as_ref(),
                     request.into(),
                     Subnetwork::Beacon,
                 ),
-                ProtocolId::State => self.send_overlay_request(
+                Subnetwork::State => self.send_overlay_request(
                     self.state_handle.tx.as_ref(),
                     request.into(),
                     Subnetwork::State,
                 ),
-                ProtocolId::Utp => {
+                Subnetwork::Utp => {
                     if let Err(err) = self.utp_talk_reqs.send(request) {
                         error!(%err, "Error forwarding talk request to uTP socket");
                     }
                 }
                 _ => {
                     warn!(
-                        "Received TalkRequest on non-supported protocol from={} protocol={} body={}",
+                        "Received TalkRequest on unsupported subnetwork from={} protocol={} body={}",
                         request.node_id(),
                         hex_encode_upper(request.protocol()),
                         hex_encode(request.body()),
@@ -172,11 +169,11 @@ impl PortalnetEvents {
     fn dispatch_overlay_event(&self, event: EventEnvelope) {
         use OverlayRequest::Event;
 
-        let all_protocols = vec![ProtocolId::History, ProtocolId::Beacon, ProtocolId::State];
+        let all_subnetworks = vec![Subnetwork::History, Subnetwork::Beacon, Subnetwork::State];
         let mut recipients = event
             .destination
             .as_ref()
-            .unwrap_or(&all_protocols)
+            .unwrap_or(&all_subnetworks)
             .to_owned();
         recipients.retain(|id| id != &event.from);
 
@@ -185,21 +182,21 @@ impl PortalnetEvents {
             error!("No valid recipients for this event");
         }
 
-        if recipients.contains(&ProtocolId::Beacon) {
+        if recipients.contains(&Subnetwork::Beacon) {
             self.send_overlay_request(
                 self.beacon_handle.tx.as_ref(),
                 Event(event.clone()),
                 Subnetwork::Beacon,
             );
         }
-        if recipients.contains(&ProtocolId::State) {
+        if recipients.contains(&Subnetwork::State) {
             self.send_overlay_request(
                 self.state_handle.tx.as_ref(),
                 Event(event.clone()),
                 Subnetwork::State,
             );
         }
-        if recipients.contains(&ProtocolId::History) {
+        if recipients.contains(&Subnetwork::History) {
             self.send_overlay_request(
                 self.history_handle.tx.as_ref(),
                 Event(event.clone()),
@@ -273,21 +270,21 @@ impl From<SystemTime> for Timestamp {
 pub struct EventEnvelope {
     /// The timestamp of this event's generation.
     pub timestamp: Timestamp,
-    /// The protocol that generated this event.
-    pub from: ProtocolId,
+    /// The subnetwork that generated this event.
+    pub from: Subnetwork,
     /// The event payload.
     pub payload: OverlayEvent,
-    /// Specifies the protocols to which this event should be sent.
+    /// Specifies the subnetworks to which this event should be sent.
     ///
     /// A value of `None` is taken to indicate `all protocols`.
-    pub destination: Option<Vec<ProtocolId>>,
+    pub destination: Option<Vec<Subnetwork>>,
 }
 
 impl EventEnvelope {
     pub fn new(
         payload: OverlayEvent,
-        from: ProtocolId,
-        destination: Option<Vec<ProtocolId>>,
+        from: Subnetwork,
+        destination: Option<Vec<Subnetwork>>,
     ) -> Self {
         let timestamp = Timestamp::now();
         Self {

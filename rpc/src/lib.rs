@@ -61,6 +61,7 @@ pub async fn launch_jsonrpc_server(
             }
             Subnetwork::State => modules.push(PortalRpcModule::State),
             Subnetwork::Beacon => modules.push(PortalRpcModule::Beacon),
+            _ => return Err(RpcError::Custom("Unsupported subnetwork".to_string())),
         }
     }
 

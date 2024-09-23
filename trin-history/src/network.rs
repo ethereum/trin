@@ -6,7 +6,7 @@ use utp_rs::socket::UtpSocket;
 
 use crate::storage::HistoryStorage;
 use ethportal_api::{
-    types::{distance::XorMetric, enr::Enr, portal_wire::ProtocolId},
+    types::{distance::XorMetric, enr::Enr, network::Subnetwork},
     HistoryContentKey,
 };
 use portalnet::{
@@ -50,7 +50,7 @@ impl HistoryNetwork {
             discovery,
             utp_socket,
             storage,
-            ProtocolId::History,
+            Subnetwork::History,
             validator,
         )
         .await;

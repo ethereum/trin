@@ -63,6 +63,7 @@ impl PortalStorageConfigFactory {
             Subnetwork::History => Self::HISTORY_CAPACITY_WEIGHT,
             Subnetwork::State => Self::STATE_CAPACITY_WEIGHT,
             Subnetwork::Beacon => Self::BEACON_CAPACITY_WEIGHT,
+            _ => unreachable!("Subnetwork not activated: {subnetwork:?}"),
         }
     }
 }
