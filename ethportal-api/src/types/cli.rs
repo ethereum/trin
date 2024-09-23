@@ -212,12 +212,6 @@ pub struct TrinConfig {
     )]
     pub utp_transfer_limit: usize,
 
-    #[arg(
-        long = "gossip-dropped",
-        help = "Gossip content as it gets dropped from local storage (history network only)."
-    )]
-    pub gossip_dropped: bool,
-
     #[command(subcommand)]
     pub command: Option<TrinConfigCommands>,
 }
@@ -250,7 +244,6 @@ impl Default for TrinConfig {
             ws_port: DEFAULT_WEB3_WS_PORT,
             command: None,
             utp_transfer_limit: DEFAULT_UTP_TRANSFER_LIMIT,
-            gossip_dropped: false,
             network: MAINNET.clone(),
         }
     }
