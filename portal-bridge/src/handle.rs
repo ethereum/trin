@@ -65,8 +65,9 @@ pub fn subnetworks_flag(bridge_config: &BridgeConfig) -> String {
             Subnetwork::History => vec![Subnetwork::History],
             // State requires both history and state
             Subnetwork::State => vec![Subnetwork::History, Subnetwork::State],
+            _ => panic!("Unsupported subnetwork: {subnetwork:?}"),
         })
-        .map(|network_kind| network_kind.to_string())
+        .map(|network_kind| network_kind.to_cli_arg())
         .collect::<HashSet<_>>();
     Vec::from_iter(subnetworks).join(",")
 }

@@ -1,20 +1,6 @@
-use ethportal_api::types::portal_wire::{ProtocolId, Request, Response};
+use ethportal_api::types::portal_wire::{Request, Response};
 
 pub type MetricLabel = &'static str;
-
-impl From<ProtocolLabel> for MetricLabel {
-    fn from(label: ProtocolLabel) -> Self {
-        match label {
-            ProtocolLabel::State => "state",
-            ProtocolLabel::VerkleState => "verkle_state",
-            ProtocolLabel::History => "history",
-            ProtocolLabel::TransactionGossip => "transaction_gossip",
-            ProtocolLabel::CanonicalIndices => "canonical_indices",
-            ProtocolLabel::Beacon => "beacon",
-            ProtocolLabel::Utp => "utp",
-        }
-    }
-}
 
 impl From<MessageDirectionLabel> for MetricLabel {
     fn from(label: MessageDirectionLabel) -> Self {
@@ -24,6 +10,7 @@ impl From<MessageDirectionLabel> for MetricLabel {
         }
     }
 }
+
 impl From<MessageLabel> for MetricLabel {
     fn from(label: MessageLabel) -> Self {
         match label {
@@ -38,6 +25,7 @@ impl From<MessageLabel> for MetricLabel {
         }
     }
 }
+
 impl From<UtpDirectionLabel> for MetricLabel {
     fn from(label: UtpDirectionLabel) -> Self {
         match label {
@@ -84,18 +72,6 @@ impl From<&Response> for MessageLabel {
         }
     }
 }
-/// Protocol Labels
-/// - These label values identify the protocol in the metrics
-#[derive(Debug, Clone, Copy)]
-pub enum ProtocolLabel {
-    State,
-    VerkleState,
-    History,
-    TransactionGossip,
-    CanonicalIndices,
-    Beacon,
-    Utp,
-}
 
 /// Message Direction Labels
 pub enum MessageDirectionLabel {
@@ -118,19 +94,6 @@ pub enum MessageLabel {
     Accept,
 }
 
-impl From<&ProtocolId> for ProtocolLabel {
-    fn from(protocol: &ProtocolId) -> Self {
-        match protocol {
-            ProtocolId::State => Self::State,
-            ProtocolId::VerkleState => Self::VerkleState,
-            ProtocolId::History => Self::History,
-            ProtocolId::TransactionGossip => Self::TransactionGossip,
-            ProtocolId::CanonicalIndices => Self::CanonicalIndices,
-            ProtocolId::Beacon => Self::Beacon,
-            ProtocolId::Utp => Self::Utp,
-        }
-    }
-}
 /// uTP Transfer Direction Labels
 #[derive(Debug, Clone, Copy)]
 pub enum UtpDirectionLabel {

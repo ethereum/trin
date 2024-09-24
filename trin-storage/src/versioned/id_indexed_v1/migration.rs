@@ -50,7 +50,7 @@ mod tests {
     use std::collections::HashMap;
 
     use anyhow::Result;
-    use ethportal_api::{types::portal_wire::ProtocolId, IdentityContentKey, OverlayContentKey};
+    use ethportal_api::{types::network::Subnetwork, IdentityContentKey, OverlayContentKey};
     use rand::Rng;
 
     use crate::{
@@ -134,7 +134,7 @@ mod tests {
         legacy_history::create_store(&config)?;
 
         // migrate
-        let config = IdIndexedV1StoreConfig::new(ContentType::History, ProtocolId::History, config);
+        let config = IdIndexedV1StoreConfig::new(ContentType::History, Subnetwork::History, config);
         migrate_legacy_history_store(&config)?;
 
         // make sure we can initialize new store and that it's empty
@@ -160,7 +160,7 @@ mod tests {
         }
 
         // migrate
-        let config = IdIndexedV1StoreConfig::new(ContentType::History, ProtocolId::History, config);
+        let config = IdIndexedV1StoreConfig::new(ContentType::History, Subnetwork::History, config);
         migrate_legacy_history_store(&config)?;
 
         // create IdIndexedV1Store and verify content

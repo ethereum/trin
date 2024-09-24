@@ -1,7 +1,7 @@
 use crate::{utils::fixture_header_by_hash, Peertest, PeertestNode};
 use alloy_primitives::{B256, U256};
 use ethportal_api::{
-    types::{distance::Distance, portal_wire::ProtocolId},
+    types::{distance::Distance, network::Subnetwork},
     BeaconNetworkApiClient, ContentValue, Discv5ApiClient, HistoryContentKey,
     HistoryNetworkApiClient, StateNetworkApiClient, Web3ApiClient,
 };
@@ -29,26 +29,26 @@ pub async fn test_discv5_routing_table_info(target: &Client) {
     assert!(result.local_node_id.starts_with("0x"));
 }
 
-pub async fn test_routing_table_info(protocol: ProtocolId, target: &Client) {
-    info!("Testing routing_table_info for {protocol}");
-    let result = match protocol {
-        ProtocolId::Beacon => BeaconNetworkApiClient::routing_table_info(target),
-        ProtocolId::History => HistoryNetworkApiClient::routing_table_info(target),
-        ProtocolId::State => StateNetworkApiClient::routing_table_info(target),
-        _ => panic!("Unexpected protocol: {protocol}"),
+pub async fn test_routing_table_info(subnetwork: Subnetwork, target: &Client) {
+    info!("Testing routing_table_info for {subnetwork}");
+    let result = match subnetwork {
+        Subnetwork::Beacon => BeaconNetworkApiClient::routing_table_info(target),
+        Subnetwork::History => HistoryNetworkApiClient::routing_table_info(target),
+        Subnetwork::State => StateNetworkApiClient::routing_table_info(target),
+        _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
     .unwrap();
     assert!(result.local_node_id.starts_with("0x"));
 }
 
-pub async fn test_radius(protocol: ProtocolId, target: &Client) {
-    info!("Testing radius for {protocol}");
-    let result = match protocol {
-        ProtocolId::Beacon => BeaconNetworkApiClient::radius(target),
-        ProtocolId::History => HistoryNetworkApiClient::radius(target),
-        ProtocolId::State => StateNetworkApiClient::radius(target),
-        _ => panic!("Unexpected protocol: {protocol}"),
+pub async fn test_radius(subnetwork: Subnetwork, target: &Client) {
+    info!("Testing radius for {subnetwork}");
+    let result = match subnetwork {
+        Subnetwork::Beacon => BeaconNetworkApiClient::radius(target),
+        Subnetwork::History => HistoryNetworkApiClient::radius(target),
+        Subnetwork::State => StateNetworkApiClient::radius(target),
+        _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
     .unwrap();
@@ -58,71 +58,71 @@ pub async fn test_radius(protocol: ProtocolId, target: &Client) {
     );
 }
 
-pub async fn test_add_enr(protocol: ProtocolId, target: &Client, peertest: &Peertest) {
-    info!("Testing add_enr for {protocol}");
+pub async fn test_add_enr(subnetwork: Subnetwork, target: &Client, peertest: &Peertest) {
+    info!("Testing add_enr for {subnetwork}");
     let bootnode_enr = peertest.bootnode.enr.clone();
-    let result = match protocol {
-        ProtocolId::Beacon => BeaconNetworkApiClient::add_enr(target, bootnode_enr),
-        ProtocolId::History => HistoryNetworkApiClient::add_enr(target, bootnode_enr),
-        ProtocolId::State => StateNetworkApiClient::add_enr(target, bootnode_enr),
-        _ => panic!("Unexpected protocol: {protocol}"),
+    let result = match subnetwork {
+        Subnetwork::Beacon => BeaconNetworkApiClient::add_enr(target, bootnode_enr),
+        Subnetwork::History => HistoryNetworkApiClient::add_enr(target, bootnode_enr),
+        Subnetwork::State => StateNetworkApiClient::add_enr(target, bootnode_enr),
+        _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
     .unwrap();
     assert!(result);
 }
 
-pub async fn test_get_enr(protocol: ProtocolId, target: &Client, peertest: &Peertest) {
-    info!("Testing get_enr for {protocol}");
+pub async fn test_get_enr(subnetwork: Subnetwork, target: &Client, peertest: &Peertest) {
+    info!("Testing get_enr for {subnetwork}");
     let node_id = peertest.bootnode.enr.node_id();
-    let result = match protocol {
-        ProtocolId::Beacon => BeaconNetworkApiClient::get_enr(target, node_id),
-        ProtocolId::History => HistoryNetworkApiClient::get_enr(target, node_id),
-        ProtocolId::State => StateNetworkApiClient::get_enr(target, node_id),
-        _ => panic!("Unexpected protocol: {protocol}"),
+    let result = match subnetwork {
+        Subnetwork::Beacon => BeaconNetworkApiClient::get_enr(target, node_id),
+        Subnetwork::History => HistoryNetworkApiClient::get_enr(target, node_id),
+        Subnetwork::State => StateNetworkApiClient::get_enr(target, node_id),
+        _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
     .unwrap();
     assert_eq!(result, peertest.bootnode.enr);
 }
 
-pub async fn test_delete_enr(protocol: ProtocolId, target: &Client, peertest: &Peertest) {
-    info!("Testing delete_enr for {protocol}");
+pub async fn test_delete_enr(subnetwork: Subnetwork, target: &Client, peertest: &Peertest) {
+    info!("Testing delete_enr for {subnetwork}");
     let node_id = peertest.bootnode.enr.node_id();
-    let result = match protocol {
-        ProtocolId::Beacon => BeaconNetworkApiClient::delete_enr(target, node_id),
-        ProtocolId::History => HistoryNetworkApiClient::delete_enr(target, node_id),
-        ProtocolId::State => StateNetworkApiClient::delete_enr(target, node_id),
-        _ => panic!("Unexpected protocol: {protocol}"),
+    let result = match subnetwork {
+        Subnetwork::Beacon => BeaconNetworkApiClient::delete_enr(target, node_id),
+        Subnetwork::History => HistoryNetworkApiClient::delete_enr(target, node_id),
+        Subnetwork::State => StateNetworkApiClient::delete_enr(target, node_id),
+        _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
     .unwrap();
     assert!(result);
 }
 
-pub async fn test_lookup_enr(protocol: ProtocolId, peertest: &Peertest) {
-    info!("Testing lookup_enr for {protocol}");
+pub async fn test_lookup_enr(subnetwork: Subnetwork, peertest: &Peertest) {
+    info!("Testing lookup_enr for {subnetwork}");
     let target = &peertest.bootnode.ipc_client;
     let node_id = peertest.nodes[0].enr.node_id();
-    let result = match protocol {
-        ProtocolId::Beacon => BeaconNetworkApiClient::lookup_enr(target, node_id),
-        ProtocolId::History => HistoryNetworkApiClient::lookup_enr(target, node_id),
-        ProtocolId::State => StateNetworkApiClient::lookup_enr(target, node_id),
-        _ => panic!("Unexpected protocol: {protocol}"),
+    let result = match subnetwork {
+        Subnetwork::Beacon => BeaconNetworkApiClient::lookup_enr(target, node_id),
+        Subnetwork::History => HistoryNetworkApiClient::lookup_enr(target, node_id),
+        Subnetwork::State => StateNetworkApiClient::lookup_enr(target, node_id),
+        _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
     .unwrap();
     assert_eq!(result, peertest.nodes[0].enr);
 }
 
-pub async fn test_ping(protocol: ProtocolId, target: &Client, peertest: &Peertest) {
-    info!("Testing ping for {protocol}");
+pub async fn test_ping(subnetwork: Subnetwork, target: &Client, peertest: &Peertest) {
+    info!("Testing ping for {subnetwork}");
     let bootnode_enr = peertest.bootnode.enr.clone();
-    let result = match protocol {
-        ProtocolId::Beacon => BeaconNetworkApiClient::ping(target, bootnode_enr),
-        ProtocolId::History => HistoryNetworkApiClient::ping(target, bootnode_enr),
-        ProtocolId::State => StateNetworkApiClient::ping(target, bootnode_enr),
-        _ => panic!("Unexpected protocol: {protocol}"),
+    let result = match subnetwork {
+        Subnetwork::Beacon => BeaconNetworkApiClient::ping(target, bootnode_enr),
+        Subnetwork::History => HistoryNetworkApiClient::ping(target, bootnode_enr),
+        Subnetwork::State => StateNetworkApiClient::ping(target, bootnode_enr),
+        _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
     .unwrap();
@@ -141,14 +141,14 @@ pub async fn test_ping_cross_network(mainnet_target: &Client, angelfood_node: &P
     };
 }
 
-pub async fn test_find_nodes(protocol: ProtocolId, target: &Client, peertest: &Peertest) {
-    info!("Testing find_nodes for {protocol}");
+pub async fn test_find_nodes(subnetwork: Subnetwork, target: &Client, peertest: &Peertest) {
+    info!("Testing find_nodes for {subnetwork}");
     let bootnode_enr = peertest.bootnode.enr.clone();
-    let result = match protocol {
-        ProtocolId::Beacon => BeaconNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
-        ProtocolId::History => HistoryNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
-        ProtocolId::State => StateNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
-        _ => panic!("Unexpected protocol: {protocol}"),
+    let result = match subnetwork {
+        Subnetwork::Beacon => BeaconNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
+        Subnetwork::History => HistoryNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
+        Subnetwork::State => StateNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
+        _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
     .unwrap();
@@ -156,17 +156,17 @@ pub async fn test_find_nodes(protocol: ProtocolId, target: &Client, peertest: &P
 }
 
 pub async fn test_find_nodes_zero_distance(
-    protocol: ProtocolId,
+    subnetwork: Subnetwork,
     target: &Client,
     peertest: &Peertest,
 ) {
-    info!("Testing find_nodes with zero distance for {protocol}");
+    info!("Testing find_nodes with zero distance for {subnetwork}");
     let bootnode_enr = peertest.bootnode.enr.clone();
-    let result = match protocol {
-        ProtocolId::Beacon => BeaconNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
-        ProtocolId::History => HistoryNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
-        ProtocolId::State => StateNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
-        _ => panic!("Unexpected protocol: {protocol}"),
+    let result = match subnetwork {
+        Subnetwork::Beacon => BeaconNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
+        Subnetwork::History => HistoryNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
+        Subnetwork::State => StateNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
+        _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
     .unwrap();

@@ -84,7 +84,7 @@ fn generate_trin_config(
     let private_key = hex_encode(private_key);
     let subnetworks = subnetworks
         .iter()
-        .map(|sn| sn.to_string())
+        .map(|sn| sn.to_cli_arg())
         .collect::<Vec<String>>()
         .join(",");
     let network = network.to_string();

@@ -8,10 +8,7 @@ pub mod rpc;
 use crate::rpc::RpcServer;
 use discv5::TalkRequest;
 use ethportal_api::{
-    types::{
-        enr::Enr,
-        portal_wire::{ProtocolId, MAINNET},
-    },
+    types::{enr::Enr, network::Subnetwork, portal_wire::MAINNET},
     utils::bytes::{hex_encode, hex_encode_upper},
 };
 use jsonrpsee::{
@@ -145,11 +142,11 @@ impl TestApp {
         // Forward discv5 uTP packets to uTP socket
         tokio::spawn(async move {
             while let Some(request) = talk_req_rx.recv().await {
-                let protocol_id = MAINNET
-                    .get_protocol_id_from_hex(&hex_encode_upper(request.protocol()))
+                let subnetwork = MAINNET
+                    .get_subnetwork_from_protocol_identifier(&hex_encode_upper(request.protocol()))
                     .unwrap();
 
-                if let ProtocolId::Utp = protocol_id {
+                if let Subnetwork::Utp = subnetwork {
                     utp_talk_reqs_tx.send(request).unwrap();
                 };
             }

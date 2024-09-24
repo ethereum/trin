@@ -41,9 +41,10 @@ use ethportal_api::{
         discv5::RoutingTableInfo,
         distance::{Distance, Metric},
         enr::Enr,
+        network::Subnetwork,
         portal_wire::{
             Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping, Pong,
-            PopulatedOffer, PopulatedOfferWithResult, ProtocolId, Request, Response,
+            PopulatedOffer, PopulatedOfferWithResult, Request, Response,
         },
     },
     utils::bytes::hex_encode,
@@ -70,7 +71,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     /// The overlay routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The subnetwork protocol of the overlay.
-    protocol: ProtocolId,
+    protocol: Subnetwork,
     /// A sender to send commands to the OverlayService.
     pub command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
     /// uTP controller.
@@ -101,7 +102,7 @@ where
         discovery: Arc<Discovery>,
         utp_socket: Arc<UtpSocket<UtpEnr>>,
         store: Arc<RwLock<TStore>>,
-        protocol: ProtocolId,
+        protocol: Subnetwork,
         validator: Arc<TValidator>,
     ) -> Self {
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
@@ -156,7 +157,7 @@ where
     }
 
     /// Returns the subnetwork protocol of the overlay protocol.
-    pub fn protocol(&self) -> &ProtocolId {
+    pub fn protocol(&self) -> &Subnetwork {
         &self.protocol
     }
 

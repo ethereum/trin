@@ -1,5 +1,5 @@
 use ethportal_api::{
-    types::{distance::Distance, portal::PaginateLocalContentInfo, portal_wire::ProtocolId},
+    types::{distance::Distance, network::Subnetwork, portal::PaginateLocalContentInfo},
     HistoryContentKey, OverlayContentKey,
 };
 use trin_storage::{
@@ -51,7 +51,7 @@ impl ContentStore for HistoryStorage {
 impl HistoryStorage {
     pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
         let sql_connection_pool = config.sql_connection_pool.clone();
-        let config = IdIndexedV1StoreConfig::new(ContentType::History, ProtocolId::History, config);
+        let config = IdIndexedV1StoreConfig::new(ContentType::History, Subnetwork::History, config);
         Ok(Self {
             store: create_store(ContentType::History, config, sql_connection_pool)?,
         })

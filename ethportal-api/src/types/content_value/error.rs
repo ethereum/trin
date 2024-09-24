@@ -9,7 +9,7 @@ pub enum ContentValueError {
         decode_error: ssz::DecodeError,
         input: String,
     },
-    #[error("could not determine content type of {bytes} from {subnetwork} subnetwork")]
+    #[error("could not determine content type of {bytes} from {subnetwork:?} subnetwork")]
     UnknownContent {
         bytes: String,
         subnetwork: Subnetwork,
@@ -25,12 +25,12 @@ pub enum ContentValueError {
     /// This error implies that handling of the "content absent" response was skipped.
     #[error("attempted to decode the '0x' absent content message")]
     DecodeAbsentContent,
-    #[error("could not determine fork digest of {bytes} from {subnetwork} subnetwork")]
+    #[error("could not determine fork digest of {bytes} from {subnetwork:?} subnetwork")]
     UnknownForkDigest {
         bytes: String,
         subnetwork: Subnetwork,
     },
-    #[error("could not determine fork name of {bytes} from {subnetwork} subnetwork")]
+    #[error("could not determine fork name of {bytes} from {subnetwork:?} subnetwork")]
     UnknownForkName {
         bytes: String,
         subnetwork: Subnetwork,

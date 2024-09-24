@@ -339,11 +339,17 @@ pub fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> 
 pub fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>, String> {
     let subnetworks = subnetwork_string
         .split(',')
-        .map(Subnetwork::from_str)
+        .map(Subnetwork::from_cli_arg)
         .collect::<Result<Vec<Subnetwork>, String>>()?;
 
     if subnetworks.is_empty() {
         return Err("At least one subnetwork must be enabled".to_owned());
+    }
+
+    for subnetwork in &subnetworks {
+        if !subnetwork.is_active() {
+            return Err("{subnetwork} subnetwork has not yet been activated".to_owned());
+        }
     }
 
     Ok(Arc::new(subnetworks))

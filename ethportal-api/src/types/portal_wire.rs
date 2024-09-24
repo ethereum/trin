@@ -6,6 +6,7 @@ use std::{
 };
 
 use alloy_primitives::U256;
+use anyhow::anyhow;
 use bimap::BiHashMap;
 use once_cell::sync::Lazy;
 use rlp::Encodable;
@@ -22,9 +23,9 @@ use crate::{
         bytes::ByteList2048,
         distance::Distance,
         enr::{Enr, SszEnr},
-        network::Network,
+        network::{Network, Subnetwork},
     },
-    utils::bytes::{hex_decode, hex_encode, ByteUtilsError},
+    utils::bytes::{hex_decode, hex_encode},
     RawContentKey,
 };
 
@@ -157,31 +158,11 @@ pub enum DiscoveryRequestError {
     InvalidMessage,
 }
 
-#[derive(Error, Debug)]
-pub enum ProtocolIdError {
-    #[error("Unable to decode protocol id to bytes")]
-    Decode(ByteUtilsError),
-
-    #[error("invalid protocol id")]
-    Invalid,
-}
-
-/// Protocol identifiers
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub enum ProtocolId {
-    State,
-    VerkleState,
-    History,
-    TransactionGossip,
-    CanonicalIndices,
-    Beacon,
-    Utp,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NetworkSpec {
     network: Network,
-    portal_networks: BiHashMap<ProtocolId, String>,
+    // mapping of subnetworks to protocol id hex strings
+    portal_subnetworks: BiHashMap<Subnetwork, String>,
 }
 
 impl NetworkSpec {
@@ -189,84 +170,57 @@ impl NetworkSpec {
         self.network
     }
 
-    pub fn get_protocol_id_from_hex(&self, hex: &str) -> Result<ProtocolId, ProtocolIdError> {
-        self.portal_networks
+    pub fn get_subnetwork_from_protocol_identifier(&self, hex: &str) -> anyhow::Result<Subnetwork> {
+        self.portal_subnetworks
             .get_by_right(hex)
             .copied()
-            .ok_or(ProtocolIdError::Invalid)
+            .ok_or(anyhow!("Invalid subnetwork identifier: {hex}"))
     }
 
-    pub fn get_protocol_hex_from_id(
+    pub fn get_protocol_identifier_from_subnetwork(
         &self,
-        protocol_id: &ProtocolId,
-    ) -> Result<String, ProtocolIdError> {
-        self.portal_networks
-            .get_by_left(protocol_id)
+        subnetwork: &Subnetwork,
+    ) -> anyhow::Result<String> {
+        self.portal_subnetworks
+            .get_by_left(subnetwork)
             .cloned()
-            .ok_or(ProtocolIdError::Invalid)
+            .ok_or(anyhow!(
+                "Cannot find protocol identifier for subnetwork: {subnetwork}"
+            ))
     }
 }
 
 pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
-    let mut portal_networks = BiHashMap::new();
-    portal_networks.insert(ProtocolId::State, "0x500A".to_string());
-    portal_networks.insert(ProtocolId::History, "0x500B".to_string());
-    portal_networks.insert(ProtocolId::Beacon, "0x500C".to_string());
-    portal_networks.insert(ProtocolId::CanonicalIndices, "0x500D".to_string());
-    portal_networks.insert(ProtocolId::VerkleState, "0x500E".to_string());
-    portal_networks.insert(ProtocolId::TransactionGossip, "0x500F".to_string());
-    portal_networks.insert(ProtocolId::Utp, "0x757470".to_string());
+    let mut portal_subnetworks = BiHashMap::new();
+    portal_subnetworks.insert(Subnetwork::State, "0x500A".to_string());
+    portal_subnetworks.insert(Subnetwork::History, "0x500B".to_string());
+    portal_subnetworks.insert(Subnetwork::Beacon, "0x500C".to_string());
+    portal_subnetworks.insert(Subnetwork::CanonicalIndices, "0x500D".to_string());
+    portal_subnetworks.insert(Subnetwork::VerkleState, "0x500E".to_string());
+    portal_subnetworks.insert(Subnetwork::TransactionGossip, "0x500F".to_string());
+    portal_subnetworks.insert(Subnetwork::Utp, "0x757470".to_string());
     NetworkSpec {
-        portal_networks,
+        portal_subnetworks,
         network: Network::Mainnet,
     }
     .into()
 });
 
 pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
-    let mut portal_networks = BiHashMap::new();
-    portal_networks.insert(ProtocolId::State, "0x504A".to_string());
-    portal_networks.insert(ProtocolId::History, "0x504B".to_string());
-    portal_networks.insert(ProtocolId::Beacon, "0x504C".to_string());
-    portal_networks.insert(ProtocolId::CanonicalIndices, "0x504D".to_string());
-    portal_networks.insert(ProtocolId::VerkleState, "0x504E".to_string());
-    portal_networks.insert(ProtocolId::TransactionGossip, "0x504F".to_string());
-    portal_networks.insert(ProtocolId::Utp, "0x757470".to_string());
+    let mut portal_subnetworks = BiHashMap::new();
+    portal_subnetworks.insert(Subnetwork::State, "0x504A".to_string());
+    portal_subnetworks.insert(Subnetwork::History, "0x504B".to_string());
+    portal_subnetworks.insert(Subnetwork::Beacon, "0x504C".to_string());
+    portal_subnetworks.insert(Subnetwork::CanonicalIndices, "0x504D".to_string());
+    portal_subnetworks.insert(Subnetwork::VerkleState, "0x504E".to_string());
+    portal_subnetworks.insert(Subnetwork::TransactionGossip, "0x504F".to_string());
+    portal_subnetworks.insert(Subnetwork::Utp, "0x757470".to_string());
     NetworkSpec {
-        portal_networks,
+        portal_subnetworks,
         network: Network::Angelfood,
     }
     .into()
 });
-
-impl fmt::Display for ProtocolId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let protocol = match self {
-            ProtocolId::State => "State",
-            ProtocolId::VerkleState => "Verkle State",
-            ProtocolId::History => "History",
-            ProtocolId::TransactionGossip => "Transaction Gossip",
-            ProtocolId::CanonicalIndices => "Canonical Indices",
-            ProtocolId::Beacon => "Beacon",
-            ProtocolId::Utp => "uTP",
-        };
-        write!(f, "{protocol}")
-    }
-}
-
-impl From<ProtocolId> for u8 {
-    fn from(protocol_id: ProtocolId) -> Self {
-        match protocol_id {
-            ProtocolId::State => 2,
-            ProtocolId::VerkleState => 5,
-            ProtocolId::History => 0,
-            ProtocolId::TransactionGossip => 3,
-            ProtocolId::CanonicalIndices => 4,
-            ProtocolId::Beacon => 1,
-            ProtocolId::Utp => 99,
-        }
-    }
-}
 
 /// A Portal protocol message.
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
@@ -628,49 +582,25 @@ mod test {
     use test_log::test;
 
     #[test]
-    fn protocol_id_invalid() {
+    fn subnetwork_invalid() {
         let hex = "0x504F";
-        assert!(!MAINNET.portal_networks.contains_right(hex));
+        assert!(!MAINNET.portal_subnetworks.contains_right(hex));
     }
 
     #[test]
-    fn protocol_id_encoding() {
+    fn subnetwork_encoding() {
         let hex = "0x500A";
-        let protocol_id = MAINNET.get_protocol_id_from_hex(hex).unwrap();
-        let expected_hex = MAINNET.get_protocol_hex_from_id(&protocol_id).unwrap();
+        let protocol_id = MAINNET
+            .get_subnetwork_from_protocol_identifier(hex)
+            .unwrap();
+        let expected_hex = MAINNET
+            .get_protocol_identifier_from_subnetwork(&protocol_id)
+            .unwrap();
         assert_eq!(hex, expected_hex);
-    }
-
-    #[test]
-    fn prtocol_id_to_u8() {
-        let protocol_id = ProtocolId::History;
-        let expected_u8 = 0;
-        assert_eq!(expected_u8, u8::from(protocol_id));
-
-        let protocol_id = ProtocolId::Beacon;
-        let expected_u8 = 1;
-        assert_eq!(expected_u8, u8::from(protocol_id));
-
-        let protocol_id = ProtocolId::State;
-        let expected_u8 = 2;
-        assert_eq!(expected_u8, u8::from(protocol_id));
-
-        let protocol_id = ProtocolId::TransactionGossip;
-        let expected_u8 = 3;
-        assert_eq!(expected_u8, u8::from(protocol_id));
-
-        let protocol_id = ProtocolId::CanonicalIndices;
-        let expected_u8 = 4;
-        assert_eq!(expected_u8, u8::from(protocol_id));
-
-        let protocol_id = ProtocolId::Utp;
-        let expected_u8 = 99;
-        assert_eq!(expected_u8, u8::from(protocol_id));
     }
 
     // Wire message test vectors available in Ethereum Portal Network specs repo:
     // github.com/ethereum/portal-network-specs
-
     #[test]
     fn message_encoding_ping() {
         let data_radius: U256 = U256::MAX - U256::from(1u8);

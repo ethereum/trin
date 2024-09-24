@@ -13,8 +13,8 @@ use ethportal_api::{
             LightClientUpdatesByRange,
         },
         distance::Distance,
+        network::Subnetwork,
         portal::PaginateLocalContentInfo,
-        portal_wire::ProtocolId,
     },
     BeaconContentKey, OverlayContentKey, RawContentKey,
 };
@@ -309,7 +309,7 @@ impl BeaconStorage {
         let storage = Self {
             node_data_dir: config.node_data_dir,
             sql_connection_pool: config.sql_connection_pool,
-            metrics: StorageMetricsReporter::new(ProtocolId::Beacon),
+            metrics: StorageMetricsReporter::new(Subnetwork::Beacon),
             cache: BeaconStorageCache::new(),
         };
 

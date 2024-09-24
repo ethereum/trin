@@ -79,7 +79,7 @@ impl<TContentKey: OverlayContentKey> VersionedContentStore for IdIndexedV1Store<
     fn create(content_type: ContentType, config: Self::Config) -> Result<Self, ContentStoreError> {
         maybe_create_table_and_indexes(&content_type, &config.sql_connection_pool)?;
 
-        let protocol_id = config.network;
+        let subnetwork = config.subnetwork;
 
         let pruning_strategy = PruningStrategy::new(config.clone());
 
@@ -88,7 +88,7 @@ impl<TContentKey: OverlayContentKey> VersionedContentStore for IdIndexedV1Store<
             radius: Distance::MAX,
             pruning_strategy,
             usage_stats: UsageStats::default(),
-            metrics: StorageMetricsReporter::new(protocol_id),
+            metrics: StorageMetricsReporter::new(subnetwork),
             _phantom_content_key: PhantomData,
         };
         store.init()?;
@@ -543,7 +543,7 @@ fn maybe_create_table_and_indexes(
 mod tests {
     use anyhow::Result;
     use discv5::enr::NodeId;
-    use ethportal_api::{types::portal_wire::ProtocolId, IdentityContentKey};
+    use ethportal_api::{types::network::Subnetwork, IdentityContentKey};
     use rand::Rng;
     use tempfile::TempDir;
 
@@ -565,7 +565,7 @@ mod tests {
     fn create_config(temp_dir: &TempDir, storage_capacity_bytes: u64) -> IdIndexedV1StoreConfig {
         IdIndexedV1StoreConfig {
             content_type: ContentType::State,
-            network: ProtocolId::State,
+            subnetwork: Subnetwork::State,
             node_id: NodeId::random(),
             node_data_dir: temp_dir.path().to_path_buf(),
             distance_fn: DistanceFunction::Xor,

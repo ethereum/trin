@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use ethportal_api::types::{distance::Distance, portal_wire::ProtocolId};
+use ethportal_api::types::{distance::Distance, network::Subnetwork};
 use prometheus_exporter::{
     self,
     prometheus::{
@@ -90,10 +90,10 @@ pub struct StorageMetricsReporter {
 }
 
 impl StorageMetricsReporter {
-    pub fn new(protocol_id: ProtocolId) -> Self {
+    pub fn new(subnetwork: Subnetwork) -> Self {
         Self {
             storage_metrics: PORTALNET_METRICS.storage(),
-            protocol: protocol_id.to_string(),
+            protocol: subnetwork.to_string(),
         }
     }
 

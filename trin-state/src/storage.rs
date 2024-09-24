@@ -4,8 +4,8 @@ use ethportal_api::{
         content_key::state::{AccountTrieNodeKey, ContractBytecodeKey, ContractStorageTrieNodeKey},
         content_value::state::{ContractBytecode, TrieNode},
         distance::Distance,
+        network::Subnetwork,
         portal::PaginateLocalContentInfo,
-        portal_wire::ProtocolId,
     },
     ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
 };
@@ -72,7 +72,7 @@ impl ContentStore for StateStorage {
 impl StateStorage {
     pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
         let sql_connection_pool = config.sql_connection_pool.clone();
-        let config = IdIndexedV1StoreConfig::new(ContentType::State, ProtocolId::State, config);
+        let config = IdIndexedV1StoreConfig::new(ContentType::State, Subnetwork::State, config);
         Ok(Self {
             store: create_store(ContentType::State, config, sql_connection_pool)?,
         })
