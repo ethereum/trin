@@ -353,6 +353,12 @@ pub fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>
         return Err("At least one subnetwork must be enabled".to_owned());
     }
 
+    for subnetwork in &subnetworks {
+        if !subnetwork.is_active() {
+            return Err("{subnetwork} subnetwork has not yet been activated".to_owned());
+        }
+    }
+
     Ok(Arc::new(subnetworks))
 }
 

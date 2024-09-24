@@ -1,23 +1,6 @@
-use ethportal_api::types::{
-    network::Subnetwork,
-    portal_wire::{Request, Response},
-};
+use ethportal_api::types::portal_wire::{Request, Response};
 
 pub type MetricLabel = &'static str;
-
-impl From<ProtocolLabel> for MetricLabel {
-    fn from(label: ProtocolLabel) -> Self {
-        match label {
-            ProtocolLabel::State => "state",
-            ProtocolLabel::VerkleState => "verkle_state",
-            ProtocolLabel::History => "history",
-            ProtocolLabel::TransactionGossip => "transaction_gossip",
-            ProtocolLabel::CanonicalIndices => "canonical_indices",
-            ProtocolLabel::Beacon => "beacon",
-            ProtocolLabel::Utp => "utp",
-        }
-    }
-}
 
 impl From<MessageDirectionLabel> for MetricLabel {
     fn from(label: MessageDirectionLabel) -> Self {
@@ -27,6 +10,7 @@ impl From<MessageDirectionLabel> for MetricLabel {
         }
     }
 }
+
 impl From<MessageLabel> for MetricLabel {
     fn from(label: MessageLabel) -> Self {
         match label {
@@ -41,6 +25,7 @@ impl From<MessageLabel> for MetricLabel {
         }
     }
 }
+
 impl From<UtpDirectionLabel> for MetricLabel {
     fn from(label: UtpDirectionLabel) -> Self {
         match label {
@@ -87,18 +72,6 @@ impl From<&Response> for MessageLabel {
         }
     }
 }
-/// Protocol Labels
-/// - These label values identify the protocol in the metrics
-#[derive(Debug, Clone, Copy)]
-pub enum ProtocolLabel {
-    State,
-    VerkleState,
-    History,
-    TransactionGossip,
-    CanonicalIndices,
-    Beacon,
-    Utp,
-}
 
 /// Message Direction Labels
 pub enum MessageDirectionLabel {
@@ -121,19 +94,6 @@ pub enum MessageLabel {
     Accept,
 }
 
-impl From<&Subnetwork> for ProtocolLabel {
-    fn from(subnetwork: &Subnetwork) -> Self {
-        match subnetwork {
-            Subnetwork::State => Self::State,
-            Subnetwork::VerkleState => Self::VerkleState,
-            Subnetwork::History => Self::History,
-            Subnetwork::TransactionGossip => Self::TransactionGossip,
-            Subnetwork::CanonicalIndices => Self::CanonicalIndices,
-            Subnetwork::Beacon => Self::Beacon,
-            Subnetwork::Utp => Self::Utp,
-        }
-    }
-}
 /// uTP Transfer Direction Labels
 #[derive(Debug, Clone, Copy)]
 pub enum UtpDirectionLabel {

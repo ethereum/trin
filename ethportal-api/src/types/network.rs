@@ -81,4 +81,17 @@ impl Subnetwork {
             Subnetwork::Utp => "utp".to_string(),
         }
     }
+
+    /// Returns true if the subnetwork has been "fully" activated.
+    pub fn is_active(&self) -> bool {
+        match self {
+            Subnetwork::Beacon => true,
+            Subnetwork::History => true,
+            Subnetwork::State => true,
+            Subnetwork::CanonicalIndices => false,
+            Subnetwork::VerkleState => false,
+            Subnetwork::TransactionGossip => false,
+            Subnetwork::Utp => false,
+        }
+    }
 }
