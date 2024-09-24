@@ -12,19 +12,13 @@ pub struct Bootnode {
 
 impl From<Enr> for Bootnode {
     fn from(enr: Enr) -> Self {
-        let all_bootnodes = DEFAULT_BOOTNODES
-            .clone()
-            .into_iter()
-            .chain(ANGELFOOD_BOOTNODES.clone());
-        for bootnode in all_bootnodes {
-            if bootnode.enr == enr {
-                return bootnode;
-            }
-        }
-        Bootnode {
-            enr,
-            alias: "custom".to_string(),
-        }
+        Iterator::chain(DEFAULT_BOOTNODES.iter(), ANGELFOOD_BOOTNODES.iter())
+            .find(|bootnode| bootnode.enr == enr)
+            .cloned()
+            .unwrap_or_else(|| Self {
+                enr,
+                alias: "custom".to_string(),
+            })
     }
 }
 
