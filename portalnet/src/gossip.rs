@@ -272,15 +272,19 @@ fn batch_interested_enrs<TMetric: Metric>(
 
 const NUM_CLOSEST_NODES: usize = 4;
 const NUM_FARTHER_NODES: usize = 4;
-/// Selects gossip recipients from a vec of sorted interested ENRs.
-/// Returned vec is a concatenation of, at most:
-/// 1. First `NUM_CLOSEST_NODES` elements of `interested_sorted_enrs`.
-/// 2. `NUM_FARTHER_NODES` elements randomly selected from
-///    `interested_sorted_enrs[NUM_CLOSEST_NODES..]`
+
+/// Selects gossip recipients from a vec of interested ENRs.
+///
+/// If number of ENRs is at most `NUM_CLOSEST_NODES + NUM_FARTHER_NODES`, then all are returned.
+/// Otherwise, ENRs are sorted by distance from `content_id` and then:
+///
+/// 1. Closest `NUM_CLOSEST_NODES` ENRs are selected
+/// 2. Random `NUM_FARTHER_NODES` ENRs are selected from the rest
 fn select_gossip_recipients<TMetric: Metric>(
     content_id: &[u8; 32],
     mut enrs: Vec<Enr>,
 ) -> Vec<Enr> {
+    // Check if we need to do any selection
     if enrs.len() <= NUM_CLOSEST_NODES + NUM_FARTHER_NODES {
         return enrs;
     }
