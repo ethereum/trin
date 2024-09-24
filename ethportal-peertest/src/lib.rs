@@ -45,7 +45,7 @@ async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
     // Short sleep to make sure all peertest nodes can connect
     thread::sleep(time::Duration::from_secs(2));
     let ipc_client = reth_ipc::client::IpcClientBuilder::default()
-        .build(web3_ipc_path)
+        .build(&web3_ipc_path.to_string_lossy())
         .await
         .unwrap();
 

@@ -4,16 +4,17 @@ use crate::{
     errors::WsHttpSamePortError,
     jsonrpsee::{
         http_client::{HttpClient, HttpClientBuilder},
-        server::{IdProvider, Server, ServerBuilder, ServerHandle},
+        server::{Server, ServerBuilder, ServerHandle},
         ws_client::{WsClient, WsClientBuilder},
         RpcModule,
     },
     RpcError, TransportRpcModuleConfig,
 };
-use ethportal_api::types::cli::{
-    DEFAULT_WEB3_HTTP_PORT, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_WS_PORT,
+use ethportal_api::{
+    jsonrpsee::server::IdProvider,
+    types::cli::{DEFAULT_WEB3_HTTP_PORT, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_WS_PORT},
 };
-use reth_ipc::server::{Builder as IpcServerBuilder, Endpoint, IpcServer};
+use reth_ipc::server::{Builder as IpcServerBuilder, IpcServer};
 use std::{
     fmt,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
@@ -48,8 +49,8 @@ impl RpcServer {
         self.ws_http.ws_local_addr
     }
 
-    /// Returns the [`Endpoint`] of the ipc server if started.
-    pub fn ipc_endpoint(&self) -> Option<&Endpoint> {
+    /// Returns the `endpoint` of the ipc server if started.
+    pub fn ipc_endpoint(&self) -> Option<String> {
         self.ipc.as_ref().map(|ipc| ipc.endpoint())
     }
 
@@ -57,7 +58,12 @@ impl RpcServer {
     ///
     /// This returns an [RpcServerHandle] that's connected to the server task(s) until the server is
     /// stopped or the [RpcServerHandle] is dropped.
-    #[instrument(name = "start", skip_all, fields(http = ?self.http_local_addr(), ws = ?self.ws_local_addr(), ipc = ?self.ipc_endpoint().map(|ipc|ipc.path())), target = "rpc", level = "TRACE")]
+    #[instrument(
+        name = "start",
+        skip_all,
+        fields(http = ?self.http_local_addr(), ws = ?self.ws_local_addr(), ipc = ?self.ipc_endpoint()),
+        target = "rpc",
+        level = "TRACE")]
     pub async fn start(
         self,
         modules: TransportRpcModules<()>,
@@ -195,8 +201,6 @@ pub enum ServerKind {
     WS(SocketAddr),
     /// WS and http on the same port
     WsHttp(SocketAddr),
-    /// Auth.
-    Auth(SocketAddr),
 }
 
 impl fmt::Display for ServerKind {
@@ -205,7 +209,6 @@ impl fmt::Display for ServerKind {
             ServerKind::Http(addr) => write!(f, "{addr} (HTTP-RPC server)"),
             ServerKind::WS(addr) => write!(f, "{addr} (WS-RPC server)"),
             ServerKind::WsHttp(addr) => write!(f, "{addr} (WS-HTTP-RPC server)"),
-            ServerKind::Auth(addr) => write!(f, "{addr} (AUTH server)"),
         }
     }
 }
@@ -224,41 +227,41 @@ impl fmt::Display for ServerKind {
 #[derive(Default)]
 pub struct RpcServerConfig {
     /// Configs for JSON-RPC Http.
-    http_server_config: Option<ServerBuilder>,
+    http_server_config: Option<ServerBuilder<Identity, Identity>>,
     /// Allowed CORS Domains for http
     http_cors_domains: Option<String>,
     /// Address where to bind the http server to
     http_addr: Option<SocketAddr>,
     /// Configs for WS server
-    ws_server_config: Option<ServerBuilder>,
+    ws_server_config: Option<ServerBuilder<Identity, Identity>>,
     /// Allowed CORS Domains for ws.
     ws_cors_domains: Option<String>,
     /// Address where to bind the ws server to
     ws_addr: Option<SocketAddr>,
     /// Configs for JSON-RPC IPC server
-    ipc_server_config: Option<IpcServerBuilder>,
-    /// The Endpoint where to launch the ipc server
-    ipc_endpoint: Option<Endpoint>,
+    ipc_server_config: Option<IpcServerBuilder<Identity, Identity>>,
+    /// The endpoint where to launch the ipc server
+    ipc_endpoint: Option<String>,
 }
 
 impl RpcServerConfig {
     /// Creates a new config with only http set
-    pub fn http(config: ServerBuilder) -> Self {
+    pub fn http(config: ServerBuilder<Identity, Identity>) -> Self {
         Self::default().with_http(config)
     }
 
     /// Creates a new config with only ws set
-    pub fn ws(config: ServerBuilder) -> Self {
+    pub fn ws(config: ServerBuilder<Identity, Identity>) -> Self {
         Self::default().with_ws(config)
     }
 
     /// Creates a new config with only ipc set
-    pub fn ipc(config: IpcServerBuilder) -> Self {
+    pub fn ipc(config: IpcServerBuilder<Identity, Identity>) -> Self {
         Self::default().with_ipc(config)
     }
 
     /// Configures the http server
-    pub fn with_http(mut self, config: ServerBuilder) -> Self {
+    pub fn with_http(mut self, config: ServerBuilder<Identity, Identity>) -> Self {
         self.http_server_config = Some(config);
         self
     }
@@ -282,7 +285,7 @@ impl RpcServerConfig {
     }
 
     /// Configures the ws server
-    pub fn with_ws(mut self, config: ServerBuilder) -> Self {
+    pub fn with_ws(mut self, config: ServerBuilder<Identity, Identity>) -> Self {
         self.ws_server_config = Some(config);
         self
     }
@@ -304,7 +307,7 @@ impl RpcServerConfig {
     }
 
     /// Configures the ipc server
-    pub fn with_ipc(mut self, config: IpcServerBuilder) -> Self {
+    pub fn with_ipc(mut self, config: IpcServerBuilder<Identity, Identity>) -> Self {
         self.ipc_server_config = Some(config);
         self
     }
@@ -333,7 +336,7 @@ impl RpcServerConfig {
     ///
     /// Default is [DEFAULT_WEB3_IPC_PATH]
     pub fn with_ipc_endpoint(mut self, path: impl Into<String>) -> Self {
-        self.ipc_endpoint = Some(Endpoint::new(path.into()));
+        self.ipc_endpoint = Some(path.into());
         self
     }
 
@@ -356,9 +359,9 @@ impl RpcServerConfig {
         self.ws_addr
     }
 
-    /// Returns the [Endpoint] of the ipc server
-    pub fn ipc_endpoint(&self) -> Option<&Endpoint> {
-        self.ipc_endpoint.as_ref()
+    /// Returns the endpoint of the ipc server
+    pub fn ipc_endpoint(&self) -> Option<String> {
+        self.ipc_endpoint.clone()
     }
 
     /// Convenience function to do [RpcServerConfig::build] and [RpcServer::start] in one step
@@ -409,7 +412,7 @@ impl RpcServerConfig {
             self.ws_server_config.take();
 
             let builder = self.http_server_config.take().expect("is set; qed");
-            let (server, addr) = WsHttpServerKind::build(
+            let server = WsHttpServerKind::build(
                 builder,
                 http_socket_addr,
                 cors,
@@ -417,8 +420,8 @@ impl RpcServerConfig {
             )
             .await?;
             return Ok(WsHttpServer {
-                http_local_addr: Some(addr),
-                ws_local_addr: Some(addr),
+                http_local_addr: Some(server.local_addr()),
+                ws_local_addr: Some(server.local_addr()),
                 server: WsHttpServers::SamePort(server),
             });
         }
@@ -437,27 +440,27 @@ impl RpcServerConfig {
             });
 
             let builder = builder.ws_only();
-            let (server, addr) = WsHttpServerKind::build(
+            let server = WsHttpServerKind::build(
                 builder,
                 ws_socket_addr,
                 self.ws_cors_domains.take(),
                 ServerKind::WS(ws_socket_addr),
             )
             .await?;
-            ws_local_addr = Some(addr);
+            ws_local_addr = Some(server.local_addr());
             ws_server = Some(server);
         }
 
         if let Some(builder) = self.http_server_config.take() {
             let builder = builder.http_only();
-            let (server, addr) = WsHttpServerKind::build(
+            let server = WsHttpServerKind::build(
                 builder,
                 http_socket_addr,
                 self.http_cors_domains.take(),
                 ServerKind::Http(http_socket_addr),
             )
             .await?;
-            http_local_addr = Some(addr);
+            http_local_addr = Some(server.local_addr());
             http_server = Some(server);
         }
 
@@ -483,8 +486,8 @@ impl RpcServerConfig {
         if let Some(builder) = self.ipc_server_config {
             let ipc_path = self
                 .ipc_endpoint
-                .unwrap_or_else(|| Endpoint::new(DEFAULT_WEB3_IPC_PATH.to_string()));
-            let ipc = builder.build(ipc_path.path())?;
+                .unwrap_or_else(|| DEFAULT_WEB3_IPC_PATH.to_string());
+            let ipc = builder.build(ipc_path);
             server.ipc = Some(ipc);
         }
 
@@ -582,31 +585,34 @@ impl WsHttpServerKind {
 
     /// Builds
     async fn build(
-        builder: ServerBuilder,
+        builder: ServerBuilder<Identity, Identity>,
         socket_addr: SocketAddr,
         cors_domains: Option<String>,
         server_kind: ServerKind,
-    ) -> Result<(Self, SocketAddr), RpcError> {
+    ) -> Result<Self, RpcError> {
         if let Some(cors) = cors_domains.as_deref().map(cors::create_cors_layer) {
             let cors = cors.map_err(|err| RpcError::Custom(err.to_string()))?;
-            let middleware = tower::ServiceBuilder::new().layer(cors);
             let server = builder
-                .set_middleware(middleware)
+                .set_http_middleware(tower::ServiceBuilder::new().layer(cors))
                 .build(socket_addr)
                 .await
-                .map_err(|err| RpcError::from_jsonrpsee_error(err, server_kind))?;
-            let local_addr = server.local_addr()?;
-            let server = WsHttpServerKind::WithCors(server);
-            Ok((server, local_addr))
+                .map_err(|err| RpcError::IoError(err, server_kind))?;
+            Ok(WsHttpServerKind::WithCors(server))
         } else {
             let server = builder
                 .build(socket_addr)
                 .await
-                .map_err(|err| RpcError::from_jsonrpsee_error(err, server_kind))?;
-            let local_addr = server.local_addr()?;
-            let server = WsHttpServerKind::Plain(server);
-            Ok((server, local_addr))
+                .map_err(|err| RpcError::IoError(err, server_kind))?;
+            Ok(WsHttpServerKind::Plain(server))
         }
+    }
+
+    fn local_addr(&self) -> SocketAddr {
+        match self {
+            WsHttpServerKind::Plain(server) => server.local_addr(),
+            WsHttpServerKind::WithCors(server) => server.local_addr(),
+        }
+        .expect("Expect to get local address")
     }
 }
 
@@ -627,8 +633,8 @@ mod tests {
 
     fn is_addr_in_use_kind(err: &RpcError, kind: ServerKind) -> bool {
         match err {
-            RpcError::AddressAlreadyInUse { kind: k, error } => {
-                *k == kind && error.kind() == io::ErrorKind::AddrInUse
+            RpcError::IoError(err, server_kind) => {
+                server_kind == &kind && err.kind() == io::ErrorKind::AddrInUse
             }
             _ => false,
         }

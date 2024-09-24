@@ -17,7 +17,7 @@ alloy-rpc-types.workspace = true
 discv5.workspace = true
 eth_trie.workspace = true
 ethportal-api.workspace = true
-hyper.workspace = true
+http = "1.1.0"
 portalnet.workspace = true
 reth-ipc.workspace = true
 revm.workspace = true
@@ -27,7 +27,7 @@ strum.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tower = { version = "0.4.13", features = ["full"] }
-tower-http = { version = "0.4.4", features = ["full"] }
+tower-http = { version = "0.5.0", features = ["full"] }
 tracing.workspace = true
 trin-evm.workspace = true
 trin-utils.workspace = true

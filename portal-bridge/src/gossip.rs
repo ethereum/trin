@@ -6,7 +6,6 @@ use tracing::{debug, warn, Instrument};
 
 use crate::stats::{BeaconSlotStats, HistoryBlockStats, StatsReporter};
 use ethportal_api::{
-    jsonrpsee::core::Error,
     types::portal::{ContentInfo, TraceGossipInfo},
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, ContentValue, HistoryContentKey,
     HistoryContentValue, HistoryNetworkApiClient, OverlayContentKey,
@@ -38,7 +37,7 @@ async fn beacon_trace_gossip(
     client: HttpClient,
     content_key: BeaconContentKey,
     content_value: BeaconContentValue,
-) -> Result<GossipReport, Error> {
+) -> GossipReport {
     let mut retries = 0;
     let mut traces = vec![];
     let mut found = false;
@@ -53,11 +52,11 @@ async fn beacon_trace_gossip(
         if let Ok(trace) = result {
             traces.push(trace.clone());
             if !trace.transferred.is_empty() {
-                return Ok(GossipReport {
+                return GossipReport {
                     traces,
                     retries,
                     found,
-                });
+                };
             }
         }
         // if not, make rfc request to see if data is available on network
@@ -66,11 +65,11 @@ async fn beacon_trace_gossip(
         if let Ok(ContentInfo::Content { .. }) = result {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             found = true;
-            return Ok(GossipReport {
+            return GossipReport {
                 traces,
                 retries,
                 found,
-            });
+            };
         }
         retries += 1;
         debug!("Unable to locate content on network, after failing to gossip, retrying in {:?} seconds. content key={:?}", RETRY_AFTER, content_key.to_hex());
@@ -81,11 +80,11 @@ async fn beacon_trace_gossip(
         GOSSIP_RETRY_COUNT,
         content_key.to_hex(),
     );
-    Ok(GossipReport {
+    GossipReport {
         traces,
         retries,
         found,
-    })
+    }
 }
 
 /// Gossip any given content key / value to the history network.
@@ -111,7 +110,7 @@ async fn history_trace_gossip(
     client: HttpClient,
     content_key: HistoryContentKey,
     content_value: HistoryContentValue,
-) -> Result<GossipReport, Error> {
+) -> GossipReport {
     let mut retries = 0;
     let mut traces = vec![];
     let mut found = false;
@@ -126,11 +125,11 @@ async fn history_trace_gossip(
         if let Ok(trace) = result {
             traces.push(trace.clone());
             if !trace.transferred.is_empty() {
-                return Ok(GossipReport {
+                return GossipReport {
                     traces,
                     retries,
                     found,
-                });
+                };
             }
         }
         // if not, make rfc request to see if data is available on network
@@ -139,11 +138,11 @@ async fn history_trace_gossip(
         if let Ok(ContentInfo::Content { .. }) = result {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             found = true;
-            return Ok(GossipReport {
+            return GossipReport {
                 traces,
                 retries,
                 found,
-            });
+            };
         }
         retries += 1;
         debug!("Unable to locate content on network, after failing to gossip, retrying in {:?} seconds. content key={:?}", RETRY_AFTER, content_key.to_hex());
@@ -154,11 +153,11 @@ async fn history_trace_gossip(
         GOSSIP_RETRY_COUNT,
         content_key.to_hex(),
     );
-    Ok(GossipReport {
+    GossipReport {
         traces,
         retries,
         found,
-    })
+    }
 }
 
 pub struct GossipReport {

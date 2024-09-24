@@ -3,7 +3,7 @@ use std::{collections::HashSet, str::FromStr};
 use tracing::{debug, info};
 
 use crate::gossip::GossipReport;
-use ethportal_api::{jsonrpsee::core::Error, types::enr::Enr, BeaconContentKey, HistoryContentKey};
+use ethportal_api::{types::enr::Enr, BeaconContentKey, HistoryContentKey};
 
 // Trait for tracking / reporting gossip stats
 pub trait StatsReporter<TContentKey> {
@@ -194,34 +194,27 @@ impl std::fmt::Display for ContentStats {
     }
 }
 
-impl From<Result<GossipReport, Error>> for ContentStats {
-    fn from(result: Result<GossipReport, Error>) -> Self {
-        let mut content_stats = ContentStats::default();
-        match result {
-            Ok(gossip_report) => {
-                content_stats.retries += gossip_report.retries;
-                content_stats.found = gossip_report.found;
-                for trace in &gossip_report.traces {
-                    for enr in trace.offered.iter() {
-                        let enr = Enr::from_str(enr)
-                            .expect("ENR from trace gossip response to successfully decode.");
-                        content_stats.offered.insert(enr);
-                    }
+impl From<GossipReport> for ContentStats {
+    fn from(gossip_report: GossipReport) -> Self {
+        let mut content_stats = ContentStats {
+            retries: gossip_report.retries,
+            found: gossip_report.found,
+            ..ContentStats::default()
+        };
 
-                    for enr in trace.accepted.iter() {
-                        let enr = Enr::from_str(enr)
-                            .expect("ENR from trace gossip response to successfully decode.");
-                        content_stats.accepted.insert(enr);
-                    }
-
-                    for enr in trace.transferred.iter() {
-                        let enr = Enr::from_str(enr)
-                            .expect("ENR from trace gossip response to successfully decode.");
-                        content_stats.transferred.insert(enr);
-                    }
-                }
-            }
-            Err(_) => content_stats.failures += 1,
+        let enr_from_str = |enr: &String| {
+            Enr::from_str(enr).expect("ENR from trace gossip response to successfully decode.")
+        };
+        for trace in &gossip_report.traces {
+            content_stats
+                .offered
+                .extend(trace.offered.iter().map(enr_from_str));
+            content_stats
+                .accepted
+                .extend(trace.accepted.iter().map(enr_from_str));
+            content_stats
+                .transferred
+                .extend(trace.transferred.iter().map(enr_from_str));
         }
         content_stats
     }
