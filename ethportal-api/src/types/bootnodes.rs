@@ -2,12 +2,24 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 
-use crate::types::enr::Enr;
+use crate::types::{enr::Enr, network::Network};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Bootnode {
     pub enr: Enr,
     pub alias: String,
+}
+
+impl From<Enr> for Bootnode {
+    fn from(enr: Enr) -> Self {
+        Iterator::chain(DEFAULT_BOOTNODES.iter(), ANGELFOOD_BOOTNODES.iter())
+            .find(|bootnode| bootnode.enr == enr)
+            .cloned()
+            .unwrap_or_else(|| Self {
+                enr,
+                alias: "custom".to_string(),
+            })
+    }
 }
 
 lazy_static! {
@@ -70,6 +82,13 @@ lazy_static! {
         Enr::from_str("enr:-IS4QA5hpJikeDFf1DD1_Le6_ylgrLGpdwn3SRaneGu9hY2HUI7peHep0f28UUMzbC0PvlWjN8zSfnqMG07WVcCyBhADgmlkgnY0gmlwhKRc9-KJc2VjcDI1NmsxoQJMpHmGj1xSP1O-Mffk_jYIHVcg6tY5_CjmWVg1gJEsPIN1ZHCCE4o").expect("Parsing static bootnode enr to work"),
             alias: "ultralight-4".to_string()
         }];
+
+    // AngelFood bootstrap nodes
+    pub static ref ANGELFOOD_BOOTNODES: Vec<Bootnode> = vec![
+        Bootnode{
+            enr: Enr::from_str("enr:-LC4QMnoW2m4YYQRPjZhJ5hEpcA6a3V7iQs3slQ1TepzKBIVWQtjpcHsPINc0TcheMCbx6I2n5aax8M3AtUObt74ySUCY6p0IDVhYzI2NzViNGRmMjNhNmEwOWVjNDFkZTRlYTQ2ODQxNjk2ZTQ1YzSCaWSCdjSCaXCEQONKaYlzZWNwMjU2azGhAvZgYbpA9G8NQ6X4agu-R7Ymtu0hcX6xBQ--UEel_b6Pg3VkcIIjKA").expect("Parsing static bootnode enr to work"),
+            alias: "angelfood-trin-1".to_string()
+        }];
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -82,26 +101,20 @@ pub enum Bootnodes {
     Custom(Vec<Bootnode>),
 }
 
-impl From<Enr> for Bootnode {
-    fn from(enr: Enr) -> Self {
-        for bootnode in DEFAULT_BOOTNODES.clone().into_iter() {
-            if bootnode.enr == enr {
-                return bootnode;
+impl Bootnodes {
+    pub fn to_enrs(&self, network: Network) -> Vec<Enr> {
+        match (self, network) {
+            (Bootnodes::Default, Network::Mainnet) => {
+                DEFAULT_BOOTNODES.iter().map(|bn| bn.enr.clone()).collect()
             }
-        }
-        Bootnode {
-            enr,
-            alias: "custom".to_string(),
-        }
-    }
-}
-
-impl From<Bootnodes> for Vec<Enr> {
-    fn from(bootnodes: Bootnodes) -> Self {
-        match bootnodes {
-            Bootnodes::Default => DEFAULT_BOOTNODES.iter().map(|bn| bn.enr.clone()).collect(),
-            Bootnodes::None => vec![],
-            Bootnodes::Custom(bootnodes) => bootnodes.iter().map(|bn| bn.enr.clone()).collect(),
+            (Bootnodes::Default, Network::Angelfood) => ANGELFOOD_BOOTNODES
+                .iter()
+                .map(|bn| bn.enr.clone())
+                .collect(),
+            (Bootnodes::None, _) => vec![],
+            (Bootnodes::Custom(bootnodes), _) => {
+                bootnodes.iter().map(|bn| bn.enr.clone()).collect()
+            }
         }
     }
 }
@@ -135,10 +148,18 @@ mod test {
     use rstest::rstest;
 
     #[test_log::test]
-    fn test_bootnodes_default_with_angelfood_bootnodes() {
+    fn test_bootnodes_default_with_default_bootnodes() {
         let config = TrinConfig::new_from(["trin"].iter()).unwrap();
         assert_eq!(config.bootnodes, Bootnodes::Default);
-        let bootnodes: Vec<Enr> = config.bootnodes.into();
+        let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
+        assert_eq!(bootnodes.len(), 11);
+    }
+
+    #[test_log::test]
+    fn test_bootnodes_default_with_explicit_default_bootnodes() {
+        let config = TrinConfig::new_from(["trin", "--bootnodes", "default"].iter()).unwrap();
+        assert_eq!(config.bootnodes, Bootnodes::Default);
+        let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
         assert_eq!(bootnodes.len(), 11);
     }
 
@@ -146,7 +167,7 @@ mod test {
     fn test_bootnodes_default_with_no_bootnodes() {
         let config = TrinConfig::new_from(["trin", "--bootnodes", "none"].iter()).unwrap();
         assert_eq!(config.bootnodes, Bootnodes::None);
-        let bootnodes: Vec<Enr> = config.bootnodes.into();
+        let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
         assert_eq!(bootnodes.len(), 0);
     }
 
@@ -170,7 +191,32 @@ mod test {
             }
             _ => panic!("Bootnodes should be custom"),
         };
-        let bootnodes: Vec<Enr> = config.bootnodes.into();
+        let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
         assert_eq!(bootnodes.len(), expected_length);
+    }
+
+    #[rstest]
+    fn test_angelfood_network_defaults_to_correct_bootnodes() {
+        let config = TrinConfig::new_from(["trin", "--network", "angelfood"].iter()).unwrap();
+        assert_eq!(config.bootnodes, Bootnodes::Default);
+        let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Angelfood);
+        assert_eq!(bootnodes.len(), 1);
+    }
+
+    #[rstest]
+    fn test_custom_bootnodes_override_angelfood_default() {
+        let enr = "enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg";
+        let config =
+            TrinConfig::new_from(["trin", "--network", "angelfood", "--bootnodes", enr].iter())
+                .unwrap();
+        assert_eq!(
+            config.bootnodes,
+            Bootnodes::Custom(vec![Bootnode {
+                enr: Enr::from_str(enr).unwrap(),
+                alias: "custom".to_string(),
+            }])
+        );
+        let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Angelfood);
+        assert_eq!(bootnodes.len(), 1);
     }
 }

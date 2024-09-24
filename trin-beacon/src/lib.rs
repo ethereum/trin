@@ -20,7 +20,7 @@ use tracing::info;
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler, network::BeaconNetwork};
-use ethportal_api::types::{enr::Enr, jsonrpc::request::BeaconJsonRpcRequest};
+use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
@@ -82,10 +82,9 @@ pub fn spawn_beacon_network(
     portalnet_config: PortalnetConfig,
     beacon_message_rx: mpsc::UnboundedReceiver<OverlayRequest>,
 ) -> JoinHandle<()> {
-    let bootnode_enrs: Vec<Enr> = portalnet_config.bootnodes.into();
     info!(
         "About to spawn Beacon Network with {} boot nodes.",
-        bootnode_enrs.len()
+        portalnet_config.bootnodes.len()
     );
 
     tokio::spawn(async move {

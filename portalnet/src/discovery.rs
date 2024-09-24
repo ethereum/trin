@@ -181,8 +181,7 @@ impl Discovery {
         let discv5 = Discv5::new(enr, enr_key, discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {e}"))?;
 
-        let bootnode_enrs: Vec<Enr> = portal_config.bootnodes.into();
-        for enr in bootnode_enrs {
+        for enr in portal_config.bootnodes {
             if enr.node_id() == discv5.local_enr().node_id() {
                 warn!("Bootnode ENR is the same as the local ENR. Skipping.");
                 continue;
@@ -523,7 +522,7 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
 mod tests {
     use super::*;
     use crate::utils::db::configure_node_data_dir;
-    use ethportal_api::types::{bootnodes::Bootnodes, portal_wire::MAINNET};
+    use ethportal_api::types::portal_wire::MAINNET;
     use trin_utils::dir::create_temp_test_dir;
 
     #[test]
@@ -537,7 +536,7 @@ mod tests {
 
         let mut portalnet_config = PortalnetConfig {
             private_key,
-            bootnodes: Bootnodes::None,
+            bootnodes: vec![],
             ..Default::default()
         };
 

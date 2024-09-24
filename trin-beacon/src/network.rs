@@ -7,7 +7,7 @@ use utp_rs::socket::UtpSocket;
 
 use crate::{storage::BeaconStorage, sync::BeaconSync, validation::BeaconValidator};
 use ethportal_api::{
-    types::{distance::XorMetric, enr::Enr, network::Subnetwork},
+    types::{distance::XorMetric, network::Subnetwork},
     BeaconContentKey,
 };
 use light_client::{consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client};
@@ -39,9 +39,8 @@ impl BeaconNetwork {
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
     ) -> anyhow::Result<Self> {
-        let bootnode_enrs: Vec<Enr> = portal_config.bootnodes.into();
         let config = OverlayConfig {
-            bootnode_enrs,
+            bootnode_enrs: portal_config.bootnodes,
             utp_transfer_limit: portal_config.utp_transfer_limit,
             gossip_dropped: GOSSIP_DROPPED,
             ..Default::default()
