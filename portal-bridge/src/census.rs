@@ -3,6 +3,7 @@ use anyhow::anyhow;
 use delay_map::HashMapDelay;
 use discv5::enr::NodeId;
 use futures::{channel::oneshot, StreamExt};
+use thiserror::Error;
 use tokio::{
     sync::mpsc,
     time::{Duration, Instant},
@@ -19,6 +20,14 @@ use ethportal_api::{
     BeaconContentKey, BeaconNetworkApiClient, Enr, HistoryContentKey, HistoryNetworkApiClient,
     OverlayContentKey, StateContentKey, StateNetworkApiClient,
 };
+
+#[derive(Error, Debug)]
+pub enum CensusError {
+    #[error("No peers found in Census")]
+    NoPeers,
+    #[error("Failed to initialize Census")]
+    FailedInitialization,
+}
 
 /// Ping delay for liveness check of peers in census
 /// Two minutes was chosen somewhat arbitrarily, and can be adjusted
@@ -52,11 +61,15 @@ impl Census {
 }
 
 impl Census {
-    pub async fn init(&mut self) {
+    pub async fn init(&mut self) -> Result<(), CensusError> {
         // currently, the census is only initialized for the state network
         // only initialized networks will yield inside `run()` loop
         info!("Initializing state network census");
         self.state.init().await;
+        if self.state.peers.is_empty() {
+            return Err(CensusError::FailedInitialization);
+        }
+        Ok(())
     }
 
     pub async fn run(&mut self) {
@@ -67,9 +80,19 @@ impl Census {
             tokio::select! {
                 // handle enrs request
                 Some(request) = self.census_rx.recv() => {
-                    let enrs = self.get_interested_enrs(request.content_key).await;
-                    if let Err(err) = request.resp_tx.send(enrs) {
-                        error!("Error sending enrs response: {err:?}");
+                    match self.get_interested_enrs(request.content_key).await {
+                        Ok(enrs) => {
+                            if let Err(err) = request.resp_tx.send(enrs) {
+                                error!("Error sending enrs response: {err:?}");
+                            }
+                        }
+                        Err(_) => {
+                            error!("No peers found in census, restarting initialization.");
+                            self.state.init().await;
+                            if let Err(err) = request.resp_tx.send(Vec::new()) {
+                                error!("Error sending enrs response: {err:?}");
+                            }
+                        }
                     }
                 }
                 Some(Ok(known_enr)) = self.history.peers.next() => {
@@ -89,7 +112,10 @@ impl Census {
         }
     }
 
-    pub async fn get_interested_enrs(&self, content_key: ContentKey) -> Vec<Enr> {
+    pub async fn get_interested_enrs(
+        &self,
+        content_key: ContentKey,
+    ) -> Result<Vec<Enr>, CensusError> {
         match content_key {
             ContentKey::History(content_key) => {
                 self.history
@@ -211,15 +237,16 @@ impl Network {
     }
 
     // Look up all known interested enrs for a given content id
-    async fn get_interested_enrs(&self, content_id: [u8; 32]) -> Vec<Enr> {
+    async fn get_interested_enrs(&self, content_id: [u8; 32]) -> Result<Vec<Enr>, CensusError> {
         if self.peers.is_empty() {
             error!(
                 "No known peers in {} census, unable to offer.",
                 self.subnetwork
             );
-            return Vec::new();
+            return Err(CensusError::NoPeers);
         }
-        self.peers
+        Ok(self
+            .peers
             .iter()
             .filter_map(|(node_id, (enr, data_radius))| {
                 let distance = XorMetric::distance(node_id, &content_id);
@@ -230,7 +257,7 @@ impl Network {
                 }
             })
             .take(ENRS_RESPONSE_LIMIT)
-            .collect()
+            .collect())
     }
 }
 
