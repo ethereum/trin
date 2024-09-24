@@ -76,7 +76,7 @@ use ethportal_api::{
             Pong, PopulatedOffer, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
             MAX_PORTAL_NODES_ENRS_SIZE,
         },
-        query_trace::QueryTrace,
+        query_trace::{QueryFailureKind, QueryTrace},
     },
     utils::bytes::hex_encode_compact,
     OverlayContentKey, RawContentKey,
@@ -131,6 +131,9 @@ where
     find_node_query_pool: QueryPool<NodeId, FindNodeQuery<NodeId>, TContentKey>,
     /// A query pool that manages find content queries.
     find_content_query_pool: QueryPool<NodeId, FindContentQuery<NodeId>, TContentKey>,
+    /// A channel for recording events related to content queries.
+    content_query_trace_events_tx: UnboundedSender<QueryTraceEvent>,
+    content_query_trace_events_rx: UnboundedReceiver<QueryTraceEvent>,
     /// Timeout after which a peer in an ongoing query is marked unresponsive.
     query_peer_timeout: Duration,
     /// Number of peers to request data from in parallel for a single query.
@@ -209,6 +212,8 @@ where
         };
 
         let (response_tx, response_rx) = mpsc::unbounded_channel();
+        let (content_query_trace_events_tx, content_query_trace_events_rx) =
+            mpsc::unbounded_channel();
         let (event_stream, _) = broadcast::channel(EVENT_STREAM_CHANNEL_CAPACITY);
 
         tokio::spawn(async move {
@@ -223,6 +228,8 @@ where
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
                 find_node_query_pool: QueryPool::new(query_timeout),
                 find_content_query_pool: QueryPool::new(query_timeout),
+                content_query_trace_events_tx,
+                content_query_trace_events_rx,
                 query_peer_timeout,
                 query_parallelism,
                 query_num_results,
@@ -409,6 +416,9 @@ where
                     self.handle_find_content_query_event(query_event);
                 }
                 _ = OverlayService::<TContentKey, TMetric, TValidator, TStore>::bucket_maintenance_poll(self.protocol, &self.kbuckets) => {}
+                Some(trace_event) = self.content_query_trace_events_rx.recv() => {
+                    self.track_content_query_trace_event(trace_event);
+                }
                 _ = bucket_refresh_interval.tick() => {
                     trace!(protocol = %self.protocol, "Routing table bucket refresh");
                     self.bucket_refresh_lookup();
@@ -493,7 +503,7 @@ where
         queries: &mut QueryPool<NodeId, TQuery, TContentKey>,
     ) -> QueryEvent<TQuery, TContentKey> {
         future::poll_fn(move |_cx| match queries.poll() {
-            QueryPoolState::Validating(query_info, query, sending_peer) => {
+            QueryPoolState::Validating(query_id, query_info, query, sending_peer) => {
                 // This only happens during a FindContent query.
                 let content_key = match &query_info.query_type {
                     QueryType::FindContent { target, .. } => target.clone(),
@@ -505,10 +515,11 @@ where
                         return Poll::Pending;
                     }
                 };
+                let is_tracing = query_info.trace.is_some();
                 // Generate the query result here instead of in handle_find_content_query_event,
                 // because the query is only borrowed, and can't be moved to the query event.
                 let query_result = query.pending_validation_result(sending_peer);
-                Poll::Ready(QueryEvent::Validating(content_key, query_result))
+                Poll::Ready(QueryEvent::Validating(query_id, is_tracing, content_key, query_result))
             }
             // Note that some query pools skip over Validating, straight to Finished (like the
             // FindNode query pool)
@@ -651,7 +662,12 @@ where
                     }
                 }
             }
-            QueryEvent::Validating(content_key, query_result) => {
+            QueryEvent::Validating(query_id, is_tracing, content_key, query_result) => {
+                let query_trace_events_tx = if is_tracing {
+                    Some(self.content_query_trace_events_tx.clone())
+                } else {
+                    None
+                };
                 match query_result {
                     FindContentQueryPending::NonePending => {
                         // This should be an unreachable path
@@ -673,6 +689,8 @@ where
                                 utp_processing,
                                 peer,
                                 valid_content_tx,
+                                query_id,
+                                query_trace_events_tx,
                             )
                             .await;
                         });
@@ -710,6 +728,14 @@ where
                                     );
                                     // Indicate to the query that the content is invalid
                                     let _ = valid_content_tx.send(None);
+                                    if let Some(query_trace_events_tx) = query_trace_events_tx {
+                                        let _ =
+                                            query_trace_events_tx.send(QueryTraceEvent::Failure(
+                                                query_id,
+                                                peer,
+                                                QueryFailureKind::UtpTransferFailed,
+                                            ));
+                                    }
                                     return;
                                 }
                             };
@@ -721,6 +747,8 @@ where
                                 utp_processing,
                                 peer,
                                 valid_content_tx,
+                                query_id,
+                                query_trace_events_tx,
                             )
                             .await;
                         });
@@ -775,6 +803,27 @@ where
                                 trace: query_info.trace,
                             }));
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Handles a queued event, used to trace the progress of a content query.
+    /// These events can be issued from spawned tasks, such as when processing received content.
+    fn track_content_query_trace_event(&mut self, trace_event: QueryTraceEvent) {
+        match trace_event {
+            QueryTraceEvent::Failure(query_id, node_id, fail_kind) => {
+                debug!(
+                    protocol = %self.protocol,
+                    query.id = %query_id,
+                    node_id = %node_id,
+                    failure = ?fail_kind,
+                    "Peer failed during content query"
+                );
+                if let Some((query_info, _)) = self.find_content_query_pool.get_mut(query_id) {
+                    if let Some(trace) = &mut query_info.trace {
+                        trace.node_failed(node_id, fail_kind);
                     }
                 }
             }
@@ -1877,6 +1926,8 @@ where
         utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
         sending_peer: NodeId,
         valid_content_callback: Sender<Option<ValidatedContent<NodeId>>>,
+        query_id: QueryId,
+        query_trace_events_tx: Option<UnboundedSender<QueryTraceEvent>>,
     ) {
         let mut content = content;
         // Operate under assumption that all content in the store is valid
@@ -1905,6 +1956,13 @@ where
                     );
                     // Indicate to the query that the content is invalid
                     let _ = valid_content_callback.send(None);
+                    if let Some(query_trace_events_tx) = query_trace_events_tx {
+                        let _ = query_trace_events_tx.send(QueryTraceEvent::Failure(
+                            query_id,
+                            sending_peer,
+                            QueryFailureKind::InvalidContent,
+                        ));
+                    }
                     return;
                 }
             };
@@ -2644,9 +2702,15 @@ pub enum QueryEvent<TQuery: Query<NodeId>, TContentKey> {
     /// The query has timed out, possible returning peers.
     TimedOut(QueryId, QueryInfo<TContentKey>, TQuery),
     /// The query is working to validate the response.
-    Validating(TContentKey, TQuery::PendingValidationResult),
+    /// The bool argument indicates whether this query traces events.
+    Validating(QueryId, bool, TContentKey, TQuery::PendingValidationResult),
     /// The query has completed successfully.
     Finished(QueryId, QueryInfo<TContentKey>, TQuery),
+}
+
+pub enum QueryTraceEvent {
+    /// The interaction with a particular node had a fatal failure
+    Failure(QueryId, NodeId, QueryFailureKind),
 }
 
 /// Limits a to a maximum packet size, including the discv5 header overhead.
@@ -2828,6 +2892,8 @@ mod tests {
         let peers_to_ping = HashSetDelay::default();
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
+        let (content_query_trace_events_tx, content_query_trace_events_rx) =
+            mpsc::unbounded_channel();
         let validator = Arc::new(MockValidator {});
         let accept_queue = Arc::new(RwLock::new(AcceptQueue::default()));
 
@@ -2843,6 +2909,8 @@ mod tests {
             active_outgoing_requests,
             find_node_query_pool: QueryPool::new(overlay_config.query_timeout),
             find_content_query_pool: QueryPool::new(overlay_config.query_timeout),
+            content_query_trace_events_tx,
+            content_query_trace_events_rx,
             query_peer_timeout: overlay_config.query_peer_timeout,
             query_parallelism: overlay_config.query_parallelism,
             query_num_results: overlay_config.query_num_results,

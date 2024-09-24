@@ -63,7 +63,12 @@ pub enum QueryPoolState<'a, TNodeId, TQuery, TContentKey> {
         )>,
     ),
     /// A query has received a result from the given peer. It may require validation
-    Validating(&'a mut QueryInfo<TContentKey>, &'a mut TQuery, TNodeId),
+    Validating(
+        QueryId,
+        &'a mut QueryInfo<TContentKey>,
+        &'a mut TQuery,
+        TNodeId,
+    ),
     /// A query has finished.
     Finished(QueryId, QueryInfo<TContentKey>, TQuery),
     /// A query has timed out.
@@ -146,7 +151,7 @@ where
 
         if let Some((query_id, sending_peer)) = validating {
             let (query_info, query) = self.queries.get_mut(&query_id).expect("s.a.");
-            return QueryPoolState::Validating(query_info, query, sending_peer);
+            return QueryPoolState::Validating(query_id, query_info, query, sending_peer);
         }
 
         if let Some(query_id) = finished {
