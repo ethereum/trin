@@ -45,7 +45,7 @@ impl StateNetwork {
             debug!("Poke is not supported by the State Network")
         }
         let config = OverlayConfig {
-            bootnode_enrs: portal_config.bootnodes.into(),
+            bootnode_enrs: portal_config.bootnodes,
             disable_poke: DISABLE_POKE,
             gossip_dropped: GOSSIP_DROPPED,
             utp_transfer_limit: portal_config.utp_transfer_limit,

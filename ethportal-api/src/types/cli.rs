@@ -259,7 +259,7 @@ impl TrinConfig {
         I: Iterator<Item = T>,
         T: Into<OsString> + Clone,
     {
-        let mut config = Self::try_parse_from(args)?;
+        let config = Self::try_parse_from(args)?;
 
         if let Some(TrinConfigCommands::CreateDashboard(dashboard_config)) = config.command {
             if let Err(err) = create_dashboard(dashboard_config) {
@@ -310,14 +310,6 @@ impl TrinConfig {
                 ErrorKind::ValueValidation,
                 "State subnetwork can only be enabled together with history.",
             ));
-        }
-
-        // change to default angelfood bootnodes if angelfood is selected,
-        // and default mainnet bootnodes are being used
-        if config.network.get_network_name() == "angelfood"
-            && config.bootnodes == Bootnodes::Default
-        {
-            config.bootnodes = Bootnodes::Angelfood;
         }
 
         Ok(config)

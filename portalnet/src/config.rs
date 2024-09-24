@@ -4,6 +4,8 @@ use alloy_primitives::B256;
 use ethportal_api::types::{
     bootnodes::Bootnodes,
     cli::{TrinConfig, DEFAULT_UTP_TRANSFER_LIMIT},
+    enr::Enr,
+    network::Network,
 };
 
 /// Capacity of the cache for observed `NodeAddress` values.
@@ -16,7 +18,7 @@ pub struct PortalnetConfig {
     pub external_addr: Option<SocketAddr>,
     pub private_key: B256,
     pub listen_port: u16,
-    pub bootnodes: Bootnodes,
+    pub bootnodes: Vec<Enr>,
     pub internal_ip: bool,
     pub no_stun: bool,
     pub no_upnp: bool,
@@ -33,7 +35,7 @@ impl Default for PortalnetConfig {
             external_addr: None,
             private_key: B256::random(),
             listen_port: 4242,
-            bootnodes: Bootnodes::default(),
+            bootnodes: Bootnodes::default().to_enrs(Network::Mainnet),
             internal_ip: false,
             no_stun: false,
             no_upnp: false,
@@ -53,7 +55,7 @@ impl PortalnetConfig {
             listen_port: trin_config.discovery_port,
             no_stun: trin_config.no_stun,
             no_upnp: trin_config.no_upnp,
-            bootnodes: trin_config.bootnodes.clone(),
+            bootnodes: trin_config.bootnodes.to_enrs(trin_config.network.network()),
             disable_poke: trin_config.disable_poke,
             trusted_block_root: trin_config.trusted_block_root,
             utp_transfer_limit: trin_config.utp_transfer_limit,

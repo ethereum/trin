@@ -20,7 +20,7 @@ use tracing::info;
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
-use ethportal_api::types::{enr::Enr, jsonrpc::request::HistoryJsonRpcRequest};
+use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
@@ -83,10 +83,9 @@ pub fn spawn_history_network(
     portalnet_config: PortalnetConfig,
     history_message_rx: mpsc::UnboundedReceiver<OverlayRequest>,
 ) -> JoinHandle<()> {
-    let bootnode_enrs: Vec<Enr> = portalnet_config.bootnodes.into();
     info!(
         "About to spawn History Network with {} boot nodes",
-        bootnode_enrs.len()
+        portalnet_config.bootnodes.len()
     );
 
     tokio::spawn(async move {
