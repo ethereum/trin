@@ -1271,7 +1271,7 @@ where
                 })
                 .flatten()
                 .collect();
-            propagate_gossip_cross_thread(
+            propagate_gossip_cross_thread::<_, TMetric>(
                 validated_content,
                 utp_processing.kbuckets,
                 utp_processing.command_tx.clone(),
@@ -1755,7 +1755,7 @@ where
             }
         };
 
-        propagate_gossip_cross_thread(
+        propagate_gossip_cross_thread::<_, TMetric>(
             validated_content,
             utp_processing.kbuckets,
             utp_processing.command_tx.clone(),
@@ -1938,7 +1938,7 @@ where
                             );
                             content_to_propagate.extend(dropped_content.clone());
                         }
-                        propagate_gossip_cross_thread(
+                        propagate_gossip_cross_thread::<_, TMetric>(
                             content_to_propagate,
                             utp_processing.kbuckets.clone(),
                             utp_processing.command_tx.clone(),

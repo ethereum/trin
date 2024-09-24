@@ -207,7 +207,12 @@ where
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
     pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
         let kbuckets = Arc::clone(&self.kbuckets);
-        propagate_gossip_cross_thread(content, kbuckets, self.command_tx.clone(), None)
+        propagate_gossip_cross_thread::<_, TMetric>(
+            content,
+            kbuckets,
+            self.command_tx.clone(),
+            None,
+        )
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT, returns trace detailing outcome of
@@ -218,8 +223,13 @@ where
         data: Vec<u8>,
     ) -> GossipResult {
         let kbuckets = Arc::clone(&self.kbuckets);
-        trace_propagate_gossip_cross_thread(content_key, data, kbuckets, self.command_tx.clone())
-            .await
+        trace_propagate_gossip_cross_thread::<_, TMetric>(
+            content_key,
+            data,
+            kbuckets,
+            self.command_tx.clone(),
+        )
+        .await
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.
