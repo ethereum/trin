@@ -1,5 +1,4 @@
 use super::enr::Enr;
-use crate::utils::bytes::hex_encode;
 use serde::{Deserialize, Serialize};
 
 use discv5::enr::NodeId;
@@ -9,7 +8,7 @@ use discv5::enr::NodeId;
 #[serde(transparent)]
 pub struct Bucket {
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub node_ids: Vec<String>,
+    pub node_ids: Vec<NodeId>,
 }
 
 /// Represents a discv5 kbuckets table
@@ -24,7 +23,7 @@ pub struct KBucketsTable {
 #[serde(rename_all = "camelCase")]
 pub struct NodeInfo {
     pub enr: Enr,
-    pub node_id: String,
+    pub node_id: NodeId,
     pub ip: Option<String>,
 }
 
@@ -32,7 +31,7 @@ pub struct NodeInfo {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RoutingTableInfo {
-    pub local_node_id: String,
+    pub local_node_id: NodeId,
     pub buckets: KBucketsTable,
 }
 
@@ -41,10 +40,7 @@ impl<TVal: Eq> From<discv5::kbucket::KBucketsTable<NodeId, TVal>> for KBucketsTa
         let buckets = table
             .buckets_iter()
             .map(|bucket| Bucket {
-                node_ids: bucket
-                    .iter()
-                    .map(|node| hex_encode(*node.key.preimage()))
-                    .collect(),
+                node_ids: bucket.iter().map(|node| *node.key.preimage()).collect(),
             })
             .collect();
 
