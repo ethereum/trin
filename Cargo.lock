@@ -4297,6 +4297,7 @@ dependencies = [
  "serde_yaml",
  "ssz_types",
  "test-log",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-test",
