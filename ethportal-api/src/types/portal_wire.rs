@@ -564,7 +564,7 @@ impl From<PopulatedOfferWithResult> for Offer {
 #[derive(Debug, PartialEq, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Accept {
     pub connection_id: u16,
-    pub content_keys: BitList<typenum::U8>,
+    pub content_keys: BitList<typenum::U64>,
 }
 
 impl From<Accept> for Value {
@@ -578,6 +578,7 @@ impl From<Accept> for Value {
 mod test {
     use super::*;
     use alloy_primitives::bytes;
+    use ssz_types::Error::OutOfBounds;
     use std::str::FromStr;
     use test_log::test;
 
@@ -784,5 +785,61 @@ mod test {
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, accept);
+    }
+
+    #[test]
+    fn maximum_accept_items() {
+        let connection_id = u16::from_le_bytes([0x01, 0x02]);
+        // Specs say that the bitlist should be able to hold up to 64 bits
+        let mut content_keys = BitList::with_capacity(64).unwrap();
+        content_keys.set(63, true).unwrap();
+        content_keys.set(0, true).unwrap();
+        let accept = Accept {
+            connection_id,
+            content_keys,
+        };
+        let accept = Message::Accept(accept);
+
+        let encoded: Vec<u8> = accept.clone().into();
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x07010206000000010000000000008001";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
+        assert_eq!(decoded, accept);
+
+        if let Message::Accept(Accept {
+            connection_id: decoded_connection_id,
+            content_keys,
+        }) = decoded
+        {
+            assert_eq!(decoded_connection_id, connection_id);
+            assert_eq!(content_keys.len(), 64);
+            assert!(content_keys.get(0).unwrap());
+            assert!(!content_keys.get(1).unwrap());
+            assert!(!content_keys.get(62).unwrap());
+            assert!(content_keys.get(63).unwrap());
+        } else {
+            panic!("Expected Accept message, but got {decoded:?}");
+        }
+    }
+
+    #[test]
+    fn too_many_accept_items() {
+        match BitList::with_capacity(65) {
+            Err(OutOfBounds { i: _i, len }) => {
+                // TODO: assert this after https://github.com/sigp/ethereum_ssz/pull/33 is merged
+                // assert_eq!(i, 65);
+                assert_eq!(len, 64);
+            }
+            Err(_) => panic!("Expected OutOfBounds error"),
+            Ok(content_keys) => {
+                let accept = Accept {
+                    connection_id: 0,
+                    content_keys,
+                };
+                panic!("Expected OutOfBounds error, but got {accept:?}");
+            }
+        }
     }
 }
