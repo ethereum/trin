@@ -3,10 +3,10 @@ use std::{collections::HashMap, sync::Arc};
 use discv5::{enr::NodeId, kbucket::KBucketsTable};
 use futures::channel::oneshot;
 use parking_lot::RwLock;
-use rand::seq::IteratorRandom;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::{
     overlay::{
@@ -60,12 +60,13 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Me
     );
 
     // Map from content_ids to interested ENRs
-    let mut interested_ends = batch_interested_enrs::<TMetric>(&content_ids, kbuckets);
+    let mut content_id_to_interested_enrs =
+        batch_interested_enrs::<TMetric>(&content_ids, kbuckets);
 
     // Map from ENRs to content they will gossip
     let mut enrs_and_content: HashMap<Enr, Vec<&(TContentKey, Vec<u8>)>> = HashMap::new();
     for (content_id, content_key_value) in &content {
-        let interested_enrs = interested_ends.remove(content_id).unwrap_or_else(|| {
+        let interested_enrs = content_id_to_interested_enrs.remove(content_id).unwrap_or_else(|| {
             error!("interested_enrs should contain all content ids, even if there are no interested ENRs");
             vec![]
         });
@@ -94,7 +95,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Me
             Some(ref utp_controller) => match utp_controller.get_outbound_semaphore() {
                 Some(permit) => Some(permit),
                 None => {
-                    debug!("Permit for gossip not acquired! Skipping gossiping to enr: {enr}");
+                    trace!("Permit for gossip not acquired! Skipping gossiping to enr: {enr}");
                     continue;
                 }
             },
@@ -293,14 +294,15 @@ fn select_gossip_recipients<TMetric: Metric>(
     enrs.sort_by_cached_key(|enr| TMetric::distance(content_id, &enr.node_id().raw()));
 
     // Split of at NUM_CLOSEST_NODES
-    let farther_enrs = enrs.split_off(NUM_CLOSEST_NODES);
+    let mut farther_enrs = enrs.split_off(NUM_CLOSEST_NODES);
 
     // Select random NUM_FARTHER_NODES
-    let random_farther_enrs = farther_enrs
-        .into_iter()
-        .choose_multiple(&mut rand::thread_rng(), NUM_FARTHER_NODES);
+    let mut rng = rand::thread_rng();
+    for _ in 0..NUM_FARTHER_NODES {
+        let enr = farther_enrs.swap_remove(rng.gen_range(0..farther_enrs.len()));
+        enrs.push(enr);
+    }
 
-    enrs.extend(random_farther_enrs);
     enrs
 }
 
