@@ -1,16 +1,12 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
-use discv5::{
-    enr::NodeId,
-    kbucket::{self, KBucketsTable},
-};
+use discv5::{enr::NodeId, kbucket::KBucketsTable};
 use futures::channel::oneshot;
-use itertools::Itertools;
 use parking_lot::RwLock;
-use rand::seq::IteratorRandom;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::{
     overlay::{
@@ -22,7 +18,7 @@ use crate::{
 };
 use ethportal_api::{
     types::{
-        distance::{Metric, XorMetric},
+        distance::Metric,
         enr::Enr,
         portal_wire::{PopulatedOffer, PopulatedOfferWithResult, Request, Response},
     },
@@ -43,78 +39,67 @@ pub struct GossipResult {
 
 /// Propagate gossip in a way that can be used across threads, without &self.
 /// Doesn't trace gossip results
-pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
+pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Metric>(
     content: Vec<(TContentKey, Vec<u8>)>,
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
     utp_controller: Option<Arc<UtpController>>,
 ) -> usize {
-    // Propagate all validated content, whether or not it was stored.
-    let ids_to_propagate: Vec<String> = content
-        .iter()
-        .unique_by(|(key, _)| key.content_id())
-        .map(|(key, _)| hex_encode_compact(key.content_id()))
-        .collect();
-    debug!(ids = ?ids_to_propagate, "propagating validated content");
-
-    // Get all connected nodes from overlay routing table
-    let kbuckets = kbuckets.read();
-    let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
-        .buckets_iter()
-        .flat_map(|kbucket| {
-            kbucket
-                .iter()
-                .filter(|node| node.status.is_connected())
-                .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
+    // Precalculate content ids
+    let content = content
+        .into_iter()
+        .map(|(content_key, content_value)| {
+            (content_key.content_id(), (content_key, content_value))
         })
-        .collect();
+        .collect::<HashMap<_, _>>();
 
+    let content_ids = content.keys().collect::<Vec<_>>();
     debug!(
-        "propagating validated content: found {} nodes",
-        all_nodes.len()
+        ids = ?content_ids.iter().map(hex_encode_compact),
+        "propagating validated content",
     );
-    if all_nodes.is_empty() {
-        // If there are no nodes whatsoever in the routing table the gossip cannot proceed.
-        warn!("No nodes in routing table, gossip cannot proceed.");
-        return 0;
-    }
 
-    // HashMap to temporarily store all interested ENRs and the content.
-    // Key is base64 string of node's ENR.
-    let mut enrs_and_content: HashMap<String, Vec<(TContentKey, Vec<u8>)>> = HashMap::new();
+    // Map from content_ids to interested ENRs
+    let mut content_id_to_interested_enrs =
+        batch_interested_enrs::<TMetric>(&content_ids, kbuckets);
 
-    for (content_key, content_value) in content {
-        let interested_enrs = calculate_interested_enrs(&content_key, &all_nodes);
+    // Map from ENRs to content they will gossip
+    let mut enrs_and_content: HashMap<Enr, Vec<&(TContentKey, Vec<u8>)>> = HashMap::new();
+    for (content_id, content_key_value) in &content {
+        let interested_enrs = content_id_to_interested_enrs.remove(content_id).unwrap_or_else(|| {
+            error!("interested_enrs should contain all content ids, even if there are no interested ENRs");
+            vec![]
+        });
+        if interested_enrs.is_empty() {
+            debug!(
+                content.id = %hex_encode(content_id),
+                "No peers eligible for neighborhood gossip"
+            );
+            continue;
+        };
 
-        // Temporarily store all randomly selected nodes with the content of interest.
-        // We want this so we can offer all the content to an interested node in one request.
-        for enr in interested_enrs {
+        // Select gossip recipients
+        for enr in select_gossip_recipients::<TMetric>(content_id, interested_enrs) {
             enrs_and_content
-                .entry(enr.to_base64())
+                .entry(enr)
                 .or_default()
-                .push((content_key.clone(), content_value.clone()));
+                .push(content_key_value);
         }
     }
 
     let num_propagated_peers = enrs_and_content.len();
-    debug!("propagating validated content to {num_propagated_peers} peers");
 
     // Create and send OFFER overlay request to the interested nodes
-    for (enr_string, mut interested_content) in enrs_and_content.into_iter() {
+    for (enr, mut interested_content) in enrs_and_content {
         let permit = match utp_controller {
             Some(ref utp_controller) => match utp_controller.get_outbound_semaphore() {
                 Some(permit) => Some(permit),
-                None => continue,
+                None => {
+                    trace!("Permit for gossip not acquired! Skipping gossiping to enr: {enr}");
+                    continue;
+                }
             },
             None => None,
-        };
-
-        let enr = match Enr::from_str(&enr_string) {
-            Ok(enr) => enr,
-            Err(err) => {
-                error!(error = %err, enr.base64 = %enr_string, "Error decoding ENR from base-64");
-                continue;
-            }
         };
 
         // offer messages are limited to 64 content keys
@@ -127,7 +112,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
             );
             // sort content keys by distance to the node
             interested_content.sort_by_cached_key(|(key, _)| {
-                XorMetric::distance(&key.content_id(), &enr.node_id().raw())
+                TMetric::distance(&key.content_id(), &enr.node_id().raw())
             });
             // take 64 closest content keys
             interested_content.truncate(64);
@@ -135,7 +120,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
         // change content keys to raw content keys
         let interested_content = interested_content
             .into_iter()
-            .map(|(key, value)| (key.to_bytes(), value))
+            .map(|(key, value)| (key.to_bytes(), value.clone()))
             .collect();
         let offer_request = Request::PopulatedOffer(PopulatedOffer {
             content_items: interested_content,
@@ -154,7 +139,6 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
         }
     }
 
-    debug!("finished propagating validated content");
     num_propagated_peers
 }
 
@@ -162,39 +146,27 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
 /// This function is designed to be used via the JSON-RPC API. Since it is blocking, it should not
 /// be used internally in the offer/accept flow.
 /// Returns a trace detailing the outcome of the gossip.
-pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
+pub async fn trace_propagate_gossip_cross_thread<
+    TContentKey: OverlayContentKey,
+    TMetric: Metric,
+>(
     content_key: TContentKey,
     data: Vec<u8>,
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
 ) -> GossipResult {
     let mut gossip_result = GossipResult::default();
-    // Get all connected nodes from overlay routing table
-    let interested_enrs = {
-        let kbuckets = kbuckets.read();
-        let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
-            .buckets_iter()
-            .flat_map(|kbucket| {
-                kbucket
-                    .iter()
-                    .filter(|node| node.status.is_connected())
-                    .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
-            })
-            .collect();
 
-        if all_nodes.is_empty() {
-            // If there are no nodes whatsoever in the routing table the gossip cannot proceed.
-            warn!("No nodes in routing table, gossip cannot proceed.");
-            return gossip_result;
-        }
-        calculate_interested_enrs(&content_key, &all_nodes)
-    };
+    let content_id = content_key.content_id();
+
+    let interested_enrs = interested_enrs::<TMetric>(&content_id, kbuckets);
     if interested_enrs.is_empty() {
+        debug!(content.id = %hex_encode(content_id), "No peers eligible for trace gossip");
         return gossip_result;
     };
 
-    // Create and send OFFER overlay request to the interested nodes
-    for enr in interested_enrs.into_iter() {
+    // Select ENRs to gossip to, create and send OFFER overlay request to the interested nodes
+    for enr in select_gossip_recipients::<TMetric>(&content_id, interested_enrs) {
         let (result_tx, mut result_rx) = tokio::sync::mpsc::unbounded_channel();
         let offer_request = Request::PopulatedOfferWithResult(PopulatedOfferWithResult {
             content_item: (content_key.clone().to_bytes(), data.clone()),
@@ -243,74 +215,95 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
     gossip_result
 }
 
-/// Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
-fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
-    content_key: &TContentKey,
-    all_nodes: &[&kbucket::Node<NodeId, Node>],
+/// Returns all ENRs that are connected and interested into provided content id.
+fn interested_enrs<TMetric: Metric>(
+    content_id: &[u8; 32],
+    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
 ) -> Vec<Enr> {
-    let content_id = content_key.content_id();
-    // HashMap to temporarily store all interested ENRs and the content.
-    // Key is base64 string of node's ENR.
-
-    // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node
-    // radius
-    let mut interested_enrs: Vec<Enr> = all_nodes
+    kbuckets
+        .write()
         .iter()
+        // Keep only connected nodes
+        .filter_map(|entry| {
+            if entry.status.is_connected() {
+                Some(entry.node)
+            } else {
+                None
+            }
+        })
+        // Keep only nodes that are interested in content
         .filter(|node| {
-            XorMetric::distance(&content_id, &node.key.preimage().raw()) < node.value.data_radius()
+            TMetric::distance(content_id, &node.key.preimage().raw()) <= node.value.data_radius
         })
         .map(|node| node.value.enr())
-        .collect();
-
-    // Continue if no nodes are interested in the content
-    if interested_enrs.is_empty() {
-        debug!(
-            content.id = %hex_encode(content_id),
-            kbuckets.len = all_nodes.len(),
-            "No peers eligible for neighborhood gossip"
-        );
-        return vec![];
-    }
-
-    // Sort all eligible nodes by proximity to the content.
-    interested_enrs
-        .sort_by_cached_key(|enr| XorMetric::distance(&content_id, &enr.node_id().raw()));
-
-    select_gossip_recipients(interested_enrs)
+        .collect()
 }
 
-/// Randomly select `num_enrs` nodes from `enrs`.
-fn select_random_enrs(num_enrs: usize, enrs: Vec<Enr>) -> Vec<Enr> {
-    let random_enrs: Vec<Enr> = enrs
-        .into_iter()
-        .choose_multiple(&mut rand::thread_rng(), num_enrs);
-    random_enrs
+/// For each content id, returns all ENRs that are connected and interested into it.
+///
+/// The keys of the resulting map will always contain all `content_ids`. If none of the nodes is
+/// interested into specific content id, it will still be present in the result but the value
+/// associated with it will be empty.
+fn batch_interested_enrs<TMetric: Metric>(
+    content_ids: &[&[u8; 32]],
+    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+) -> HashMap<[u8; 32], Vec<Enr>> {
+    let mut result = content_ids
+        .iter()
+        .map(|content_id| (**content_id, vec![]))
+        .collect::<HashMap<_, _>>();
+    for entry in kbuckets.write().iter() {
+        // Skip non-connected nodes
+        if !entry.status.is_connected() {
+            continue;
+        }
+        let node = entry.node;
+        for content_id in content_ids {
+            let distance = TMetric::distance(content_id, &node.key.preimage().raw());
+            if distance <= node.value.data_radius {
+                result
+                    .entry(**content_id)
+                    .or_default()
+                    .push(node.value.enr());
+            }
+        }
+    }
+    result
 }
 
 const NUM_CLOSEST_NODES: usize = 4;
 const NUM_FARTHER_NODES: usize = 4;
-/// Selects gossip recipients from a vec of sorted interested ENRs.
-/// Returned vec is a concatenation of, at most:
-/// 1. First `NUM_CLOSEST_NODES` elements of `interested_sorted_enrs`.
-/// 2. `NUM_FARTHER_NODES` elements randomly selected from
-///    `interested_sorted_enrs[NUM_CLOSEST_NODES..]`
-fn select_gossip_recipients(interested_sorted_enrs: Vec<Enr>) -> Vec<Enr> {
-    let mut gossip_recipients: Vec<Enr> = vec![];
 
-    // Get first n closest nodes
-    gossip_recipients.extend(
-        interested_sorted_enrs
-            .clone()
-            .into_iter()
-            .take(NUM_CLOSEST_NODES),
-    );
-    if interested_sorted_enrs.len() > NUM_CLOSEST_NODES {
-        let farther_enrs = interested_sorted_enrs[NUM_CLOSEST_NODES..].to_vec();
-        // Get random non-close ENRs to gossip to.
-        let random_farther_enrs = select_random_enrs(NUM_FARTHER_NODES, farther_enrs);
-        gossip_recipients.extend(random_farther_enrs);
+/// Selects gossip recipients from a vec of interested ENRs.
+///
+/// If number of ENRs is at most `NUM_CLOSEST_NODES + NUM_FARTHER_NODES`, then all are returned.
+/// Otherwise, ENRs are sorted by distance from `content_id` and then:
+///
+/// 1. Closest `NUM_CLOSEST_NODES` ENRs are selected
+/// 2. Random `NUM_FARTHER_NODES` ENRs are selected from the rest
+fn select_gossip_recipients<TMetric: Metric>(
+    content_id: &[u8; 32],
+    mut enrs: Vec<Enr>,
+) -> Vec<Enr> {
+    // Check if we need to do any selection
+    if enrs.len() <= NUM_CLOSEST_NODES + NUM_FARTHER_NODES {
+        return enrs;
     }
-    gossip_recipients
+
+    // Sort enrs by distance
+    enrs.sort_by_cached_key(|enr| TMetric::distance(content_id, &enr.node_id().raw()));
+
+    // Split of at NUM_CLOSEST_NODES
+    let mut farther_enrs = enrs.split_off(NUM_CLOSEST_NODES);
+
+    // Select random NUM_FARTHER_NODES
+    let mut rng = rand::thread_rng();
+    for _ in 0..NUM_FARTHER_NODES {
+        let enr = farther_enrs.swap_remove(rng.gen_range(0..farther_enrs.len()));
+        enrs.push(enr);
+    }
+
+    enrs
 }
 
 #[cfg(test)]
@@ -318,9 +311,10 @@ fn select_gossip_recipients(interested_sorted_enrs: Vec<Enr>) -> Vec<Enr> {
 mod tests {
     use super::*;
 
+    use rand::random;
     use rstest::rstest;
 
-    use ethportal_api::types::enr::generate_random_remote_enr;
+    use ethportal_api::types::{distance::XorMetric, enr::generate_random_remote_enr};
 
     #[allow(clippy::zero_repeat_side_effects)]
     #[rstest]
@@ -334,7 +328,7 @@ mod tests {
         #[case] all_nodes: Vec<Enr>,
         #[case] expected_size: usize,
     ) {
-        let gossip_recipients = select_gossip_recipients(all_nodes);
+        let gossip_recipients = select_gossip_recipients::<XorMetric>(&random(), all_nodes);
         assert_eq!(gossip_recipients.len(), expected_size);
     }
 }
