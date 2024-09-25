@@ -36,7 +36,7 @@ pub type FindNodesInfo = Vec<Enr>;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AcceptInfo {
-    pub content_keys: BitList<typenum::U8>,
+    pub content_keys: BitList<typenum::U64>,
 }
 
 /// Response for TraceGossip endpoint
