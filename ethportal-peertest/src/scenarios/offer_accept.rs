@@ -12,8 +12,10 @@ use crate::{
     Peertest,
 };
 use ethportal_api::{
-    jsonrpsee::async_client::Client, types::enr::Enr, utils::bytes::hex_encode, ContentValue,
-    Discv5ApiClient, HistoryNetworkApiClient,
+    jsonrpsee::async_client::Client,
+    types::{enr::Enr, portal_wire::OfferTrace},
+    utils::bytes::hex_encode,
+    ContentValue, Discv5ApiClient, HistoryNetworkApiClient,
 };
 
 pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
@@ -120,7 +122,11 @@ pub async fn test_populated_offer_with_trace(peertest: &Peertest, target: &Clien
         .unwrap();
 
     // check that the result of the offer is true for a valid transfer
-    assert!(result);
+    if let OfferTrace::Success(accepted_keys) = result {
+        assert_eq!(hex_encode(accepted_keys.into_bytes()), "0x03");
+    } else {
+        panic!("Offer failed");
+    }
 
     // Check if the stored content value in bootnode's DB matches the offered
     assert_eq!(

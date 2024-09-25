@@ -20,7 +20,7 @@ use ethportal_api::{
     types::{
         distance::Metric,
         enr::Enr,
-        portal_wire::{PopulatedOffer, PopulatedOfferWithResult, Request, Response},
+        portal_wire::{OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response},
     },
     utils::bytes::{hex_encode, hex_encode_compact},
     OverlayContentKey,
@@ -205,11 +205,9 @@ pub async fn trace_propagate_gossip_cross_thread<
             // continue to next peer if err while waiting for response
             Err(_) => continue,
         }
-        if let Some(result) = result_rx.recv().await {
-            if result {
-                // update gossip result with peer marked as successfully transferring the content
-                gossip_result.transferred.push(enr);
-            }
+        if let Some(OfferTrace::Success(_)) = result_rx.recv().await {
+            // update gossip result with peer marked as successfully transferring the content
+            gossip_result.transferred.push(enr);
         }
     }
     gossip_result

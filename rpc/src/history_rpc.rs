@@ -9,6 +9,7 @@ use ethportal_api::{
             AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
             TraceContentInfo, TraceGossipInfo,
         },
+        portal_wire::OfferTrace,
     },
     ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiServer, RawContentValue,
     RoutingTableInfo,
@@ -176,7 +177,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         enr: Enr,
         content_key: HistoryContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<bool> {
+    ) -> RpcResult<OfferTrace> {
         let content_value = HistoryContentValue::decode(&content_key, &content_value)
             .map_err(RpcServeError::from)?;
         let endpoint = HistoryEndpoint::TraceOffer(enr, content_key, content_value);
