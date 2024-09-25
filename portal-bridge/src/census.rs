@@ -30,14 +30,14 @@ pub enum CensusError {
 }
 
 /// Ping delay for liveness check of peers in census
-/// Two minutes was chosen somewhat arbitrarily, and can be adjusted
+/// One hour was chosen after 2mins was too slow, and can be adjusted
 /// in the future based on performance
-const LIVENESS_CHECK_DELAY: Duration = Duration::from_secs(120);
+const LIVENESS_CHECK_DELAY: Duration = Duration::from_secs(3600);
 
 /// The maximum number of enrs to return in a response,
 /// limiting the number of OFFER requests spawned by the bridge
 /// for each piece of content
-const ENRS_RESPONSE_LIMIT: usize = 8;
+const ENRS_RESPONSE_LIMIT: usize = 4;
 
 /// The census is responsible for maintaining a list of known peers in the network,
 /// checking their liveness, updating their data radius, iterating through their
