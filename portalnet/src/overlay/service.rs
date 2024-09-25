@@ -72,9 +72,9 @@ use ethportal_api::{
         enr::{Enr, SszEnr},
         network::Subnetwork,
         portal_wire::{
-            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping,
-            Pong, PopulatedOffer, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
-            MAX_PORTAL_NODES_ENRS_SIZE,
+            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
+            OfferTrace, Ping, Pong, PopulatedOffer, Request, Response,
+            MAX_PORTAL_CONTENT_PAYLOAD_SIZE, MAX_PORTAL_NODES_ENRS_SIZE,
         },
         query_trace::QueryTrace,
     },
@@ -1504,7 +1504,7 @@ where
         // keys
         if response.content_keys.is_zero() {
             if let Some(tx) = gossip_result_tx {
-                let _ = tx.send(false);
+                let _ = tx.send(OfferTrace::Declined);
             }
             return Ok(response);
         }
@@ -1557,7 +1557,7 @@ where
                         "Error decoding previously offered content items"
                     );
                     if let Some(tx) = gossip_result_tx {
-                        let _ = tx.send(false);
+                        let _ = tx.send(OfferTrace::Failed);
                     }
                     return;
                 }
@@ -1568,7 +1568,7 @@ where
                 Err(err) => {
                     warn!(%err, "Unable to build content payload");
                     if let Some(tx) = gossip_result_tx {
-                        let _ = tx.send(false);
+                        let _ = tx.send(OfferTrace::Failed);
                     }
                     return;
                 }
@@ -1577,7 +1577,11 @@ where
                 .connect_outbound_stream(cid, content_payload.to_vec())
                 .await;
             if let Some(tx) = gossip_result_tx {
-                let _ = tx.send(result);
+                if result {
+                    let _ = tx.send(OfferTrace::Success(response_clone.content_keys));
+                } else {
+                    let _ = tx.send(OfferTrace::Failed);
+                }
             }
             // explicitly drop permit in the thread so the permit is included in the thread
             if let Some(permit) = request_permit {

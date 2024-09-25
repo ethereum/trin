@@ -6,6 +6,7 @@ use crate::{
             AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
             TraceContentInfo, TraceGossipInfo,
         },
+        portal_wire::OfferTrace,
     },
     RawContentValue, RoutingTableInfo,
 };
@@ -114,15 +115,14 @@ pub trait HistoryNetworkApi {
 
     /// Send an OFFER request with given ContentKey, to the designated peer.
     /// Does not store the content locally.
-    /// Returns true if the content was accepted and successfully transferred,
-    /// returns false if the content was not accepted or the transfer failed.
+    /// Returns trace info for the offer.
     #[method(name = "historyTraceOffer")]
     async fn trace_offer(
         &self,
         enr: Enr,
         content_key: HistoryContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<bool>;
+    ) -> RpcResult<OfferTrace>;
 
     /// Send an OFFER request with given ContentKeys, to the designated peer and wait for a
     /// response. Requires the content keys to be stored locally.

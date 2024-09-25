@@ -550,7 +550,17 @@ pub struct PopulatedOfferWithResult {
     /// The offered content key & value
     pub content_item: (RawContentKey, Vec<u8>),
     /// The channel to send the result of the offer to
-    pub result_tx: tokio::sync::mpsc::UnboundedSender<bool>,
+    pub result_tx: tokio::sync::mpsc::UnboundedSender<OfferTrace>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OfferTrace {
+    /// Offer was successful, all accepted content keys in bitlist were transferred
+    Success(BitList<typenum::U64>),
+    /// Peer is not interested in any of the offered content keys
+    Declined,
+    /// This offer failed, perhaps locally or from a timeout or transfer failure
+    Failed,
 }
 
 impl From<PopulatedOfferWithResult> for Offer {

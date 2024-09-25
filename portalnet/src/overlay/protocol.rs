@@ -43,8 +43,8 @@ use ethportal_api::{
         enr::Enr,
         network::Subnetwork,
         portal_wire::{
-            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping, Pong,
-            PopulatedOffer, PopulatedOfferWithResult, Request, Response,
+            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, OfferTrace,
+            Ping, Pong, PopulatedOffer, PopulatedOfferWithResult, Request, Response,
         },
     },
     utils::bytes::hex_encode,
@@ -593,7 +593,7 @@ where
         enr: Enr,
         content_key: RawContentKey,
         content_value: Vec<u8>,
-    ) -> Result<bool, OverlayRequestError> {
+    ) -> Result<OfferTrace, OverlayRequestError> {
         // Construct the request.
         let (result_tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let request = Request::PopulatedOfferWithResult(PopulatedOfferWithResult {

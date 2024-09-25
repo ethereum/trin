@@ -4,8 +4,9 @@ use alloy_rlp::Decodable;
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
-    types::state_trie::account_state::AccountState as AccountStateInfo, ContentValue, Enr,
-    OverlayContentKey, StateContentKey, StateContentValue, StateNetworkApiClient,
+    types::{portal_wire::OfferTrace, state_trie::account_state::AccountState as AccountStateInfo},
+    ContentValue, Enr, OverlayContentKey, StateContentKey, StateContentValue,
+    StateNetworkApiClient,
 };
 use revm::Database;
 use revm_primitives::{keccak256, Bytecode, SpecId, B256};
@@ -275,7 +276,7 @@ impl StateBridge {
                             offer_report
                                 .lock()
                                 .expect("to acquire lock")
-                                .update(&enr, false);
+                                .update(&enr, OfferTrace::Failed);
                             warn!("Error offering to: {enr}, error: {e:?}");
                         }
                     },
@@ -283,7 +284,7 @@ impl StateBridge {
                         offer_report
                             .lock()
                             .expect("to acquire lock")
-                            .update(&enr, false);
+                            .update(&enr, OfferTrace::Failed);
                         error!("trace_offer timed out on state proof {content_key}: indicating a bug is present");
                     }
                 };
@@ -307,10 +308,8 @@ struct OfferReport {
     content_key: StateContentKey,
     total: usize,
     success: Vec<Enr>,
-    // includes both enrs that rejected offer and failed txs
-    // in the future we may want to differentiate between these cases
-    // and return a more detailed report from `trace_offer`
-    fail: Vec<Enr>,
+    failed: Vec<Enr>,
+    declined: Vec<Enr>,
 }
 
 impl OfferReport {
@@ -319,17 +318,21 @@ impl OfferReport {
             content_key,
             total,
             success: Vec::new(),
-            fail: Vec::new(),
+            failed: Vec::new(),
+            declined: Vec::new(),
         }
     }
 
-    fn update(&mut self, enr: &Enr, success: bool) {
-        if success {
-            self.success.push(enr.clone());
-        } else {
-            self.fail.push(enr.clone());
+    fn update(&mut self, enr: &Enr, trace: OfferTrace) {
+        match trace {
+            // since the state bridge only offers one content key at a time,
+            // we can assume that a successful offer means the lone content key
+            // was successfully offered
+            OfferTrace::Success(_) => self.success.push(enr.clone()),
+            OfferTrace::Failed => self.failed.push(enr.clone()),
+            OfferTrace::Declined => self.declined.push(enr.clone()),
         }
-        if self.total == self.success.len() + self.fail.len() {
+        if self.total == self.success.len() + self.failed.len() + self.declined.len() {
             self.report();
         }
     }
@@ -337,18 +340,21 @@ impl OfferReport {
     fn report(&self) {
         if enabled!(Level::DEBUG) {
             debug!(
-                "Successfully offered to {}/{} peers. Content key: {}. Failed: {:?}",
+                "Successfully offered to {}/{} peers. Content key: {}. Declined: {:?}. Failed: {:?}",
                 self.success.len(),
                 self.total,
                 self.content_key.to_hex(),
-                self.fail,
+                self.declined,
+                self.failed,
             );
         } else {
             info!(
-                "Successfully offered to {}/{} peers. Content key: {}",
+                "Successfully offered to {}/{} peers. Content key: {}. Declined: {}. Failed: {}.",
                 self.success.len(),
                 self.total,
                 self.content_key.to_hex(),
+                self.declined.len(),
+                self.failed.len(),
             );
         }
     }
