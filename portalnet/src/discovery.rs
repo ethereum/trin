@@ -26,7 +26,7 @@ use super::config::PortalnetConfig;
 use crate::socket;
 use ethportal_api::{
     types::{discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec},
-    utils::bytes::{hex_decode, hex_encode},
+    utils::bytes::hex_decode,
     NodeInfo,
 };
 use trin_utils::version::get_trin_version;
@@ -279,7 +279,7 @@ impl Discovery {
         Ok(NodeInfo {
             enr: Enr::from_str(&self.discv5.local_enr().to_base64())
                 .map_err(|err| anyhow!("{err}"))?,
-            node_id: hex_encode(self.discv5.local_enr().node_id().raw()),
+            node_id: self.discv5.local_enr().node_id(),
             ip: self
                 .discv5
                 .local_enr()
@@ -292,7 +292,7 @@ impl Discovery {
     /// k-buckets.
     pub fn routing_table_info(&self) -> RoutingTableInfo {
         RoutingTableInfo {
-            local_node_id: hex_encode(self.discv5.local_enr().node_id().raw()),
+            local_node_id: self.discv5.local_enr().node_id(),
             buckets: self.discv5.kbuckets().into(),
         }
     }

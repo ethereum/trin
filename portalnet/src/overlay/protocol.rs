@@ -254,7 +254,7 @@ where
     /// Returns the node-id and a nested array of node-ids to represent this node's k-buckets table.
     pub fn routing_table_info(&self) -> RoutingTableInfo {
         RoutingTableInfo {
-            local_node_id: hex_encode(self.local_enr().node_id().raw()),
+            local_node_id: self.local_enr().node_id(),
             buckets: self.kbuckets.read().clone().into(),
         }
     }

@@ -25,12 +25,14 @@ pub async fn test_discv5_node_info(peertest: &Peertest) {
 
 pub async fn test_discv5_routing_table_info(target: &Client) {
     info!("Testing discv5_routingTableInfo");
+    let node_info = target.node_info().await.unwrap();
     let result = Discv5ApiClient::routing_table_info(target).await.unwrap();
-    assert!(result.local_node_id.starts_with("0x"));
+    assert_eq!(result.local_node_id, node_info.node_id);
 }
 
 pub async fn test_routing_table_info(subnetwork: Subnetwork, target: &Client) {
     info!("Testing routing_table_info for {subnetwork}");
+    let node_info = target.node_info().await.unwrap();
     let result = match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::routing_table_info(target),
         Subnetwork::History => HistoryNetworkApiClient::routing_table_info(target),
@@ -39,7 +41,7 @@ pub async fn test_routing_table_info(subnetwork: Subnetwork, target: &Client) {
     }
     .await
     .unwrap();
-    assert!(result.local_node_id.starts_with("0x"));
+    assert_eq!(result.local_node_id, node_info.node_id);
 }
 
 pub async fn test_radius(subnetwork: Subnetwork, target: &Client) {
