@@ -26,6 +26,7 @@ use light_client::{
 use ssz::Decode;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::debug;
 use tree_hash::TreeHash;
 use trin_validation::{
     merkle::proof::verify_merkle_proof,
@@ -262,13 +263,17 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                     .read()
                     .await
                     .get_finalized_state_root()
-                    .await?;
+                    .await;
 
-                Self::state_summaries_validation(
-                    fork_versioned_historical_summaries,
-                    latest_finalized_root,
-                )
-                .await?;
+                if let Ok(latest_finalized_root) = latest_finalized_root {
+                    Self::state_summaries_validation(
+                        fork_versioned_historical_summaries,
+                        latest_finalized_root,
+                    )
+                    .await?;
+                } else {
+                    debug!("Failed to get latest finalized state root. Bypassing historical summaries with proof validation");
+                }
             }
         }
 
