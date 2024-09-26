@@ -12,19 +12,24 @@ use tracing::error;
 use url::Url;
 
 use crate::{
+    census::ENR_OFFER_LIMIT,
     constants::{DEFAULT_GOSSIP_LIMIT, DEFAULT_OFFER_LIMIT, HTTP_REQUEST_TIMEOUT},
     types::mode::BridgeMode,
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
     FALLBACK_BASE_EL_ENDPOINT,
 };
-use ethportal_api::types::{
-    cli::{
-        check_private_key_length, network_parser, DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK,
-        DEFAULT_WEB3_HTTP_PORT,
+use ethportal_api::{
+    types::{
+        cli::{
+            check_private_key_length, network_parser, DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK,
+            DEFAULT_WEB3_HTTP_PORT,
+        },
+        network::Subnetwork,
+        portal_wire::NetworkSpec,
     },
-    network::Subnetwork,
-    portal_wire::NetworkSpec,
+    Enr,
 };
+use portalnet::discovery::UtpEnr;
 
 const DEFAULT_SUBNETWORK: &str = "history";
 const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
@@ -154,6 +159,76 @@ pub struct BridgeConfig {
         help = "The maximum number of concurrent offer rpc requests for state bridge."
     )]
     pub offer_limit: usize,
+
+    #[arg(
+        default_value_t = ENR_OFFER_LIMIT,
+        long = "enr-offer-limit",
+        help = "The maximum number of enrs to gossip per content key (STATE BRIDGE ONLY)."
+    )]
+    pub enr_offer_limit: usize,
+
+    #[arg(
+        long = "filter-clients",
+        help = "Filter clients out from offer request (STATE BRIDGE ONLY).",
+        value_parser = client_parser,
+        default_value = "",
+    )]
+    pub filter_clients: Arc<Vec<ClientType>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientType {
+    Fluffy,
+    Trin,
+    Shisui,
+    Ultralight,
+    Unknown,
+}
+
+impl TryFrom<&str> for ClientType {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "fluffy" => Ok(ClientType::Fluffy),
+            "trin" => Ok(ClientType::Trin),
+            "shisui" => Ok(ClientType::Shisui),
+            "ultralight" => Ok(ClientType::Ultralight),
+            "unknown" => Ok(ClientType::Unknown),
+            _ => Err(format!("Unknown client type: {s}")),
+        }
+    }
+}
+
+impl From<&Enr> for ClientType {
+    fn from(enr: &Enr) -> Self {
+        if let Some(client_id) = UtpEnr(enr.clone()).client() {
+            if client_id.starts_with("t") {
+                ClientType::Trin
+            } else if client_id.starts_with("f") {
+                ClientType::Fluffy
+            } else if client_id.starts_with("s") {
+                ClientType::Shisui
+            } else if client_id.starts_with("u") {
+                ClientType::Ultralight
+            } else {
+                ClientType::Unknown
+            }
+        } else {
+            ClientType::Unknown
+        }
+    }
+}
+
+fn client_parser(s: &str) -> Result<Arc<Vec<ClientType>>, String> {
+    if s.is_empty() {
+        return Ok(Arc::new(vec![]));
+    }
+    Ok(Arc::new(
+        s.split(",")
+            .map(ClientType::try_from)
+            .collect::<Result<Vec<ClientType>, String>>()?,
+    ))
 }
 
 pub fn url_to_client(url: Url) -> Result<ClientWithBaseUrl, String> {

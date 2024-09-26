@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         // Initialize the census
         let (census_tx, census_rx) = mpsc::unbounded_channel();
-        let mut census = Census::new(portal_client.clone(), census_rx);
+        let mut census = Census::new(portal_client.clone(), census_rx, &bridge_config);
         // initialize the census to acquire critical threshold view of network before gossiping
         census.init().await?;
         census_handle = Some(tokio::spawn(async move {

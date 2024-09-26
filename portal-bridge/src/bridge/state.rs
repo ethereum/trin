@@ -58,7 +58,7 @@ impl StateBridge {
     ) -> anyhow::Result<Self> {
         let metrics = BridgeMetricsReporter::new("state".to_string(), &format!("{mode:?}"));
         let offer_semaphore = Arc::new(Semaphore::new(offer_limit));
-        let global_offer_report = GlobalOfferReport::new();
+        let global_offer_report = GlobalOfferReport::default();
         Ok(Self {
             mode,
             portal_client,
@@ -187,6 +187,11 @@ impl StateBridge {
             // This is used for gossiping storage trie diffs
             trin_execution.database.storage_cache.clear();
         }
+        // display final global state offer report
+        self.global_offer_report
+            .lock()
+            .expect("to acquire lock")
+            .report();
         temp_directory.close()?;
         Ok(())
     }
@@ -326,6 +331,7 @@ impl StateBridge {
 }
 
 /// Global report for outcomes of offering state content keys from long-running state bridge
+#[derive(Default)]
 struct GlobalOfferReport {
     success: usize,
     failed: usize,
@@ -333,14 +339,6 @@ struct GlobalOfferReport {
 }
 
 impl GlobalOfferReport {
-    fn new() -> Self {
-        Self {
-            success: 0,
-            failed: 0,
-            declined: 0,
-        }
-    }
-
     fn update(&mut self, trace: &OfferTrace) {
         match trace {
             OfferTrace::Success(_) => self.success += 1,
@@ -354,14 +352,21 @@ impl GlobalOfferReport {
         info!(
             "State offer report: Total Offers: {}. Successful: {}% ({}). Declined: {}% ({}). Failed: {}% ({}).",
             total,
-            self.success as f64 / total as f64,
+            format!("{:.2}", calculate_percentage(self.success, total)),
             self.success,
-            self.declined as f64 / total as f64,
+            format!("{:.2}", calculate_percentage(self.declined, total)),
             self.declined,
-            self.failed as f64 / total as f64,
+            format!("{:.2}", calculate_percentage(self.failed, total)),
             self.failed,
         );
     }
+}
+
+fn calculate_percentage(part: usize, total: usize) -> f64 {
+    if total == 0 {
+        return 0.0;
+    }
+    (part as f64 / total as f64) * 100.0
 }
 
 /// Individual report for outcomes of offering a state content key

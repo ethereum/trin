@@ -10,6 +10,7 @@ use tokio::{
 };
 use tracing::{error, info, warn};
 
+use crate::cli::{BridgeConfig, ClientType};
 use ethportal_api::{
     generate_random_remote_enr,
     jsonrpsee::http_client::HttpClient,
@@ -37,7 +38,7 @@ const LIVENESS_CHECK_DELAY: Duration = Duration::from_secs(3600);
 /// The maximum number of enrs to return in a response,
 /// limiting the number of OFFER requests spawned by the bridge
 /// for each piece of content
-const ENRS_RESPONSE_LIMIT: usize = 4;
+pub const ENR_OFFER_LIMIT: usize = 4;
 
 /// The census is responsible for maintaining a list of known peers in the network,
 /// checking their liveness, updating their data radius, iterating through their
@@ -50,11 +51,15 @@ pub struct Census {
 }
 
 impl Census {
-    pub fn new(client: HttpClient, census_rx: mpsc::UnboundedReceiver<EnrsRequest>) -> Self {
+    pub fn new(
+        client: HttpClient,
+        census_rx: mpsc::UnboundedReceiver<EnrsRequest>,
+        bridge_config: &BridgeConfig,
+    ) -> Self {
         Self {
-            history: Network::new(client.clone(), Subnetwork::History),
-            state: Network::new(client.clone(), Subnetwork::State),
-            beacon: Network::new(client.clone(), Subnetwork::Beacon),
+            history: Network::new(client.clone(), Subnetwork::History, bridge_config),
+            state: Network::new(client.clone(), Subnetwork::State, bridge_config),
+            beacon: Network::new(client.clone(), Subnetwork::Beacon, bridge_config),
             census_rx,
         }
     }
@@ -64,7 +69,6 @@ impl Census {
     pub async fn init(&mut self) -> Result<(), CensusError> {
         // currently, the census is only initialized for the state network
         // only initialized networks will yield inside `run()` loop
-        info!("Initializing state network census");
         self.state.init().await;
         if self.state.peers.is_empty() {
             return Err(CensusError::FailedInitialization);
@@ -142,14 +146,18 @@ struct Network {
     peers: HashMapDelay<[u8; 32], (Enr, Distance)>,
     client: HttpClient,
     subnetwork: Subnetwork,
+    filter_clients: Vec<ClientType>,
+    enr_offer_limit: usize,
 }
 
 impl Network {
-    fn new(client: HttpClient, subnetwork: Subnetwork) -> Self {
+    fn new(client: HttpClient, subnetwork: Subnetwork, bridge_config: &BridgeConfig) -> Self {
         Self {
             peers: HashMapDelay::new(LIVENESS_CHECK_DELAY),
             client,
             subnetwork,
+            filter_clients: bridge_config.filter_clients.to_vec(),
+            enr_offer_limit: bridge_config.enr_offer_limit,
         }
     }
 
@@ -161,6 +169,14 @@ impl Network {
     // peers. However, since the census continues to iterate through the peers after initialization,
     // the initialization is just to reach a critical mass of peers so that gossip can begin.
     async fn init(&mut self) {
+        let msg = match self.filter_clients.is_empty() {
+            true => format!("Initializing {} network census.", self.subnetwork),
+            false => format!(
+                "Initializing {} network census with filtered clients: {:?}",
+                self.subnetwork, self.filter_clients
+            ),
+        };
+        info!("{}", msg);
         let (_, random_enr) = generate_random_remote_enr();
         let Ok(initial_enrs) = self
             .subnetwork
@@ -216,6 +232,12 @@ impl Network {
     // since the same enr might appear multiple times between the
     // routing tables of different peers.
     async fn liveness_check(&mut self, enr: Enr) -> bool {
+        // skip if client type is filtered
+        let client_type = ClientType::from(&enr);
+        if self.filter_clients.contains(&client_type) {
+            return false;
+        }
+
         // if enr is already registered, check if delay map deadline has expired
         if let Some(deadline) = self.peers.deadline(&enr.node_id().raw()) {
             if Instant::now() < deadline {
@@ -256,7 +278,7 @@ impl Network {
                     None
                 }
             })
-            .take(ENRS_RESPONSE_LIMIT)
+            .take(self.enr_offer_limit)
             .collect())
     }
 }
