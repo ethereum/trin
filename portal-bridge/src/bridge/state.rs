@@ -45,6 +45,8 @@ pub struct StateBridge {
     offer_semaphore: Arc<Semaphore>,
     // Used to request all interested enrs in the network from census process.
     census_tx: mpsc::UnboundedSender<EnrsRequest>,
+    // Global offer report for tallying total performance of state bridge
+    offer_report: Arc<Mutex<OfferReport>>,
 }
 
 impl StateBridge {
@@ -56,12 +58,14 @@ impl StateBridge {
     ) -> anyhow::Result<Self> {
         let metrics = BridgeMetricsReporter::new("state".to_string(), &format!("{mode:?}"));
         let offer_semaphore = Arc::new(Semaphore::new(offer_limit));
+        let offer_report = OfferReport::new(None, usize::MAX);
         Ok(Self {
             mode,
             portal_client,
             metrics,
             offer_semaphore,
             census_tx,
+            offer_report: Arc::new(Mutex::new(offer_report)),
         })
     }
 
@@ -96,6 +100,8 @@ impl StateBridge {
         let mut trin_execution = TrinExecution::new(temp_directory.path(), state_config).await?;
         for block_number in 0..=last_block {
             info!("Gossipping state for block at height: {block_number}");
+            // display global state offer report
+            self.offer_report.lock().expect("to acquire lock").report();
 
             // process block
             let RootWithTrieDiff {
@@ -242,7 +248,7 @@ impl StateBridge {
             return;
         };
         let offer_report = Arc::new(Mutex::new(OfferReport::new(
-            content_key.clone(),
+            Some(content_key.clone()),
             enrs.len(),
         )));
         for enr in enrs.clone() {
@@ -252,6 +258,7 @@ impl StateBridge {
             let content_value = content_value.clone();
             let offer_report = offer_report.clone();
             let metrics = self.metrics.clone();
+            let global_offer_report = self.offer_report.clone();
             tokio::spawn(async move {
                 let timer = metrics.start_process_timer("spawn_offer_state_proof");
                 match timeout(
@@ -267,24 +274,36 @@ impl StateBridge {
                 {
                     Ok(result) => match result {
                         Ok(result) => {
+                            global_offer_report
+                                .lock()
+                                .expect("to acquire lock")
+                                .update(&enr, &result);
                             offer_report
                                 .lock()
                                 .expect("to acquire lock")
-                                .update(&enr, result);
+                                .update(&enr, &result);
                         }
                         Err(e) => {
+                            global_offer_report
+                                .lock()
+                                .expect("to acquire lock")
+                                .update(&enr, &OfferTrace::Failed);
                             offer_report
                                 .lock()
                                 .expect("to acquire lock")
-                                .update(&enr, OfferTrace::Failed);
+                                .update(&enr, &OfferTrace::Failed);
                             warn!("Error offering to: {enr}, error: {e:?}");
                         }
                     },
                     Err(_) => {
+                        global_offer_report
+                            .lock()
+                            .expect("to acquire lock")
+                            .update(&enr, &OfferTrace::Failed);
                         offer_report
                             .lock()
                             .expect("to acquire lock")
-                            .update(&enr, OfferTrace::Failed);
+                            .update(&enr, &OfferTrace::Failed);
                         error!("trace_offer timed out on state proof {content_key}: indicating a bug is present");
                     }
                 };
@@ -305,7 +324,8 @@ impl StateBridge {
 
 // Individual report for outcomes of offering a state content key
 struct OfferReport {
-    content_key: StateContentKey,
+    // content key as None is reserved for the global state offer report
+    content_key: Option<StateContentKey>,
     total: usize,
     success: Vec<Enr>,
     failed: Vec<Enr>,
@@ -313,7 +333,7 @@ struct OfferReport {
 }
 
 impl OfferReport {
-    fn new(content_key: StateContentKey, total: usize) -> Self {
+    fn new(content_key: Option<StateContentKey>, total: usize) -> Self {
         Self {
             content_key,
             total,
@@ -323,7 +343,7 @@ impl OfferReport {
         }
     }
 
-    fn update(&mut self, enr: &Enr, trace: OfferTrace) {
+    fn update(&mut self, enr: &Enr, trace: &OfferTrace) {
         match trace {
             // since the state bridge only offers one content key at a time,
             // we can assume that a successful offer means the lone content key
@@ -339,20 +359,38 @@ impl OfferReport {
 
     fn report(&self) {
         if enabled!(Level::DEBUG) {
-            debug!(
-                "Successfully offered to {}/{} peers. Content key: {}. Declined: {:?}. Failed: {:?}",
-                self.success.len(),
-                self.total,
-                self.content_key.to_hex(),
-                self.declined,
-                self.failed,
-            );
-        } else {
+            if let Some(content_key) = &self.content_key {
+                debug!(
+                    "Successfully offered to {}/{} peers. Content key: {}. Declined: {:?}. Failed: {:?}",
+                    self.success.len(),
+                    self.total,
+                    content_key.to_hex(),
+                    self.declined,
+                    self.failed,
+                );
+            } else {
+                debug!(
+                    "State offer report: {}/{} peers. Declined: {:?}. Failed: {:?}",
+                    self.success.len(),
+                    self.total,
+                    self.declined,
+                    self.failed,
+                );
+            }
+        } else if let Some(content_key) = &self.content_key {
             info!(
                 "Successfully offered to {}/{} peers. Content key: {}. Declined: {}. Failed: {}.",
                 self.success.len(),
                 self.total,
-                self.content_key.to_hex(),
+                content_key.to_hex(),
+                self.declined.len(),
+                self.failed.len(),
+            );
+        } else {
+            info!(
+                "State offer report: {}/{} peers. Declined: {}. Failed: {}.",
+                self.success.len(),
+                self.total,
                 self.declined.len(),
                 self.failed.len(),
             );
