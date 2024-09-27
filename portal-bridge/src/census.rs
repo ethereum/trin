@@ -169,14 +169,13 @@ impl Network {
     // peers. However, since the census continues to iterate through the peers after initialization,
     // the initialization is just to reach a critical mass of peers so that gossip can begin.
     async fn init(&mut self) {
-        let msg = match self.filter_clients.is_empty() {
-            true => format!("Initializing {} network census.", self.subnetwork),
-            false => format!(
+        match self.filter_clients.is_empty() {
+            true => info!("Initializing {} network census", self.subnetwork),
+            false => info!(
                 "Initializing {} network census with filtered clients: {:?}",
                 self.subnetwork, self.filter_clients
             ),
-        };
-        info!("{}", msg);
+        }
         let (_, random_enr) = generate_random_remote_enr();
         let Ok(initial_enrs) = self
             .subnetwork

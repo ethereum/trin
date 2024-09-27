@@ -349,24 +349,20 @@ impl GlobalOfferReport {
 
     fn report(&self) {
         let total = self.success + self.failed + self.declined;
+        if total == 0 {
+            return;
+        }
         info!(
             "State offer report: Total Offers: {}. Successful: {}% ({}). Declined: {}% ({}). Failed: {}% ({}).",
             total,
-            format!("{:.2}", calculate_percentage(self.success, total)),
+            100 * self.success / total,
             self.success,
-            format!("{:.2}", calculate_percentage(self.declined, total)),
+            100 * self.declined / total,
             self.declined,
-            format!("{:.2}", calculate_percentage(self.failed, total)),
+            100 * self.failed / total,
             self.failed,
         );
     }
-}
-
-fn calculate_percentage(part: usize, total: usize) -> f64 {
-    if total == 0 {
-        return 0.0;
-    }
-    (part as f64 / total as f64) * 100.0
 }
 
 /// Individual report for outcomes of offering a state content key

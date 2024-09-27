@@ -1,4 +1,4 @@
-use std::{env, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy_primitives::B256;
 use clap::Parser;
@@ -29,7 +29,7 @@ use ethportal_api::{
     },
     Enr,
 };
-use portalnet::discovery::UtpEnr;
+use portalnet::discovery::ENR_PORTAL_CLIENT_KEY;
 
 const DEFAULT_SUBNETWORK: &str = "history";
 const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
@@ -170,10 +170,9 @@ pub struct BridgeConfig {
     #[arg(
         long = "filter-clients",
         help = "Filter clients out from offer request (STATE BRIDGE ONLY).",
-        value_parser = client_parser,
-        default_value = "",
+        value_delimiter = ','
     )]
-    pub filter_clients: Arc<Vec<ClientType>>,
+    pub filter_clients: Vec<ClientType>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,10 +184,10 @@ pub enum ClientType {
     Unknown,
 }
 
-impl TryFrom<&str> for ClientType {
-    type Error = String;
+impl FromStr for ClientType {
+    type Err = String;
 
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "fluffy" => Ok(ClientType::Fluffy),
             "trin" => Ok(ClientType::Trin),
@@ -202,7 +201,10 @@ impl TryFrom<&str> for ClientType {
 
 impl From<&Enr> for ClientType {
     fn from(enr: &Enr) -> Self {
-        if let Some(client_id) = UtpEnr(enr.clone()).client() {
+        let client_id = enr
+            .get(ENR_PORTAL_CLIENT_KEY)
+            .and_then(|v| String::from_utf8(v.to_vec()).ok());
+        if let Some(client_id) = client_id {
             if client_id.starts_with("t") {
                 ClientType::Trin
             } else if client_id.starts_with("f") {
@@ -218,17 +220,6 @@ impl From<&Enr> for ClientType {
             ClientType::Unknown
         }
     }
-}
-
-fn client_parser(s: &str) -> Result<Arc<Vec<ClientType>>, String> {
-    if s.is_empty() {
-        return Ok(Arc::new(vec![]));
-    }
-    Ok(Arc::new(
-        s.split(",")
-            .map(ClientType::try_from)
-            .collect::<Result<Vec<ClientType>, String>>()?,
-    ))
 }
 
 pub fn url_to_client(url: Url) -> Result<ClientWithBaseUrl, String> {
