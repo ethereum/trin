@@ -1,4 +1,4 @@
-use std::{env, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy_primitives::B256;
 use clap::Parser;
@@ -12,19 +12,24 @@ use tracing::error;
 use url::Url;
 
 use crate::{
+    census::ENR_OFFER_LIMIT,
     constants::{DEFAULT_GOSSIP_LIMIT, DEFAULT_OFFER_LIMIT, HTTP_REQUEST_TIMEOUT},
     types::mode::BridgeMode,
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
     FALLBACK_BASE_EL_ENDPOINT,
 };
-use ethportal_api::types::{
-    cli::{
-        check_private_key_length, network_parser, DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK,
-        DEFAULT_WEB3_HTTP_PORT,
+use ethportal_api::{
+    types::{
+        cli::{
+            check_private_key_length, network_parser, DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK,
+            DEFAULT_WEB3_HTTP_PORT,
+        },
+        network::Subnetwork,
+        portal_wire::NetworkSpec,
     },
-    network::Subnetwork,
-    portal_wire::NetworkSpec,
+    Enr,
 };
+use portalnet::discovery::ENR_PORTAL_CLIENT_KEY;
 
 const DEFAULT_SUBNETWORK: &str = "history";
 const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
@@ -154,6 +159,67 @@ pub struct BridgeConfig {
         help = "The maximum number of concurrent offer rpc requests for state bridge."
     )]
     pub offer_limit: usize,
+
+    #[arg(
+        default_value_t = ENR_OFFER_LIMIT,
+        long = "enr-offer-limit",
+        help = "The maximum number of enrs to gossip per content key (STATE BRIDGE ONLY)."
+    )]
+    pub enr_offer_limit: usize,
+
+    #[arg(
+        long = "filter-clients",
+        help = "Filter clients out from offer request (STATE BRIDGE ONLY).",
+        value_delimiter = ','
+    )]
+    pub filter_clients: Vec<ClientType>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientType {
+    Fluffy,
+    Trin,
+    Shisui,
+    Ultralight,
+    Unknown,
+}
+
+impl FromStr for ClientType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "fluffy" => Ok(ClientType::Fluffy),
+            "trin" => Ok(ClientType::Trin),
+            "shisui" => Ok(ClientType::Shisui),
+            "ultralight" => Ok(ClientType::Ultralight),
+            "unknown" => Ok(ClientType::Unknown),
+            _ => Err(format!("Unknown client type: {s}")),
+        }
+    }
+}
+
+impl From<&Enr> for ClientType {
+    fn from(enr: &Enr) -> Self {
+        let client_id = enr
+            .get(ENR_PORTAL_CLIENT_KEY)
+            .and_then(|v| String::from_utf8(v.to_vec()).ok());
+        if let Some(client_id) = client_id {
+            if client_id.starts_with("t") {
+                ClientType::Trin
+            } else if client_id.starts_with("f") {
+                ClientType::Fluffy
+            } else if client_id.starts_with("s") {
+                ClientType::Shisui
+            } else if client_id.starts_with("u") {
+                ClientType::Ultralight
+            } else {
+                ClientType::Unknown
+            }
+        } else {
+            ClientType::Unknown
+        }
+    }
 }
 
 pub fn url_to_client(url: Url) -> Result<ClientWithBaseUrl, String> {
