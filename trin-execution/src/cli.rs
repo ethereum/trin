@@ -22,6 +22,12 @@ pub struct TrinExecutionConfig {
 
     #[arg(
         long,
+        help = "The last block that should be executed. This is useful if execution should stop early."
+    )]
+    pub last_block: Option<u64>,
+
+    #[arg(
+        long,
         default_value = "none",
         help = "The block traces will be dumped to the working directory: Configuration options ['none', 'block:<number>', 'all']."
     )]
