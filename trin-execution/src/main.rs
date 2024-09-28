@@ -63,9 +63,11 @@ async fn main() -> anyhow::Result<()> {
         tx.send(()).expect("signal ctrl_c should never fail");
     });
 
-    let end_block = get_spec_block_number(SpecId::CANCUN);
+    let last_block = trin_execution_config
+        .last_block
+        .unwrap_or(get_spec_block_number(SpecId::CANCUN));
     trin_execution
-        .process_range_of_blocks(end_block, Some(rx))
+        .process_range_of_blocks(last_block, Some(rx))
         .await?;
 
     Ok(())
