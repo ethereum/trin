@@ -1,8 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use discv5::{enr::NodeId, kbucket::KBucketsTable};
 use futures::channel::oneshot;
-use parking_lot::RwLock;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -13,7 +11,7 @@ use crate::{
         command::OverlayCommand,
         request::{OverlayRequest, RequestDirection},
     },
-    types::node::Node,
+    types::kbucket::SharedKBucketsTable,
     utp_controller::UtpController,
 };
 use ethportal_api::{
@@ -41,7 +39,7 @@ pub struct GossipResult {
 /// Doesn't trace gossip results
 pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Metric>(
     content: Vec<(TContentKey, Vec<u8>)>,
-    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+    kbuckets: &SharedKBucketsTable,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
     utp_controller: Option<Arc<UtpController>>,
 ) -> usize {
@@ -60,8 +58,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Me
     );
 
     // Map from content_ids to interested ENRs
-    let mut content_id_to_interested_enrs =
-        batch_interested_enrs::<TMetric>(&content_ids, kbuckets);
+    let mut content_id_to_interested_enrs = kbuckets.batch_interested_enrs::<TMetric>(&content_ids);
 
     // Map from ENRs to content they will gossip
     let mut enrs_and_content: HashMap<Enr, Vec<&(TContentKey, Vec<u8>)>> = HashMap::new();
@@ -152,14 +149,14 @@ pub async fn trace_propagate_gossip_cross_thread<
 >(
     content_key: TContentKey,
     data: Vec<u8>,
-    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+    kbuckets: &SharedKBucketsTable,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
 ) -> GossipResult {
     let mut gossip_result = GossipResult::default();
 
     let content_id = content_key.content_id();
 
-    let interested_enrs = interested_enrs::<TMetric>(&content_id, kbuckets);
+    let interested_enrs = kbuckets.interested_enrs::<TMetric>(&content_id);
     if interested_enrs.is_empty() {
         debug!(content.id = %hex_encode(content_id), "No peers eligible for trace gossip");
         return gossip_result;
@@ -211,62 +208,6 @@ pub async fn trace_propagate_gossip_cross_thread<
         }
     }
     gossip_result
-}
-
-/// Returns all ENRs that are connected and interested into provided content id.
-fn interested_enrs<TMetric: Metric>(
-    content_id: &[u8; 32],
-    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
-) -> Vec<Enr> {
-    kbuckets
-        .write()
-        .iter()
-        // Keep only connected nodes
-        .filter_map(|entry| {
-            if entry.status.is_connected() {
-                Some(entry.node)
-            } else {
-                None
-            }
-        })
-        // Keep only nodes that are interested in content
-        .filter(|node| {
-            TMetric::distance(content_id, &node.key.preimage().raw()) <= node.value.data_radius
-        })
-        .map(|node| node.value.enr())
-        .collect()
-}
-
-/// For each content id, returns all ENRs that are connected and interested into it.
-///
-/// The keys of the resulting map will always contain all `content_ids`. If none of the nodes is
-/// interested into specific content id, it will still be present in the result but the value
-/// associated with it will be empty.
-fn batch_interested_enrs<TMetric: Metric>(
-    content_ids: &[&[u8; 32]],
-    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
-) -> HashMap<[u8; 32], Vec<Enr>> {
-    let mut result = content_ids
-        .iter()
-        .map(|content_id| (**content_id, vec![]))
-        .collect::<HashMap<_, _>>();
-    for entry in kbuckets.write().iter() {
-        // Skip non-connected nodes
-        if !entry.status.is_connected() {
-            continue;
-        }
-        let node = entry.node;
-        for content_id in content_ids {
-            let distance = TMetric::distance(content_id, &node.key.preimage().raw());
-            if distance <= node.value.data_radius {
-                result
-                    .entry(**content_id)
-                    .or_default()
-                    .push(node.value.enr());
-            }
-        }
-    }
-    result
 }
 
 const NUM_CLOSEST_NODES: usize = 4;

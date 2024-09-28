@@ -14,14 +14,14 @@ use delay_map::HashSetDelay;
 use discv5::{
     enr::NodeId,
     kbucket::{
-        self, ConnectionDirection, ConnectionState, FailureReason, InsertResult, KBucketsTable,
-        Key, NodeStatus, UpdateResult,
+        ConnectionDirection, ConnectionState, FailureReason, InsertResult, Key, NodeStatus,
+        UpdateResult,
     },
     rpc::RequestId,
 };
 use futures::{channel::oneshot, future::join_all, prelude::*};
 use parking_lot::RwLock;
-use rand::seq::IteratorRandom;
+use rand::Rng;
 use smallvec::SmallVec;
 use ssz::Encode;
 use ssz_types::BitList;
@@ -61,7 +61,10 @@ use crate::{
             RequestDirection,
         },
     },
-    types::node::Node,
+    types::{
+        kbucket::{DiscoveredNodesUpdateResult, Entry, SharedKBucketsTable},
+        node::Node,
+    },
     utils::portal_wire,
     utp_controller::UtpController,
 };
@@ -111,7 +114,7 @@ where
     /// The content database of the local node.
     store: Arc<RwLock<TStore>>,
     /// The routing table of the local node.
-    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+    kbuckets: SharedKBucketsTable,
     /// The protocol identifier.
     protocol: Subnetwork,
     /// A queue of peers that require regular ping to check connectivity.
@@ -184,7 +187,7 @@ where
     pub async fn spawn(
         discovery: Arc<Discovery>,
         store: Arc<RwLock<TStore>>,
-        kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+        kbuckets: SharedKBucketsTable,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
         protocol: Subnetwork,
@@ -281,11 +284,7 @@ where
             };
 
             // Attempt to insert the node into the routing table.
-            match self
-                .kbuckets
-                .write()
-                .insert_or_update(&kbucket::Key::from(node_id), node, status)
-            {
+            match self.kbuckets.insert_or_update(node, status) {
                 InsertResult::Failed(reason) => {
                     warn!(
                         protocol = %self.protocol,
@@ -396,15 +395,8 @@ where
                     }
                 }
                 Some(Ok(node_id)) = self.peers_to_ping.next() => {
-                    // If the node is in the routing table, then ping and re-queue the node.
-                    let key = kbucket::Key::from(node_id);
-                    // Hold the lock as little as possible
-                    let optional_enr = match self.kbuckets.write().entry(&key) {
-                        kbucket::Entry::Present(entry, _) => Some(entry.value().enr()),
-                        _ => None
-                    };
-                    if let Some(enr) = optional_enr {
-                        self.ping_node(&enr);
+                    if let Some(node) = self.kbuckets.entry(node_id).present() {
+                        self.ping_node(&node.enr);
                         self.peers_to_ping.insert(node_id);
                     }
                 }
@@ -434,14 +426,10 @@ where
         // buckets are going to be empty-ish.
         let target_node_id = {
             // This should be 256
-            let buckets_count = self.kbuckets.read().buckets_iter().count();
+            let buckets_count = self.kbuckets.buckets_count();
             // Randomly pick one of the buckets.
-            let Some(bucket) = (buckets_count - EXPECTED_NON_EMPTY_BUCKETS..buckets_count)
-                .choose(&mut rand::thread_rng())
-            else {
-                error!("Error choosing random bucket index for refresh");
-                return;
-            };
+            let bucket = rand::thread_rng()
+                .gen_range(buckets_count - EXPECTED_NON_EMPTY_BUCKETS..buckets_count);
 
             trace!(protocol = %self.protocol, bucket = %bucket, "Refreshing routing table bucket");
             match u8::try_from(bucket) {
@@ -474,13 +462,10 @@ where
     /// Consumes previously applied pending entries from the `KBucketsTable`. An `AppliedPending`
     /// result is recorded when a pending bucket entry replaces a disconnected entry in the
     /// respective bucket.
-    async fn bucket_maintenance_poll(
-        protocol: Subnetwork,
-        kbuckets: &Arc<RwLock<KBucketsTable<NodeId, Node>>>,
-    ) {
+    async fn bucket_maintenance_poll(protocol: Subnetwork, kbuckets: &SharedKBucketsTable) {
         future::poll_fn(move |_cx| {
             // Drain applied pending entries from the routing table.
-            if let Some(entry) = kbuckets.write().take_applied_pending() {
+            if let Some(entry) = kbuckets.take_applied_pending() {
                 debug!(
                     %protocol,
                     inserted = %entry.inserted.into_preimage(),
@@ -833,7 +818,7 @@ where
     /// Submits outgoing requests to offer `content` to the closest known nodes whose radius
     /// contains `content_key`.
     fn poke_content(
-        kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+        kbuckets: &SharedKBucketsTable,
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
         content_key: TContentKey,
         content: Vec<u8>,
@@ -846,11 +831,8 @@ where
         for node_id in nodes_to_poke.iter() {
             // Look up node in the routing table. We need the ENR and the radius. If we can't find
             // the node, then move on to the next.
-            let key = kbucket::Key::from(*node_id);
-            let node = match kbuckets.write().entry(&key) {
-                kbucket::Entry::Present(entry, _) => entry.value().clone(),
-                kbucket::Entry::Pending(mut entry, _) => entry.value().clone(),
-                _ => continue,
+            let Some(node) = kbuckets.entry(*node_id).present_or_pending() else {
+                continue;
             };
 
             // If the content is within the node's radius, then offer the node the content.
@@ -1004,14 +986,15 @@ where
             "Handling FindNodes message",
         );
 
-        let distances64: Vec<u64> = request.distances.iter().map(|x| (*x).into()).collect();
         let mut enrs = self
-            .nodes_by_distance(distances64)
+            .kbuckets
+            .nodes_by_distances(self.local_enr(), &request.distances, FIND_NODES_MAX_NODES)
             .into_iter()
             .filter(|enr| {
                 // Filter out the source node.
                 &enr.node_id() != source
             })
+            .map(SszEnr)
             .collect();
 
         // Limit the ENRs so that their summed sizes do not surpass the max TALKREQ packet size.
@@ -1076,8 +1059,16 @@ where
             // If we can't obtain a permit or don't have data to send back, send the requester a
             // list of closer ENRs.
             (Ok(_), None) | (Ok(None), _) => {
-                let mut enrs = self.find_nodes_close_to_content(content_key);
-                enrs.retain(|enr| source != &enr.node_id());
+                let mut enrs = self
+                    .kbuckets
+                    .closest_to_content_id::<TMetric>(
+                        &content_key.content_id(),
+                        FIND_CONTENT_MAX_NODES,
+                    )
+                    .into_iter()
+                    .filter(|enr| &enr.node_id() != source)
+                    .map(SszEnr)
+                    .collect::<Vec<_>>();
                 pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_CONTENT_PAYLOAD_SIZE);
                 Ok(Content::Enrs(enrs))
             }
@@ -1325,7 +1316,7 @@ where
                 .collect();
             propagate_gossip_cross_thread::<_, TMetric>(
                 validated_content,
-                utp_processing.kbuckets,
+                &utp_processing.kbuckets,
                 utp_processing.command_tx.clone(),
                 Some(utp_processing.utp_controller),
             );
@@ -1383,11 +1374,7 @@ where
     /// Register source NodeId activity in overlay routing table
     fn register_node_activity(&mut self, source: NodeId) {
         // Look up the node in the routing table.
-        let key = kbucket::Key::from(source);
-        let is_node_in_table = matches!(
-            self.kbuckets.write().entry(&key),
-            kbucket::Entry::Present(_, _) | kbucket::Entry::Pending(_, _)
-        );
+        let is_node_in_table = self.kbuckets.entry(source).present_or_pending().is_some();
 
         // If the node is in the routing table, then call update on the routing table in order to
         // update the node's position in the kbucket. If the node is not in the routing table, then
@@ -1417,16 +1404,8 @@ where
 
     /// Processes a ping request from some source node.
     fn process_ping(&self, ping: Ping, source: NodeId) {
-        // Look up the node in the routing table.
-        let key = kbucket::Key::from(source);
-        let optional_node = match self.kbuckets.write().entry(&key) {
-            kbucket::Entry::Present(ref entry, _) => Some(entry.value().clone()),
-            kbucket::Entry::Pending(ref mut entry, _) => Some(entry.value().clone()),
-            _ => None,
-        };
-
         // If the node is in the routing table, then check if we need to update the node.
-        if let Some(node) = optional_node {
+        if let Some(node) = self.kbuckets.entry(source).present_or_pending() {
             // TODO: How do we handle data in the custom payload? This is unique to each overlay
             // network, so there may need to be some way to parameterize the update for a
             // ping/pong.
@@ -1479,10 +1458,9 @@ where
         // use the existing entry's value and direction. Otherwise, build a new entry from
         // the source ENR and establish a connection in the outgoing direction, because this
         // node is responding to our request.
-        let key = kbucket::Key::from(source.node_id());
-        let (node, status) = match self.kbuckets.write().entry(&key) {
-            kbucket::Entry::Present(ref entry, status) => (entry.value().clone(), status),
-            kbucket::Entry::Pending(ref mut entry, status) => (entry.value().clone(), status),
+        let (node, status) = match self.kbuckets.entry(source.node_id()) {
+            Entry::Present(node, node_status) => (node, node_status),
+            Entry::Pending(node, node_status) => (node, node_status),
             _ => {
                 // TODO: Decide default data radius, and define a constant.
                 let node = Node::new(source.clone(), Distance::MAX);
@@ -1813,7 +1791,7 @@ where
 
         propagate_gossip_cross_thread::<_, TMetric>(
             validated_content,
-            utp_processing.kbuckets,
+            &utp_processing.kbuckets,
             utp_processing.command_tx.clone(),
             Some(utp_processing.utp_controller),
         );
@@ -1835,13 +1813,7 @@ where
         // table entry, then request the node.
         //
         // TODO: Perform update on non-ENR node entry state. See note in `process_ping`.
-        let key = kbucket::Key::from(node_id);
-        let optional_node = match self.kbuckets.write().entry(&key) {
-            kbucket::Entry::Present(ref entry, _) => Some(entry.value().clone()),
-            kbucket::Entry::Pending(ref mut entry, _) => Some(entry.value().clone()),
-            _ => None,
-        };
-        if let Some(node) = optional_node {
+        if let Some(node) = self.kbuckets.entry(node_id).present_or_pending() {
             if node.enr().seq() < pong.enr_seq {
                 self.request_node(&node.enr());
             }
@@ -1856,12 +1828,9 @@ where
     /// Update the recorded radius of a node in our routing table.
     fn update_node_radius(&self, enr: Enr, data_radius: Distance) {
         let node_id = enr.node_id();
-        let key = kbucket::Key::from(node_id);
 
-        let updated_node = Node { enr, data_radius };
-
-        if let UpdateResult::Failed(_) = self.kbuckets.write().update_node(&key, updated_node, None)
-        {
+        let updated_node = Node::new(enr, data_radius);
+        if let UpdateResult::Failed(_) = self.kbuckets.update_node(updated_node, None) {
             error!(
                 "Failed to update radius of node {}",
                 hex_encode_compact(node_id.raw())
@@ -2007,7 +1976,7 @@ where
                         }
                         propagate_gossip_cross_thread::<_, TMetric>(
                             content_to_propagate,
-                            utp_processing.kbuckets.clone(),
+                            &utp_processing.kbuckets,
                             utp_processing.command_tx.clone(),
                             Some(utp_processing.utp_controller.clone()),
                         );
@@ -2035,7 +2004,7 @@ where
 
         if !utp_processing.disable_poke {
             Self::poke_content(
-                utp_processing.kbuckets,
+                &utp_processing.kbuckets,
                 utp_processing.command_tx,
                 content_key,
                 content,
@@ -2049,94 +2018,21 @@ where
     fn process_discovered_enrs(&mut self, enrs: Vec<Enr>) {
         let local_node_id = self.local_enr().node_id();
 
-        // Acquire write lock here so that we can perform node lookup and insert/update atomically.
-        // Once we acquire the write lock for the routing table, we shouldn't try to acquire any
-        // other locks.
-        // Because `self.ping_node()` can block (requires store lock), we will save disconnected
-        // peers to ping, and ping them once we relese the lock.
-        let mut kbuckets = self.kbuckets.write();
+        // Ignore outself
+        let enrs = enrs
+            .into_iter()
+            .filter(|enr| enr.node_id() != local_node_id);
 
-        let mut disconnected_peers_to_ping: Vec<Enr> = vec![];
+        let DiscoveredNodesUpdateResult {
+            inserted_nodes,
+            removed_nodes,
+        } = self.kbuckets.insert_or_update_discovered_nodes(enrs);
 
-        for enr in enrs {
-            let node_id = enr.node_id();
-
-            // Ignore ourself.
-            if node_id == local_node_id {
-                continue;
-            }
-
-            let key = kbucket::Key::from(node_id);
-            let optional_node = match kbuckets.entry(&key) {
-                kbucket::Entry::Present(entry, _) => Some(entry.value().clone()),
-                kbucket::Entry::Pending(ref mut entry, _) => Some(entry.value().clone()),
-                _ => None,
-            };
-
-            // If the node is in the routing table, then check to see if we should update its entry.
-            // If the node is not in the routing table, then add the node in a disconnected state.
-            // A subsequent ping will establish connectivity with the node. If the insertion
-            // succeeds, then add the node to the ping queue. Ignore insertion failures.
-            if let Some(node) = optional_node {
-                if node.enr().seq() < enr.seq() {
-                    let updated_node = Node {
-                        enr,
-                        data_radius: node.data_radius(),
-                    };
-
-                    // The update removed the node because it would violate the incoming peers
-                    // condition or a bucket/table filter. Remove the node from
-                    // the ping queue.
-                    if let UpdateResult::Failed(reason) =
-                        kbuckets.update_node(&key, updated_node, None)
-                    {
-                        self.peers_to_ping.remove(&node_id);
-                        debug!(
-                            peer = %node_id,
-                            error = ?reason,
-                            "Error updating entry for discovered node",
-                        );
-                    }
-                }
-            } else {
-                let node = Node::new(enr, Distance::MAX);
-                let status = NodeStatus {
-                    state: ConnectionState::Disconnected,
-                    direction: ConnectionDirection::Outgoing,
-                };
-                match kbuckets.insert_or_update(&key, node, status) {
-                    InsertResult::Inserted => {
-                        debug!(inserted = %node_id, "Inserted discovered node into routing table");
-                        self.peers_to_ping.insert(node_id);
-                    }
-                    InsertResult::Pending { disconnected } => {
-                        // The disconnected node is the least-recently connected entry that is
-                        // currently considered disconnected. This node should be pinged to check
-                        // for connectivity.
-                        //
-                        // The discovered node was inserted as a pending entry that will be inserted
-                        // after some timeout if the disconnected node is not updated.
-                        if let kbucket::Entry::Present(node_to_ping, _) =
-                            kbuckets.entry(&disconnected)
-                        {
-                            disconnected_peers_to_ping.push(node_to_ping.value().enr());
-                        }
-                    }
-                    other => {
-                        debug!(
-                            peer = %node_id,
-                            reason = ?other,
-                            "Discovered node not inserted into routing table"
-                        );
-                    }
-                }
-            }
+        for node_id in inserted_nodes {
+            self.peers_to_ping.insert(node_id);
         }
-        // Releases the self.kbuckets lock.
-        drop(kbuckets);
-
-        for enr in disconnected_peers_to_ping {
-            self.ping_node(&enr);
+        for node_id in removed_nodes {
+            self.peers_to_ping.remove(&node_id);
         }
     }
 
@@ -2330,15 +2226,13 @@ where
 
     /// Attempts to insert a newly connected node or update an existing node to connected.
     fn connect_node(&mut self, node: Node, connection_direction: ConnectionDirection) {
-        let node_id = node.enr().node_id();
-        let key = kbucket::Key::from(node_id);
+        let node_id = node.enr.node_id();
         let status = NodeStatus {
             state: ConnectionState::Connected,
             direction: connection_direction,
         };
 
-        let mut node_to_ping = None;
-        match self.kbuckets.write().insert_or_update(&key, node, status) {
+        match self.kbuckets.insert_or_update(node, status) {
             InsertResult::Inserted => {
                 // The node was inserted into the routing table. Add the node to the ping queue.
                 debug!(
@@ -2353,7 +2247,9 @@ where
                 // The disconnected node is the least-recently connected entry that is
                 // currently considered disconnected. This node should be pinged to check
                 // for connectivity.
-                node_to_ping = Some(disconnected);
+                if let Some(node) = self.kbuckets.entry(disconnected.into_preimage()).present() {
+                    self.ping_node(&node.enr);
+                }
             }
             InsertResult::StatusUpdated {
                 promoted_to_connected,
@@ -2382,18 +2278,6 @@ where
                 );
             }
         }
-
-        // Ping node to check for connectivity. See comment above for reasoning.
-        if let Some(key) = node_to_ping {
-            // Hold the lock as little as possible
-            let optional_enr = match self.kbuckets.write().entry(&key) {
-                kbucket::Entry::Present(entry, _) => Some(entry.value().enr()),
-                _ => None,
-            };
-            if let Some(enr) = optional_enr {
-                self.ping_node(&enr);
-            }
-        }
     }
 
     /// Attempts to update the connection state of a node.
@@ -2402,22 +2286,18 @@ where
         node_id: NodeId,
         state: ConnectionState,
     ) -> Result<(), FailureReason> {
-        let key = kbucket::Key::from(node_id);
-
-        match self.kbuckets.write().update_node_status(&key, state, None) {
-            UpdateResult::Failed(reason) => match reason {
-                FailureReason::KeyNonExistent => Err(FailureReason::KeyNonExistent),
-                other => {
+        match self.kbuckets.update_node_status(node_id, state, None) {
+            UpdateResult::Failed(reason) => {
+                if reason != FailureReason::KeyNonExistent {
                     warn!(
                         protocol = %self.protocol,
                         peer = %node_id,
-                        error = ?other,
+                        error = ?reason,
                         "Error updating node connection state",
                     );
-
-                    Err(other)
                 }
-            },
+                Err(reason)
+            }
             _ => {
                 trace!(
                     protocol = %self.protocol,
@@ -2430,106 +2310,15 @@ where
         }
     }
 
-    /// Returns a vector of all the ENRs of nodes currently contained in the routing table which are
-    /// connected.
-    fn table_entries_enr(&self) -> Vec<Enr> {
-        self.kbuckets
-            .write()
-            .iter()
-            .filter(|entry| {
-                // Filter out disconnected nodes.
-                entry.status.is_connected()
-            })
-            .map(|entry| entry.node.value.enr())
-            .collect()
-    }
-
-    /// Returns a vector of the ENRs of the closest nodes by the given log2 distances.
-    fn nodes_by_distance(&self, mut log2_distances: Vec<u64>) -> Vec<SszEnr> {
-        let mut nodes_to_send = Vec::new();
-        log2_distances.sort_unstable();
-        log2_distances.dedup();
-
-        let mut log2_distances = log2_distances.as_slice();
-        if let Some(0) = log2_distances.first() {
-            // If the distance is 0 send our local ENR.
-            nodes_to_send.push(SszEnr::new(self.local_enr()));
-            log2_distances = &log2_distances[1..];
-        }
-
-        if !log2_distances.is_empty() {
-            let mut kbuckets = self.kbuckets.write();
-            for node in kbuckets
-                .nodes_by_distances(log2_distances, FIND_NODES_MAX_NODES)
-                .into_iter()
-                .filter(|entry| {
-                    // Filter out disconnected nodes.
-                    entry.status.is_connected()
-                })
-                .map(|entry| entry.node.value.clone())
-            {
-                nodes_to_send.push(SszEnr::new(node.enr()));
-            }
-        }
-        nodes_to_send
-    }
-
-    /// Returns list of nodes closest to content, sorted by distance.
-    fn find_nodes_close_to_content(&self, content_key: impl OverlayContentKey) -> Vec<SszEnr> {
-        let content_id = content_key.content_id();
-
-        let mut nodes_with_distance: Vec<(Distance, Enr)> = self
-            .table_entries_enr()
-            .into_iter()
-            .map(|enr| (TMetric::distance(&content_id, &enr.node_id().raw()), enr))
-            .collect();
-
-        nodes_with_distance.sort_by(|a, b| a.0.cmp(&b.0));
-
-        nodes_with_distance
-            .into_iter()
-            .take(FIND_CONTENT_MAX_NODES)
-            .map(|node_record| SszEnr::new(node_record.1))
-            .collect()
-    }
-
-    /// Returns a vector of ENRs of the `max_nodes` closest connected nodes to the target from our
-    /// routing table.
-    fn closest_connected_nodes(&self, target_key: &Key<NodeId>, max_nodes: usize) -> Vec<Enr> {
-        // Filter out all disconnected nodes
-        let kbuckets = self.kbuckets.read();
-        let mut all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
-            .buckets_iter()
-            .flat_map(|kbucket| {
-                kbucket
-                    .iter()
-                    .filter(|node| node.status.is_connected())
-                    .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
-            })
-            .collect();
-
-        all_nodes.sort_by(|a, b| {
-            let a_distance = a.key.distance(target_key);
-            let b_distance = b.key.distance(target_key);
-            a_distance.cmp(&b_distance)
-        });
-
-        all_nodes
-            .iter()
-            .take(max_nodes)
-            .map(|closest| closest.value.enr.clone())
-            .collect()
-    }
-
     /// Starts a FindNode query to find nodes with IDs closest to `target`.
     fn init_find_nodes_query(
         &mut self,
         target: &NodeId,
         callback: Option<oneshot::Sender<Vec<Enr>>>,
     ) -> Option<QueryId> {
-        let target_key = Key::from(*target);
-
-        let closest_enrs = self.closest_connected_nodes(&target_key, self.query_num_results);
+        let closest_enrs = self
+            .kbuckets
+            .closest_to_node_id(*target, self.query_num_results);
         if closest_enrs.is_empty() {
             // If there are no nodes whatsoever in the routing table the query cannot proceed.
             warn!("No nodes in routing table, find nodes query cannot proceed.");
@@ -2593,7 +2382,9 @@ where
             peer_timeout: self.query_peer_timeout,
         };
 
-        let closest_enrs = self.closest_connected_nodes(&target_key, query_config.num_results);
+        let closest_enrs = self
+            .kbuckets
+            .closest_to_content_id::<TMetric>(&target.content_id(), query_config.num_results);
         if closest_enrs.is_empty() {
             // If there are no connected nodes in the routing table the query cannot proceed.
             warn!("No connected nodes in routing table, find content query cannot proceed.");
@@ -2638,11 +2429,8 @@ where
     /// Returns an ENR if one is known for the given NodeId.
     pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
         // Check whether we know this node id in our X's Portal Network's routing table.
-        let key = kbucket::Key::from(*node_id);
-        match self.kbuckets.write().entry(&key) {
-            kbucket::Entry::Present(ref entry, _) => return Some(entry.value().enr()),
-            kbucket::Entry::Pending(ref mut entry, _) => return Some(entry.value().enr()),
-            _ => {}
+        if let Some(node) = self.kbuckets.entry(*node_id).present_or_pending() {
+            return Some(node.enr);
         }
 
         // Check whether this node id is in our discv5 routing table
@@ -2736,7 +2524,7 @@ where
     validator: Arc<TValidator>,
     store: Arc<RwLock<TStore>>,
     metrics: OverlayMetricsReporter,
-    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+    kbuckets: SharedKBucketsTable,
     command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
     utp_controller: Arc<UtpController>,
     accept_queue: Arc<RwLock<AcceptQueue<TContentKey>>>,
@@ -2757,7 +2545,7 @@ where
             validator: Arc::clone(&service.validator),
             store: Arc::clone(&service.store),
             metrics: service.metrics.clone(),
-            kbuckets: Arc::clone(&service.kbuckets),
+            kbuckets: service.kbuckets.clone(),
             command_tx: service.command_tx.clone(),
             utp_controller: Arc::clone(&service.utp_controller),
             accept_queue: Arc::clone(&service.accept_queue),
@@ -2778,7 +2566,7 @@ where
             validator: Arc::clone(&self.validator),
             store: Arc::clone(&self.store),
             metrics: self.metrics.clone(),
-            kbuckets: Arc::clone(&self.kbuckets),
+            kbuckets: self.kbuckets.clone(),
             command_tx: self.command_tx.clone(),
             utp_controller: Arc::clone(&self.utp_controller),
             accept_queue: Arc::clone(&self.accept_queue),
@@ -2814,9 +2602,11 @@ mod tests {
     use std::{net::SocketAddr, time::Instant};
 
     use alloy_primitives::U256;
-    use discv5::kbucket::Entry;
+    use discv5::kbucket;
+    use kbucket::KBucketsTable;
     use rstest::*;
     use serial_test::serial;
+    use tempfile::TempDir;
     use tokio::{
         sync::{mpsc::unbounded_channel, RwLock as TokioRwLock},
         time::timeout,
@@ -2847,15 +2637,15 @@ mod tests {
     }
 
     fn build_service(
+        temp_dir: &TempDir,
     ) -> OverlayService<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore> {
         let portal_config = PortalnetConfig {
             no_stun: true,
             no_upnp: true,
             ..Default::default()
         };
-        let temp_dir = create_temp_test_dir().unwrap().into_path();
         let discovery =
-            Arc::new(Discovery::new(portal_config, &temp_dir, MAINNET.clone()).unwrap());
+            Arc::new(Discovery::new(portal_config, temp_dir.path(), MAINNET.clone()).unwrap());
 
         let header_oracle = HeaderOracle::default();
         let header_oracle = Arc::new(TokioRwLock::new(header_oracle));
@@ -2883,13 +2673,13 @@ mod tests {
         let store = Arc::new(RwLock::new(store));
 
         let overlay_config = OverlayConfig::default();
-        let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
-            discovery.local_enr().node_id().into(),
+        let kbuckets = SharedKBucketsTable::new(KBucketsTable::new(
+            node_id.into(),
             overlay_config.bucket_pending_timeout,
             overlay_config.max_incoming_per_bucket,
             overlay_config.table_filter,
             overlay_config.bucket_filter,
-        )));
+        ));
 
         let protocol = Subnetwork::History;
         let active_outgoing_requests = Arc::new(RwLock::new(HashMap::new()));
@@ -2935,11 +2725,11 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_ping_source_in_table_higher_enr_seq() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
-        let key = kbucket::Key::from(node_id);
         let status = NodeStatus {
             state: ConnectionState::Connected,
             direction: ConnectionDirection::Outgoing,
@@ -2948,10 +2738,7 @@ mod tests {
         let data_radius = Distance::MAX;
         let node = Node::new(source.clone(), data_radius);
 
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&key, node, status);
+        let _ = service.kbuckets.insert_or_update(node, status);
 
         let ping = Ping {
             enr_seq: source.seq() + 1,
@@ -2992,7 +2779,8 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_ping_source_not_in_table() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
@@ -3011,11 +2799,11 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_request_failure() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, destination) = generate_random_remote_enr();
         let node_id = destination.node_id();
-        let key = kbucket::Key::from(node_id);
         let status = NodeStatus {
             state: ConnectionState::Connected,
             direction: ConnectionDirection::Outgoing,
@@ -3023,18 +2811,12 @@ mod tests {
 
         let node = Node::new(destination.clone(), Distance::MAX);
 
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&key, node, status);
+        let _ = service.kbuckets.insert_or_update(node, status);
         service.peers_to_ping.insert(node_id);
 
         assert!(service.peers_to_ping.contains_key(&node_id));
 
-        assert!(matches!(
-            service.kbuckets.write().entry(&key),
-            kbucket::Entry::Present { .. }
-        ));
+        assert!(service.kbuckets.entry(node_id).present().is_some());
 
         let request_id = rand::random();
         let error = OverlayRequestError::Timeout;
@@ -3042,8 +2824,8 @@ mod tests {
 
         assert!(!service.peers_to_ping.contains_key(&node_id));
 
-        match service.kbuckets.write().entry(&key) {
-            kbucket::Entry::Present(_entry, status) => {
+        match service.kbuckets.entry(node_id) {
+            Entry::Present(_, status) => {
                 assert_eq!(ConnectionState::Disconnected, status.state)
             }
             _ => panic!(),
@@ -3053,11 +2835,10 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_pong_source_in_table_higher_enr_seq() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, source) = generate_random_remote_enr();
-        let node_id = source.node_id();
-        let key = kbucket::Key::from(node_id);
         let status = NodeStatus {
             state: ConnectionState::Connected,
             direction: ConnectionDirection::Outgoing,
@@ -3066,10 +2847,7 @@ mod tests {
         let data_radius = Distance::MAX;
         let node = Node::new(source.clone(), data_radius);
 
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&key, node, status);
+        let _ = service.kbuckets.insert_or_update(node, status);
 
         let pong = Pong {
             enr_seq: source.seq() + 1,
@@ -3110,7 +2888,8 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_pong_source_not_in_table() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, source) = generate_random_remote_enr();
         let data_radius = Distance::MAX;
@@ -3128,15 +2907,15 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_local_enr() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
         let local_enr = service.discovery.local_enr();
         service.process_discovered_enrs(vec![local_enr.clone()]);
 
         // Check routing table for local ENR.
         // Local node should not be present in the routing table.
-        let local_key = kbucket::Key::from(local_enr.node_id());
         assert!(matches!(
-            service.kbuckets.write().entry(&local_key),
+            service.kbuckets.entry(local_enr.node_id()),
             Entry::SelfEntry
         ));
 
@@ -3148,7 +2927,8 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_unknown_enrs() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         // Generate random ENRs to simulate.
         let (_, enr1) = generate_random_remote_enr();
@@ -3157,13 +2937,10 @@ mod tests {
         let enrs: Vec<Enr> = vec![enr1.clone(), enr2.clone()];
         service.process_discovered_enrs(enrs);
 
-        let key1 = kbucket::Key::from(enr1.node_id());
-        let key2 = kbucket::Key::from(enr2.node_id());
-
         // Check routing table for first ENR.
         // Node should be present in a disconnected state in the outgoing direction.
-        match service.kbuckets.write().entry(&key1) {
-            kbucket::Entry::Present(_entry, status) => {
+        match service.kbuckets.entry(enr1.node_id()) {
+            Entry::Present(_node, status) => {
                 assert_eq!(ConnectionState::Disconnected, status.state);
                 assert_eq!(ConnectionDirection::Outgoing, status.direction);
             }
@@ -3172,8 +2949,8 @@ mod tests {
 
         // Check routing table for second ENR.
         // Node should be present in a disconnected state in the outgoing direction.
-        match service.kbuckets.write().entry(&key2) {
-            kbucket::Entry::Present(_entry, status) => {
+        match service.kbuckets.entry(enr2.node_id()) {
+            Entry::Present(_node, status) => {
                 assert_eq!(ConnectionState::Disconnected, status.state);
                 assert_eq!(ConnectionDirection::Outgoing, status.direction);
             }
@@ -3192,14 +2969,15 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_known_enrs() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         // Generate random ENRs to simulate.
         let (sk1, mut enr1) = generate_random_remote_enr();
         let (_, enr2) = generate_random_remote_enr();
 
-        let key1 = kbucket::Key::from(enr1.node_id());
-        let key2 = kbucket::Key::from(enr2.node_id());
+        let node_id_1 = enr1.node_id();
+        let node_id_2 = enr2.node_id();
 
         let status = NodeStatus {
             state: ConnectionState::Connected,
@@ -3211,22 +2989,10 @@ mod tests {
         let node2 = Node::new(enr2.clone(), data_radius);
 
         // Insert nodes into routing table.
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&key1, node1, status);
-        assert!(matches!(
-            service.kbuckets.write().entry(&key1),
-            kbucket::Entry::Present { .. }
-        ));
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&key2, node2, status);
-        assert!(matches!(
-            service.kbuckets.write().entry(&key2),
-            kbucket::Entry::Present { .. }
-        ));
+        let _ = service.kbuckets.insert_or_update(node1, status);
+        assert!(service.kbuckets.entry(node_id_1).present().is_some(),);
+        let _ = service.kbuckets.insert_or_update(node2, status);
+        assert!(service.kbuckets.entry(node_id_2).present().is_some());
 
         // Modify first ENR to increment sequence number.
         let updated_udp: u16 = DEFAULT_DISCOVERY_PORT;
@@ -3238,19 +3004,15 @@ mod tests {
 
         // Check routing table for first ENR.
         // Node should be present with ENR sequence number equal to 2.
-        match service.kbuckets.write().entry(&key1) {
-            kbucket::Entry::Present(entry, _status) => {
-                assert_eq!(2, entry.value().enr.seq());
-            }
+        match service.kbuckets.entry(node_id_1).present() {
+            Some(node) => assert_eq!(2, node.enr.seq()),
             _ => panic!(),
         };
 
         // Check routing table for second ENR.
         // Node should be present with ENR sequence number equal to 1.
-        match service.kbuckets.write().entry(&key2) {
-            kbucket::Entry::Present(entry, _status) => {
-                assert_eq!(1, entry.value().enr.seq());
-            }
+        match service.kbuckets.entry(node_id_2).present() {
+            Some(node) => assert_eq!(1, node.enr.seq()),
             _ => panic!(),
         };
     }
@@ -3258,7 +3020,8 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn poke_content() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
         let content = vec![0xef];
@@ -3269,21 +3032,14 @@ mod tests {
         };
 
         let (_, enr) = generate_random_remote_enr();
-        let key = kbucket::Key::from(enr.node_id());
-        let peer = Node {
-            enr,
-            data_radius: Distance::MAX,
-        };
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&key, peer.clone(), status);
+        let peer = Node::new(enr.clone(), Distance::MAX);
+        let _ = service.kbuckets.insert_or_update(peer.clone(), status);
 
         let peer_node_ids: Vec<NodeId> = vec![peer.enr.node_id()];
 
         // Node has maximum radius, so there should be one offer in the channel.
         OverlayService::<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore>::poke_content(
-            service.kbuckets.clone(),
+            &service.kbuckets,
             service.command_tx.clone(),
             content_key,
             content,
@@ -3309,7 +3065,8 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn poke_content_unknown_peers() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
         let content = vec![0xef];
@@ -3321,7 +3078,7 @@ mod tests {
 
         // No nodes in the routing table, so no commands should be in the channel.
         OverlayService::<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore>::poke_content(
-            service.kbuckets.clone(),
+            &service.kbuckets,
             service.command_tx.clone(),
             content_key,
             content,
@@ -3334,7 +3091,8 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn poke_content_peers_with_sufficient_radius() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
         let content = vec![0xef];
@@ -3346,34 +3104,20 @@ mod tests {
 
         // The first node has a maximum radius, so the content SHOULD be offered.
         let (_, enr1) = generate_random_remote_enr();
-        let key1 = kbucket::Key::from(enr1.node_id());
-        let peer1 = Node {
-            enr: enr1,
-            data_radius: Distance::MAX,
-        };
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&key1, peer1.clone(), status);
+        let peer1 = Node::new(enr1.clone(), Distance::MAX);
+        let _ = service.kbuckets.insert_or_update(peer1.clone(), status);
 
         // The second node has a radius of zero, so the content SHOULD NOT not be offered.
         let (_, enr2) = generate_random_remote_enr();
-        let key2 = kbucket::Key::from(enr2.node_id());
-        let peer2 = Node {
-            enr: enr2,
-            data_radius: Distance::from(U256::ZERO),
-        };
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&key2, peer2.clone(), status);
+        let peer2 = Node::new(enr2.clone(), Distance::from(U256::ZERO));
+        let _ = service.kbuckets.insert_or_update(peer2.clone(), status);
 
         let peers = vec![peer1.clone(), peer2];
         let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.enr.node_id()).collect();
 
         // One offer should be in the channel for the maximum radius node.
         OverlayService::<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore>::poke_content(
-            service.kbuckets.clone(),
+            &service.kbuckets,
             service.command_tx.clone(),
             content_key,
             content,
@@ -3399,7 +3143,8 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn request_node() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, destination) = generate_random_remote_enr();
         service.request_node(&destination);
@@ -3434,7 +3179,8 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn ping_node() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, destination) = generate_random_remote_enr();
         service.ping_node(&destination);
@@ -3462,28 +3208,25 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn connect_node() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
-        let key = kbucket::Key::from(node_id);
 
         let data_radius = Distance::MAX;
         let node = Node::new(enr, data_radius);
         let connection_direction = ConnectionDirection::Outgoing;
 
         assert!(!service.peers_to_ping.contains_key(&node_id));
-        assert!(matches!(
-            service.kbuckets.write().entry(&key),
-            kbucket::Entry::Absent { .. }
-        ));
+        assert!(matches!(service.kbuckets.entry(node_id), Entry::Absent));
 
         service.connect_node(node, connection_direction);
 
         assert!(service.peers_to_ping.contains_key(&node_id));
 
-        match service.kbuckets.write().entry(&key) {
-            kbucket::Entry::Present(_entry, status) => {
+        match service.kbuckets.entry(node_id) {
+            Entry::Present(_node, status) => {
                 assert_eq!(ConnectionState::Connected, status.state);
                 assert_eq!(connection_direction, status.direction);
             }
@@ -3494,11 +3237,11 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn update_node_connection_state_disconnected_to_connected() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
-        let key = kbucket::Key::from(node_id);
 
         let data_radius = Distance::MAX;
         let node = Node::new(enr, data_radius);
@@ -3509,13 +3252,10 @@ mod tests {
             direction: connection_direction,
         };
 
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&key, node, status);
+        let _ = service.kbuckets.insert_or_update(node, status);
 
-        match service.kbuckets.write().entry(&key) {
-            kbucket::Entry::Present(_entry, status) => {
+        match service.kbuckets.entry(node_id) {
+            Entry::Present(_node, status) => {
                 assert_eq!(ConnectionState::Disconnected, status.state);
                 assert_eq!(connection_direction, status.direction);
             }
@@ -3524,8 +3264,8 @@ mod tests {
 
         let _ = service.update_node_connection_state(node_id, ConnectionState::Connected);
 
-        match service.kbuckets.write().entry(&key) {
-            kbucket::Entry::Present(_entry, status) => {
+        match service.kbuckets.entry(node_id) {
+            Entry::Present(_node, status) => {
                 assert_eq!(ConnectionState::Connected, status.state);
                 assert_eq!(connection_direction, status.direction);
             }
@@ -3536,11 +3276,11 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn update_node_connection_state_connected_to_disconnected() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
-        let key = kbucket::Key::from(node_id);
 
         let data_radius = Distance::MAX;
         let node = Node::new(enr, data_radius);
@@ -3551,13 +3291,10 @@ mod tests {
             direction: connection_direction,
         };
 
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&key, node, status);
+        let _ = service.kbuckets.insert_or_update(node, status);
 
-        match service.kbuckets.write().entry(&key) {
-            kbucket::Entry::Present(_entry, status) => {
+        match service.kbuckets.entry(node_id) {
+            Entry::Present(_node, status) => {
                 assert_eq!(ConnectionState::Connected, status.state);
                 assert_eq!(connection_direction, status.direction);
             }
@@ -3566,8 +3303,8 @@ mod tests {
 
         let _ = service.update_node_connection_state(node_id, ConnectionState::Disconnected);
 
-        match service.kbuckets.write().entry(&key) {
-            kbucket::Entry::Present(_entry, status) => {
+        match service.kbuckets.entry(node_id) {
+            Entry::Present(_node, status) => {
                 assert_eq!(ConnectionState::Disconnected, status.state);
                 assert_eq!(connection_direction, status.direction);
             }
@@ -3599,7 +3336,8 @@ mod tests {
 
     #[test_log::test(tokio::test)]
     async fn test_init_find_nodes_query() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, bootnode1) = generate_random_remote_enr();
         let (_, bootnode2) = generate_random_remote_enr();
@@ -3639,7 +3377,8 @@ mod tests {
 
     #[test_log::test(tokio::test)]
     async fn test_advance_findnodes_query() {
-        let mut service = build_service();
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = build_service(&temp_dir);
 
         let (_, bootnode) = generate_random_remote_enr();
         let bootnodes = vec![bootnode.clone()];
@@ -3760,7 +3499,8 @@ mod tests {
 
     #[test_log::test(tokio::test)]
     async fn test_find_enrs() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, bootnode) = generate_random_remote_enr();
         let bootnodes = vec![bootnode.clone()];
@@ -3818,11 +3558,10 @@ mod tests {
 
     #[tokio::test]
     async fn init_find_content_query() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, bootnode_enr) = generate_random_remote_enr();
-        let bootnode_node_id = bootnode_enr.node_id();
-        let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
         let data_radius = Distance::MAX;
         let bootnode = Node {
@@ -3836,10 +3575,7 @@ mod tests {
             direction: connection_direction,
         };
 
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&bootnode_key, bootnode, status);
+        let _ = service.kbuckets.insert_or_update(bootnode, status);
 
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
@@ -3872,7 +3608,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_content_no_nodes() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
@@ -3885,11 +3622,10 @@ mod tests {
 
     #[tokio::test]
     async fn advance_find_content_query_with_enrs() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, bootnode_enr) = generate_random_remote_enr();
-        let bootnode_node_id = bootnode_enr.node_id();
-        let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
         let data_radius = Distance::MAX;
         let bootnode = Node {
@@ -3903,10 +3639,7 @@ mod tests {
             direction: connection_direction,
         };
 
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&bootnode_key, bootnode, status);
+        let _ = service.kbuckets.insert_or_update(bootnode, status);
 
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
@@ -3949,11 +3682,11 @@ mod tests {
 
     #[tokio::test]
     async fn advance_find_content_query_with_content() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, bootnode_enr) = generate_random_remote_enr();
         let bootnode_node_id = bootnode_enr.node_id();
-        let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
         let data_radius = Distance::MAX;
         let bootnode = Node {
@@ -3967,10 +3700,7 @@ mod tests {
             direction: connection_direction,
         };
 
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&bootnode_key, bootnode, status);
+        let _ = service.kbuckets.insert_or_update(bootnode, status);
 
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
@@ -4015,11 +3745,11 @@ mod tests {
 
     #[tokio::test]
     async fn advance_find_content_query_with_connection_id() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, bootnode_enr) = generate_random_remote_enr();
         let bootnode_node_id = bootnode_enr.node_id();
-        let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
         let data_radius = Distance::MAX;
         let bootnode = Node {
@@ -4033,10 +3763,7 @@ mod tests {
             direction: connection_direction,
         };
 
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&bootnode_key, bootnode, status);
+        let _ = service.kbuckets.insert_or_update(bootnode, status);
 
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
@@ -4084,11 +3811,10 @@ mod tests {
 
     #[test_log::test(tokio::test)]
     async fn handle_find_content_query_event() {
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
 
         let (_, bootnode_enr) = generate_random_remote_enr();
-        let bootnode_node_id = bootnode_enr.node_id();
-        let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
         let data_radius = Distance::MAX;
         let bootnode = Node {
@@ -4102,10 +3828,7 @@ mod tests {
             direction: connection_direction,
         };
 
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&bootnode_key, bootnode, status);
+        let _ = service.kbuckets.insert_or_update(bootnode, status);
 
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
@@ -4204,7 +3927,8 @@ mod tests {
     #[tokio::test]
     async fn test_event_stream() {
         // Get overlay service event stream
-        let mut service = task::spawn(build_service());
+        let temp_dir = create_temp_test_dir().unwrap();
+        let mut service = task::spawn(build_service(&temp_dir));
         let (sender, mut receiver) = broadcast::channel(1);
         service.event_stream = sender;
         // Emit LightClientUpdate event
