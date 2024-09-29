@@ -71,25 +71,27 @@ impl StateBridge {
 
     pub async fn launch(&self) {
         info!("Launching state bridge: {:?}", self.mode);
-        match self.mode.clone() {
-            BridgeMode::Single(ModeType::Block(last_block)) => {
-                if last_block > get_spec_block_number(SpecId::MERGE) {
-                    panic!(
-                        "State bridge only supports blocks up to {} for the time being.",
-                        get_spec_block_number(SpecId::MERGE)
-                    );
-                }
-                self.launch_state(last_block)
-                    .await
-                    .expect("State bridge failed");
-            }
-            _ => panic!("State bridge only supports backfill using 'single' mode to specify the terminating block number."),
+        let (start_block, end_block) = match self.mode.clone() {
+            // TODO: This should only gossip state trie at this block
+            BridgeMode::Single(ModeType::Block(block)) => (0, block),
+            BridgeMode::Single(ModeType::BlockRange(start_block, end_block)) => (start_block, end_block),
+            _ => panic!("State bridge only supports 'single' mode, for single block (implies 0..=block range) or range of blocks."),
+        };
+
+        if end_block > get_spec_block_number(SpecId::MERGE) {
+            panic!(
+                "State bridge only supports blocks up to {} for the time being.",
+                get_spec_block_number(SpecId::MERGE)
+            );
         }
+
+        self.launch_state(start_block, end_block)
+            .await
+            .expect("State bridge failed");
         info!("Bridge mode: {:?} complete.", self.mode);
     }
 
-    async fn launch_state(&self, last_block: u64) -> anyhow::Result<()> {
-        info!("Gossiping state data from block 0 to {last_block}");
+    async fn launch_state(&self, start_block: u64, end_block: u64) -> anyhow::Result<()> {
         let temp_directory = create_temp_dir("trin-bridge-state", None)?;
 
         // Enable contract storage changes caching required for gossiping the storage trie
@@ -98,101 +100,116 @@ impl StateBridge {
             block_to_trace: BlockToTrace::None,
         };
         let mut trin_execution = TrinExecution::new(temp_directory.path(), state_config).await?;
-        for block_number in 0..=last_block {
-            info!("Gossipping state for block at height: {block_number}");
+
+        if start_block > 0 {
+            info!("Executing up to block: {}", start_block - 1);
+            trin_execution
+                .process_range_of_blocks(start_block - 1, None)
+                .await?;
+            // flush the database cache
+            trin_execution.database.storage_cache.clear();
+        }
+
+        info!("Gossiping state data from block {start_block} to {end_block} (inclusively)");
+        while trin_execution.next_block_number() <= end_block {
+            info!(
+                "Gossipping state for block at height: {}",
+                trin_execution.next_block_number()
+            );
             // display global state offer report
             self.global_offer_report
                 .lock()
                 .expect("to acquire lock")
                 .report();
 
-            // process block
-            let RootWithTrieDiff {
-                root: root_hash,
-                trie_diff: changed_nodes,
-            } = trin_execution.process_next_block().await?;
+            let root_with_trie_diff = trin_execution.process_next_block().await?;
 
-            let block = trin_execution
-                .era_manager
-                .lock()
-                .await
-                .last_fetched_block()
-                .await?
-                .clone();
-
-            let walk_diff = TrieWalker::new(root_hash, changed_nodes);
-
-            // gossip block's new state transitions
-            for node in walk_diff.nodes.keys() {
-                let account_proof = walk_diff.get_proof(*node);
-
-                // gossip the account
-                self.gossip_account(&account_proof, block.header.hash())
-                    .await?;
-
-                let Some(encoded_last_node) = account_proof.proof.last() else {
-                    error!("Account proof is empty. This should never happen maybe there is a bug in trie_walker?");
-                    continue;
-                };
-
-                let decoded_node = decode_node(&mut encoded_last_node.as_ref())
-                    .expect("Should should only be passing valid encoded nodes");
-                let Node::Leaf(leaf) = decoded_node else {
-                    continue;
-                };
-                let account: AccountStateInfo = Decodable::decode(&mut leaf.value.as_slice())?;
-
-                // reconstruct the address hash from the path so that we can fetch the
-                // address from the database
-                let mut partial_key_path = leaf.key.get_data().to_vec();
-                partial_key_path.pop();
-                let full_key_path =
-                    [&account_proof.path.clone(), partial_key_path.as_slice()].concat();
-                let address_hash = full_nibble_path_to_address_hash(&full_key_path);
-
-                // if the code_hash is empty then then don't try to gossip the contract bytecode
-                if account.code_hash != keccak256([]) {
-                    // gossip contract bytecode
-                    let code = trin_execution.database.code_by_hash(account.code_hash)?;
-                    self.gossip_contract_bytecode(
-                        address_hash,
-                        &account_proof,
-                        block.header.hash(),
-                        account.code_hash,
-                        code,
-                    )
-                    .await?;
-                }
-
-                // gossip contract storage
-                let storage_changed_nodes =
-                    trin_execution.database.get_storage_trie_diff(address_hash);
-
-                let storage_walk_diff =
-                    TrieWalker::new(account.storage_root, storage_changed_nodes);
-
-                for storage_node in storage_walk_diff.nodes.keys() {
-                    let storage_proof = storage_walk_diff.get_proof(*storage_node);
-                    self.gossip_storage(
-                        &account_proof,
-                        &storage_proof,
-                        address_hash,
-                        block.header.hash(),
-                    )
-                    .await?;
-                }
-            }
-
-            // flush the database cache
-            // This is used for gossiping storage trie diffs
-            trin_execution.database.storage_cache.clear();
+            self.gossip_trie_diff(root_with_trie_diff, &mut trin_execution)
+                .await?;
         }
+
         // display final global state offer report
         self.global_offer_report
             .lock()
             .expect("to acquire lock")
             .report();
+
         temp_directory.close()?;
+        Ok(())
+    }
+
+    async fn gossip_trie_diff(
+        &self,
+        root_with_trie_diff: RootWithTrieDiff,
+        trin_execution: &mut TrinExecution,
+    ) -> anyhow::Result<()> {
+        let block_hash = trin_execution
+            .era_manager
+            .lock()
+            .await
+            .last_fetched_block()
+            .await?
+            .header
+            .hash();
+
+        let walk_diff = TrieWalker::new(root_with_trie_diff.root, root_with_trie_diff.trie_diff);
+
+        // gossip block's new state transitions
+        for node in walk_diff.nodes.keys() {
+            let account_proof = walk_diff.get_proof(*node);
+
+            // gossip the account
+            self.gossip_account(&account_proof, block_hash).await?;
+
+            let Some(encoded_last_node) = account_proof.proof.last() else {
+                error!("Account proof is empty. This should never happen maybe there is a bug in trie_walker?");
+                continue;
+            };
+
+            let decoded_node = decode_node(&mut encoded_last_node.as_ref())
+                .expect("Should should only be passing valid encoded nodes");
+            let Node::Leaf(leaf) = decoded_node else {
+                continue;
+            };
+            let account: AccountStateInfo = Decodable::decode(&mut leaf.value.as_slice())?;
+
+            // reconstruct the address hash from the path so that we can fetch the
+            // address from the database
+            let mut partial_key_path = leaf.key.get_data().to_vec();
+            partial_key_path.pop();
+            let full_key_path = [&account_proof.path.clone(), partial_key_path.as_slice()].concat();
+            let address_hash = full_nibble_path_to_address_hash(&full_key_path);
+
+            // if the code_hash is empty then then don't try to gossip the contract bytecode
+            if account.code_hash != keccak256([]) {
+                // gossip contract bytecode
+                let code = trin_execution.database.code_by_hash(account.code_hash)?;
+                self.gossip_contract_bytecode(
+                    address_hash,
+                    &account_proof,
+                    block_hash,
+                    account.code_hash,
+                    code,
+                )
+                .await?;
+            }
+
+            // gossip contract storage
+            let storage_changed_nodes = trin_execution.database.get_storage_trie_diff(address_hash);
+
+            let storage_walk_diff = TrieWalker::new(account.storage_root, storage_changed_nodes);
+
+            for storage_node in storage_walk_diff.nodes.keys() {
+                let storage_proof = storage_walk_diff.get_proof(*storage_node);
+                self.gossip_storage(&account_proof, &storage_proof, address_hash, block_hash)
+                    .await?;
+            }
+        }
+
+        // flush the database cache
+        // This is used for gossiping storage trie diffs
+        trin_execution.database.storage_cache.clear();
+
         Ok(())
     }
 
