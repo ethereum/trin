@@ -15,20 +15,29 @@ use crate::{
 pub struct ConsensusApi {
     primary: Url,
     fallback: Url,
+    request_timeout: u64,
 }
 
 impl ConsensusApi {
-    pub async fn new(primary: Url, fallback: Url) -> Result<Self, reqwest_middleware::Error> {
+    pub async fn new(
+        primary: Url,
+        fallback: Url,
+        request_timeout: u64,
+    ) -> Result<Self, reqwest_middleware::Error> {
         debug!(
             "Starting ConsensusApi with primary provider: {primary} and fallback provider: {fallback}",
         );
-        let client = url_to_client(primary.clone()).map_err(|err| {
+        let client = url_to_client(primary.clone(), request_timeout).map_err(|err| {
             anyhow!("Unable to create primary client for consensus data provider: {err:?}")
         })?;
         if let Err(err) = check_provider(&client).await {
             warn!("Primary consensus data provider may be offline: {err:?}");
         }
-        Ok(Self { primary, fallback })
+        Ok(Self {
+            primary,
+            fallback,
+            request_timeout,
+        })
     }
 
     /// Requests the `BeaconState` structure corresponding to the current head of the beacon chain.
@@ -88,7 +97,7 @@ impl ConsensusApi {
 
     /// Make a request to the cl provider.
     async fn request(&self, endpoint: String) -> anyhow::Result<String> {
-        let client = url_to_client(self.primary.clone()).map_err(|err| {
+        let client = url_to_client(self.primary.clone(), self.request_timeout).map_err(|err| {
             anyhow!("Unable to create client for primary consensus data provider: {err:?}")
         })?;
         match client.get(&endpoint)?.send().await?.text().await {
@@ -96,9 +105,12 @@ impl ConsensusApi {
             Err(err) => {
                 warn!("Error requesting consensus data from provider, retrying with fallback provider: {err:?}");
                 sleep(FALLBACK_RETRY_AFTER).await;
-                let client = url_to_client(self.fallback.clone()).map_err(|err| {
-                    anyhow!("Unable to create client for fallback consensus data provider: {err:?}")
-                })?;
+                let client =
+                    url_to_client(self.fallback.clone(), self.request_timeout).map_err(|err| {
+                        anyhow!(
+                            "Unable to create client for fallback consensus data provider: {err:?}"
+                        )
+                    })?;
                 client
                     .get(endpoint)?
                     .send()

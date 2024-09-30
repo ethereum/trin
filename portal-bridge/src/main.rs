@@ -86,6 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let consensus_api = ConsensusApi::new(
                 bridge_config.cl_provider,
                 bridge_config.cl_provider_fallback,
+                bridge_config.request_timeout,
             )
             .await?;
             let portal_client_clone = portal_client.clone();
@@ -110,6 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let execution_api = ExecutionApi::new(
                 bridge_config.el_provider,
                 bridge_config.el_provider_fallback,
+                bridge_config.request_timeout,
             )
             .await?;
             match bridge_config.mode {

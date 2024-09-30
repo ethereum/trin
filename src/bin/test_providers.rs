@@ -68,6 +68,7 @@ pub async fn main() -> Result<()> {
             primary: client_url.clone(),
             fallback: client_url,
             header_validator: HeaderValidator::default(),
+            request_timeout: 20,
         };
         for gossip_range in all_ranges.iter_mut() {
             debug!("Testing range: {gossip_range:?}");
