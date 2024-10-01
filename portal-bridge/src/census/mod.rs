@@ -1,6 +1,6 @@
 use ethportal_api::{
-    jsonrpsee::http_client::HttpClient, BeaconContentKey, Enr, HistoryContentKey,
-    OverlayContentKey, StateContentKey,
+    jsonrpsee::http_client::HttpClient, types::network::Subnetwork, BeaconContentKey, Enr,
+    HistoryContentKey, OverlayContentKey, StateContentKey,
 };
 use futures::{channel::oneshot, StreamExt};
 use thiserror::Error;
@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 use tracing::{error, info};
 
 use crate::cli::BridgeConfig;
-use network::{Network, Subnetwork};
+use network::Network;
 
 mod network;
 
@@ -84,7 +84,7 @@ impl Census {
             tokio::select! {
                 // handle enrs request
                 Some(request) = self.census_rx.recv() => {
-                    match self.get_interested_enrs(request.content_key).await {
+                    match self.get_interested_enrs(request.content_key) {
                         Ok(enrs) => {
                             if let Err(err) = request.resp_tx.send(enrs) {
                                 error!("Error sending enrs response: {err:?}");
@@ -116,25 +116,16 @@ impl Census {
         }
     }
 
-    pub async fn get_interested_enrs(
-        &self,
-        content_key: ContentKey,
-    ) -> Result<Vec<Enr>, CensusError> {
+    pub fn get_interested_enrs(&self, content_key: ContentKey) -> Result<Vec<Enr>, CensusError> {
         match content_key {
             ContentKey::History(content_key) => {
-                self.history
-                    .get_interested_enrs(content_key.content_id())
-                    .await
+                self.history.get_interested_enrs(content_key.content_id())
             }
             ContentKey::State(content_key) => {
-                self.state
-                    .get_interested_enrs(content_key.content_id())
-                    .await
+                self.state.get_interested_enrs(content_key.content_id())
             }
             ContentKey::Beacon(content_key) => {
-                self.beacon
-                    .get_interested_enrs(content_key.content_id())
-                    .await
+                self.beacon.get_interested_enrs(content_key.content_id())
             }
         }
     }

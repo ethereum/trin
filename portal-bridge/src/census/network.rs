@@ -1,5 +1,5 @@
 use alloy_primitives::U256;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use delay_map::HashMapDelay;
 use discv5::enr::NodeId;
 use ethportal_api::{
@@ -7,6 +7,7 @@ use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
     types::{
         distance::{Distance, Metric, XorMetric},
+        network::Subnetwork,
         portal::PongInfo,
     },
     BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, StateNetworkApiClient,
@@ -36,6 +37,13 @@ pub struct Network {
 
 impl Network {
     pub fn new(client: HttpClient, subnetwork: Subnetwork, bridge_config: &BridgeConfig) -> Self {
+        if !matches!(
+            subnetwork,
+            Subnetwork::History | Subnetwork::Beacon | Subnetwork::State
+        ) {
+            panic!("Unsupported subnetwork: {subnetwork}");
+        }
+
         Self {
             peers: HashMapDelay::new(LIVENESS_CHECK_DELAY),
             client,
@@ -62,7 +70,6 @@ impl Network {
         }
         let (_, random_enr) = generate_random_remote_enr();
         let Ok(initial_enrs) = self
-            .subnetwork
             .recursive_find_nodes(&self.client, random_enr.node_id())
             .await
         else {
@@ -98,7 +105,6 @@ impl Network {
         // iterate peers routing table via rfn over various distances
         for distance in 245..257 {
             let Ok(result) = self
-                .subnetwork
                 .find_nodes(&self.client, enr.clone(), vec![distance])
                 .await
             else {
@@ -128,7 +134,7 @@ impl Network {
             }
         }
 
-        match self.subnetwork.ping(&self.client, enr.clone()).await {
+        match self.ping(&self.client, enr.clone()).await {
             Ok(pong_info) => {
                 let data_radius = Distance::from(U256::from(pong_info.data_radius));
                 self.peers.insert(enr.node_id().raw(), (enr, data_radius));
@@ -142,7 +148,7 @@ impl Network {
     }
 
     // Look up all known interested enrs for a given content id
-    pub async fn get_interested_enrs(&self, content_id: [u8; 32]) -> Result<Vec<Enr>, CensusError> {
+    pub fn get_interested_enrs(&self, content_id: [u8; 32]) -> Result<Vec<Enr>, CensusError> {
         if self.peers.is_empty() {
             error!(
                 "No known peers in {} census, unable to offer.",
@@ -164,33 +170,13 @@ impl Network {
             .take(self.enr_offer_limit)
             .collect())
     }
-}
 
-/// The subnetwork enum represents the different subnetworks that the census
-/// can operate on, and forwards requests to each respective overlay network.
-#[derive(Debug)]
-pub enum Subnetwork {
-    History,
-    State,
-    Beacon,
-}
-
-impl std::fmt::Display for Subnetwork {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Subnetwork::History => write!(f, "history"),
-            Subnetwork::State => write!(f, "state"),
-            Subnetwork::Beacon => write!(f, "beacon"),
-        }
-    }
-}
-
-impl Subnetwork {
     async fn ping(&self, client: &HttpClient, enr: Enr) -> anyhow::Result<PongInfo> {
-        let result = match self {
+        let result = match self.subnetwork {
             Subnetwork::History => HistoryNetworkApiClient::ping(client, enr).await,
             Subnetwork::State => StateNetworkApiClient::ping(client, enr).await,
             Subnetwork::Beacon => BeaconNetworkApiClient::ping(client, enr).await,
+            _ => bail!("Unsupported subnetwork: {}", self.subnetwork),
         };
         result.map_err(|e| anyhow!(e))
     }
@@ -201,12 +187,13 @@ impl Subnetwork {
         enr: Enr,
         distances: Vec<u16>,
     ) -> anyhow::Result<Vec<Enr>> {
-        let result = match self {
+        let result = match self.subnetwork {
             Subnetwork::History => {
                 HistoryNetworkApiClient::find_nodes(client, enr, distances).await
             }
             Subnetwork::State => StateNetworkApiClient::find_nodes(client, enr, distances).await,
             Subnetwork::Beacon => BeaconNetworkApiClient::find_nodes(client, enr, distances).await,
+            _ => bail!("Unsupported subnetwork: {}", self.subnetwork),
         };
         result.map_err(|e| anyhow!(e))
     }
@@ -216,7 +203,7 @@ impl Subnetwork {
         client: &HttpClient,
         node_id: NodeId,
     ) -> anyhow::Result<Vec<Enr>> {
-        let result = match self {
+        let result = match self.subnetwork {
             Subnetwork::History => {
                 HistoryNetworkApiClient::recursive_find_nodes(client, node_id).await
             }
@@ -224,6 +211,7 @@ impl Subnetwork {
             Subnetwork::Beacon => {
                 BeaconNetworkApiClient::recursive_find_nodes(client, node_id).await
             }
+            _ => bail!("Unsupported subnetwork: {}", self.subnetwork),
         };
         result.map_err(|e| anyhow!(e))
     }
