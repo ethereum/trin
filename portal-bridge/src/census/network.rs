@@ -12,6 +12,7 @@ use ethportal_api::{
     },
     BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, StateNetworkApiClient,
 };
+use rand::seq::IteratorRandom;
 use tokio::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
@@ -167,8 +168,7 @@ impl Network {
                     None
                 }
             })
-            .take(self.enr_offer_limit)
-            .collect())
+            .choose_multiple(&mut rand::thread_rng(), self.enr_offer_limit))
     }
 
     async fn ping(&self, client: &HttpClient, enr: Enr) -> anyhow::Result<PongInfo> {
