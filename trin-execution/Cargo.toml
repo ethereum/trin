@@ -13,6 +13,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
 alloy-consensus.workspace = true
+alloy-eips = "0.3.6"
 alloy-primitives.workspace = true
 alloy-rlp.workspace = true
 alloy-rpc-types.workspace = true

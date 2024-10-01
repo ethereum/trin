@@ -111,7 +111,7 @@ r2d2_sqlite = "0.24.0"
 rand = "0.8.5"
 reqwest = { version = "0.12.7", features = ["native-tls-vendored", "json"] }
 reth-ipc = { tag = "v1.0.7", git = "https://github.com/paradigmxyz/reth.git"}
-revm = { version = "14.0.2", default-features = false, features = ["std", "secp256k1", "serde-json"] }
+revm = { version = "14.0.2", default-features = false, features = ["std", "secp256k1", "serde-json", "c-kzg"] }
 revm-primitives = { version = "9.0.2", default-features = false, features = ["std", "serde"] }
 rpc = { path = "rpc"}
 rstest = "0.18.2"

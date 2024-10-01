@@ -26,6 +26,7 @@ use trin_evm::{
 
 use crate::{
     era::types::{ProcessedBlock, TransactionsWithSender},
+    evm::pre_block_contracts::apply_pre_block_contracts,
     metrics::{
         set_int_gauge_vec, start_timer_vec, stop_timer, BLOCK_HEIGHT, BLOCK_PROCESSING_TIMES,
         TRANSACTION_PROCESSING_TIMES,
@@ -180,6 +181,9 @@ impl<'a> BlockExecutor<'a> {
         }
 
         self.set_evm_environment(&block.header);
+
+        // apply pre block contracts such as eip-4788
+        apply_pre_block_contracts(&mut self.evm, &block.header)?;
 
         // execute transactions
         let cumulative_transaction_timer =

@@ -159,7 +159,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
             withdrawals_root: Some(withdrawals_root),
             blob_gas_used: Some(U64::from(payload.blob_gas_used)),
             excess_blob_gas: Some(U64::from(payload.excess_blob_gas)),
-            parent_beacon_block_root: None,
+            parent_beacon_block_root: Some(self.message.parent_root),
         };
 
         Ok(ProcessedBlock {
