@@ -9,7 +9,7 @@ use ethportal_api::{
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, history::HistoryBridge},
-    constants::DEFAULT_GOSSIP_LIMIT,
+    constants::{DEFAULT_GOSSIP_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
     types::mode::BridgeMode,
 };
 use serde::Deserialize;
@@ -24,9 +24,13 @@ pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient
     let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());
     // url doesn't matter, we're not making any requests
     let client_url = Url::parse("http://www.null.com").unwrap();
-    let execution_api = ExecutionApi::new(client_url.clone(), client_url)
-        .await
-        .unwrap();
+    let execution_api = ExecutionApi::new(
+        client_url.clone(),
+        client_url,
+        DEFAULT_TOTAL_REQUEST_TIMEOUT,
+    )
+    .await
+    .unwrap();
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
     let bridge = HistoryBridge::new(
@@ -54,9 +58,13 @@ pub async fn test_beacon_bridge(peertest: &Peertest, portal_client: &HttpClient)
     sleep(Duration::from_secs(1)).await;
     // url doesn't matter, we're not making any requests
     let client_url = Url::parse("http://www.null.com").unwrap();
-    let consensus_api = ConsensusApi::new(client_url.clone(), client_url)
-        .await
-        .unwrap();
+    let consensus_api = ConsensusApi::new(
+        client_url.clone(),
+        client_url,
+        DEFAULT_TOTAL_REQUEST_TIMEOUT,
+    )
+    .await
+    .unwrap();
     let bridge = BeaconBridge::new(consensus_api, mode, portal_client.clone());
     bridge.launch().await;
 

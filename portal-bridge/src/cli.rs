@@ -8,12 +8,13 @@ use reqwest::{
 };
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
+use tokio::time::Duration;
 use tracing::error;
 use url::Url;
 
 use crate::{
     census::ENR_OFFER_LIMIT,
-    constants::{DEFAULT_GOSSIP_LIMIT, DEFAULT_OFFER_LIMIT, HTTP_REQUEST_TIMEOUT},
+    constants::{DEFAULT_GOSSIP_LIMIT, DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
     types::mode::BridgeMode,
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
     FALLBACK_BASE_EL_ENDPOINT,
@@ -173,6 +174,13 @@ pub struct BridgeConfig {
         value_delimiter = ','
     )]
     pub filter_clients: Vec<ClientType>,
+
+    #[arg(
+        default_value_t = DEFAULT_TOTAL_REQUEST_TIMEOUT,
+        long = "request-timeout",
+        help = "The timeout in seconds is applied from when the request starts connecting until the response body has finished. Also considered a total deadline.",
+    )]
+    pub request_timeout: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -222,7 +230,7 @@ impl From<&Enr> for ClientType {
     }
 }
 
-pub fn url_to_client(url: Url) -> Result<ClientWithBaseUrl, String> {
+pub fn url_to_client(url: Url, request_timeout: u64) -> Result<ClientWithBaseUrl, String> {
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
@@ -256,7 +264,7 @@ pub fn url_to_client(url: Url) -> Result<ClientWithBaseUrl, String> {
     // Add retry middleware
     let reqwest_client = Client::builder()
         .default_headers(headers)
-        .timeout(HTTP_REQUEST_TIMEOUT)
+        .timeout(Duration::from_secs(request_timeout))
         .build()
         .map_err(|_| "Failed to build HTTP client")?;
     let client = ClientBuilder::new(reqwest_client)

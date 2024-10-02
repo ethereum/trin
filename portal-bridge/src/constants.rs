@@ -14,9 +14,9 @@ pub const HEADER_WITH_PROOF_CONTENT_VALUE: &str =
 // Beacon chain mainnet genesis time: Tue Dec 01 2020 12:00:23 GMT+0000
 pub const BEACON_GENESIS_TIME: u64 = 1606824023;
 
-// This is a very conservative timeout if a provider takes longer than even 1 second it is probably
-// overloaded and not performing well
-pub const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
+/// The timeout in seconds is applied from when the request starts connecting until the response
+/// body has finished. Also considered a total deadline.
+pub const DEFAULT_TOTAL_REQUEST_TIMEOUT: u64 = 20;
 
 // The maximum number of active blocks being gossiped. Note that this doesn't
 // exactly mean the number of concurrent gossip jsonrpc requests, as the gossip
