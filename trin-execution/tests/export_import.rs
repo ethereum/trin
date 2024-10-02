@@ -44,19 +44,23 @@ async fn execute_export_import_execute() -> anyhow::Result<()> {
     drop(trin_execution);
 
     // 2. export from dir_1 into era2
-    let exporter = StateExporter::new(ExportStateConfig {
-        data_dir: Some(dir_1),
-        path_to_era2: era2_dir,
-    })
+    let exporter = StateExporter::new(
+        ExportStateConfig {
+            path_to_era2: era2_dir,
+        },
+        &dir_1,
+    )
     .await?;
     let era2_file = exporter.export()?;
     drop(exporter);
 
     // 3. import from era2 into dir_2
-    let importer = StateImporter::new(ImportStateConfig {
-        data_dir: Some(dir_2.clone()),
-        path_to_era2: era2_file,
-    })
+    let importer = StateImporter::new(
+        ImportStateConfig {
+            path_to_era2: era2_file,
+        },
+        &dir_2,
+    )
     .await?;
     importer.import().await?;
     drop(importer);

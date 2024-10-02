@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use anyhow::{ensure, Error};
 use e2store::era2::{AccountEntry, AccountOrStorageEntry, Era2, StorageItem};
@@ -6,10 +6,9 @@ use eth_trie::{EthTrie, Trie};
 use ethportal_api::Header;
 use revm_primitives::{keccak256, B256, U256};
 use tracing::info;
-use trin_utils::dir::setup_data_dir;
 
 use crate::{
-    cli::{ImportStateConfig, APP_NAME},
+    cli::ImportStateConfig,
     config::StateConfig,
     era::manager::EraManager,
     evm::block_executor::BLOCKHASH_SERVE_WINDOW,
@@ -25,13 +24,8 @@ pub struct StateImporter {
 }
 
 impl StateImporter {
-    pub async fn new(config: ImportStateConfig) -> anyhow::Result<Self> {
-        let data_dir = setup_data_dir(
-            APP_NAME,
-            config.data_dir.clone(),
-            /* ephemeral= */ false,
-        )?;
-        let rocks_db = Arc::new(setup_rocksdb(&data_dir)?);
+    pub async fn new(config: ImportStateConfig, data_dir: &Path) -> anyhow::Result<Self> {
+        let rocks_db = Arc::new(setup_rocksdb(data_dir)?);
 
         let execution_position = ExecutionPosition::initialize_from_db(rocks_db.clone())?;
         ensure!(

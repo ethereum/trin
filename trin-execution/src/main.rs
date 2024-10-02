@@ -15,10 +15,16 @@ async fn main() -> anyhow::Result<()> {
 
     let trin_execution_config = TrinExecutionConfig::parse();
 
+    let data_dir = setup_data_dir(
+        APP_NAME,
+        trin_execution_config.data_dir.clone(),
+        trin_execution_config.ephemeral,
+    )?;
+
     if let Some(command) = trin_execution_config.command {
         match command {
             TrinExecutionSubCommands::ImportState(import_state_config) => {
-                let state_importer = StateImporter::new(import_state_config).await?;
+                let state_importer = StateImporter::new(import_state_config, &data_dir).await?;
                 let header = state_importer.import().await?;
                 info!(
                     "Imported state from era2: {} {}",
@@ -27,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
             TrinExecutionSubCommands::ExportState(export_state_config) => {
-                let state_exporter = StateExporter::new(export_state_config).await?;
+                let state_exporter = StateExporter::new(export_state_config, &data_dir).await?;
                 state_exporter.export()?;
                 info!(
                     "Exported state into era2: {} {}",
@@ -43,12 +49,6 @@ async fn main() -> anyhow::Result<()> {
     if let Some(addr) = trin_execution_config.enable_metrics_with_url {
         prometheus_exporter::start(addr)?;
     }
-
-    let data_dir = setup_data_dir(
-        APP_NAME,
-        trin_execution_config.data_dir.clone(),
-        trin_execution_config.ephemeral,
-    )?;
 
     let mut trin_execution =
         TrinExecution::new(&data_dir, trin_execution_config.clone().into()).await?;

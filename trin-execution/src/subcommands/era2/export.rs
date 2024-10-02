@@ -1,4 +1,7 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use alloy_consensus::EMPTY_ROOT_HASH;
 use alloy_rlp::Decodable;
@@ -11,10 +14,9 @@ use ethportal_api::{types::state_trie::account_state::AccountState, Header};
 use parking_lot::Mutex;
 use revm_primitives::{B256, KECCAK_EMPTY, U256};
 use tracing::info;
-use trin_utils::dir::setup_data_dir;
 
 use crate::{
-    cli::{ExportStateConfig, APP_NAME},
+    cli::ExportStateConfig,
     config::StateConfig,
     era::manager::EraManager,
     storage::{
@@ -30,13 +32,8 @@ pub struct StateExporter {
 }
 
 impl StateExporter {
-    pub async fn new(config: ExportStateConfig) -> anyhow::Result<Self> {
-        let data_dir = setup_data_dir(
-            APP_NAME,
-            config.data_dir.clone(),
-            /* ephemeral= */ false,
-        )?;
-        let rocks_db = Arc::new(setup_rocksdb(&data_dir)?);
+    pub async fn new(config: ExportStateConfig, data_dir: &Path) -> anyhow::Result<Self> {
+        let rocks_db = Arc::new(setup_rocksdb(data_dir)?);
 
         let execution_position = ExecutionPosition::initialize_from_db(rocks_db.clone())?;
         ensure!(
