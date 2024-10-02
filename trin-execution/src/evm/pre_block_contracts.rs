@@ -1,4 +1,4 @@
-use alloy_eips::eip4788::{self, BEACON_ROOTS_ADDRESS};
+use alloy_eips::eip4788;
 use anyhow::anyhow;
 use ethportal_api::Header;
 use revm::{db::State, DatabaseCommit, Evm};
@@ -26,7 +26,7 @@ fn apply_beacon_root_contract(
     // Update transaction environment to call the beacon roots contract
     evm.context.evm.env.tx = TxEnv {
         caller: eip4788::SYSTEM_ADDRESS,
-        transact_to: TxKind::Call(BEACON_ROOTS_ADDRESS),
+        transact_to: TxKind::Call(eip4788::BEACON_ROOTS_ADDRESS),
         data: parent_beacon_block_root.0.into(),
         ..Default::default()
     };
@@ -38,8 +38,9 @@ fn apply_beacon_root_contract(
         Err(err) => return Err(anyhow!("Failed to call beacon roots contract: {err:?}")),
     };
 
-    state.remove(&eip4788::SYSTEM_ADDRESS);
-    state.remove(&evm.block().coinbase);
+    // Remove all the keys except the beacon roots address which is the only state change we want to
+    // keep
+    state.retain(|address, _| address == &eip4788::BEACON_ROOTS_ADDRESS);
 
     evm.context.evm.db.commit(state);
 
