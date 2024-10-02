@@ -4,6 +4,8 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::types::block_to_trace::BlockToTrace;
 
+pub const APP_NAME: &str = "trin-execution";
+
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Trin Execution", about = "Executing blocks with no devp2p")]
 pub struct TrinExecutionConfig {
