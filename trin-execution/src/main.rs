@@ -1,14 +1,12 @@
 use clap::Parser;
 use tracing::info;
 use trin_execution::{
-    cli::{TrinExecutionConfig, TrinExecutionSubCommands},
-    era::manager::EraManager,
+    cli::{TrinExecutionConfig, TrinExecutionSubCommands, APP_NAME},
     execution::TrinExecution,
     subcommands::era2::{export::StateExporter, import::StateImporter},
 };
 use trin_utils::{dir::setup_data_dir, log::init_tracing_logger};
 
-const APP_NAME: &str = "trin-execution";
 const LATEST_BLOCK: u64 = 20_868_946;
 
 #[tokio::main]
@@ -16,6 +14,30 @@ async fn main() -> anyhow::Result<()> {
     init_tracing_logger();
 
     let trin_execution_config = TrinExecutionConfig::parse();
+
+    if let Some(command) = trin_execution_config.command {
+        match command {
+            TrinExecutionSubCommands::ImportState(import_state_config) => {
+                let state_importer = StateImporter::new(import_state_config).await?;
+                let header = state_importer.import().await?;
+                info!(
+                    "Imported state from era2: {} {}",
+                    header.number, header.state_root,
+                );
+                return Ok(());
+            }
+            TrinExecutionSubCommands::ExportState(export_state_config) => {
+                let state_exporter = StateExporter::new(export_state_config).await?;
+                state_exporter.export()?;
+                info!(
+                    "Exported state into era2: {} {}",
+                    state_exporter.header().number,
+                    state_exporter.header().state_root,
+                );
+                return Ok(());
+            }
+        }
+    }
 
     // Initialize prometheus metrics
     if let Some(addr) = trin_execution_config.enable_metrics_with_url {
@@ -30,31 +52,6 @@ async fn main() -> anyhow::Result<()> {
 
     let mut trin_execution =
         TrinExecution::new(&data_dir, trin_execution_config.clone().into()).await?;
-
-    if let Some(command) = trin_execution_config.command {
-        match command {
-            TrinExecutionSubCommands::ImportState(import_state) => {
-                let mut state_importer = StateImporter::new(trin_execution, import_state);
-                state_importer.import_state()?;
-                state_importer.import_last_256_block_hashes().await?;
-
-                info!(
-                    "Imported state from era2: {} {}",
-                    state_importer.trin_execution.next_block_number() - 1,
-                    state_importer.trin_execution.get_root()?
-                );
-                return Ok(());
-            }
-            TrinExecutionSubCommands::ExportState(export_state) => {
-                let mut era_manager =
-                    EraManager::new(trin_execution.next_block_number() - 1).await?;
-                let header = era_manager.get_next_block().await?.clone();
-                let mut state_exporter = StateExporter::new(trin_execution, export_state);
-                state_exporter.export_state(header.header)?;
-                return Ok(());
-            }
-        }
-    }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {

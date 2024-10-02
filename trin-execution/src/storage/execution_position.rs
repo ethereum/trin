@@ -27,11 +27,7 @@ impl ExecutionPosition {
             Some(raw_execution_position) => {
                 Decodable::decode(&mut raw_execution_position.as_slice())?
             }
-            None => Self {
-                version: 0,
-                next_block_number: 0,
-                state_root: EMPTY_ROOT_HASH,
-            },
+            None => Self::default(),
         })
     }
 
@@ -52,5 +48,15 @@ impl ExecutionPosition {
         self.state_root = header.state_root;
         db.put(EXECUTION_POSITION_DB_KEY, alloy_rlp::encode(self))?;
         Ok(())
+    }
+}
+
+impl Default for ExecutionPosition {
+    fn default() -> Self {
+        Self {
+            version: 0,
+            next_block_number: 0,
+            state_root: EMPTY_ROOT_HASH,
+        }
     }
 }

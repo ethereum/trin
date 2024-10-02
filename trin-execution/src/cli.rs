@@ -4,6 +4,8 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::types::block_to_trace::BlockToTrace;
 
+pub const APP_NAME: &str = "trin-execution";
+
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Trin Execution", about = "Executing blocks with no devp2p")]
 pub struct TrinExecutionConfig {
@@ -54,12 +56,16 @@ pub enum TrinExecutionSubCommands {
 
 #[derive(Args, Debug, Default, Clone, PartialEq)]
 pub struct ImportStateConfig {
+    #[arg(long, help = "The directory where to import the snapshot data.")]
+    pub data_dir: Option<PathBuf>,
     #[arg(long, help = "path to where the era2 state snapshot is located")]
     pub path_to_era2: PathBuf,
 }
 
 #[derive(Args, Debug, Default, Clone, PartialEq)]
 pub struct ExportStateConfig {
+    #[arg(long, help = "The directory from where to export the snapshot data.")]
+    pub data_dir: Option<PathBuf>,
     #[arg(long, help = "path to where the era2 state snapshot is located")]
     pub path_to_era2: PathBuf,
 }

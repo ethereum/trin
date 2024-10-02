@@ -3,36 +3,66 @@ use std::sync::Arc;
 use anyhow::{ensure, Error};
 use e2store::era2::{AccountEntry, AccountOrStorageEntry, Era2, StorageItem};
 use eth_trie::{EthTrie, Trie};
+use ethportal_api::Header;
 use revm_primitives::{keccak256, B256, U256};
 use tracing::info;
+use trin_utils::dir::setup_data_dir;
 
 use crate::{
-    cli::ImportStateConfig, era::manager::EraManager, evm::block_executor::BLOCKHASH_SERVE_WINDOW,
-    execution::TrinExecution, storage::account_db::AccountDB,
+    cli::{ImportStateConfig, APP_NAME},
+    config::StateConfig,
+    era::manager::EraManager,
+    evm::block_executor::BLOCKHASH_SERVE_WINDOW,
+    storage::{
+        account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
+        utils::setup_rocksdb,
+    },
 };
 
 pub struct StateImporter {
-    pub trin_execution: TrinExecution,
-    importer_config: ImportStateConfig,
+    config: ImportStateConfig,
+    evm_db: EvmDB,
 }
 
 impl StateImporter {
-    pub fn new(trin_execution: TrinExecution, importer_config: ImportStateConfig) -> Self {
-        Self {
-            trin_execution,
-            importer_config,
-        }
+    pub async fn new(config: ImportStateConfig) -> anyhow::Result<Self> {
+        let data_dir = setup_data_dir(
+            APP_NAME,
+            config.data_dir.clone(),
+            /* ephemeral= */ false,
+        )?;
+        let rocks_db = Arc::new(setup_rocksdb(&data_dir)?);
+
+        let execution_position = ExecutionPosition::initialize_from_db(rocks_db.clone())?;
+        ensure!(
+            execution_position.next_block_number() == 0,
+            "Cannot import state from .era2, database is not empty",
+        );
+
+        let evm_db = EvmDB::new(StateConfig::default(), rocks_db, &execution_position)
+            .expect("Failed to create EVM database");
+
+        Ok(Self { config, evm_db })
     }
 
-    pub fn import_state(&mut self) -> anyhow::Result<()> {
-        info!("Importing state from .era2 file");
-        if self.trin_execution.next_block_number() != 0 {
-            return Err(Error::msg(
-                "Cannot import state from .era2, database is not empty",
-            ));
-        }
+    pub async fn import(&self) -> anyhow::Result<Header> {
+        // Import state from era2 file
+        let header = self.import_state()?;
 
-        let mut era2 = Era2::open(self.importer_config.path_to_era2.clone())?;
+        // Save execution position
+        let mut execution_position = ExecutionPosition::default();
+        execution_position.update_position(self.evm_db.db.clone(), &header)?;
+
+        // Import last 256 block hashes
+        self.import_last_256_block_hashes(header.number).await?;
+
+        Ok(header)
+    }
+
+    pub fn import_state(&self) -> anyhow::Result<Header> {
+        info!("Importing state from .era2 file");
+
+        let mut era2 = Era2::open(self.config.path_to_era2.clone())?;
         info!("Era2 reader initiated");
         let mut accounts_imported = 0;
         while let Some(account) = era2.next() {
@@ -47,7 +77,7 @@ impl StateImporter {
             } = account;
 
             // Build storage trie
-            let account_db = AccountDB::new(address_hash, self.trin_execution.database.db.clone());
+            let account_db = AccountDB::new(address_hash, self.evm_db.db.clone());
             let mut storage_trie = EthTrie::new(Arc::new(account_db));
             for _ in 0..storage_count {
                 let Some(AccountOrStorageEntry::Storage(storage_entry)) = era2.next() else {
@@ -76,21 +106,16 @@ impl StateImporter {
                 "Code hash mismatch, .era2 import failed"
             );
             if !bytecode.is_empty() {
-                self.trin_execution
-                    .database
-                    .db
-                    .put(keccak256(&bytecode), bytecode.clone())?;
+                self.evm_db.db.put(keccak256(&bytecode), bytecode.clone())?;
             }
 
             // Insert account into state trie
-            self.trin_execution
-                .database
+            self.evm_db
                 .trie
                 .lock()
                 .insert(address_hash.as_slice(), &alloy_rlp::encode(&account_state))?;
 
-            self.trin_execution
-                .database
+            self.evm_db
                 .db
                 .put(address_hash, alloy_rlp::encode(account_state))
                 .expect("Inserting account should never fail");
@@ -99,37 +124,29 @@ impl StateImporter {
             if accounts_imported % 1000 == 0 {
                 info!("Imported {} accounts", accounts_imported);
                 info!("Committing changes to database");
-                self.trin_execution.get_root()?;
+                self.evm_db.trie.lock().root_hash()?;
                 info!("Finished committing changes to database");
             }
         }
 
         // Check if the state root matches, if this fails it means either the .era2 is wrong or we
         // imported the state wrong
-        if era2.header.header.state_root != self.trin_execution.get_root()? {
+        if era2.header.header.state_root != self.evm_db.trie.lock().root_hash()? {
             return Err(Error::msg("State root mismatch, .era2 import failed"));
         }
 
-        // Save execution position
-        self.trin_execution
-            .execution_position
-            .update_position(self.trin_execution.database.db.clone(), &era2.header.header)?;
-
         info!("Done importing State from .era2 file");
 
-        Ok(())
+        Ok(era2.header.header)
     }
 
     /// insert the last 256 block hashes into the database
-    pub async fn import_last_256_block_hashes(&mut self) -> anyhow::Result<()> {
-        let first_block_hash_to_add = self
-            .trin_execution
-            .next_block_number()
-            .saturating_sub(BLOCKHASH_SERVE_WINDOW);
+    pub async fn import_last_256_block_hashes(&self, block_number: u64) -> anyhow::Result<()> {
+        let first_block_hash_to_add = block_number.saturating_sub(BLOCKHASH_SERVE_WINDOW);
         let mut era_manager = EraManager::new(first_block_hash_to_add).await?;
-        while era_manager.next_block_number() < self.trin_execution.next_block_number() {
+        while era_manager.next_block_number() < block_number {
             let block = era_manager.get_next_block().await?;
-            self.trin_execution.database.db.put(
+            self.evm_db.db.put(
                 keccak256(B256::from(U256::from(block.header.number))),
                 block.header.hash(),
             )?
