@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use alloy_consensus::EMPTY_ROOT_HASH;
 use alloy_rlp::Decodable;
@@ -67,7 +67,7 @@ impl StateExporter {
         })
     }
 
-    pub fn export(&self) -> anyhow::Result<()> {
+    pub fn export(&self) -> anyhow::Result<PathBuf> {
         info!(
             "Exporting state from block number: {} with state root: {}",
             self.header.number, self.header.state_root
@@ -133,7 +133,7 @@ impl StateExporter {
 
         info!("Era2 snapshot exported");
 
-        Ok(())
+        Ok(era2.path().to_path_buf())
     }
 
     pub fn header(&self) -> &Header {
