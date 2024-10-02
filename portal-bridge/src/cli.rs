@@ -157,7 +157,7 @@ pub struct BridgeConfig {
     #[arg(
         default_value_t = DEFAULT_OFFER_LIMIT,
         long = "offer-limit",
-        help = "The maximum number of concurrent offer rpc requests for state bridge."
+        help = "The maximum number of concurrent offer rpc requests. (STATE BRIDGE ONLY)"
     )]
     pub offer_limit: usize,
 
@@ -181,6 +181,60 @@ pub struct BridgeConfig {
         help = "The timeout in seconds is applied from when the request starts connecting until the response body has finished. Also considered a total deadline.",
     )]
     pub request_timeout: u64,
+
+    #[arg(
+        help = "Bridge identifier: 'bridge_id/bridge_total' eg. '1/4' (STATE BRIDGE ONLY)",
+        long = "bridge-id",
+        default_value = "1/1"
+    )]
+    pub bridge_id: BridgeId,
+}
+
+/// Used to identify the bridge amongst a set of bridges,
+/// each responsible for offering a subset of the total content.
+#[derive(Parser, Debug, Clone)]
+pub struct BridgeId {
+    // must be greater than 0
+    pub id: u64,
+    // must be greater than 0
+    pub total: u64,
+}
+
+impl BridgeId {
+    // Returns true if the bridge is responsible for gossiping the content
+    // at the given index. Each bridge is responsible for gossiping 1/n of
+    // the total content, where n is the total number of bridges.
+    pub fn is_selected(&self, index: u64) -> bool {
+        if self.total == 1 {
+            return true;
+        }
+        // offset bridge id by 1 to be compatible with modulo operation
+        index % self.total == (self.id - 1)
+    }
+}
+
+impl FromStr for BridgeId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split('/').collect();
+        if parts.len() != 2 {
+            return Err("Invalid bridge id format".to_string());
+        }
+        let id = parts[0]
+            .parse()
+            .map_err(|_| "Invalid bridge id".to_string())?;
+        let total = parts[1]
+            .parse()
+            .map_err(|_| "Invalid bridge total".to_string())?;
+        if id > total {
+            return Err("Bridge id must be less than or equal to total".to_string());
+        }
+        if id == 0 || total == 0 {
+            return Err("Bridge id and total must each be greater than 0".to_string());
+        }
+        Ok(Self { id, total })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
