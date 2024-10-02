@@ -4341,6 +4341,7 @@ dependencies = [
  "smallvec",
  "ssz_types",
  "stunclient",
+ "tempfile",
  "test-log",
  "thiserror",
  "tokio",
