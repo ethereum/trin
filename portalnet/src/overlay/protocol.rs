@@ -509,13 +509,10 @@ where
     pub async fn send_offer(
         &self,
         enr: Enr,
-        content_key: RawContentKey,
-        content_value: Vec<u8>,
+        content_items: Vec<(RawContentKey, Vec<u8>)>,
     ) -> Result<Accept, OverlayRequestError> {
         // Construct the request.
-        let request = Request::PopulatedOffer(PopulatedOffer {
-            content_items: vec![(content_key, content_value)],
-        });
+        let request = Request::PopulatedOffer(PopulatedOffer { content_items });
 
         let direction = RequestDirection::Outgoing {
             destination: enr.clone(),

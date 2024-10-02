@@ -181,13 +181,15 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
     target
         .offer(
             fresh_enr.clone(),
-            header_key_2.clone(),
-            header_value_2.encode(),
+            vec![(header_key_2.clone(), header_value_2.encode())],
         )
         .await
         .unwrap();
     target
-        .offer(fresh_enr.clone(), body_key_2.clone(), body_value_2.encode())
+        .offer(
+            fresh_enr.clone(),
+            vec![(body_key_2.clone(), body_value_2.encode())],
+        )
         .await
         .unwrap();
 

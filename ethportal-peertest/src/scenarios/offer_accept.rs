@@ -81,8 +81,7 @@ pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     let result = target
         .offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
-            content_key.clone(),
-            content_value.encode(),
+            vec![(content_key.clone(), content_value.encode())],
         )
         .await
         .unwrap();
@@ -144,8 +143,7 @@ pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) 
     target
         .offer(
             peertest.bootnode.enr.clone(),
-            content_key.clone(),
-            content_value.encode(),
+            vec![(content_key.clone(), content_value.encode())],
         )
         .await
         .unwrap();
@@ -221,8 +219,7 @@ pub async fn test_offer_propagates_gossip_multiple_content_values(
     target
         .offer(
             peertest.bootnode.enr.clone(),
-            header_key.clone(),
-            header_value.encode(),
+            vec![(header_key.clone(), header_value.encode())],
         )
         .await
         .unwrap();

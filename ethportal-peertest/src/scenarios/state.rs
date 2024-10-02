@@ -63,8 +63,7 @@ async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &Peerte
     StateNetworkApiClient::offer(
         target,
         peer.enr.clone(),
-        fixture.key.clone(),
-        fixture.raw_offer_value.clone(),
+        vec![(fixture.key.clone(), fixture.raw_offer_value.clone())],
     )
     .await
     .unwrap();

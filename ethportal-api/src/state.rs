@@ -94,19 +94,18 @@ pub trait StateNetworkApi {
         content_value: RawContentValue,
     ) -> RpcResult<TraceGossipInfo>;
 
-    /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
-    /// Does not store the content locally.
+    /// Send an OFFER request with given ContentItems, to the designated peer and wait for a
+    /// response. Does not store the content locally.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist
     /// receive.
     #[method(name = "stateOffer")]
     async fn offer(
         &self,
         enr: Enr,
-        content_key: StateContentKey,
-        content_value: RawContentValue,
+        content_items: Vec<(StateContentKey, RawContentValue)>,
     ) -> RpcResult<AcceptInfo>;
 
-    /// Send an OFFER request with given ContentKey, to the designated peer.
+    /// Send an OFFER request with given ContentItems, to the designated peer.
     /// Does not store the content locally.
     /// Returns trace info for offer.
     #[method(name = "stateTraceOffer")]
