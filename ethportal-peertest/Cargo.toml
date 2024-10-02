@@ -15,6 +15,7 @@ alloy-primitives = { workspace = true, features = ["getrandom"] }
 alloy-rlp.workspace = true
 anyhow.workspace = true
 discv5.workspace = true
+e2store.workspace = true
 ethereum_ssz.workspace = true
 ethportal-api.workspace = true
 futures.workspace = true

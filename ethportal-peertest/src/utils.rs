@@ -29,7 +29,7 @@ where
     Fut: Future<Output = Result<O>>,
 {
     // If content is absent an error will be returned.
-    for counter in 0..60 {
+    for counter in 0..10 {
         let result = f().await;
         match result {
             Ok(val) => return val,

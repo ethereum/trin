@@ -2235,6 +2235,7 @@ dependencies = [
  "alloy-rlp",
  "anyhow",
  "discv5",
+ "e2store",
  "ethereum_ssz",
  "ethportal-api",
  "futures",
