@@ -1,149 +1,35 @@
 use alloy_primitives::U256;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use delay_map::HashMapDelay;
 use discv5::enr::NodeId;
-use futures::{channel::oneshot, StreamExt};
-use thiserror::Error;
-use tokio::{
-    sync::mpsc,
-    time::{Duration, Instant},
-};
-use tracing::{error, info, warn};
-
-use crate::cli::{BridgeConfig, ClientType};
 use ethportal_api::{
     generate_random_remote_enr,
     jsonrpsee::http_client::HttpClient,
     types::{
         distance::{Distance, Metric, XorMetric},
+        network::Subnetwork,
         portal::PongInfo,
     },
-    BeaconContentKey, BeaconNetworkApiClient, Enr, HistoryContentKey, HistoryNetworkApiClient,
-    OverlayContentKey, StateContentKey, StateNetworkApiClient,
+    BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, StateNetworkApiClient,
 };
+use rand::seq::IteratorRandom;
+use tokio::time::{Duration, Instant};
+use tracing::{error, info, warn};
 
-#[derive(Error, Debug)]
-pub enum CensusError {
-    #[error("No peers found in Census")]
-    NoPeers,
-    #[error("Failed to initialize Census")]
-    FailedInitialization,
-}
+use crate::{
+    census::CensusError,
+    cli::{BridgeConfig, ClientType},
+};
 
 /// Ping delay for liveness check of peers in census
 /// One hour was chosen after 2mins was too slow, and can be adjusted
 /// in the future based on performance
 const LIVENESS_CHECK_DELAY: Duration = Duration::from_secs(3600);
 
-/// The maximum number of enrs to return in a response,
-/// limiting the number of OFFER requests spawned by the bridge
-/// for each piece of content
-pub const ENR_OFFER_LIMIT: usize = 4;
-
-/// The census is responsible for maintaining a list of known peers in the network,
-/// checking their liveness, updating their data radius, iterating through their
-/// rfn to find new peers, and providing interested enrs for a given content key.
-pub struct Census {
-    history: Network,
-    state: Network,
-    beacon: Network,
-    census_rx: mpsc::UnboundedReceiver<EnrsRequest>,
-}
-
-impl Census {
-    pub fn new(
-        client: HttpClient,
-        census_rx: mpsc::UnboundedReceiver<EnrsRequest>,
-        bridge_config: &BridgeConfig,
-    ) -> Self {
-        Self {
-            history: Network::new(client.clone(), Subnetwork::History, bridge_config),
-            state: Network::new(client.clone(), Subnetwork::State, bridge_config),
-            beacon: Network::new(client.clone(), Subnetwork::Beacon, bridge_config),
-            census_rx,
-        }
-    }
-}
-
-impl Census {
-    pub async fn init(&mut self) -> Result<(), CensusError> {
-        // currently, the census is only initialized for the state network
-        // only initialized networks will yield inside `run()` loop
-        self.state.init().await;
-        if self.state.peers.is_empty() {
-            return Err(CensusError::FailedInitialization);
-        }
-        Ok(())
-    }
-
-    pub async fn run(&mut self) {
-        loop {
-            // Randomly selects between what available task is ready
-            // and executes it. Ensures that the census will continue
-            // to update while it handles a stream of enr requests.
-            tokio::select! {
-                // handle enrs request
-                Some(request) = self.census_rx.recv() => {
-                    match self.get_interested_enrs(request.content_key).await {
-                        Ok(enrs) => {
-                            if let Err(err) = request.resp_tx.send(enrs) {
-                                error!("Error sending enrs response: {err:?}");
-                            }
-                        }
-                        Err(_) => {
-                            error!("No peers found in census, restarting initialization.");
-                            self.state.init().await;
-                            if let Err(err) = request.resp_tx.send(Vec::new()) {
-                                error!("Error sending enrs response: {err:?}");
-                            }
-                        }
-                    }
-                }
-                Some(Ok(known_enr)) = self.history.peers.next() => {
-                    self.history.process_enr(known_enr.1.0).await;
-                    info!("Updated history census: found peers: {}", self.history.peers.len());
-                }
-                // yield next known state peer and ping for liveness
-                Some(Ok(known_enr)) = self.state.peers.next() => {
-                    self.state.process_enr(known_enr.1.0).await;
-                    info!("Updated state census: found peers: {}", self.state.peers.len());
-                }
-                Some(Ok(known_enr)) = self.beacon.peers.next() => {
-                    self.beacon.process_enr(known_enr.1.0).await;
-                    info!("Updated beacon census: found peers: {}", self.beacon.peers.len());
-                }
-            }
-        }
-    }
-
-    pub async fn get_interested_enrs(
-        &self,
-        content_key: ContentKey,
-    ) -> Result<Vec<Enr>, CensusError> {
-        match content_key {
-            ContentKey::History(content_key) => {
-                self.history
-                    .get_interested_enrs(content_key.content_id())
-                    .await
-            }
-            ContentKey::State(content_key) => {
-                self.state
-                    .get_interested_enrs(content_key.content_id())
-                    .await
-            }
-            ContentKey::Beacon(content_key) => {
-                self.beacon
-                    .get_interested_enrs(content_key.content_id())
-                    .await
-            }
-        }
-    }
-}
-
 /// The network struct is responsible for maintaining a list of known peers
 /// in the given subnetwork.
-struct Network {
-    peers: HashMapDelay<[u8; 32], (Enr, Distance)>,
+pub struct Network {
+    pub peers: HashMapDelay<[u8; 32], (Enr, Distance)>,
     client: HttpClient,
     subnetwork: Subnetwork,
     filter_clients: Vec<ClientType>,
@@ -151,7 +37,14 @@ struct Network {
 }
 
 impl Network {
-    fn new(client: HttpClient, subnetwork: Subnetwork, bridge_config: &BridgeConfig) -> Self {
+    pub fn new(client: HttpClient, subnetwork: Subnetwork, bridge_config: &BridgeConfig) -> Self {
+        if !matches!(
+            subnetwork,
+            Subnetwork::History | Subnetwork::Beacon | Subnetwork::State
+        ) {
+            panic!("Unsupported subnetwork: {subnetwork}");
+        }
+
         Self {
             peers: HashMapDelay::new(LIVENESS_CHECK_DELAY),
             client,
@@ -168,7 +61,7 @@ impl Network {
     // the initialization process to be considered complete after it has found ~100% of the network
     // peers. However, since the census continues to iterate through the peers after initialization,
     // the initialization is just to reach a critical mass of peers so that gossip can begin.
-    async fn init(&mut self) {
+    pub async fn init(&mut self) {
         match self.filter_clients.is_empty() {
             true => info!("Initializing {} network census", self.subnetwork),
             false => info!(
@@ -178,7 +71,6 @@ impl Network {
         }
         let (_, random_enr) = generate_random_remote_enr();
         let Ok(initial_enrs) = self
-            .subnetwork
             .recursive_find_nodes(&self.client, random_enr.node_id())
             .await
         else {
@@ -206,7 +98,7 @@ impl Network {
 
     /// Only processes an enr (iterating through its rfn) if the enr's
     /// liveness delay has expired
-    async fn process_enr(&mut self, enr: Enr) {
+    pub async fn process_enr(&mut self, enr: Enr) {
         // ping for liveliness check
         if !self.liveness_check(enr.clone()).await {
             return;
@@ -214,7 +106,6 @@ impl Network {
         // iterate peers routing table via rfn over various distances
         for distance in 245..257 {
             let Ok(result) = self
-                .subnetwork
                 .find_nodes(&self.client, enr.clone(), vec![distance])
                 .await
             else {
@@ -230,7 +121,7 @@ impl Network {
     // Only perform liveness check on enrs if their deadline is up,
     // since the same enr might appear multiple times between the
     // routing tables of different peers.
-    async fn liveness_check(&mut self, enr: Enr) -> bool {
+    pub async fn liveness_check(&mut self, enr: Enr) -> bool {
         // skip if client type is filtered
         let client_type = ClientType::from(&enr);
         if self.filter_clients.contains(&client_type) {
@@ -244,7 +135,7 @@ impl Network {
             }
         }
 
-        match self.subnetwork.ping(&self.client, enr.clone()).await {
+        match self.ping(&self.client, enr.clone()).await {
             Ok(pong_info) => {
                 let data_radius = Distance::from(U256::from(pong_info.data_radius));
                 self.peers.insert(enr.node_id().raw(), (enr, data_radius));
@@ -258,7 +149,7 @@ impl Network {
     }
 
     // Look up all known interested enrs for a given content id
-    async fn get_interested_enrs(&self, content_id: [u8; 32]) -> Result<Vec<Enr>, CensusError> {
+    pub fn get_interested_enrs(&self, content_id: [u8; 32]) -> Result<Vec<Enr>, CensusError> {
         if self.peers.is_empty() {
             error!(
                 "No known peers in {} census, unable to offer.",
@@ -277,36 +168,15 @@ impl Network {
                     None
                 }
             })
-            .take(self.enr_offer_limit)
-            .collect())
+            .choose_multiple(&mut rand::thread_rng(), self.enr_offer_limit))
     }
-}
 
-/// The subnetwork enum represents the different subnetworks that the census
-/// can operate on, and forwards requests to each respective overlay network.
-#[derive(Debug)]
-enum Subnetwork {
-    History,
-    State,
-    Beacon,
-}
-
-impl std::fmt::Display for Subnetwork {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Subnetwork::History => write!(f, "history"),
-            Subnetwork::State => write!(f, "state"),
-            Subnetwork::Beacon => write!(f, "beacon"),
-        }
-    }
-}
-
-impl Subnetwork {
     async fn ping(&self, client: &HttpClient, enr: Enr) -> anyhow::Result<PongInfo> {
-        let result = match self {
+        let result = match self.subnetwork {
             Subnetwork::History => HistoryNetworkApiClient::ping(client, enr).await,
             Subnetwork::State => StateNetworkApiClient::ping(client, enr).await,
             Subnetwork::Beacon => BeaconNetworkApiClient::ping(client, enr).await,
+            _ => bail!("Unsupported subnetwork: {}", self.subnetwork),
         };
         result.map_err(|e| anyhow!(e))
     }
@@ -317,12 +187,13 @@ impl Subnetwork {
         enr: Enr,
         distances: Vec<u16>,
     ) -> anyhow::Result<Vec<Enr>> {
-        let result = match self {
+        let result = match self.subnetwork {
             Subnetwork::History => {
                 HistoryNetworkApiClient::find_nodes(client, enr, distances).await
             }
             Subnetwork::State => StateNetworkApiClient::find_nodes(client, enr, distances).await,
             Subnetwork::Beacon => BeaconNetworkApiClient::find_nodes(client, enr, distances).await,
+            _ => bail!("Unsupported subnetwork: {}", self.subnetwork),
         };
         result.map_err(|e| anyhow!(e))
     }
@@ -332,7 +203,7 @@ impl Subnetwork {
         client: &HttpClient,
         node_id: NodeId,
     ) -> anyhow::Result<Vec<Enr>> {
-        let result = match self {
+        let result = match self.subnetwork {
             Subnetwork::History => {
                 HistoryNetworkApiClient::recursive_find_nodes(client, node_id).await
             }
@@ -340,19 +211,8 @@ impl Subnetwork {
             Subnetwork::Beacon => {
                 BeaconNetworkApiClient::recursive_find_nodes(client, node_id).await
             }
+            _ => bail!("Unsupported subnetwork: {}", self.subnetwork),
         };
         result.map_err(|e| anyhow!(e))
     }
-}
-
-pub struct EnrsRequest {
-    pub content_key: ContentKey,
-    pub resp_tx: oneshot::Sender<Vec<Enr>>,
-}
-
-#[derive(Debug, Clone)]
-pub enum ContentKey {
-    History(HistoryContentKey),
-    State(StateContentKey),
-    Beacon(BeaconContentKey),
 }
