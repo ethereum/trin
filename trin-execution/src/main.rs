@@ -1,7 +1,5 @@
 use clap::Parser;
-use revm_primitives::SpecId;
 use tracing::info;
-use trin_evm::spec_id::get_spec_block_number;
 use trin_execution::{
     cli::{TrinExecutionConfig, TrinExecutionSubCommands},
     era::manager::EraManager,
@@ -11,6 +9,7 @@ use trin_execution::{
 use trin_utils::{dir::setup_data_dir, log::init_tracing_logger};
 
 const APP_NAME: &str = "trin-execution";
+const LATEST_BLOCK: u64 = 20_868_946;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -63,9 +62,7 @@ async fn main() -> anyhow::Result<()> {
         tx.send(()).expect("signal ctrl_c should never fail");
     });
 
-    let last_block = trin_execution_config
-        .last_block
-        .unwrap_or(get_spec_block_number(SpecId::CANCUN));
+    let last_block = trin_execution_config.last_block.unwrap_or(LATEST_BLOCK);
     trin_execution
         .process_range_of_blocks(last_block, Some(rx))
         .await?;
