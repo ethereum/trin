@@ -15,6 +15,11 @@ async fn main() -> anyhow::Result<()> {
 
     let trin_execution_config = TrinExecutionConfig::parse();
 
+    // Initialize prometheus metrics
+    if let Some(addr) = trin_execution_config.enable_metrics_with_url {
+        prometheus_exporter::start(addr)?;
+    }
+
     let data_dir = setup_data_dir(
         APP_NAME,
         trin_execution_config.data_dir.clone(),
@@ -43,11 +48,6 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
         }
-    }
-
-    // Initialize prometheus metrics
-    if let Some(addr) = trin_execution_config.enable_metrics_with_url {
-        prometheus_exporter::start(addr)?;
     }
 
     let mut trin_execution =
