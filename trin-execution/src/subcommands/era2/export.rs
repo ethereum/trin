@@ -7,7 +7,7 @@ use alloy_consensus::EMPTY_ROOT_HASH;
 use alloy_rlp::Decodable;
 use anyhow::ensure;
 use e2store::era2::{
-    AccountEntry, AccountOrStorageEntry, Era2, StorageEntry, StorageItem, MAX_STORAGE_ITEMS,
+    AccountEntry, AccountOrStorageEntry, Era2Writer, StorageEntry, StorageItem, MAX_STORAGE_ITEMS,
 };
 use eth_trie::{EthTrie, Trie};
 use ethportal_api::{types::state_trie::account_state::AccountState, Header};
@@ -69,7 +69,7 @@ impl StateExporter {
             "Exporting state from block number: {} with state root: {}",
             self.header.number, self.header.state_root
         );
-        let mut era2 = Era2::create(self.config.path_to_era2.clone(), self.header.clone())?;
+        let mut era2 = Era2Writer::new(&self.config.path_to_era2, self.header.clone())?;
         info!("Era2 initiated");
         info!("Trie leaf iterator initiated");
         let mut accounts_exported = 0;
@@ -127,6 +127,8 @@ impl StateExporter {
                 info!("Processed {} accounts", accounts_exported);
             }
         }
+
+        era2.flush()?;
 
         info!("Era2 snapshot exported");
 

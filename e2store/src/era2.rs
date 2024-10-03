@@ -1,3 +1,30 @@
+//! The format for storing full flat state snapshots.
+//!
+//! Filename:
+//!
+//! ```text
+//! <network-name>-<block-number>-<short-state-root>.era2
+//! ```
+//!
+//! Type definitions:
+//!
+//! ```text
+//! era2 := Version | CompressedHeader | account*
+//! account :=  CompressedAccount | CompressedStorage*
+//!
+//! Version             = { type: 0x3265, data: nil }
+//! CompressedHeader    = { type: 0x03,   data: snappyFramed(rlp(header)) }
+//! CompressedAccount   = { type: 0x08,   data: snappyFramed(rlp(Account)) }
+//! CompressedStorage   = { type: 0x09,   data: snappyFramed(rlp(Vec<StorageItem>)) }
+//!
+//! Account             = { address_hash, AccountState, raw_bytecode, storage_entry_count }
+//! AccountState        = { nonce, balance, storage_root, code_hash }
+//! StorageItem         = { storage_index_hash, value }
+//! ```
+//!
+//! CompressedStorage can have a max of 10 million storage items, records must be filled before
+//! creating a new one, and must be sorted by storage_index_hash across all entries.
+
 use std::{
     fs,
     io::{ErrorKind, Read, Write},
@@ -12,7 +39,7 @@ use ethportal_api::types::{execution::header::Header, state_trie::account_state:
 
 use crate::{
     e2store::{
-        stream::E2StoreStream,
+        stream::{E2StoreStreamReader, E2StoreStreamWriter},
         types::{Entry, VersionEntry},
     },
     types::HeaderEntry,
@@ -21,52 +48,22 @@ use crate::{
 
 pub const MAX_STORAGE_ITEMS: usize = 10_000_000;
 
-// <network-name>-<block-number>-<short-state-root>.era2
-//
-// era2 := Version | CompressedHeader | account*
-// account :=  CompressedAccount | CompressedStorage*
-// -----
-// Version                     = { type: 0x3265, data: nil }
-// CompressedHeader            = { type: 0x03,   data: snappyFramed(rlp(header)) }
-// CompressedAccount           = { type: 0x08,   data: snappyFramed(rlp(address_hash, rlp(nonce,
-// balance, storage_root, code_hash), raw_bytecode, storage_entry_count)) }
-// CompressedStorage           = { type: 0x09,   data: snappyFramed(rlp(Vec<StorageItem {
-// storage_index_hash, value }>)) }
-// -----
-// CompressedStorage can have a max of 10 million storage items, records must be filled before
-// creating a new one, and must be sorted by storage_index_hash across all entries.
-
-/// Represents an era2 `Era2` state snapshot.
-/// Unlike era1, not all fields will be stored in the struct, account's will be streamed from an
-/// iterator as needed.
-pub struct Era2 {
+/// The `Era2` streaming writer.
+///
+/// Unlike [crate::era::Era] and [crate::era1::Era1], the `Era2` files are too big to be held in
+/// memory.
+pub struct Era2Writer {
     pub version: VersionEntry,
     pub header: HeaderEntry,
 
-    /// e2store_stream, manages the interactions between the era2 state snapshot
-    e2store_stream: E2StoreStream,
+    writer: E2StoreStreamWriter,
     pending_storage_entries: u32,
     path: PathBuf,
 }
 
-impl Era2 {
-    pub fn open(path: PathBuf) -> anyhow::Result<Self> {
-        let mut e2store_stream = E2StoreStream::open(&path)?;
-
-        let version = VersionEntry::try_from(&e2store_stream.next_entry()?)?;
-        let header = HeaderEntry::try_from(&e2store_stream.next_entry()?)?;
-
-        Ok(Self {
-            version,
-            header,
-            e2store_stream,
-            pending_storage_entries: 0,
-            path,
-        })
-    }
-
-    pub fn create(path: PathBuf, header: Header) -> anyhow::Result<Self> {
-        fs::create_dir_all(&path)?;
+impl Era2Writer {
+    pub fn new(path: &Path, header: Header) -> anyhow::Result<Self> {
+        fs::create_dir_all(path)?;
         ensure!(path.is_dir(), "era2 path is not a directory: {:?}", path);
         let path = path.join(format!(
             "mainnet-{:010}-{}.era2",
@@ -74,18 +71,18 @@ impl Era2 {
             hex::encode(&header.state_root.as_slice()[..4])
         ));
         ensure!(!path.exists(), "era2 file already exists: {:?}", path);
-        let mut e2store_stream = E2StoreStream::create(&path)?;
+        let mut writer = E2StoreStreamWriter::new(&path)?;
 
         let version = VersionEntry::default();
-        e2store_stream.append_entry(&version.clone().into())?;
+        writer.append_entry(&version.clone().into())?;
 
         let header = HeaderEntry { header };
-        e2store_stream.append_entry(&header.clone().try_into()?)?;
+        writer.append_entry(&header.clone().try_into()?)?;
 
         Ok(Self {
             version,
             header,
-            e2store_stream,
+            writer,
             pending_storage_entries: 0,
             path,
         })
@@ -105,7 +102,7 @@ impl Era2 {
 
                 self.pending_storage_entries = account.storage_count;
                 let entry: Entry = account.clone().try_into()?;
-                self.e2store_stream.append_entry(&entry)?;
+                self.writer.append_entry(&entry)?;
                 entry.value.len()
             }
             AccountOrStorageEntry::Storage(storage) => {
@@ -123,22 +120,60 @@ impl Era2 {
 
                 self.pending_storage_entries -= 1;
                 let entry: Entry = storage.clone().try_into()?;
-                self.e2store_stream.append_entry(&entry)?;
+                self.writer.append_entry(&entry)?;
                 entry.value.len()
             }
         };
         Ok(size)
     }
+
+    pub fn flush(&mut self) -> anyhow::Result<()> {
+        self.writer.flush()
+    }
 }
 
-impl Iterator for Era2 {
+/// The `Era2` streaming reader.
+///
+/// Unlike [crate::era::Era] and [crate::era1::Era1], the `Era2` files are too big to be held in
+/// memory.
+pub struct Era2Reader {
+    pub version: VersionEntry,
+    pub header: HeaderEntry,
+
+    reader: E2StoreStreamReader,
+    pending_storage_entries: u32,
+    path: PathBuf,
+}
+
+impl Era2Reader {
+    pub fn new(path: &Path) -> anyhow::Result<Self> {
+        let mut reader = E2StoreStreamReader::new(path)?;
+
+        let version = VersionEntry::try_from(&reader.next_entry()?)?;
+        let header = HeaderEntry::try_from(&reader.next_entry()?)?;
+
+        Ok(Self {
+            version,
+            header,
+            reader,
+            pending_storage_entries: 0,
+            path: path.to_path_buf(),
+        })
+    }
+
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
+    }
+}
+
+impl Iterator for Era2Reader {
     type Item = AccountOrStorageEntry;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.pending_storage_entries > 0 {
             self.pending_storage_entries -= 1;
 
-            let raw_storage_entry = match self.e2store_stream.next_entry() {
+            let raw_storage_entry = match self.reader.next_entry() {
                 Ok(raw_storage_entry) => raw_storage_entry,
                 Err(err) => panic!("Failed to read next storage entry: {:?}", err),
             };
@@ -150,7 +185,7 @@ impl Iterator for Era2 {
             return Some(AccountOrStorageEntry::Storage(storage_entry));
         }
 
-        let raw_account_entry = match self.e2store_stream.next_entry() {
+        let raw_account_entry = match self.reader.next_entry() {
             Ok(raw_account_entry) => raw_account_entry,
             Err(err) => match err {
                 // If we read to the end of the error file we should get this
@@ -280,7 +315,7 @@ impl TryFrom<StorageEntry> for Entry {
 #[cfg(test)]
 mod tests {
     use alloy_primitives::{Address, Bloom, B64};
-    use tempfile::TempDir;
+    use trin_utils::dir::create_temp_test_dir;
 
     use crate::e2store::types::VersionEntry;
 
@@ -289,8 +324,7 @@ mod tests {
     #[test]
     fn test_era2_stream_write_and_read() -> anyhow::Result<()> {
         // setup
-        let tmp_dir = TempDir::new()?;
-        let tmp_path = tmp_dir.as_ref().to_path_buf();
+        let tmp_dir = create_temp_test_dir()?;
 
         // create fake execution block header
         let header = Header {
@@ -317,14 +351,14 @@ mod tests {
         };
 
         // create a new e2store file and write some data to it
-        let mut era2_write_file = Era2::create(tmp_path.clone(), header.clone())?;
+        let mut era2_writer = Era2Writer::new(tmp_dir.path(), header.clone())?;
 
-        let tmp_path = tmp_path.join(format!(
+        let era2_path = tmp_dir.path().join(format!(
             "mainnet-{:010}-{}.era2",
             header.number,
             hex::encode(&header.state_root.as_slice()[..4])
         ));
-        assert_eq!(era2_write_file.path(), tmp_path.as_path());
+        assert_eq!(era2_writer.path(), era2_path);
 
         let account = AccountOrStorageEntry::Account(AccountEntry {
             address_hash: B256::default(),
@@ -333,35 +367,37 @@ mod tests {
             storage_count: 1,
         });
 
-        assert_eq!(era2_write_file.pending_storage_entries, 0);
-        let size = era2_write_file.append_entry(&account)?;
+        assert_eq!(era2_writer.pending_storage_entries, 0);
+        let size = era2_writer.append_entry(&account)?;
         assert_eq!(size, 101);
-        assert_eq!(era2_write_file.pending_storage_entries, 1);
+        assert_eq!(era2_writer.pending_storage_entries, 1);
 
         let storage = AccountOrStorageEntry::Storage(StorageEntry(vec![StorageItem {
             storage_index_hash: B256::default(),
             value: U256::default(),
         }]));
 
-        let size = era2_write_file.append_entry(&storage)?;
+        let size = era2_writer.append_entry(&storage)?;
         assert_eq!(size, 29);
-        assert_eq!(era2_write_file.pending_storage_entries, 0);
+        assert_eq!(era2_writer.pending_storage_entries, 0);
+        era2_writer.flush()?;
+        drop(era2_writer);
 
         // read results and see if they match
-        let mut era2_read_file = Era2::open(tmp_path.clone())?;
-        assert_eq!(era2_read_file.path(), tmp_path.as_path());
+        let mut era2_reader = Era2Reader::new(&era2_path)?;
+        assert_eq!(era2_reader.path(), &era2_path);
 
         let default_version_entry = VersionEntry::default();
-        assert_eq!(era2_read_file.version, default_version_entry);
-        assert_eq!(era2_read_file.header, HeaderEntry { header });
-        assert_eq!(era2_read_file.pending_storage_entries, 0);
-        let read_account_tuple = era2_read_file.next().unwrap();
+        assert_eq!(era2_reader.version, default_version_entry);
+        assert_eq!(era2_reader.header, HeaderEntry { header });
+        assert_eq!(era2_reader.pending_storage_entries, 0);
+        let read_account_tuple = era2_reader.next().unwrap();
         assert_eq!(account, read_account_tuple);
-        assert_eq!(era2_read_file.pending_storage_entries, 1);
+        assert_eq!(era2_reader.pending_storage_entries, 1);
 
-        let read_storage_tuple = era2_read_file.next().unwrap();
+        let read_storage_tuple = era2_reader.next().unwrap();
         assert_eq!(storage, read_storage_tuple);
-        assert_eq!(era2_read_file.pending_storage_entries, 0);
+        assert_eq!(era2_reader.pending_storage_entries, 0);
 
         // cleanup
         tmp_dir.close()?;

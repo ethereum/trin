@@ -1,7 +1,7 @@
 use std::{path::Path, sync::Arc};
 
 use anyhow::{ensure, Error};
-use e2store::era2::{AccountEntry, AccountOrStorageEntry, Era2, StorageItem};
+use e2store::era2::{AccountEntry, AccountOrStorageEntry, Era2Reader, StorageItem};
 use eth_trie::{EthTrie, Trie};
 use ethportal_api::Header;
 use revm_primitives::{keccak256, B256, U256};
@@ -56,7 +56,7 @@ impl StateImporter {
     pub fn import_state(&self) -> anyhow::Result<Header> {
         info!("Importing state from .era2 file");
 
-        let mut era2 = Era2::open(self.config.path_to_era2.clone())?;
+        let mut era2 = Era2Reader::new(&self.config.path_to_era2)?;
         info!("Era2 reader initiated");
         let mut accounts_imported = 0;
         while let Some(account) = era2.next() {
