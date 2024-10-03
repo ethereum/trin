@@ -1,13 +1,14 @@
 use anyhow::anyhow;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use ethportal_api::RawContentValue;
 use std::io::{Read, Write};
 
 /// Decode content values from uTP payload. All content values are encoded with a LEB128 varint
 /// prefix which indicates the length in bytes of the consecutive content item.
-pub fn decode_content_payload(payload: Vec<u8>) -> anyhow::Result<Vec<Vec<u8>>> {
+pub fn decode_content_payload(payload: RawContentValue) -> anyhow::Result<Vec<RawContentValue>> {
     let mut payload = BytesMut::from(&payload[..]).reader();
 
-    let mut content_values: Vec<Vec<u8>> = Vec::new();
+    let mut content_values: Vec<RawContentValue> = Vec::new();
 
     // Read LEB128 encoded index and content items until all payload bytes are consumed
     while !payload.get_ref().is_empty() {
@@ -23,7 +24,7 @@ pub fn decode_content_payload(payload: Vec<u8>) -> anyhow::Result<Vec<Vec<u8>>> 
         payload
             .read_exact(&mut buf)
             .map_err(|err| anyhow!("Error reading content item: {err}"))?;
-        content_values.push(buf);
+        content_values.push(buf.into());
     }
     Ok(content_values)
 }

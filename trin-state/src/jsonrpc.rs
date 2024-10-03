@@ -194,7 +194,7 @@ async fn find_content(
 ) -> Result<Value, String> {
     let result = network
     .overlay
-    .send_find_content(enr, content_key.to_bytes().to_vec())
+    .send_find_content(enr, content_key.to_bytes())
     .await
     .and_then(|(content, utp_transfer)| match content {
         Content::ConnectionId(id) => Err(OverlayRequestError::Failure(format!(
@@ -244,6 +244,7 @@ async fn get_content(
             .overlay
             .lookup_content(content_key.clone(), is_trace)
             .await
+            .map(|result| result.map(|(bytes, a, b)| (bytes.to_vec(), a, b)))
             .map_err(|err| err.to_string())?
             .map_err(|err| match err {
                 OverlayRequestError::ContentNotFound {
@@ -330,7 +331,7 @@ async fn trace_offer(
         "TraceOffer",
         network
             .overlay
-            .send_offer_trace(enr, content_key.to_bytes(), content_value.encode().to_vec())
+            .send_offer_trace(enr, content_key.to_bytes(), content_value.encode())
             .await,
     )
 }
@@ -345,13 +346,13 @@ async fn gossip(
         Ok(json!(
             network
                 .overlay
-                .propagate_gossip_trace(content_key, content_value.encode().to_vec())
+                .propagate_gossip_trace(content_key, content_value.encode())
                 .await
         ))
     } else {
         Ok(network
             .overlay
-            .propagate_gossip(vec![(content_key, content_value.encode().to_vec())])
+            .propagate_gossip(vec![(content_key, content_value.encode())])
             .into())
     }
 }

@@ -1,4 +1,4 @@
-use ethportal_api::types::content_key::overlay::IdentityContentKey;
+use ethportal_api::{types::content_key::overlay::IdentityContentKey, RawContentValue};
 
 /// The result of the content key/value validation.
 #[derive(Debug, PartialEq, Eq)]
@@ -14,7 +14,7 @@ pub struct ValidationResult<TContentKey> {
     /// key/value). This is used for Recursive Gossip in the state network (see [specs](
     /// https://github.com/ethereum/portal-network-specs/blob/04cc360179aeda179e0b1cac6fea900a74e87f2b/state-network.md#gossip
     /// ) for details.).
-    pub additional_content_to_propagate: Option<(TContentKey, Vec<u8>)>,
+    pub additional_content_to_propagate: Option<(TContentKey, RawContentValue)>,
 }
 
 impl<TContentKey> ValidationResult<TContentKey> {
@@ -27,7 +27,7 @@ impl<TContentKey> ValidationResult<TContentKey> {
 
     pub fn new_with_additional_content_to_propagate(
         additional_content_key: TContentKey,
-        additional_content_value: Vec<u8>,
+        additional_content_value: RawContentValue,
     ) -> Self {
         Self {
             valid_for_storing: true,

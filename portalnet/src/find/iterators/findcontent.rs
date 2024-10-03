@@ -31,6 +31,7 @@ use std::{
 
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use discv5::kbucket::{Distance, Key};
+use ethportal_api::RawContentValue;
 use tracing::warn;
 
 use super::{
@@ -40,7 +41,7 @@ use super::{
 
 pub enum FindContentQueryResponse<TNodeId> {
     ClosestNodes(Vec<TNodeId>),
-    Content(Vec<u8>),
+    Content(RawContentValue),
     ConnectionId(u16),
 }
 
@@ -51,7 +52,7 @@ pub enum FindContentQueryPending<TNodeId> {
     NonePending,
     /// Content returned, but not yet validated.
     PendingContent {
-        content: Vec<u8>,
+        content: RawContentValue,
         nodes_to_poke: Vec<TNodeId>,
         // peer that sent the content
         peer: TNodeId,
@@ -78,14 +79,14 @@ pub enum FindContentQueryResult<TNodeId> {
 /// Content proposed by a peer, which has not been validated
 #[derive(Debug, Clone)]
 enum UnvalidatedContent {
-    Content(Vec<u8>),
+    Content(RawContentValue),
     Connection(u16),
 }
 
 #[derive(Debug, Clone)]
 pub struct ValidatedContent<TNodeId> {
     /// The body of the content
-    pub content: Vec<u8>,
+    pub content: RawContentValue,
     /// Was the content transferred via uTP?
     pub was_utp_transfer: bool,
     /// Which peer sent the content that was validated?
