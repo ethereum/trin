@@ -69,6 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             portal_client.clone(),
             bridge_config.offer_limit,
             census_tx,
+            bridge_config.bridge_id,
         )
         .await?;
 

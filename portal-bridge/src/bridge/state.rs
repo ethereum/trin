@@ -33,6 +33,7 @@ use trin_utils::dir::create_temp_dir;
 use crate::{
     bridge::history::SERVE_BLOCK_TIMEOUT,
     census::{ContentKey, EnrsRequest},
+    cli::BridgeId,
     types::mode::{BridgeMode, ModeType},
 };
 
@@ -47,6 +48,8 @@ pub struct StateBridge {
     census_tx: mpsc::UnboundedSender<EnrsRequest>,
     // Global offer report for tallying total performance of state bridge
     global_offer_report: Arc<Mutex<GlobalOfferReport>>,
+    // Bridge id used to determine which content keys to gossip
+    bridge_id: BridgeId,
 }
 
 impl StateBridge {
@@ -55,6 +58,7 @@ impl StateBridge {
         portal_client: HttpClient,
         offer_limit: usize,
         census_tx: mpsc::UnboundedSender<EnrsRequest>,
+        bridge_id: BridgeId,
     ) -> anyhow::Result<Self> {
         let metrics = BridgeMetricsReporter::new("state".to_string(), &format!("{mode:?}"));
         let offer_semaphore = Arc::new(Semaphore::new(offer_limit));
@@ -66,6 +70,7 @@ impl StateBridge {
             offer_semaphore,
             census_tx,
             global_offer_report: Arc::new(Mutex::new(global_offer_report)),
+            bridge_id,
         })
     }
 
@@ -155,11 +160,14 @@ impl StateBridge {
         let walk_diff = TrieWalker::new(root_with_trie_diff.root, root_with_trie_diff.trie_diff);
 
         // gossip block's new state transitions
+        let mut content_idx = 0;
         for node in walk_diff.nodes.keys() {
             let account_proof = walk_diff.get_proof(*node);
 
             // gossip the account
-            self.gossip_account(&account_proof, block_hash).await?;
+            self.gossip_account(&account_proof, block_hash, content_idx)
+                .await?;
+            content_idx += 1;
 
             let Some(encoded_last_node) = account_proof.proof.last() else {
                 error!("Account proof is empty. This should never happen maybe there is a bug in trie_walker?");
@@ -190,8 +198,10 @@ impl StateBridge {
                     block_hash,
                     account.code_hash,
                     code,
+                    content_idx,
                 )
                 .await?;
+                content_idx += 1;
             }
 
             // gossip contract storage
@@ -201,8 +211,15 @@ impl StateBridge {
 
             for storage_node in storage_walk_diff.nodes.keys() {
                 let storage_proof = storage_walk_diff.get_proof(*storage_node);
-                self.gossip_storage(&account_proof, &storage_proof, address_hash, block_hash)
-                    .await?;
+                self.gossip_storage(
+                    &account_proof,
+                    &storage_proof,
+                    address_hash,
+                    block_hash,
+                    content_idx,
+                )
+                .await?;
+                content_idx += 1;
             }
         }
 
@@ -217,7 +234,12 @@ impl StateBridge {
         &self,
         account_proof: &TrieProof,
         block_hash: B256,
+        content_idx: u64,
     ) -> anyhow::Result<()> {
+        // check if the bridge should gossip the content key
+        if !self.bridge_id.is_selected(content_idx) {
+            return Ok(());
+        }
         let content_key = create_account_content_key(account_proof)?;
         let content_value = create_account_content_value(block_hash, account_proof)?;
         self.spawn_offer_tasks(content_key, content_value).await;
@@ -231,7 +253,12 @@ impl StateBridge {
         block_hash: B256,
         code_hash: B256,
         code: Bytecode,
+        content_idx: u64,
     ) -> anyhow::Result<()> {
+        // check if the bridge should gossip the content key
+        if !self.bridge_id.is_selected(content_idx) {
+            return Ok(());
+        }
         let content_key = create_contract_content_key(address_hash, code_hash)?;
         let content_value = create_contract_content_value(block_hash, account_proof, code)?;
         self.spawn_offer_tasks(content_key, content_value).await;
@@ -244,7 +271,12 @@ impl StateBridge {
         storage_proof: &TrieProof,
         address_hash: B256,
         block_hash: B256,
+        content_idx: u64,
     ) -> anyhow::Result<()> {
+        // check if the bridge should gossip the content key
+        if !self.bridge_id.is_selected(content_idx) {
+            return Ok(());
+        }
         let content_key = create_storage_content_key(storage_proof, address_hash)?;
         let content_value = create_storage_content_value(block_hash, account_proof, storage_proof)?;
         self.spawn_offer_tasks(content_key, content_value).await;

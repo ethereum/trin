@@ -10,7 +10,7 @@ use ethportal_api::{
     utils::bytes::hex_encode,
     Header,
 };
-use portal_bridge::api::execution::ExecutionApi;
+use portal_bridge::{api::execution::ExecutionApi, constants::DEFAULT_TOTAL_REQUEST_TIMEOUT};
 use rand::{
     distributions::{Distribution, Uniform},
     thread_rng,
@@ -68,7 +68,7 @@ pub async fn main() -> Result<()> {
             primary: client_url.clone(),
             fallback: client_url,
             header_validator: HeaderValidator::default(),
-            request_timeout: 20,
+            request_timeout: DEFAULT_TOTAL_REQUEST_TIMEOUT,
         };
         for gossip_range in all_ranges.iter_mut() {
             debug!("Testing range: {gossip_range:?}");
