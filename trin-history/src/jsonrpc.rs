@@ -127,7 +127,9 @@ async fn get_content(
             .await
             .map_err(|err| err.to_string())?
         {
-            Ok((content_bytes, utp_transfer, trace)) => (content_bytes, utp_transfer, trace),
+            Ok((content_bytes, utp_transfer, trace)) => {
+                (content_bytes.to_vec(), utp_transfer, trace)
+            }
             Err(err) => match err.clone() {
                 OverlayRequestError::ContentNotFound {
                     message,
@@ -272,7 +274,7 @@ async fn find_content(
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
     content_key: HistoryContentKey,
 ) -> Result<Value, String> {
-    match network.overlay.send_find_content(enr, content_key.to_bytes().to_vec()).await {
+    match network.overlay.send_find_content(enr, content_key.to_bytes()).await {
         Ok((content, utp_transfer)) => match content {
             Content::ConnectionId(id) => Err(format!(
                 "FindContent request returned a connection id ({id:?}) instead of conducting utp transfer."
@@ -311,7 +313,7 @@ async fn gossip(
     content_key: HistoryContentKey,
     content_value: ethportal_api::HistoryContentValue,
 ) -> Result<Value, String> {
-    let data = content_value.encode().to_vec();
+    let data = content_value.encode();
     Ok(network
         .overlay
         .propagate_gossip(vec![(content_key, data)])
@@ -324,7 +326,7 @@ async fn trace_gossip(
     content_key: HistoryContentKey,
     content_value: ethportal_api::HistoryContentValue,
 ) -> Result<Value, String> {
-    let data = content_value.encode().to_vec();
+    let data = content_value.encode();
     Ok(json!(
         network
             .overlay
@@ -341,7 +343,7 @@ async fn offer(
 ) -> Result<Value, String> {
     let content_items = content_items
         .into_iter()
-        .map(|(key, value)| (key.to_bytes(), value.encode().to_vec()))
+        .map(|(key, value)| (key.to_bytes(), value.encode()))
         .collect();
     match network.overlay.send_offer(enr, content_items).await {
         Ok(accept) => Ok(json!(AcceptInfo {
@@ -360,7 +362,7 @@ async fn trace_offer(
 ) -> Result<Value, String> {
     match network
         .overlay
-        .send_offer_trace(enr, content_key.to_bytes(), content_value.encode().to_vec())
+        .send_offer_trace(enr, content_key.to_bytes(), content_value.encode())
         .await
     {
         Ok(accept) => Ok(json!(accept)),

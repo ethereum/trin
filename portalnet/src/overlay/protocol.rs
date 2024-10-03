@@ -50,7 +50,7 @@ use ethportal_api::{
         },
     },
     utils::bytes::hex_encode,
-    OverlayContentKey, RawContentKey,
+    OverlayContentKey, RawContentKey, RawContentValue,
 };
 use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
 use trin_storage::ContentStore;
@@ -205,7 +205,7 @@ impl<
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
-    pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
+    pub fn propagate_gossip(&self, content: Vec<(TContentKey, RawContentValue)>) -> usize {
         propagate_gossip_cross_thread::<_, TMetric>(
             content,
             &self.kbuckets,
@@ -219,7 +219,7 @@ impl<
     pub async fn propagate_gossip_trace(
         &self,
         content_key: TContentKey,
-        data: Vec<u8>,
+        data: RawContentValue,
     ) -> GossipResult {
         trace_propagate_gossip_cross_thread::<_, TMetric>(
             content_key,
@@ -382,7 +382,7 @@ impl<
     pub async fn send_find_content(
         &self,
         enr: Enr,
-        content_key: Vec<u8>,
+        content_key: RawContentKey,
     ) -> Result<FindContentResult, OverlayRequestError> {
         // Construct the request.
         let request = FindContent {
@@ -417,7 +417,9 @@ impl<
                     // Init uTP stream if `connection_id` is received
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
-                        let content = self.init_find_content_stream(enr, conn_id).await?;
+                        let content = RawContentValue::from(
+                            self.init_find_content_stream(enr, conn_id).await?,
+                        );
                         match self.validate_content(&content_key, &content).await {
                             Ok(_) => Ok((Content::Content(content), true)),
                             Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
@@ -467,11 +469,46 @@ impl<
             })
     }
 
+    /// Offer is sent in order to store content to k nodes with radii that contain content-id
+    /// Offer is also sent to nodes after FindContent (POKE)
+    pub async fn send_wire_offer(
+        &self,
+        enr: Enr,
+        content_keys: Vec<TContentKey>,
+    ) -> Result<Accept, OverlayRequestError> {
+        let content_items = content_keys
+            .into_iter()
+            .map(|key| match self.store.read().get(&key) {
+                Ok(Some(content)) => Ok((key.to_bytes(), RawContentValue::from(content))),
+                _ => Err(OverlayRequestError::ContentNotFound {
+                    message: format!("Content key not found in local store: {key:02X?}"),
+                    utp: false,
+                    trace: None,
+                }),
+            })
+            .collect::<Result<Vec<(RawContentKey, RawContentValue)>, OverlayRequestError>>()?;
+        // Construct the request.
+        let request = PopulatedOffer { content_items };
+        let direction = RequestDirection::Outgoing {
+            destination: enr.clone(),
+        };
+
+        // Send the request and wait on the response.
+        match self
+            .send_overlay_request(Request::PopulatedOffer(request), direction)
+            .await
+        {
+            Ok(Response::Accept(accept)) => Ok(accept),
+            Ok(_) => Err(OverlayRequestError::InvalidResponse),
+            Err(error) => Err(error),
+        }
+    }
+
     /// Send Offer request without storing the content into db
     pub async fn send_offer(
         &self,
         enr: Enr,
-        content_items: Vec<(RawContentKey, Vec<u8>)>,
+        content_items: Vec<(RawContentKey, RawContentValue)>,
     ) -> Result<Accept, OverlayRequestError> {
         // Construct the request.
         let request = Request::PopulatedOffer(PopulatedOffer { content_items });
@@ -493,7 +530,7 @@ impl<
         &self,
         enr: Enr,
         content_key: RawContentKey,
-        content_value: Vec<u8>,
+        content_value: RawContentValue,
     ) -> Result<OfferTrace, OverlayRequestError> {
         // Construct the request.
         let (result_tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
