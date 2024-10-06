@@ -32,6 +32,8 @@ pub struct PongInfo {
 
 pub type FindNodesInfo = Vec<Enr>;
 
+pub const MAX_AMOUNT_OF_OFFERED_CONTENT_KEYS: usize = 64;
+
 /// Response for Offer endpoint
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
