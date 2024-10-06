@@ -137,17 +137,6 @@ pub trait BeaconNetworkApi {
         content_value: RawContentValue,
     ) -> RpcResult<OfferTrace>;
 
-    /// Send an OFFER request with given ContentItemss, to the designated peer and wait for a
-    /// response. Requires the content keys to be stored locally.
-    /// Returns the content keys bitlist upon successful content transmission or empty bitlist
-    /// receive.
-    #[method(name = "beaconWireOffer")]
-    async fn wire_offer(
-        &self,
-        enr: Enr,
-        content_keys: Vec<BeaconContentKey>,
-    ) -> RpcResult<AcceptInfo>;
-
     /// Store content key with a content data to the local database.
     #[method(name = "beaconStore")]
     async fn store(

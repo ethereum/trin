@@ -74,9 +74,6 @@ async fn complete_request(network: Arc<HistoryNetwork>, request: HistoryJsonRpcR
         HistoryEndpoint::TraceOffer(enr, content_key, content_value) => {
             trace_offer(network, enr, content_key, content_value).await
         }
-        HistoryEndpoint::WireOffer(enr, content_keys) => {
-            wire_offer(network, enr, content_keys).await
-        }
         HistoryEndpoint::Ping(enr) => ping(network, enr).await,
         HistoryEndpoint::RoutingTableInfo => {
             serde_json::to_value(network.overlay.routing_table_info())
@@ -364,19 +361,6 @@ async fn trace_offer(
     }
 }
 
-/// Constructs a JSON call for the WireOffer method.
-async fn wire_offer(
-    network: Arc<HistoryNetwork>,
-    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
-    content_keys: Vec<HistoryContentKey>,
-) -> Result<Value, String> {
-    match network.overlay.send_wire_offer(enr, content_keys).await {
-        Ok(accept) => Ok(json!(AcceptInfo {
-            content_keys: accept.content_keys,
-        })),
-        Err(msg) => Err(format!("WireOffer request timeout: {msg:?}")),
-    }
-}
 /// Constructs a JSON call for the Ping method.
 async fn ping(
     network: Arc<HistoryNetwork>,

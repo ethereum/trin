@@ -92,19 +92,6 @@ async fn peertest_unpopulated_offer() {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
-async fn peertest_unpopulated_offer_fails_with_missing_content() {
-    let (peertest, target, handle) =
-        setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
-    peertest::scenarios::offer_accept::test_unpopulated_offer_fails_with_missing_content(
-        &peertest, &target,
-    )
-    .await;
-    peertest.exit_all_nodes();
-    handle.stop().unwrap();
-}
-
-#[tokio::test(flavor = "multi_thread")]
-#[serial]
 async fn peertest_gossip_with_trace() {
     let (peertest, target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;

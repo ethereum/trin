@@ -222,19 +222,6 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
-    /// Send an OFFER request with given ContentItemss, to the designated peer and wait for a
-    /// response. Requires the content keys to be stored locally.
-    /// Returns the content keys bitlist upon successful content transmission or empty bitlist
-    /// receive.
-    async fn wire_offer(
-        &self,
-        enr: Enr,
-        content_keys: Vec<BeaconContentKey>,
-    ) -> RpcResult<AcceptInfo> {
-        let endpoint = BeaconEndpoint::WireOffer(enr, content_keys);
-        Ok(proxy_to_subnet(&self.network, endpoint).await?)
-    }
-
     /// Store content key with a content data to the local database.
     async fn store(
         &self,

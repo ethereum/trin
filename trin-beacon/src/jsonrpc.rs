@@ -73,9 +73,6 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
         BeaconEndpoint::LightClientStore => light_client_store(&network).await,
         BeaconEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
         BeaconEndpoint::Offer(enr, content_items) => offer(network, enr, content_items).await,
-        BeaconEndpoint::WireOffer(enr, content_keys) => {
-            wire_offer(network, enr, content_keys).await
-        }
         BeaconEndpoint::TraceOffer(enr, content_key, content_value) => {
             trace_offer(network, enr, content_key, content_value).await
         }
@@ -389,20 +386,6 @@ async fn trace_offer(
     {
         Ok(accept) => Ok(json!(accept)),
         Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
-    }
-}
-
-/// Constructs a JSON call for the WireOffer method.
-async fn wire_offer(
-    network: Arc<BeaconNetwork>,
-    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
-    content_keys: Vec<BeaconContentKey>,
-) -> Result<Value, String> {
-    match network.overlay.send_wire_offer(enr, content_keys).await {
-        Ok(accept) => Ok(json!(AcceptInfo {
-            content_keys: accept.content_keys,
-        })),
-        Err(msg) => Err(format!("WireOffer request timeout: {msg:?}")),
     }
 }
 

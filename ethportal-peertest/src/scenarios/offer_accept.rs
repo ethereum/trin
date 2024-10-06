@@ -22,19 +22,12 @@ pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Unpopulated OFFER/ACCEPT flow");
 
     let (content_key, content_value) = fixture_header_by_hash();
-    // Store content to offer in the testnode db
-    let store_result = target
-        .store(content_key.clone(), content_value.encode())
-        .await
-        .unwrap();
-
-    assert!(store_result);
 
     // Send wire offer request from testnode to bootnode
     let result = target
-        .wire_offer(
+        .offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
-            vec![content_key.clone()],
+            vec![(content_key.clone(), content_value.encode())],
         )
         .await
         .unwrap();
@@ -47,31 +40,6 @@ pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
         content_value,
         wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await,
     );
-}
-
-pub async fn test_unpopulated_offer_fails_with_missing_content(
-    peertest: &Peertest,
-    target: &Client,
-) {
-    info!("Testing Unpopulated OFFER/ACCEPT flow with missing content");
-
-    let (content_key, _content_value) = fixture_header_by_hash();
-
-    // validate that wire offer fails if content not available locally
-    match target
-        .wire_offer(
-            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
-            vec![content_key.clone()],
-        )
-        .await
-    {
-        Ok(_) => panic!("Unpopulated offer should have failed"),
-        Err(e) => {
-            assert!(e
-                .to_string()
-                .contains("Content key not found in local store"));
-        }
-    }
 }
 
 pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
@@ -176,15 +144,10 @@ pub async fn test_offer_propagates_gossip_with_large_content(peertest: &Peertest
         .await
         .unwrap();
     assert!(store_result);
-    let store_result = target
-        .store(body_key.clone(), body_value.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
     target
-        .wire_offer(
+        .offer(
             peertest.bootnode.ipc_client.node_info().await.unwrap().enr,
-            vec![body_key.clone()],
+            vec![(body_key.clone(), body_value.encode())],
         )
         .await
         .unwrap();
@@ -238,23 +201,14 @@ pub async fn test_offer_propagates_gossip_multiple_content_values(
         wait_for_history_content(&peertest.nodes[0].ipc_client, header_key.clone()).await,
     );
 
-    // Store content to offer in the testnode db
-    let store_result = target
-        .store(body_key.clone(), body_value.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
-    let store_result = target
-        .store(receipts_key.clone(), receipts_value.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
-
     // here everythings stored in target
     target
-        .wire_offer(
+        .offer(
             peertest.bootnode.ipc_client.node_info().await.unwrap().enr,
-            vec![body_key.clone(), receipts_key.clone()],
+            vec![
+                (body_key.clone(), body_value.encode()),
+                (receipts_key.clone(), receipts_value.encode()),
+            ],
         )
         .await
         .unwrap();
@@ -305,16 +259,6 @@ pub async fn test_offer_propagates_gossip_multiple_large_content_values(
         .await
         .unwrap();
     assert!(store_result);
-    let store_result = target
-        .store(body_key_1.clone(), body_value_1.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
-    let store_result = target
-        .store(receipts_key_1.clone(), receipts_value_1.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
 
     let (header_key_2, header_value_2) = fixture_header_by_hash_with_proof_15040641();
     let (body_key_2, body_value_2) = fixture_block_body_15040641();
@@ -326,25 +270,15 @@ pub async fn test_offer_propagates_gossip_multiple_large_content_values(
         .await
         .unwrap();
     assert!(store_result);
-    let store_result = target
-        .store(body_key_2.clone(), body_value_2.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
-    let store_result = target
-        .store(receipts_key_2.clone(), receipts_value_2.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
 
     target
-        .wire_offer(
+        .offer(
             peertest.bootnode.ipc_client.node_info().await.unwrap().enr,
             vec![
-                body_key_1.clone(),
-                receipts_key_1.clone(),
-                body_key_2.clone(),
-                receipts_key_2.clone(),
+                (body_key_1.clone(), body_value_1.encode()),
+                (receipts_key_1.clone(), receipts_value_1.encode()),
+                (body_key_2.clone(), body_value_2.encode()),
+                (receipts_key_2.clone(), receipts_value_2.encode()),
             ],
         )
         .await
