@@ -64,6 +64,8 @@ This step directs Ansible to use the current master version of trin. Read [about
 - Run Glados deployment: updates glados + portal client (currently configured as trin, but this could change)
     - `cd ../../glados/ansible`
     - `ansible-playbook playbook.yml --tags glados`
+- if you experience "couldn't resolve module/action 'community.docker.docker_compose_v2'" error, you might need to re-install the community.docker collection:
+    - `ansible-galaxy collection install community.docker --force`
 - Wait for completion
 - Launch a fresh trin node, check it against the bootnodes
 - ssh into random nodes, one of each kind, to check the logs:
