@@ -1930,6 +1930,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "anyhow",
+ "clap",
  "ethereum_ssz",
  "ethereum_ssz_derive",
  "ethportal-api",
@@ -1939,6 +1940,7 @@ dependencies = [
  "scraper",
  "snap",
  "tokio",
+ "tracing",
  "trin-utils",
 ]
 

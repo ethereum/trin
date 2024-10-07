@@ -15,11 +15,14 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 alloy-primitives.workspace = true
 alloy-rlp.workspace = true
 anyhow.workspace = true
+clap = { workspace = true, optional = true }
 ethereum_ssz.workspace = true
 ethereum_ssz_derive.workspace = true
 ethportal-api.workspace = true
 rand.workspace = true
 reqwest.workspace = true
+tracing = { workspace = true, optional = true }
+trin-utils = { workspace = true, optional = true }
 scraper.workspace = true
 snap.workspace = true
 
@@ -27,3 +30,10 @@ snap.workspace = true
 rstest.workspace = true
 tokio.workspace = true
 trin-utils.workspace = true
+
+[features]
+era2-stats-binary = ["clap", "tracing", "trin-utils"]
+
+[[bin]]
+name = "era2-stats"
+required-features = ["era2-stats-binary"]
