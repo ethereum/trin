@@ -38,7 +38,7 @@ pub struct EvmDB {
     /// State config
     pub config: StateConfig,
     /// Storage cache for the accounts used optionally for gossiping, keyed by address hash.
-    pub storage_cache: HashMap<B256, HashSet<B256>>,
+    pub storage_cache: Arc<Mutex<HashMap<B256, HashSet<B256>>>>,
     /// The underlying database.
     pub db: Arc<RocksDB>,
     /// To get proofs and to verify trie state.
@@ -65,7 +65,7 @@ impl EvmDB {
             },
         ));
 
-        let storage_cache = HashMap::new();
+        let storage_cache = Arc::new(Mutex::new(HashMap::new()));
         Ok(Self {
             config,
             storage_cache,
@@ -79,6 +79,7 @@ impl EvmDB {
 
         for key in self
             .storage_cache
+            .lock()
             .get(&address_hash)
             .unwrap_or(&HashSet::new())
         {
@@ -226,7 +227,8 @@ impl EvmDB {
         } = trie.root_hash_with_changed_nodes()?;
 
         if self.config.cache_contract_storage_changes {
-            let account_storage_cache = self.storage_cache.entry(address_hash).or_default();
+            let mut storage_cache_guard = self.storage_cache.lock();
+            let account_storage_cache = storage_cache_guard.entry(address_hash).or_default();
             for key in trie_diff.keys() {
                 account_storage_cache.insert(*key);
             }

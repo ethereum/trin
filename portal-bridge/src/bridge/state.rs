@@ -112,7 +112,7 @@ impl StateBridge {
                 .process_range_of_blocks(start_block - 1, None)
                 .await?;
             // flush the database cache
-            trin_execution.database.storage_cache.clear();
+            trin_execution.database.storage_cache.lock().clear();
         }
 
         info!("Gossiping state data from block {start_block} to {end_block} (inclusively)");
@@ -225,7 +225,7 @@ impl StateBridge {
 
         // flush the database cache
         // This is used for gossiping storage trie diffs
-        trin_execution.database.storage_cache.clear();
+        trin_execution.database.storage_cache.lock().clear();
 
         Ok(())
     }
