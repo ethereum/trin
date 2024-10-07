@@ -31,7 +31,7 @@ pub const LC_BOOTSTRAP_LATEST_BLOCK_ROOT_QUERY: &str =
 pub const TOTAL_DATA_SIZE_QUERY_BEACON: &str = "SELECT
     (SELECT TOTAL(content_size) FROM lc_bootstrap) +
     (SELECT TOTAL(update_size) FROM lc_update) +
-    (SELECT TOTAL(content_size) FROM historical_summaries) AS total_data_size;";
+    (SELECT TOTAL(update_size) FROM historical_summaries) AS total_data_size;";
 
 pub const LC_UPDATE_CREATE_TABLE: &str = "CREATE TABLE IF NOT EXISTS lc_update (
         period INTEGER PRIMARY KEY,
@@ -58,12 +58,12 @@ pub const HISTORICAL_SUMMARIES_CREATE_TABLE: &str =
         ID INTEGER PRIMARY KEY CHECK (ID = 1),
         epoch INTEGER NOT NULL,
         value BLOB NOT NULL,
-        content_size INTEGER
+        update_size INTEGER
     );";
 
 /// Query to insert or update the historical summaries table.
 pub const INSERT_OR_REPLACE_HISTORICAL_SUMMARIES_QUERY: &str =
-    "INSERT OR REPLACE INTO historical_summaries (id, epoch, value, content_size)
+    "INSERT OR REPLACE INTO historical_summaries (id, epoch, value, update_size)
                       VALUES (?1, ?2, ?3, ?4)";
 
 /// Query to get the historical summary that is greater than or equal to the given epoch.
