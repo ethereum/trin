@@ -26,7 +26,8 @@ struct Stats {
 /// Reads the era2 file and prints stats about it.
 ///
 /// It can be run with following command:
-/// ```
+///
+/// ```bash
 /// cargo run -p e2store --bin era2-stats --features era2-stats-binary -- <path>
 /// ```
 fn main() -> anyhow::Result<()> {
