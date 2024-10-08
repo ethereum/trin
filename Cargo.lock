@@ -1938,8 +1938,8 @@ dependencies = [
  "rstest",
  "scraper",
  "snap",
- "tempfile",
  "tokio",
+ "trin-utils",
 ]
 
 [[package]]

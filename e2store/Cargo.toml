@@ -25,5 +25,5 @@ snap.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
-tempfile.workspace = true
 tokio.workspace = true
+trin-utils.workspace = true
