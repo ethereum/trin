@@ -24,6 +24,10 @@ const LIVENESS_CHECK_DELAY: Duration = Duration::from_secs(3600);
 
 type PeersHashMapDelay = HashMapDelay<[u8; 32], (Enr, Distance)>;
 
+/// Contains all discovered peers on the network.
+///
+/// It provides thread safe access to peers and is responsible for deciding when they should be
+/// pinged for liveness.
 #[derive(Clone, Debug)]
 pub(super) struct Peers {
     peers: Arc<RwLock<PeersHashMapDelay>>,
@@ -66,7 +70,7 @@ impl Peers {
         }
     }
 
-    /// Selects random `limit` peers that should be interested into content.
+    /// Selects random `limit` peers that should be interested in content.
     pub fn get_interested_enrs(&self, content_id: &[u8; 32], limit: usize) -> Vec<Enr> {
         self.peers
             .read()

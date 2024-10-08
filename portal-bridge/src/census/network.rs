@@ -48,7 +48,7 @@ impl Network {
     pub fn get_interested_enrs(&self, content_id: &[u8; 32]) -> Result<Vec<Enr>, CensusError> {
         if self.peers.is_empty() {
             error!(
-                "No known peers in {} census, unable to offer.",
+                "No known peers in {} census, unable to look up interested enrs",
                 self.subnetwork
             );
             return Err(CensusError::NoPeers);
@@ -82,7 +82,9 @@ impl Network {
                 "Failed to initialize {} census, RFN failed",
                 self.subnetwork
             );
-            return Err(CensusError::FailedInitialization);
+            return Err(CensusError::FailedInitialization(
+                "RecursiveFindNodes failed",
+            ));
         };
 
         // if this initialization is too slow, we can consider
@@ -96,10 +98,10 @@ impl Network {
                 "Failed to initialize {} census, couldn't find any peers.",
                 self.subnetwork
             );
-            return Err(CensusError::FailedInitialization);
+            return Err(CensusError::FailedInitialization("No peers found"));
         }
         info!(
-            "Initialized {} census: found peers: {}",
+            "Initialized {} census: found {} peers",
             self.subnetwork,
             self.peers.len()
         );
@@ -113,7 +115,7 @@ impl Network {
 
     /// Processes the peer.
     ///
-    /// If no peer is found, reinitilizes the network.
+    /// If no peer is found, re-initilizes the network.
     pub async fn process_peer(&self, peer: Option<Result<Enr, String>>) {
         let subnetwork = &self.subnetwork;
         match peer {

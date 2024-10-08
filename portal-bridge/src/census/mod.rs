@@ -16,8 +16,8 @@ mod peers;
 pub enum CensusError {
     #[error("No peers found in Census")]
     NoPeers,
-    #[error("Failed to initialize Census")]
-    FailedInitialization,
+    #[error("Failed to initialize Census: {0}")]
+    FailedInitialization(&'static str),
     #[error("Subnetwork {0} is not supported")]
     UnsupportedSubnetwork(Subnetwork),
     #[error("Census already initialized")]
@@ -49,7 +49,7 @@ impl Census {
         }
     }
 
-    /// Returns ENRs interested into provided content id.
+    /// Returns ENRs interested in provided content id.
     pub fn get_interested_enrs(
         &self,
         subnetwork: Subnetwork,
@@ -77,6 +77,9 @@ impl Census {
         self.initialized = true;
 
         let subnetworks = HashSet::from_iter(subnetworks);
+        if subnetworks.is_empty() {
+            return Err(CensusError::FailedInitialization("No subnetwork"));
+        }
         for subnetwork in &subnetworks {
             info!("Initializing {subnetwork} subnetwork");
             match subnetwork {
