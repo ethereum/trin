@@ -69,7 +69,7 @@ impl StateExporter {
             "Exporting state from block number: {} with state root: {}",
             self.header.number, self.header.state_root
         );
-        let mut era2 = Era2Writer::new(&self.config.path_to_era2, self.header.clone())?;
+        let mut era2 = Era2Writer::create(&self.config.path_to_era2, self.header.clone())?;
         info!("Era2 initiated");
         info!("Trie leaf iterator initiated");
         let mut accounts_exported = 0;

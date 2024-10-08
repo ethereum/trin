@@ -26,7 +26,7 @@
 //! creating a new one, and must be sorted by storage_index_hash across all entries.
 
 use std::{
-    fs,
+    fs::{self, File},
     io::{ErrorKind, Read, Write},
     ops::Deref,
     path::{Path, PathBuf},
@@ -56,13 +56,13 @@ pub struct Era2Writer {
     pub version: VersionEntry,
     pub header: HeaderEntry,
 
-    writer: E2StoreStreamWriter,
+    writer: E2StoreStreamWriter<File>,
     pending_storage_entries: u32,
     path: PathBuf,
 }
 
 impl Era2Writer {
-    pub fn new(path: &Path, header: Header) -> anyhow::Result<Self> {
+    pub fn create(path: &Path, header: Header) -> anyhow::Result<Self> {
         fs::create_dir_all(path)?;
         ensure!(path.is_dir(), "era2 path is not a directory: {:?}", path);
         let path = path.join(format!(
@@ -71,7 +71,7 @@ impl Era2Writer {
             hex::encode(&header.state_root.as_slice()[..4])
         ));
         ensure!(!path.exists(), "era2 file already exists: {:?}", path);
-        let mut writer = E2StoreStreamWriter::new(&path)?;
+        let mut writer = E2StoreStreamWriter::create(&path)?;
 
         let version = VersionEntry::default();
         writer.append_entry(&version.clone().into())?;
@@ -140,14 +140,14 @@ pub struct Era2Reader {
     pub version: VersionEntry,
     pub header: HeaderEntry,
 
-    reader: E2StoreStreamReader,
+    reader: E2StoreStreamReader<File>,
     pending_storage_entries: u32,
     path: PathBuf,
 }
 
 impl Era2Reader {
-    pub fn new(path: &Path) -> anyhow::Result<Self> {
-        let mut reader = E2StoreStreamReader::new(path)?;
+    pub fn open(path: &Path) -> anyhow::Result<Self> {
+        let mut reader = E2StoreStreamReader::open(path)?;
 
         let version = VersionEntry::try_from(&reader.next_entry()?)?;
         let header = HeaderEntry::try_from(&reader.next_entry()?)?;
@@ -351,7 +351,7 @@ mod tests {
         };
 
         // create a new e2store file and write some data to it
-        let mut era2_writer = Era2Writer::new(tmp_dir.path(), header.clone())?;
+        let mut era2_writer = Era2Writer::create(tmp_dir.path(), header.clone())?;
 
         let era2_path = tmp_dir.path().join(format!(
             "mainnet-{:010}-{}.era2",
@@ -384,7 +384,7 @@ mod tests {
         drop(era2_writer);
 
         // read results and see if they match
-        let mut era2_reader = Era2Reader::new(&era2_path)?;
+        let mut era2_reader = Era2Reader::open(&era2_path)?;
         assert_eq!(era2_reader.path(), &era2_path);
 
         let default_version_entry = VersionEntry::default();

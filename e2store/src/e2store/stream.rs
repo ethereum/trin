@@ -7,13 +7,12 @@ use std::{
 use super::types::{Entry, Header};
 
 /// Streaming reader for e2store files.
-pub struct E2StoreStreamReader {
-    reader: BufReader<File>,
+pub struct E2StoreStreamReader<R> {
+    reader: BufReader<R>,
 }
 
-impl E2StoreStreamReader {
-    pub fn new(e2store_path: &Path) -> anyhow::Result<Self> {
-        let reader = BufReader::new(File::open(e2store_path)?);
+impl<R: Read> E2StoreStreamReader<R> {
+    pub fn new(reader: BufReader<R>) -> anyhow::Result<Self> {
         Ok(Self { reader })
     }
 
@@ -27,14 +26,19 @@ impl E2StoreStreamReader {
     }
 }
 
-/// Streaming writer for e2store files.
-pub struct E2StoreStreamWriter {
-    writer: BufWriter<File>,
+impl E2StoreStreamReader<File> {
+    pub fn open(path: &Path) -> anyhow::Result<Self> {
+        Self::new(BufReader::new(File::open(path)?))
+    }
 }
 
-impl E2StoreStreamWriter {
-    pub fn new(e2store_path: &Path) -> anyhow::Result<Self> {
-        let writer = BufWriter::new(File::create(e2store_path)?);
+/// Streaming writer for e2store files.
+pub struct E2StoreStreamWriter<W: Write> {
+    writer: BufWriter<W>,
+}
+
+impl<W: Write> E2StoreStreamWriter<W> {
+    pub fn new(writer: BufWriter<W>) -> anyhow::Result<Self> {
         Ok(Self { writer })
     }
 
@@ -47,6 +51,12 @@ impl E2StoreStreamWriter {
 
     pub fn flush(&mut self) -> anyhow::Result<()> {
         Ok(self.writer.flush()?)
+    }
+}
+
+impl E2StoreStreamWriter<File> {
+    pub fn create(path: &Path) -> anyhow::Result<Self> {
+        Self::new(BufWriter::new(File::create(path)?))
     }
 }
 
@@ -70,7 +80,7 @@ mod tests {
             .join(format!("{}.e2store_stream_test", random_number));
 
         // create a new e2store file and write some data to it
-        let mut e2store_stream_writer = E2StoreStreamWriter::new(&tmp_path)?;
+        let mut e2store_stream_writer = E2StoreStreamWriter::create(&tmp_path)?;
 
         let version = VersionEntry::default();
         e2store_stream_writer.append_entry(&version.clone().into())?;
@@ -82,7 +92,7 @@ mod tests {
         drop(e2store_stream_writer);
 
         // read results and see if they match
-        let mut e2store_stream_reader = E2StoreStreamReader::new(&tmp_path)?;
+        let mut e2store_stream_reader = E2StoreStreamReader::open(&tmp_path)?;
         let read_version_entry = VersionEntry::try_from(&e2store_stream_reader.next_entry()?)?;
         assert_eq!(version, read_version_entry);
         let read_entry = e2store_stream_reader.next_entry()?;

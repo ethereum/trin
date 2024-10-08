@@ -56,7 +56,7 @@ impl StateImporter {
     pub fn import_state(&self) -> anyhow::Result<Header> {
         info!("Importing state from .era2 file");
 
-        let mut era2 = Era2Reader::new(&self.config.path_to_era2)?;
+        let mut era2 = Era2Reader::open(&self.config.path_to_era2)?;
         info!("Era2 reader initiated");
         let mut accounts_imported = 0;
         while let Some(account) = era2.next() {
