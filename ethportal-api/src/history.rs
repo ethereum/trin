@@ -101,19 +101,18 @@ pub trait HistoryNetworkApi {
         content_value: RawContentValue,
     ) -> RpcResult<TraceGossipInfo>;
 
-    /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
-    /// Does not store the content locally.
+    /// Send an OFFER request with given ContentItems, to the designated peer and wait for a
+    /// response. Does not store the content locally.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist
     /// receive.
     #[method(name = "historyOffer")]
     async fn offer(
         &self,
         enr: Enr,
-        content_key: HistoryContentKey,
-        content_value: RawContentValue,
+        content_items: Vec<(HistoryContentKey, RawContentValue)>,
     ) -> RpcResult<AcceptInfo>;
 
-    /// Send an OFFER request with given ContentKey, to the designated peer.
+    /// Send an OFFER request with given ContentItems, to the designated peer.
     /// Does not store the content locally.
     /// Returns trace info for the offer.
     #[method(name = "historyTraceOffer")]
@@ -123,17 +122,6 @@ pub trait HistoryNetworkApi {
         content_key: HistoryContentKey,
         content_value: RawContentValue,
     ) -> RpcResult<OfferTrace>;
-
-    /// Send an OFFER request with given ContentKeys, to the designated peer and wait for a
-    /// response. Requires the content keys to be stored locally.
-    /// Returns the content keys bitlist upon successful content transmission or empty bitlist
-    /// receive.
-    #[method(name = "historyWireOffer")]
-    async fn wire_offer(
-        &self,
-        enr: Enr,
-        content_keys: Vec<HistoryContentKey>,
-    ) -> RpcResult<AcceptInfo>;
 
     /// Store content key with a content data to the local database.
     #[method(name = "historyStore")]

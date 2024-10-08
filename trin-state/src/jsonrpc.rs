@@ -61,9 +61,7 @@ impl StateRequestHandler {
             StateEndpoint::Store(content_key, content_value) => {
                 store(network, content_key, content_value).await
             }
-            StateEndpoint::Offer(enr, content_key, content_value) => {
-                offer(network, enr, content_key, content_value).await
-            }
+            StateEndpoint::Offer(enr, content_items) => offer(network, enr, content_items).await,
             StateEndpoint::TraceOffer(enr, content_key, content_value) => {
                 trace_offer(network, enr, content_key, content_value).await
             }
@@ -303,14 +301,18 @@ async fn store(
 async fn offer(
     network: Arc<StateNetwork>,
     enr: Enr,
-    content_key: StateContentKey,
-    content_value: StateContentValue,
+    content_items: Vec<(StateContentKey, StateContentValue)>,
 ) -> Result<Value, String> {
+    let content_items = content_items
+        .into_iter()
+        .map(|(key, value)| (key.to_bytes(), value.encode().to_vec()))
+        .collect();
+
     to_json_result(
         "Offer",
         network
             .overlay
-            .send_offer(enr, content_key.to_bytes(), content_value.encode().to_vec())
+            .send_offer(enr, content_items)
             .await
             .map(|accept| AcceptInfo {
                 content_keys: accept.content_keys,

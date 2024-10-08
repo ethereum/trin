@@ -70,14 +70,9 @@ async fn complete_request(network: Arc<HistoryNetwork>, request: HistoryJsonRpcR
             trace_gossip(network, content_key, content_value).await
         }
         HistoryEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
-        HistoryEndpoint::Offer(enr, content_key, content_value) => {
-            offer(network, enr, content_key, content_value).await
-        }
+        HistoryEndpoint::Offer(enr, content_items) => offer(network, enr, content_items).await,
         HistoryEndpoint::TraceOffer(enr, content_key, content_value) => {
             trace_offer(network, enr, content_key, content_value).await
-        }
-        HistoryEndpoint::WireOffer(enr, content_keys) => {
-            wire_offer(network, enr, content_keys).await
         }
         HistoryEndpoint::Ping(enr) => ping(network, enr).await,
         HistoryEndpoint::RoutingTableInfo => {
@@ -335,14 +330,13 @@ async fn trace_gossip(
 async fn offer(
     network: Arc<HistoryNetwork>,
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
-    content_key: HistoryContentKey,
-    content_value: HistoryContentValue,
+    content_items: Vec<(HistoryContentKey, HistoryContentValue)>,
 ) -> Result<Value, String> {
-    match network
-        .overlay
-        .send_offer(enr, content_key.to_bytes(), content_value.encode().to_vec())
-        .await
-    {
+    let content_items = content_items
+        .into_iter()
+        .map(|(key, value)| (key.to_bytes(), value.encode().to_vec()))
+        .collect();
+    match network.overlay.send_offer(enr, content_items).await {
         Ok(accept) => Ok(json!(AcceptInfo {
             content_keys: accept.content_keys,
         })),
@@ -367,19 +361,6 @@ async fn trace_offer(
     }
 }
 
-/// Constructs a JSON call for the WireOffer method.
-async fn wire_offer(
-    network: Arc<HistoryNetwork>,
-    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
-    content_keys: Vec<HistoryContentKey>,
-) -> Result<Value, String> {
-    match network.overlay.send_wire_offer(enr, content_keys).await {
-        Ok(accept) => Ok(json!(AcceptInfo {
-            content_keys: accept.content_keys,
-        })),
-        Err(msg) => Err(format!("WireOffer request timeout: {msg:?}")),
-    }
-}
 /// Constructs a JSON call for the Ping method.
 async fn ping(
     network: Arc<HistoryNetwork>,

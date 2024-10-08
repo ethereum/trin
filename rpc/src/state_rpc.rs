@@ -7,7 +7,7 @@ use ethportal_api::{
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
         portal::{
             AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo,
+            TraceContentInfo, TraceGossipInfo, MAX_CONTENT_KEYS_PER_OFFER,
         },
         portal_wire::OfferTrace,
     },
@@ -145,23 +145,32 @@ impl StateNetworkApiServer for StateNetworkApi {
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
-    /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
-    /// Does not store content locally.
+    /// Send an OFFER request with given ContentItems, to the designated peer and wait for a
+    /// response. Does not store content locally.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist
     /// receive.
     async fn offer(
         &self,
         enr: Enr,
-        content_key: StateContentKey,
-        content_value: RawContentValue,
+        content_items: Vec<(StateContentKey, RawContentValue)>,
     ) -> RpcResult<AcceptInfo> {
-        let content_value =
-            StateContentValue::decode(&content_key, &content_value).map_err(RpcServeError::from)?;
-        let endpoint = StateEndpoint::Offer(enr, content_key, content_value);
+        if !(1..=MAX_CONTENT_KEYS_PER_OFFER).contains(&content_items.len()) {
+            return Err(RpcServeError::Message(format!(
+                "Invalid amount of content items: {}",
+                content_items.len()
+            ))
+            .into());
+        }
+        let content_items = content_items
+            .into_iter()
+            .map(|(key, value)| StateContentValue::decode(&key, &value).map(|value| (key, value)))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(RpcServeError::from)?;
+        let endpoint = StateEndpoint::Offer(enr, content_items);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
-    /// Send an OFFER request with given ContentKey, to the designated peer.
+    /// Send an OFFER request with given ContentItems, to the designated peer.
     /// Does not store the content locally.
     /// Returns trace info from the offer.
     async fn trace_offer(

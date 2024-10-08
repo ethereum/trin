@@ -42,10 +42,8 @@ pub enum StateEndpoint {
     TraceRecursiveFindContent(StateContentKey),
     /// params: [content_key, content_value]
     Store(StateContentKey, StateContentValue),
-    /// WireOffer is not supported in the state network, since locally
-    /// stored values do not contain the proofs necessary for valid gossip.
-    /// params: [enr, content_key, content_value]
-    Offer(Enr, StateContentKey, StateContentValue),
+    /// params: [enr, Vec<(content_key, content_value>)]
+    Offer(Enr, Vec<(StateContentKey, StateContentValue)>),
     /// params: [enr, content_key, content_value]
     TraceOffer(Enr, StateContentKey, StateContentValue),
     /// params: [enr, content_key, content_value]
@@ -79,12 +77,10 @@ pub enum HistoryEndpoint {
     Gossip(HistoryContentKey, HistoryContentValue),
     /// params: [content_key, content_value]
     TraceGossip(HistoryContentKey, HistoryContentValue),
-    /// params: [enr, content_key, content_value]
-    Offer(Enr, HistoryContentKey, HistoryContentValue),
+    /// params: [enr, Vec<(content_key, content_value)>]
+    Offer(Enr, Vec<(HistoryContentKey, HistoryContentValue)>),
     /// params: [enr, content_key, content_value]
     TraceOffer(Enr, HistoryContentKey, HistoryContentValue),
-    /// params: [enr, [content_key]]
-    WireOffer(Enr, Vec<HistoryContentKey>),
     /// params: [enr]
     Ping(Enr),
     /// params: content_key
@@ -133,12 +129,10 @@ pub enum BeaconEndpoint {
     Gossip(BeaconContentKey, BeaconContentValue),
     /// params: [content_key, content_value]
     TraceGossip(BeaconContentKey, BeaconContentValue),
-    /// params: [enr, content_key, content_value]
-    Offer(Enr, BeaconContentKey, BeaconContentValue),
+    /// params: [enr, Vec<(content_key, content_value>)]
+    Offer(Enr, Vec<(BeaconContentKey, BeaconContentValue)>),
     /// params: [enr, content_key, content_value]
     TraceOffer(Enr, BeaconContentKey, BeaconContentValue),
-    /// params: [enr, [content_key]]
-    WireOffer(Enr, Vec<BeaconContentKey>),
     /// params: enr
     Ping(Enr),
     /// params: content_key

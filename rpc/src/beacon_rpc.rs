@@ -15,7 +15,7 @@ use ethportal_api::{
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
         portal::{
             AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo,
+            TraceContentInfo, TraceGossipInfo, MAX_CONTENT_KEYS_PER_OFFER,
         },
         portal_wire::OfferTrace,
     },
@@ -179,23 +179,35 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
-    /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
-    /// Does not store content locally.
+    /// Send an OFFER request with given ContentItems, to the designated peer and wait for a
+    /// response. Does not store content locally.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist
     /// receive.
     async fn offer(
         &self,
         enr: Enr,
-        content_key: BeaconContentKey,
-        content_value: RawContentValue,
+        content_items: Vec<(BeaconContentKey, RawContentValue)>,
     ) -> RpcResult<AcceptInfo> {
-        let content_value = BeaconContentValue::decode(&content_key, &content_value)
-            .map_err(RpcServeError::from)?;
-        let endpoint = BeaconEndpoint::Offer(enr, content_key, content_value);
+        if !(1..=MAX_CONTENT_KEYS_PER_OFFER).contains(&content_items.len()) {
+            return Err(RpcServeError::Message(format!(
+                "Invalid amount of content items: {}",
+                content_items.len()
+            ))
+            .into());
+        }
+        let content_items = content_items
+            .into_iter()
+            .map(|(key, value)| {
+                BeaconContentValue::decode(&key, &value)
+                    .map(|value| (key, value))
+                    .map_err(RpcServeError::from)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let endpoint = BeaconEndpoint::Offer(enr, content_items);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
-    /// Send an OFFER request with given ContentKey, to the designated peer.
+    /// Send an OFFER request with given ContentItems, to the designated peer.
     /// Does not store the content locally.
     /// Returns trace info from the offer.
     async fn trace_offer(
@@ -207,19 +219,6 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         let content_value = BeaconContentValue::decode(&content_key, &content_value)
             .map_err(RpcServeError::from)?;
         let endpoint = BeaconEndpoint::TraceOffer(enr, content_key, content_value);
-        Ok(proxy_to_subnet(&self.network, endpoint).await?)
-    }
-
-    /// Send an OFFER request with given ContentKeys, to the designated peer and wait for a
-    /// response. Requires the content keys to be stored locally.
-    /// Returns the content keys bitlist upon successful content transmission or empty bitlist
-    /// receive.
-    async fn wire_offer(
-        &self,
-        enr: Enr,
-        content_keys: Vec<BeaconContentKey>,
-    ) -> RpcResult<AcceptInfo> {
-        let endpoint = BeaconEndpoint::WireOffer(enr, content_keys);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

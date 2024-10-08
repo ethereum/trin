@@ -18,71 +18,14 @@ use ethportal_api::{
     ContentValue, Discv5ApiClient, HistoryNetworkApiClient,
 };
 
-pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
-    info!("Testing Unpopulated OFFER/ACCEPT flow");
-
-    let (content_key, content_value) = fixture_header_by_hash();
-    // Store content to offer in the testnode db
-    let store_result = target
-        .store(content_key.clone(), content_value.encode())
-        .await
-        .unwrap();
-
-    assert!(store_result);
-
-    // Send wire offer request from testnode to bootnode
-    let result = target
-        .wire_offer(
-            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
-            vec![content_key.clone()],
-        )
-        .await
-        .unwrap();
-
-    // Check that ACCEPT response sent by bootnode accepted the offered content
-    assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
-
-    // Check if the stored content value in bootnode's DB matches the offered
-    assert_eq!(
-        content_value,
-        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await,
-    );
-}
-
-pub async fn test_unpopulated_offer_fails_with_missing_content(
-    peertest: &Peertest,
-    target: &Client,
-) {
-    info!("Testing Unpopulated OFFER/ACCEPT flow with missing content");
-
-    let (content_key, _content_value) = fixture_header_by_hash();
-
-    // validate that wire offer fails if content not available locally
-    match target
-        .wire_offer(
-            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
-            vec![content_key.clone()],
-        )
-        .await
-    {
-        Ok(_) => panic!("Unpopulated offer should have failed"),
-        Err(e) => {
-            assert!(e
-                .to_string()
-                .contains("Content key not found in local store"));
-        }
-    }
-}
-
-pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
-    info!("Testing Populated Offer/ACCEPT flow");
+pub async fn test_offer(peertest: &Peertest, target: &Client) {
+    info!("Testing Offer/ACCEPT flow");
 
     let (content_key, content_value) = fixture_header_by_hash();
     let result = target
         .offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
-            content_key.clone(),
-            content_value.encode(),
+            vec![(content_key.clone(), content_value.encode())],
         )
         .await
         .unwrap();
@@ -97,8 +40,8 @@ pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     );
 }
 
-pub async fn test_populated_offer_with_trace(peertest: &Peertest, target: &Client) {
-    info!("Testing Populated Offer/ACCEPT flow with trace");
+pub async fn test_offer_with_trace(peertest: &Peertest, target: &Client) {
+    info!("Testing Offer/ACCEPT flow with trace");
 
     // store header for validation
     let (content_key, content_value) = fixture_header_by_hash();
@@ -136,16 +79,15 @@ pub async fn test_populated_offer_with_trace(peertest: &Peertest, target: &Clien
 }
 
 pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) {
-    info!("Testing populated offer propagates gossip");
+    info!("Testing offer propagates gossip");
 
     // get content values to gossip
     let (content_key, content_value) = fixture_header_by_hash();
-    // use populated offer which means content will *not* be stored in the target's local db
+    // use offer which means content will *not* be stored in the target's local db
     target
         .offer(
             peertest.bootnode.enr.clone(),
-            content_key.clone(),
-            content_value.encode(),
+            vec![(content_key.clone(), content_value.encode())],
         )
         .await
         .unwrap();
@@ -166,7 +108,7 @@ pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) 
 }
 
 pub async fn test_offer_propagates_gossip_with_large_content(peertest: &Peertest, target: &Client) {
-    info!("Testing populated offer propagates gossips single large content");
+    info!("Testing offer propagates gossips single large content");
 
     let (header_key, header_value) = fixture_header_by_hash_with_proof_15040708();
     // 763kb block body
@@ -178,15 +120,10 @@ pub async fn test_offer_propagates_gossip_with_large_content(peertest: &Peertest
         .await
         .unwrap();
     assert!(store_result);
-    let store_result = target
-        .store(body_key.clone(), body_value.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
     target
-        .wire_offer(
+        .offer(
             peertest.bootnode.ipc_client.node_info().await.unwrap().enr,
-            vec![body_key.clone()],
+            vec![(body_key.clone(), body_value.encode())],
         )
         .await
         .unwrap();
@@ -211,7 +148,7 @@ pub async fn test_offer_propagates_gossip_multiple_content_values(
     peertest: &Peertest,
     target: &Client,
 ) {
-    info!("Testing populated offer propagates gossips multiple content values simultaneously");
+    info!("Testing offer propagates gossips multiple content values simultaneously");
     // get content values to gossip
     let (header_key, header_value) = fixture_header_by_hash_with_proof_15040708();
     let (body_key, body_value) = fixture_block_body_15040708();
@@ -221,8 +158,7 @@ pub async fn test_offer_propagates_gossip_multiple_content_values(
     target
         .offer(
             peertest.bootnode.enr.clone(),
-            header_key.clone(),
-            header_value.encode(),
+            vec![(header_key.clone(), header_value.encode())],
         )
         .await
         .unwrap();
@@ -241,23 +177,14 @@ pub async fn test_offer_propagates_gossip_multiple_content_values(
         wait_for_history_content(&peertest.nodes[0].ipc_client, header_key.clone()).await,
     );
 
-    // Store content to offer in the testnode db
-    let store_result = target
-        .store(body_key.clone(), body_value.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
-    let store_result = target
-        .store(receipts_key.clone(), receipts_value.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
-
     // here everythings stored in target
     target
-        .wire_offer(
+        .offer(
             peertest.bootnode.ipc_client.node_info().await.unwrap().enr,
-            vec![body_key.clone(), receipts_key.clone()],
+            vec![
+                (body_key.clone(), body_value.encode()),
+                (receipts_key.clone(), receipts_value.encode()),
+            ],
         )
         .await
         .unwrap();
@@ -295,7 +222,7 @@ pub async fn test_offer_propagates_gossip_multiple_large_content_values(
     peertest: &Peertest,
     target: &Client,
 ) {
-    info!("Testing populated offer propagates gossips multiple large content simultaneously");
+    info!("Testing offer propagates gossips multiple large content simultaneously");
 
     // get content values to gossip
     let (header_key_1, header_value_1) = fixture_header_by_hash_with_proof_15040708();
@@ -305,16 +232,6 @@ pub async fn test_offer_propagates_gossip_multiple_large_content_values(
     // Store content to offer in the testnode db
     let store_result = target
         .store(header_key_1.clone(), header_value_1.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
-    let store_result = target
-        .store(body_key_1.clone(), body_value_1.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
-    let store_result = target
-        .store(receipts_key_1.clone(), receipts_value_1.encode())
         .await
         .unwrap();
     assert!(store_result);
@@ -329,25 +246,15 @@ pub async fn test_offer_propagates_gossip_multiple_large_content_values(
         .await
         .unwrap();
     assert!(store_result);
-    let store_result = target
-        .store(body_key_2.clone(), body_value_2.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
-    let store_result = target
-        .store(receipts_key_2.clone(), receipts_value_2.encode())
-        .await
-        .unwrap();
-    assert!(store_result);
 
     target
-        .wire_offer(
+        .offer(
             peertest.bootnode.ipc_client.node_info().await.unwrap().enr,
             vec![
-                body_key_1.clone(),
-                receipts_key_1.clone(),
-                body_key_2.clone(),
-                receipts_key_2.clone(),
+                (body_key_1.clone(), body_value_1.encode()),
+                (receipts_key_1.clone(), receipts_value_1.encode()),
+                (body_key_2.clone(), body_value_2.encode()),
+                (receipts_key_2.clone(), receipts_value_2.encode()),
             ],
         )
         .await
