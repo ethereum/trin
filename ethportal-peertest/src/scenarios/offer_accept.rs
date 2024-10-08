@@ -18,32 +18,8 @@ use ethportal_api::{
     ContentValue, Discv5ApiClient, HistoryNetworkApiClient,
 };
 
-pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
-    info!("Testing Unpopulated OFFER/ACCEPT flow");
-
-    let (content_key, content_value) = fixture_header_by_hash();
-
-    // Send wire offer request from testnode to bootnode
-    let result = target
-        .offer(
-            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
-            vec![(content_key.clone(), content_value.encode())],
-        )
-        .await
-        .unwrap();
-
-    // Check that ACCEPT response sent by bootnode accepted the offered content
-    assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
-
-    // Check if the stored content value in bootnode's DB matches the offered
-    assert_eq!(
-        content_value,
-        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await,
-    );
-}
-
-pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
-    info!("Testing Populated Offer/ACCEPT flow");
+pub async fn test_offer(peertest: &Peertest, target: &Client) {
+    info!("Testing Offer/ACCEPT flow");
 
     let (content_key, content_value) = fixture_header_by_hash();
     let result = target
@@ -64,8 +40,8 @@ pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     );
 }
 
-pub async fn test_populated_offer_with_trace(peertest: &Peertest, target: &Client) {
-    info!("Testing Populated Offer/ACCEPT flow with trace");
+pub async fn test_offer_with_trace(peertest: &Peertest, target: &Client) {
+    info!("Testing Offer/ACCEPT flow with trace");
 
     // store header for validation
     let (content_key, content_value) = fixture_header_by_hash();
@@ -103,11 +79,11 @@ pub async fn test_populated_offer_with_trace(peertest: &Peertest, target: &Clien
 }
 
 pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) {
-    info!("Testing populated offer propagates gossip");
+    info!("Testing offer propagates gossip");
 
     // get content values to gossip
     let (content_key, content_value) = fixture_header_by_hash();
-    // use populated offer which means content will *not* be stored in the target's local db
+    // use offer which means content will *not* be stored in the target's local db
     target
         .offer(
             peertest.bootnode.enr.clone(),
@@ -132,7 +108,7 @@ pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) 
 }
 
 pub async fn test_offer_propagates_gossip_with_large_content(peertest: &Peertest, target: &Client) {
-    info!("Testing populated offer propagates gossips single large content");
+    info!("Testing offer propagates gossips single large content");
 
     let (header_key, header_value) = fixture_header_by_hash_with_proof_15040708();
     // 763kb block body
@@ -172,7 +148,7 @@ pub async fn test_offer_propagates_gossip_multiple_content_values(
     peertest: &Peertest,
     target: &Client,
 ) {
-    info!("Testing populated offer propagates gossips multiple content values simultaneously");
+    info!("Testing offer propagates gossips multiple content values simultaneously");
     // get content values to gossip
     let (header_key, header_value) = fixture_header_by_hash_with_proof_15040708();
     let (body_key, body_value) = fixture_block_body_15040708();
@@ -246,7 +222,7 @@ pub async fn test_offer_propagates_gossip_multiple_large_content_values(
     peertest: &Peertest,
     target: &Client,
 ) {
-    info!("Testing populated offer propagates gossips multiple large content simultaneously");
+    info!("Testing offer propagates gossips multiple large content simultaneously");
 
     // get content values to gossip
     let (header_key_1, header_value_1) = fixture_header_by_hash_with_proof_15040708();

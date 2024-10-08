@@ -18,6 +18,7 @@ use ethportal_api::{
     types::{
         distance::Metric,
         enr::Enr,
+        portal::MAX_CONTENT_KEYS_PER_OFFER,
         portal_wire::{OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response},
     },
     utils::bytes::{hex_encode, hex_encode_compact},
@@ -100,19 +101,19 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Me
         };
 
         // offer messages are limited to 64 content keys
-        if interested_content.len() > 64 {
+        if interested_content.len() > MAX_CONTENT_KEYS_PER_OFFER {
             warn!(
                 enr = %enr,
                 content.len = interested_content.len(),
                 "Too many content items to offer to a single peer, dropping {}.",
-                interested_content.len() - 64
+                interested_content.len() - MAX_CONTENT_KEYS_PER_OFFER
             );
             // sort content keys by distance to the node
             interested_content.sort_by_cached_key(|(key, _)| {
                 TMetric::distance(&key.content_id(), &enr.node_id().raw())
             });
             // take 64 closest content keys
-            interested_content.truncate(64);
+            interested_content.truncate(MAX_CONTENT_KEYS_PER_OFFER);
         }
         // change content keys to raw content keys
         let interested_content = interested_content

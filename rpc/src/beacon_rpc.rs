@@ -15,7 +15,7 @@ use ethportal_api::{
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
         portal::{
             AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo, MAX_AMOUNT_OF_OFFERED_CONTENT_KEYS,
+            TraceContentInfo, TraceGossipInfo, MAX_CONTENT_KEYS_PER_OFFER,
         },
         portal_wire::OfferTrace,
     },
@@ -188,7 +188,7 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         enr: Enr,
         content_items: Vec<(BeaconContentKey, RawContentValue)>,
     ) -> RpcResult<AcceptInfo> {
-        if !(1..=MAX_AMOUNT_OF_OFFERED_CONTENT_KEYS).contains(&content_items.len()) {
+        if !(1..=MAX_CONTENT_KEYS_PER_OFFER).contains(&content_items.len()) {
             return Err(RpcServeError::Message(format!(
                 "Invalid amount of content items: {}",
                 content_items.len()
