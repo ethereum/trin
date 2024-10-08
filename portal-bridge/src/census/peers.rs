@@ -26,7 +26,7 @@ type PeersHashMapDelay = HashMapDelay<[u8; 32], (Enr, Distance)>;
 
 #[derive(Clone, Debug)]
 pub(super) struct Peers {
-    pub peers: Arc<RwLock<PeersHashMapDelay>>,
+    peers: Arc<RwLock<PeersHashMapDelay>>,
 }
 
 impl Peers {
