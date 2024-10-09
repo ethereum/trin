@@ -1,5 +1,7 @@
-use std::str::FromStr;
+use std::{fs, str::FromStr};
 
+use alloy_primitives::Bytes;
+use ssz::Decode;
 use tracing::info;
 
 use crate::{
@@ -11,12 +13,17 @@ use crate::{
     },
     Peertest,
 };
+use e2store::era1::Era1;
 use ethportal_api::{
-    jsonrpsee::async_client::Client,
-    types::{enr::Enr, portal_wire::OfferTrace},
+    jsonrpsee::{async_client::Client, http_client::HttpClient},
+    types::{
+        cli::DEFAULT_UTP_TRANSFER_LIMIT, enr::Enr, execution::accumulator::EpochAccumulator,
+        portal_wire::OfferTrace,
+    },
     utils::bytes::hex_encode,
-    ContentValue, Discv5ApiClient, HistoryNetworkApiClient,
+    ContentValue, Discv5ApiClient, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
+use portal_bridge::api::execution::construct_proof;
 
 pub async fn test_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Offer/ACCEPT flow");
@@ -315,4 +322,85 @@ pub async fn test_offer_propagates_gossip_multiple_large_content_values(
         receipts_value_2,
         wait_for_history_content(&peertest.nodes[0].ipc_client, receipts_key_2).await,
     );
+}
+
+// we use HttpClient instead of Client, because it can be cloned to spawn concurrent requests
+pub async fn test_offer_concurrent_utp_transfer_limit(peertest: &Peertest, target: HttpClient) {
+    info!("Testing offer concurrent limit");
+    // the actual limit being tested is 2 * limit (1x receipt & 1x body for each block)
+    // if you're testing with a different limit, adjust the DEFAULT_UTP_TRANSFER_LIMIT
+    // as desired up to maximum of 1000 (2 * the number of blocks in the test-era1 file)
+    let limit = DEFAULT_UTP_TRANSFER_LIMIT / 2;
+    let epoch_acc = fs::read("./trin-validation/src/assets/epoch_accs/0xe6ebe562c89bc8ecb94dc9b2889a27a816ec05d3d6bd1625acad72227071e721.bin").unwrap();
+    let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
+    // this is a special-case era1 file for testing that contains the first 500 blocks
+    // from this epoch.
+    let era1 = fs::read("./test_assets/era1/test-mainnet-01896-xxxxxx.era1").unwrap();
+    let era1 = Era1::iter_tuples(era1);
+
+    // collect keys to offer based on limit
+    let tuples = era1.take(limit).collect::<Vec<_>>();
+    let body_keys: Vec<HistoryContentKey> = tuples
+        .iter()
+        .map(|tuple| HistoryContentKey::new_block_body(tuple.header.header.hash()))
+        .collect();
+    let receipts_keys: Vec<HistoryContentKey> = tuples
+        .iter()
+        .map(|tuple| HistoryContentKey::new_block_receipts(tuple.header.header.hash()))
+        .collect();
+
+    // store headers for validation
+    for tuple in tuples.clone() {
+        let header_key = HistoryContentKey::new_block_header_by_hash(tuple.header.header.hash());
+        let header_value = HistoryContentValue::BlockHeaderWithProof(
+            construct_proof(tuple.header.header.clone(), &epoch_acc)
+                .await
+                .unwrap(),
+        );
+        let store_result = peertest
+            .bootnode
+            .ipc_client
+            .store(header_key.clone(), header_value.encode())
+            .await
+            .unwrap();
+        assert!(store_result);
+    }
+
+    // collect body and receipts to offer
+    let mut test_data: Vec<(HistoryContentKey, Bytes)> = vec![];
+    for tuple in tuples {
+        let body_key = HistoryContentKey::new_block_body(tuple.header.header.hash());
+        let body_value = HistoryContentValue::BlockBody(tuple.body.body.clone());
+        test_data.push((body_key.clone(), body_value.encode()));
+        let receipts_key = HistoryContentKey::new_block_receipts(tuple.header.header.hash());
+        let receipts_value = HistoryContentValue::Receipts(tuple.receipts.receipts.clone());
+        test_data.push((receipts_key.clone(), receipts_value.encode()));
+    }
+
+    // send offers
+    let peer_enr = peertest.bootnode.ipc_client.node_info().await.unwrap().enr;
+    let mut handles = vec![];
+    for (key, value) in test_data {
+        let peer_enr_clone = peer_enr.clone();
+        let target_clone = target.clone();
+        let body_handle = tokio::spawn(async move {
+            let _result = HistoryNetworkApiClient::trace_offer(
+                &target_clone,
+                peer_enr_clone,
+                key.clone(),
+                value,
+            )
+            .await
+            .unwrap();
+        });
+        handles.push(body_handle);
+    }
+
+    let _ = futures::future::join_all(handles).await;
+    for key in body_keys {
+        wait_for_history_content(&peertest.bootnode.ipc_client, key.clone()).await;
+    }
+    for key in receipts_keys {
+        wait_for_history_content(&peertest.bootnode.ipc_client, key.clone()).await;
+    }
 }
