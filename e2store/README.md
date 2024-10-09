@@ -21,6 +21,14 @@ era2 is a format made to store full flat state snapshots, one of our first uses 
 
 TODO: Add chart of snapshot size at every million block interval.
 
+### Era2 analysis tool
+
+Analysis tool that reads era2 file and prints basic stats about it can be run with:
+
+```bash
+cargo run -p e2store --bin era2-stats --features era2-stats-binary -- <path>
+```
+
 ## What is the difference between `e2store/memory.rs` and `e2store/stream.rs`
 
 `e2store/memory.rs` provides an api to load a full e2store file such as `.era`/`.era1` and manipulate it in memory. For smaller e2store files this approach works well. The issue comes when dealing with e2store files of much greater size loading the whole file into memory at once often isn't possible. This is where `e2store/stream.rs` comes in where you can stream the data you need from a e2store file as you need it. This is required for `.era2` format for storing full flat state snapshots.
