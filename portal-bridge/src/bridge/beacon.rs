@@ -182,7 +182,7 @@ impl BeaconBridge {
         current_period: Arc<Mutex<u64>>,
         finalized_bootstrap: Arc<Mutex<FinalizedBootstrap>>,
         finalized_slot: Arc<Mutex<u64>>,
-        finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
+        _finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
     ) {
         // Serve LightClientBootstrap data
         let api_clone = api.clone();
@@ -263,21 +263,21 @@ impl BeaconBridge {
         });
 
         // Serve `HistoricalSummariesWithProof` data
-        let slot_stats_clone = slot_stats.clone();
-        tokio::spawn(async move {
-            if let Err(err) = Self::serve_historical_summaries_with_proof(
-                api,
-                portal_client,
-                slot_stats_clone,
-                finalized_state_root.clone(),
-            )
-            .in_current_span()
-            .await
-            {
-                finalized_state_root.lock().await.in_progress = false;
-                warn!("Failed to serve HistoricalSummariesWithProof: {err}");
-            }
-        });
+        // let slot_stats_clone = slot_stats.clone();
+        // tokio::spawn(async move {
+        //     if let Err(err) = Self::serve_historical_summaries_with_proof(
+        //         api,
+        //         portal_client,
+        //         slot_stats_clone,
+        //         finalized_state_root.clone(),
+        //     )
+        //     .in_current_span()
+        //     .await
+        //     {
+        //         finalized_state_root.lock().await.in_progress = false;
+        //         warn!("Failed to serve HistoricalSummariesWithProof: {err}");
+        //     }
+        // });
 
         if let Ok(stats) = slot_stats.lock() {
             stats.report();
@@ -467,6 +467,7 @@ impl BeaconBridge {
         Ok(())
     }
 
+    #[allow(dead_code)] // TODO: Remove this once the method is used
     async fn serve_historical_summaries_with_proof(
         api: ConsensusApi,
         portal_client: HttpClient,
