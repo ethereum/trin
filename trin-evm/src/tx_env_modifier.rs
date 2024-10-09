@@ -132,7 +132,7 @@ impl TxEnvModifier for TransactionRequest {
         tx_env.gas_priority_fee = self.max_priority_fee_per_gas.map(U256::from);
         tx_env.max_fee_per_blob_gas = self.max_fee_per_blob_gas.map(U256::from);
         if let Some(gas) = self.gas {
-            tx_env.gas_limit = gas as u64;
+            tx_env.gas_limit = gas;
         }
         if let Some(value) = self.value {
             tx_env.value = value;

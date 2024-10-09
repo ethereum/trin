@@ -13,11 +13,10 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
 alloy-consensus.workspace = true
-alloy-eips = "0.3.6"
+alloy-eips.workspace = true
 alloy-primitives.workspace = true
 alloy-rlp.workspace = true
-alloy-rpc-types.workspace = true
-alloy-rpc-types-engine = "0.3.6"
+alloy-rpc-types = { workspace = true, features = ["engine"]}
 anyhow.workspace = true
 clap.workspace = true
 ethportal-api.workspace = true
@@ -31,7 +30,7 @@ prometheus_exporter.workspace = true
 rayon = "1.10.0"
 reqwest.workspace = true
 revm.workspace = true
-revm-inspectors = "0.7.4"
+revm-inspectors = "0.8.1"
 revm-primitives.workspace = true
 rocksdb = "0.22.0"
 serde = { workspace = true, features = ["rc"] }

@@ -3,11 +3,9 @@
 use std::fs;
 use std::net::{IpAddr, Ipv4Addr};
 
-use alloy::{
-    providers::{IpcConnect, Provider, ProviderBuilder, RootProvider},
-    pubsub::PubSubFrontend,
-    rpc::types::{BlockTransactions, BlockTransactionsKind},
-};
+use alloy_provider::{IpcConnect, Provider, ProviderBuilder, RootProvider};
+use alloy_pubsub::PubSubFrontend;
+use alloy_rpc_types::{BlockTransactions, BlockTransactionsKind};
 use ethportal_api::ContentValue;
 use jsonrpsee::async_client::Client;
 use serde_yaml::Value;
@@ -163,8 +161,8 @@ async fn test_eth_get_block_by_hash() {
     assert_eq!(block.header.receipts_root, receipts_root);
     assert_eq!(block.header.extra_data, extra_data);
     assert_eq!(block.header.mix_hash, mix_hash);
-    assert_eq!(block.header.gas_used, gas_used.to());
-    assert_eq!(block.header.gas_limit, gas_limit.to());
+    assert_eq!(block.header.gas_used, gas_used.to::<u64>());
+    assert_eq!(block.header.gas_limit, gas_limit.to::<u64>());
     assert_eq!(block.header.difficulty, difficulty);
     assert_eq!(block.header.timestamp, timestamp);
     assert_eq!(block.size, None);

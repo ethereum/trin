@@ -8,7 +8,7 @@ use crate::{
     storage::error::EVMError,
 };
 use alloy_consensus::EMPTY_ROOT_HASH;
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{keccak256, map::FbHashMap, Address, B256, U256};
 use alloy_rlp::Decodable;
 use eth_trie::{EthTrie, RootWithTrieDiff, Trie};
 use ethportal_api::types::state_trie::account_state::AccountState;
@@ -19,7 +19,7 @@ use revm::{
     db::{states::PlainStorageChangeset, BundleState, OriginalValuesKnown},
     Database, DatabaseRef,
 };
-use revm_primitives::{keccak256, AccountInfo, Bytecode, HashMap, KECCAK_EMPTY};
+use revm_primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
 use rocksdb::DB as RocksDB;
 use tracing::info;
 
@@ -38,7 +38,7 @@ pub struct EvmDB {
     /// State config
     pub config: StateConfig,
     /// Storage cache for the accounts used optionally for gossiping, keyed by address hash.
-    pub storage_cache: Arc<Mutex<HashMap<B256, HashSet<B256>>>>,
+    pub storage_cache: Arc<Mutex<FbHashMap<32, HashSet<B256>>>>,
     /// The underlying database.
     pub db: Arc<RocksDB>,
     /// To get proofs and to verify trie state.
@@ -65,7 +65,7 @@ impl EvmDB {
             },
         ));
 
-        let storage_cache = Arc::new(Mutex::new(HashMap::new()));
+        let storage_cache = Arc::new(Mutex::new(FbHashMap::default()));
         Ok(Self {
             config,
             storage_cache,
