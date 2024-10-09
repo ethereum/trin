@@ -6,7 +6,6 @@ The Portal Network is still in the research phase, and this client is experiment
 
 **Do not rely on Trin in a production setting.**
 
-
 ## How to use Trin
 
 Check out the [Trin book](https://ethereum.github.io/trin) to quickly get up and running with Trin.
