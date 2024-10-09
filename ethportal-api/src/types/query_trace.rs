@@ -1,6 +1,6 @@
 use std::{collections::HashMap, time::SystemTime};
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use discv5::enr::NodeId;
 use serde::{Deserialize, Serialize};
 

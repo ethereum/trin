@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use parking_lot::RwLock as PLRwLock;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};

@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use alloy_primitives::{keccak256, B256};
+use alloy::primitives::{keccak256, B256};
 use eth_trie::{decode_node, node::Node, TrieError};
 use serde::{Deserialize, Serialize};
 use ssz_derive::{Decode, Encode};

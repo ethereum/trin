@@ -1,6 +1,8 @@
-use alloy_consensus::{constants::KECCAK_EMPTY, EMPTY_ROOT_HASH};
-use alloy_primitives::{B256, U256};
-use alloy_rlp::{RlpDecodable, RlpEncodable};
+use alloy::{
+    consensus::{constants::KECCAK_EMPTY, EMPTY_ROOT_HASH},
+    primitives::{B256, U256},
+    rlp::{RlpDecodable, RlpEncodable},
+};
 use serde::{Deserialize, Serialize};
 
 /// The Account State stored in the state trie.

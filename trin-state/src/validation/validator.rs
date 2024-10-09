@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy_primitives::{keccak256, B256};
+use alloy::primitives::{keccak256, B256};
 use anyhow::anyhow;
 use ethportal_api::{
     types::content_key::state::{
@@ -155,8 +155,7 @@ impl StateValidator {
 mod tests {
     use std::path::PathBuf;
 
-    use alloy_primitives::Bytes;
-    use alloy_rlp::Decodable;
+    use alloy::{primitives::Bytes, rlp::Decodable};
     use anyhow::Result;
     use ethportal_api::{
         types::{

@@ -1,6 +1,7 @@
-use alloy_primitives::{Bytes, B256};
-use alloy_rlp::Decodable;
-
+use alloy::{
+    primitives::{Bytes, B256},
+    rlp::Decodable,
+};
 use ethportal_api::types::state_trie::{
     account_state::AccountState,
     nibbles::Nibbles,
@@ -118,7 +119,7 @@ fn check_traversal_result_is_value(
 mod tests {
     use std::{array, str::FromStr};
 
-    use alloy_primitives::{keccak256, Address, U256};
+    use alloy::primitives::{keccak256, Address, U256};
     use anyhow::Result;
     use eth_trie::{
         nibbles::Nibbles as EthTrieNibbles,
@@ -296,7 +297,7 @@ mod tests {
             storage_root: B256::random(),
             code_hash: B256::random(),
         };
-        let node = EncodedTrieNode::from(&create_leaf(&path, &alloy_rlp::encode(&account_state)));
+        let node = EncodedTrieNode::from(&create_leaf(&path, &alloy::rlp::encode(&account_state)));
         assert_eq!(
             validate_account_state(node.node_hash(), &address_hash, &vec![node].into()).unwrap(),
             account_state
@@ -325,7 +326,7 @@ mod tests {
             storage_root: B256::random(),
             code_hash: B256::random(),
         };
-        let node = EncodedTrieNode::from(&create_leaf(&path, &alloy_rlp::encode(account_state)));
+        let node = EncodedTrieNode::from(&create_leaf(&path, &alloy::rlp::encode(account_state)));
         validate_account_state(node.node_hash(), &address_hash, &vec![node].into()).unwrap();
     }
 

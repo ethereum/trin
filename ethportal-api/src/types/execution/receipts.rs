@@ -3,10 +3,12 @@ use std::{
     sync::Arc,
 };
 
-use alloy_primitives::{Address, Bloom, BloomInput, B256, U256};
-use alloy_rlp::{
-    length_of_length, Decodable, Encodable, Error as RlpError, Header as RlpHeader, RlpDecodable,
-    RlpEncodable,
+use alloy::{
+    primitives::{Address, Bloom, BloomInput, B256, U256},
+    rlp::{
+        length_of_length, Decodable, Encodable, Error as RlpError, Header as RlpHeader,
+        RlpDecodable, RlpEncodable,
+    },
 };
 use anyhow::anyhow;
 use bytes::{Buf, BufMut, Bytes};
@@ -33,8 +35,8 @@ impl Receipts {
 
         // Insert receipts into receipts tree
         for (index, receipt) in self.receipt_list.iter().enumerate() {
-            let path = alloy_rlp::encode(index);
-            let encoded_receipt = alloy_rlp::encode(receipt);
+            let path = alloy::rlp::encode(index);
+            let encoded_receipt = alloy::rlp::encode(receipt);
             trie.insert(&path, &encoded_receipt)
                 .map_err(|err| anyhow!("Error calculating receipts root: {err:?}"))?;
         }
@@ -60,7 +62,7 @@ impl Encodable for Receipts {
 }
 
 impl Decodable for Receipts {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
         let mut bytes = RlpHeader::decode_bytes(buf, true)?;
         let mut receipt_list: Vec<Receipt> = vec![];
         let payload_view = &mut bytes;
@@ -79,7 +81,7 @@ impl ssz::Encode for Receipts {
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
         let encoded_receipts: Vec<Vec<u8>> =
-            self.receipt_list.iter().map(alloy_rlp::encode).collect();
+            self.receipt_list.iter().map(alloy::rlp::encode).collect();
         encoded_receipts.ssz_append(buf);
     }
 
@@ -193,13 +195,13 @@ impl TransactionOutcome {
 }
 
 impl Decodable for TransactionOutcome {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
         let s = Bytes::decode(buf)?;
         match s.len() {
             32 => Ok(Self::StateRoot(B256::from_slice(&s))),
             1 => Ok(Self::StatusCode(s[0])),
             0 => Ok(Self::StatusCode(0)),
-            _ => Err(alloy_rlp::Error::Custom("Invalid transaction outcome")),
+            _ => Err(alloy::rlp::Error::Custom("Invalid transaction outcome")),
         }
     }
 }
@@ -294,7 +296,7 @@ impl LegacyReceipt {
 }
 
 impl Decodable for LegacyReceipt {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
         let rlp_head = RlpHeader::decode(buf)?;
         if !rlp_head.list {
             return Err(RlpError::UnexpectedString);
@@ -451,7 +453,7 @@ impl Receipt {
         }
     }
 
-    pub fn decode_enveloped_transactions(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+    pub fn decode_enveloped_transactions(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
         // at least one byte needs to be present
         if buf.is_empty() {
             return Err(RlpError::InputTooShort);
@@ -487,7 +489,7 @@ impl Encodable for Receipt {
 }
 
 impl Decodable for Receipt {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
         // at least one byte needs to be present
         if buf.is_empty() {
             return Err(RlpError::InputTooShort);
@@ -553,7 +555,7 @@ mod tests {
     use super::*;
     use std::{str::FromStr, vec};
 
-    use alloy_primitives::U256;
+    use alloy::primitives::U256;
     use serde_json::json;
     use ssz::{Decode, Encode};
 
@@ -572,7 +574,7 @@ mod tests {
         assert_eq!(receipt.cumulative_gas_used, U256::from(579367));
         assert_eq!(receipt.logs, []);
         assert_eq!(receipt.outcome, TransactionOutcome::StatusCode(1));
-        let encoded = alloy_rlp::encode(receipt);
+        let encoded = alloy::rlp::encode(receipt);
         assert_eq!(encoded, receipt_rlp);
     }
 
@@ -585,7 +587,7 @@ mod tests {
         assert_eq!(receipt.cumulative_gas_used, U256::from(189807));
         assert_eq!(receipt.logs.len(), 7);
         assert_eq!(receipt.outcome, TransactionOutcome::StatusCode(1));
-        let encoded = alloy_rlp::encode(receipt);
+        let encoded = alloy::rlp::encode(receipt);
         assert_eq!(encoded, receipt_rlp);
     }
 
@@ -689,7 +691,7 @@ mod tests {
                 }],
             ),
         );
-        let encoded = alloy_rlp::encode(&receipt);
+        let encoded = alloy::rlp::encode(&receipt);
         assert_eq!(encoded, expected);
         let decoded: Receipt =
             Decodable::decode(&mut encoded.as_slice()).expect("decoding receipt failed");
@@ -716,7 +718,7 @@ mod tests {
                 }],
             ),
         );
-        let encoded = alloy_rlp::encode(&receipt);
+        let encoded = alloy::rlp::encode(&receipt);
         assert_eq!(encoded, expected);
         let decoded: Receipt =
             Decodable::decode(&mut encoded.as_slice()).expect("decoding receipt failed");
@@ -743,7 +745,7 @@ mod tests {
                 }],
             ),
         );
-        let encoded = alloy_rlp::encode(&receipt);
+        let encoded = alloy::rlp::encode(&receipt);
         assert_eq!(&encoded, &expected);
         let decoded: Receipt =
             Decodable::decode(&mut encoded.as_slice()).expect("decoding receipt failed");
@@ -770,7 +772,7 @@ mod tests {
                 }],
             ),
         );
-        let encoded = alloy_rlp::encode(&receipt);
+        let encoded = alloy::rlp::encode(&receipt);
         assert_eq!(&encoded, &expected);
         let decoded: Receipt =
             Decodable::decode(&mut encoded.as_slice()).expect("decoding receipt failed");
@@ -792,7 +794,7 @@ mod tests {
                 }],
             ),
         );
-        let encoded = alloy_rlp::encode(&receipt);
+        let encoded = alloy::rlp::encode(&receipt);
         assert_eq!(&encoded[..], &expected[..]);
         let decoded: Receipt =
             Decodable::decode(&mut encoded.as_slice()).expect("decoding receipt failed");

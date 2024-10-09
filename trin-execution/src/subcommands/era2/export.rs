@@ -3,8 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::EMPTY_ROOT_HASH;
-use alloy_rlp::Decodable;
+use alloy::{consensus::EMPTY_ROOT_HASH, rlp::Decodable};
 use anyhow::ensure;
 use e2store::era2::{
     AccountEntry, AccountOrStorageEntry, Era2Writer, StorageEntry, StorageItem, MAX_STORAGE_ITEMS,

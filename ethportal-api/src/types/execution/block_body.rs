@@ -1,7 +1,9 @@
 use std::vec;
 
-use alloy_primitives::B256;
-use alloy_rlp::{Decodable, Encodable, Error as RlpError, Header as RlpHeader};
+use alloy::{
+    primitives::B256,
+    rlp::{Decodable, Encodable, Error as RlpError, Header as RlpHeader},
+};
 use anyhow::{anyhow, bail};
 use serde::Deserialize;
 use sha3::{Digest, Keccak256};
@@ -207,8 +209,8 @@ impl ssz::Encode for BlockBodyLegacy {
         let offset =
             <Vec<Vec<u8>> as Encode>::ssz_fixed_len() + <Vec<u8> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy_rlp::encode).collect();
-        let rlp_uncles: Vec<u8> = alloy_rlp::encode(&self.uncles);
+        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy::rlp::encode).collect();
+        let rlp_uncles: Vec<u8> = alloy::rlp::encode(&self.uncles);
         encoder.append(&encoded_txs);
         encoder.append(&rlp_uncles);
         encoder.finalize();
@@ -292,9 +294,9 @@ impl ssz::Encode for BlockBodyMerge {
         let offset =
             <Vec<Vec<u8>> as Encode>::ssz_fixed_len() + <Vec<u8> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy_rlp::encode).collect();
+        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy::rlp::encode).collect();
         let empty_uncles: Vec<Header> = vec![];
-        let rlp_uncles: Vec<u8> = alloy_rlp::encode(empty_uncles);
+        let rlp_uncles: Vec<u8> = alloy::rlp::encode(empty_uncles);
         encoder.append(&encoded_txs);
         encoder.append(&rlp_uncles);
         encoder.finalize();
@@ -387,11 +389,11 @@ impl ssz::Encode for BlockBodyShanghai {
             + <Vec<u8> as Encode>::ssz_fixed_len()
             + <Vec<Vec<u8>> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy_rlp::encode).collect();
+        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy::rlp::encode).collect();
         let empty_uncles: Vec<Header> = vec![];
-        let rlp_uncles: Vec<u8> = alloy_rlp::encode(empty_uncles);
+        let rlp_uncles: Vec<u8> = alloy::rlp::encode(empty_uncles);
         let encoded_withdrawals: Vec<Vec<u8>> =
-            self.withdrawals.iter().map(alloy_rlp::encode).collect();
+            self.withdrawals.iter().map(alloy::rlp::encode).collect();
         encoder.append(&encoded_txs);
         encoder.append(&rlp_uncles);
         encoder.append(&encoded_withdrawals);
@@ -454,7 +456,7 @@ impl ssz::Decode for BlockBodyShanghai {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use alloy_primitives::U256;
+    use alloy::primitives::U256;
     use rstest::rstest;
     use ssz::{Decode, Encode};
 
@@ -482,7 +484,7 @@ mod tests {
             Transaction::EIP1559(tx) => assert_eq!(tx.nonce, expected_nonce),
             Transaction::Blob(tx) => assert_eq!(tx.nonce, expected_nonce),
         }
-        let encoded_tx = alloy_rlp::encode(&tx);
+        let encoded_tx = alloy::rlp::encode(&tx);
         assert_eq!(hex_encode(tx_rlp), hex_encode(encoded_tx));
     }
 

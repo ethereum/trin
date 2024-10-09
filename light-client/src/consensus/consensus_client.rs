@@ -1,6 +1,6 @@
 use std::{cmp, sync::Arc};
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::{anyhow, ensure, Result};
 use chrono::Duration;
 use milagro_bls::PublicKey;

@@ -2,7 +2,7 @@
 /// Code sourced from:
 /// https://github.com/sigp/lighthouse/blob/bf533c8e42/consensus/merkle_proof/src/lib.rs
 use crate::merkle::safe_arith::ArithError;
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use ethereum_hashing::{hash, hash32_concat, ZERO_HASHES};
 use lazy_static::lazy_static;
 
@@ -408,7 +408,7 @@ impl From<InvalidSnapshot> for MerkleTreeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy_primitives::U256;
+    use alloy::primitives::U256;
     use quickcheck::TestResult;
     use quickcheck_macros::quickcheck;
 

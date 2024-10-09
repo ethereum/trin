@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use ethportal_api::BeaconContentKey;
 use light_client::{
     config::networks, consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client,

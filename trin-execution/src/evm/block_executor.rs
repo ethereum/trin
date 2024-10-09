@@ -151,12 +151,12 @@ impl<'a> BlockExecutor<'a> {
                 .database
                 .trie
                 .lock()
-                .insert(address_hash.as_ref(), &alloy_rlp::encode(&account))?;
+                .insert(address_hash.as_ref(), &alloy::rlp::encode(&account))?;
             self.evm
                 .db()
                 .database
                 .db
-                .put(address_hash, alloy_rlp::encode(account))?;
+                .put(address_hash, alloy::rlp::encode(account))?;
         }
 
         Ok(())

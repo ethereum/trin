@@ -1,5 +1,7 @@
-use alloy_primitives::B256;
-use alloy_rlp::{Encodable, Header, EMPTY_STRING_CODE};
+use alloy::{
+    primitives::B256,
+    rlp::{Encodable, Header, EMPTY_STRING_CODE},
+};
 use bytes::BufMut;
 use eth_trie::node::Node;
 use keccak_hash::keccak;

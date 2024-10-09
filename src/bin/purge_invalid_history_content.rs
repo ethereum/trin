@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::Result;
 use clap::Parser;
 use discv5::enr::{CombinedKey, Enr};

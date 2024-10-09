@@ -1,4 +1,4 @@
-use alloy_primitives::U256;
+use alloy::primitives::U256;
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serializer};
 use serde_json::Value;
 use ssz_types::VariableList;

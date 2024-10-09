@@ -6,7 +6,7 @@ use crate::{
         sync_committee::SyncCommittee,
     },
 };
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};

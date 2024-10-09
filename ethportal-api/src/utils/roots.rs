@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use alloy_primitives::B256;
-use alloy_rlp::Encodable;
+use alloy::{primitives::B256, rlp::Encodable};
 use anyhow::anyhow;
 use eth_trie::{EthTrie, MemoryDB, Trie};
 
@@ -16,8 +15,8 @@ pub fn calculate_merkle_patricia_root<'a, T: Encodable + 'a>(
 
     // Insert items into merkle patricia trie
     for (index, tx) in items.into_iter().enumerate() {
-        let path = alloy_rlp::encode(index);
-        let encoded_tx = alloy_rlp::encode(tx);
+        let path = alloy::rlp::encode(index);
+        let encoded_tx = alloy::rlp::encode(tx);
         trie.insert(&path, &encoded_tx)
             .map_err(|err| anyhow!("Error inserting into merkle patricia trie: {err:?}"))?;
     }

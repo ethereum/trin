@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::anyhow;
 use enr::NodeId;
 use serde_json::Value;
