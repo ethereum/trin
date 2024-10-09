@@ -1,8 +1,5 @@
 use clap::Parser;
-use tokio::{
-    sync::mpsc,
-    time::{sleep, Duration},
-};
+use tokio::time::{sleep, Duration};
 use tracing::Instrument;
 
 use ethportal_api::{
@@ -52,23 +49,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .portal_subnetworks
         .contains(&Subnetwork::State)
     {
-        // Initialize the census
-        let (census_tx, census_rx) = mpsc::unbounded_channel();
-        let mut census = Census::new(portal_client.clone(), census_rx, &bridge_config);
-        // initialize the census to acquire critical threshold view of network before gossiping
-        census.init().await?;
-        census_handle = Some(tokio::spawn(async move {
-            census
-                .run()
-                .instrument(tracing::trace_span!("census"))
-                .await;
-        }));
+        // Create and initialize the census to acquire critical view of network before gossiping
+        let mut census = Census::new(portal_client.clone(), &bridge_config);
+        census_handle = Some(census.init([Subnetwork::State]).await);
 
         let state_bridge = StateBridge::new(
             bridge_config.mode.clone(),
             portal_client.clone(),
             bridge_config.offer_limit,
-            census_tx,
+            census,
             bridge_config.bridge_id,
         )
         .await?;

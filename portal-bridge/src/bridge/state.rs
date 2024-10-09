@@ -4,14 +4,17 @@ use alloy_rlp::Decodable;
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
-    types::{portal_wire::OfferTrace, state_trie::account_state::AccountState as AccountStateInfo},
+    types::{
+        network::Subnetwork, portal_wire::OfferTrace,
+        state_trie::account_state::AccountState as AccountStateInfo,
+    },
     ContentValue, Enr, OverlayContentKey, StateContentKey, StateContentValue,
     StateNetworkApiClient,
 };
 use revm::Database;
 use revm_primitives::{keccak256, Bytecode, SpecId, B256};
 use tokio::{
-    sync::{mpsc, OwnedSemaphorePermit, Semaphore},
+    sync::{OwnedSemaphorePermit, Semaphore},
     time::timeout,
 };
 use tracing::{debug, enabled, error, info, warn, Level};
@@ -32,7 +35,7 @@ use trin_utils::dir::create_temp_dir;
 
 use crate::{
     bridge::history::SERVE_BLOCK_TIMEOUT,
-    census::{ContentKey, EnrsRequest},
+    census::Census,
     cli::BridgeId,
     types::mode::{BridgeMode, ModeType},
 };
@@ -44,8 +47,8 @@ pub struct StateBridge {
     // Semaphore used to limit the amount of active offer transfers
     // to make sure we don't overwhelm the trin client
     offer_semaphore: Arc<Semaphore>,
-    // Used to request all interested enrs in the network from census process.
-    census_tx: mpsc::UnboundedSender<EnrsRequest>,
+    // Used to request all interested enrs in the network.
+    census: Census,
     // Global offer report for tallying total performance of state bridge
     global_offer_report: Arc<Mutex<GlobalOfferReport>>,
     // Bridge id used to determine which content keys to gossip
@@ -57,7 +60,7 @@ impl StateBridge {
         mode: BridgeMode,
         portal_client: HttpClient,
         offer_limit: usize,
-        census_tx: mpsc::UnboundedSender<EnrsRequest>,
+        census: Census,
         bridge_id: BridgeId,
     ) -> anyhow::Result<Self> {
         let metrics = BridgeMetricsReporter::new("state".to_string(), &format!("{mode:?}"));
@@ -68,7 +71,7 @@ impl StateBridge {
             portal_client,
             metrics,
             offer_semaphore,
-            census_tx,
+            census,
             global_offer_report: Arc::new(Mutex::new(global_offer_report)),
             bridge_id,
         })
@@ -284,14 +287,10 @@ impl StateBridge {
     }
 
     // request enrs interested in the content key from Census
-    async fn request_enrs(&self, content_key: &StateContentKey) -> anyhow::Result<Vec<Enr>> {
-        let (resp_tx, resp_rx) = futures::channel::oneshot::channel();
-        let enrs_request = EnrsRequest {
-            content_key: ContentKey::State(content_key.clone()),
-            resp_tx,
-        };
-        self.census_tx.send(enrs_request)?;
-        Ok(resp_rx.await?)
+    fn request_enrs(&self, content_key: &StateContentKey) -> anyhow::Result<Vec<Enr>> {
+        Ok(self
+            .census
+            .get_interested_enrs(Subnetwork::State, &content_key.content_id())?)
     }
 
     // spawn individual offer tasks of the content key for each interested enr found in Census
@@ -300,7 +299,7 @@ impl StateBridge {
         content_key: StateContentKey,
         content_value: StateContentValue,
     ) {
-        let Ok(enrs) = self.request_enrs(&content_key).await else {
+        let Ok(enrs) = self.request_enrs(&content_key) else {
             error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
             return;
         };
