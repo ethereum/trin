@@ -441,10 +441,11 @@ mod tests {
 
         assert!(result.valid_for_storing);
 
-        // Expect error because the finalized slot does not match the content key finalized slot
+        // Expect error because the content key finalized slot is greaten than the light client
+        // update  finalized slot
         let invalid_content_key =
             BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
-                finalized_slot: 0,
+                finalized_slot: 17748599031001599584 + 1,
             });
         let result = validator
             .validate_content(&invalid_content_key, &content)
@@ -453,7 +454,7 @@ mod tests {
 
         assert_eq!(
             result.to_string(),
-            "Light client finality update finalized slot does not match the content key finalized slot: 17748599031001599584 != 0"
+            "Light client finality update finalized slot should be equal or greater than content key finalized slot: 17748599031001599584 < 17748599031001599585"
         );
 
         // Expect error because the light client finality update is not from the recent fork
