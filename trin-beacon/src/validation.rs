@@ -164,9 +164,9 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                 // slot
                 let finalized_slot = lc_finality_update.get_finalized_slot();
 
-                if key.finalized_slot != finalized_slot {
+                if key.finalized_slot > finalized_slot {
                     return Err(anyhow!(
-                        "Light client finality update finalized slot does not match the content key finalized slot: {} != {}",
+                        "Light client finality update finalized slot should be equal or greater than content key finalized slot: {} < {}",
                         finalized_slot,
                         key.finalized_slot
                     ));
