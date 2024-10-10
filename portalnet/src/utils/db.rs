@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::{anyhow, bail};
 use discv5::enr::{CombinedKey, Enr, NodeId};
 

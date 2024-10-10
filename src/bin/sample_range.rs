@@ -3,9 +3,11 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::B256;
-use alloy_provider::{Provider, ProviderBuilder};
+use alloy::{
+    eips::BlockNumberOrTag,
+    primitives::B256,
+    providers::{Provider, ProviderBuilder},
+};
 use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;

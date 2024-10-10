@@ -1,6 +1,6 @@
 use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use clap::Parser;
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},

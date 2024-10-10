@@ -3,7 +3,7 @@ use crate::consensus::{
     fork::ForkName,
     signature::BlsSignature,
 };
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use jsonrpsee::core::Serialize;
 use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::Deserialize;

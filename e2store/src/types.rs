@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 
-use alloy_rlp::Decodable;
+use alloy::rlp::Decodable;
 use anyhow::ensure;
 use ethportal_api::Header;
 
@@ -35,7 +35,7 @@ impl TryFrom<HeaderEntry> for Entry {
     type Error = anyhow::Error;
 
     fn try_from(value: HeaderEntry) -> Result<Self, Self::Error> {
-        let rlp_encoded = alloy_rlp::encode(value.header);
+        let rlp_encoded = alloy::rlp::encode(value.header);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;

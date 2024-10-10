@@ -6,7 +6,7 @@ pub enum EVMError {
     Trie(#[from] eth_trie::TrieError),
 
     #[error("rlp error {0}")]
-    RLP(#[from] alloy_rlp::Error),
+    RLP(#[from] alloy::rlp::Error),
 
     #[error("rocksdb error {0}")]
     DB(#[from] rocksdb::Error),

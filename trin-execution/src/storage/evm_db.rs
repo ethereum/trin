@@ -7,9 +7,11 @@ use crate::{
     },
     storage::error::EVMError,
 };
-use alloy_consensus::EMPTY_ROOT_HASH;
-use alloy_primitives::{keccak256, map::FbHashMap, Address, B256, U256};
-use alloy_rlp::Decodable;
+use alloy::{
+    consensus::EMPTY_ROOT_HASH,
+    primitives::{keccak256, map::FbHashMap, Address, B256, U256},
+    rlp::Decodable,
+};
 use eth_trie::{EthTrie, RootWithTrieDiff, Trie};
 use ethportal_api::types::state_trie::account_state::AccountState;
 use hashbrown::{HashMap as BrownHashMap, HashSet};
@@ -131,12 +133,12 @@ impl EvmDB {
         let _ = self
             .trie
             .lock()
-            .insert(address_hash.as_ref(), &alloy_rlp::encode(&account_state));
+            .insert(address_hash.as_ref(), &alloy::rlp::encode(&account_state));
         stop_timer(timer);
 
         let timer = start_commit_timer("account:put_account_into_db");
         self.db
-            .put(address_hash, alloy_rlp::encode(account_state))?;
+            .put(address_hash, alloy::rlp::encode(account_state))?;
         stop_timer(timer);
 
         stop_timer(plain_state_some_account_timer);
@@ -169,11 +171,11 @@ impl EvmDB {
             let _ = self.trie.lock().remove(address_hash.as_ref());
         } else {
             self.db
-                .put(address_hash, alloy_rlp::encode(&account_state))?;
+                .put(address_hash, alloy::rlp::encode(&account_state))?;
             let _ = self
                 .trie
                 .lock()
-                .insert(address_hash.as_ref(), &alloy_rlp::encode(&account_state));
+                .insert(address_hash.as_ref(), &alloy::rlp::encode(&account_state));
         }
 
         stop_timer(timer);
@@ -216,7 +218,7 @@ impl EvmDB {
             if value.is_zero() {
                 trie.remove(trie_key.as_ref())?;
             } else {
-                trie.insert(trie_key.as_ref(), &alloy_rlp::encode(value))?;
+                trie.insert(trie_key.as_ref(), &alloy::rlp::encode(value))?;
             }
         }
 
@@ -239,10 +241,10 @@ impl EvmDB {
         let _ = self
             .trie
             .lock()
-            .insert(address_hash.as_ref(), &alloy_rlp::encode(&account_state));
+            .insert(address_hash.as_ref(), &alloy::rlp::encode(&account_state));
 
         self.db
-            .put(address_hash, alloy_rlp::encode(account_state))?;
+            .put(address_hash, alloy::rlp::encode(account_state))?;
         stop_timer(timer);
         Ok(())
     }

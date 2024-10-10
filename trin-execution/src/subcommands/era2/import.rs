@@ -83,7 +83,7 @@ impl StateImporter {
                 } in storage_entry.0
                 {
                     storage_trie
-                        .insert(storage_index_hash.as_slice(), &alloy_rlp::encode(value))?;
+                        .insert(storage_index_hash.as_slice(), &alloy::rlp::encode(value))?;
                 }
                 // Commit storage trie every 10 million storage items, to avoid excessive memory
                 // usage
@@ -107,11 +107,11 @@ impl StateImporter {
             self.evm_db
                 .trie
                 .lock()
-                .insert(address_hash.as_slice(), &alloy_rlp::encode(&account_state))?;
+                .insert(address_hash.as_slice(), &alloy::rlp::encode(&account_state))?;
 
             self.evm_db
                 .db
-                .put(address_hash, alloy_rlp::encode(account_state))
+                .put(address_hash, alloy::rlp::encode(account_state))
                 .expect("Inserting account should never fail");
 
             accounts_imported += 1;

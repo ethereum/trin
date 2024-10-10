@@ -12,7 +12,7 @@ use crate::{
     },
     RawContentValue, RoutingTableInfo,
 };
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 

@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy_primitives::U256;
+use alloy::primitives::U256;
 use anyhow::anyhow;
 use bimap::BiHashMap;
 use once_cell::sync::Lazy;
@@ -587,7 +587,7 @@ impl From<Accept> for Value {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-    use alloy_primitives::bytes;
+    use alloy::primitives::bytes;
     use ssz_types::Error::OutOfBounds;
     use std::str::FromStr;
     use test_log::test;

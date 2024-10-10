@@ -9,7 +9,7 @@ use crate::{
     },
     types::bytes::ByteList1G,
 };
-use alloy_primitives::{Address, B256};
+use alloy::primitives::{Address, B256};
 use discv5::enr::k256::elliptic_curve::consts::U16;
 use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::{Deserialize, Serialize};

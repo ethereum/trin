@@ -1,7 +1,7 @@
 use crate::types::consensus::{
     execution_payload::ExecutionPayloadHeaderCapella, fork::ForkName, header::BeaconBlockHeader,
 };
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};

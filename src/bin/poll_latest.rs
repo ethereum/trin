@@ -1,5 +1,7 @@
-use alloy_primitives::B256;
-use alloy_provider::{Provider, ProviderBuilder, WsConnect};
+use alloy::{
+    primitives::B256,
+    providers::{Provider, ProviderBuilder, WsConnect},
+};
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use ethportal_api::{

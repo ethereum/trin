@@ -1,6 +1,8 @@
-use alloy_primitives::{keccak256, Address, Bloom, Bytes, B256, B64, U256, U64};
-use alloy_rlp::{Decodable, Encodable, Header as RlpHeader};
-use alloy_rpc_types::Header as RpcHeader;
+use alloy::{
+    primitives::{keccak256, Address, Bloom, Bytes, B256, B64, U256, U64},
+    rlp::{Decodable, Encodable, Header as RlpHeader},
+    rpc::types::Header as RpcHeader,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::utils::bytes::{hex_decode, hex_encode};
@@ -85,7 +87,7 @@ where
 impl Header {
     /// Returns the Keccak-256 hash of the header.
     pub fn hash(&self) -> B256 {
-        keccak256(alloy_rlp::encode(self))
+        keccak256(alloy::rlp::encode(self))
     }
 }
 
@@ -145,10 +147,10 @@ impl Encodable for Header {
 
 impl Decodable for Header {
     /// Attempt to decode a header from RLP bytes.
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        let rlp_head = alloy_rlp::Header::decode(buf)?;
+    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
+        let rlp_head = alloy::rlp::Header::decode(buf)?;
         if !rlp_head.list {
-            return Err(alloy_rlp::Error::UnexpectedString);
+            return Err(alloy::rlp::Error::UnexpectedString);
         }
         let started_len = buf.len();
         let mut header = Header {
@@ -330,7 +332,7 @@ mod tests {
             )
         );
 
-        let encoded_header = alloy_rlp::encode(header);
+        let encoded_header = alloy::rlp::encode(header);
         assert_eq!(header_rlp, encoded_header);
     }
 
@@ -350,7 +352,7 @@ mod tests {
                     .unwrap()
             )
         );
-        let encoded_header = alloy_rlp::encode(header);
+        let encoded_header = alloy::rlp::encode(header);
         assert_eq!(header_rlp, encoded_header);
     }
 
@@ -463,7 +465,7 @@ mod tests {
             B256::from_str("0x10aca3ebb4cf6ddd9e945a5db19385f9c105ede7374380c50d56384c3d233785")
                 .unwrap();
         assert_eq!(decoded.hash(), expected_hash);
-        let expected_header = alloy_rlp::encode(expected);
+        let expected_header = alloy::rlp::encode(expected);
         assert_eq!(data, expected_header);
     }
 

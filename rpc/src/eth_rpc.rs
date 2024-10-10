@@ -1,5 +1,7 @@
-use alloy_primitives::{Address, Bytes, B256, U256};
-use alloy_rpc_types::{Block, BlockId, BlockTransactions, TransactionRequest};
+use alloy::{
+    primitives::{Address, Bytes, B256, U256},
+    rpc::types::{Block, BlockId, BlockTransactions, TransactionRequest},
+};
 use tokio::sync::mpsc;
 
 use ethportal_api::{

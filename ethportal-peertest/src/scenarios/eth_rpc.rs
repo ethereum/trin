@@ -1,4 +1,4 @@
-use alloy_primitives::U256;
+use alloy::primitives::U256;
 use tracing::info;
 
 use ethportal_api::EthApiClient;

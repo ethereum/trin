@@ -11,9 +11,7 @@ description = "Implementations of jsonrpsee server API traits for Trin and serve
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives.workspace = true
-alloy-rlp.workspace = true
-alloy-rpc-types.workspace = true
+alloy.workspace = true
 discv5.workspace = true
 eth_trie.workspace = true
 ethportal-api.workspace = true

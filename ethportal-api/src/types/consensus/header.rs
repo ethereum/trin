@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz_derive::{Decode, Encode};

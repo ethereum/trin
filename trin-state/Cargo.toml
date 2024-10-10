@@ -11,8 +11,7 @@ description = "State network subprotocol for Trin."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = { workspace = true, features = ["getrandom"] }
-alloy-rlp.workspace = true
+alloy = { workspace = true, features = ["getrandom"] }
 anyhow.workspace = true
 discv5.workspace = true
 eth_trie.workspace = true

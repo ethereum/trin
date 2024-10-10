@@ -3,9 +3,11 @@
 use std::fs;
 use std::net::{IpAddr, Ipv4Addr};
 
-use alloy_provider::{IpcConnect, Provider, ProviderBuilder, RootProvider};
-use alloy_pubsub::PubSubFrontend;
-use alloy_rpc_types::{BlockTransactions, BlockTransactionsKind};
+use alloy::{
+    providers::{IpcConnect, Provider, ProviderBuilder, RootProvider},
+    pubsub::PubSubFrontend,
+    rpc::types::{BlockTransactions, BlockTransactionsKind},
+};
 use ethportal_api::ContentValue;
 use jsonrpsee::async_client::Client;
 use serde_yaml::Value;

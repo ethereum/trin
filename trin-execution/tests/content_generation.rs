@@ -1,4 +1,4 @@
-use alloy_rlp::Decodable;
+use alloy::rlp::Decodable;
 use anyhow::{ensure, Result};
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::{

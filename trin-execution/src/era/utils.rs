@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use alloy_rlp::Bytes;
+use alloy::primitives::bytes::Bytes;
 use anyhow::anyhow;
 use e2store::{
     era::Era,

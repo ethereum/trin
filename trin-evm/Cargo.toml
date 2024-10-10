@@ -12,9 +12,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 
 [dependencies]
-alloy-primitives.workspace = true
-alloy-rlp.workspace = true
-alloy-rpc-types.workspace = true
+alloy.workspace = true
 ethportal-api.workspace = true
 revm.workspace = true
 revm-primitives.workspace = true

@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use ssz::{Decode, Encode};
 use ssz_derive::{Decode, Encode};
 
@@ -119,7 +119,7 @@ pub struct ContractBytecodeWithProof {
 mod test {
     use std::path::PathBuf;
 
-    use alloy_primitives::Bytes;
+    use alloy::primitives::Bytes;
     use anyhow::Result;
     use rstest::rstest;
     use serde::Deserialize;

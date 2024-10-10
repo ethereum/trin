@@ -3,8 +3,7 @@ use std::{
     fs,
 };
 
-use alloy_primitives::Bytes;
-use alloy_rlp::Decodable;
+use alloy::{primitives::Bytes, rlp::Decodable};
 use futures::{Future, TryFutureExt};
 use serde::Deserializer;
 use ssz::Decode;

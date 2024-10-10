@@ -1,5 +1,7 @@
-use alloy_primitives::{Bloom, B64, U64};
-use alloy_rlp::Decodable;
+use alloy::{
+    primitives::{Bloom, B64, U64},
+    rlp::Decodable,
+};
 use ethportal_api::{
     consensus::{
         beacon_block::{
@@ -193,7 +195,7 @@ fn process_transactions(
 mod tests {
     use std::str::FromStr;
 
-    use alloy_primitives::{Address, Bloom, B256, B64, U256};
+    use alloy::primitives::{Address, Bloom, B256, B64, U256};
     use ethportal_api::{
         consensus::{beacon_block::SignedBeaconBlock, fork::ForkName},
         Header,

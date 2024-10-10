@@ -1,5 +1,7 @@
-use alloy_primitives::Address;
-use alloy_rlp::{RlpDecodable, RlpEncodable};
+use alloy::{
+    primitives::Address,
+    rlp::{RlpDecodable, RlpEncodable},
+};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::consensus::execution_payload::Withdrawal as ConsensusWithdrawal;

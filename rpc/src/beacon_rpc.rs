@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use discv5::enr::NodeId;
 use tokio::sync::mpsc;
 

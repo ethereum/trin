@@ -851,7 +851,7 @@ mod tests {
     }
 
     mod interested_enrs {
-        use alloy_primitives::U256;
+        use alloy::primitives::U256;
 
         use super::*;
 

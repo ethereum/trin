@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::ensure;
 use eth_trie::{RootWithTrieDiff, Trie};
 use ethportal_api::{types::execution::transaction::Transaction, Header};

@@ -6,7 +6,7 @@ use crate::{
     },
     utils::serde::{hex_fixed_vec, hex_var_list},
 };
-use alloy_primitives::{Address, B256, U256};
+use alloy::primitives::{Address, B256, U256};
 use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
