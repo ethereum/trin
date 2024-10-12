@@ -107,43 +107,43 @@ impl BlockBody {
         Ok(())
     }
 
-    pub fn transactions(&self) -> anyhow::Result<Vec<Transaction>> {
+    pub fn transactions(&self) -> &[Transaction] {
         match self {
-            BlockBody::Legacy(body) => Ok(body.txs.clone()),
-            BlockBody::Merge(body) => Ok(body.txs.clone()),
-            BlockBody::Shanghai(body) => Ok(body.txs.clone()),
+            BlockBody::Legacy(body) => &body.txs,
+            BlockBody::Merge(body) => &body.txs,
+            BlockBody::Shanghai(body) => &body.txs,
         }
     }
 
-    pub fn uncles(&self) -> anyhow::Result<Vec<Header>> {
+    pub fn uncles(&self) -> &[Header] {
         match self {
-            BlockBody::Legacy(body) => Ok(body.uncles.clone()),
-            BlockBody::Merge(_) => Ok(vec![]),
-            BlockBody::Shanghai(_) => Ok(vec![]),
+            BlockBody::Legacy(body) => &body.uncles,
+            BlockBody::Merge(_) => &[],
+            BlockBody::Shanghai(_) => &[],
         }
     }
 
-    pub fn withdrawals(&self) -> anyhow::Result<Vec<Withdrawal>> {
+    pub fn withdrawals(&self) -> anyhow::Result<&[Withdrawal]> {
         match self {
             BlockBody::Legacy(_) => bail!("Legacy block body does not have withdrawals"),
             BlockBody::Merge(_) => bail!("Merge block body does not have withdrawals"),
-            BlockBody::Shanghai(body) => Ok(body.withdrawals.clone()),
+            BlockBody::Shanghai(body) => Ok(&body.withdrawals),
         }
     }
 
     pub fn transactions_root(&self) -> anyhow::Result<B256> {
-        calculate_merkle_patricia_root(&self.transactions()?)
+        calculate_merkle_patricia_root(self.transactions())
     }
 
     pub fn uncles_root(&self) -> anyhow::Result<B256> {
         let mut buf = Vec::<u8>::new();
-        self.uncles()?.encode(&mut buf);
+        self.uncles().to_vec().encode(&mut buf);
         let hash = Keccak256::digest(&buf);
         Ok(B256::from_slice(hash.as_slice()))
     }
 
     pub fn withdrawals_root(&self) -> anyhow::Result<B256> {
-        calculate_merkle_patricia_root(&self.withdrawals()?)
+        calculate_merkle_patricia_root(self.withdrawals()?)
     }
 }
 
@@ -512,11 +512,10 @@ mod tests {
     fn block_body_roots_invalidates_transactions_root() {
         let block_body = get_14764013_block_body();
         // invalid txs
-        let mut invalid_txs = block_body.transactions().unwrap();
-        invalid_txs.truncate(1);
+        let invalid_txs = &block_body.transactions()[..1];
         let invalid_block_body = BlockBody::Legacy(BlockBodyLegacy {
-            txs: invalid_txs,
-            uncles: block_body.uncles().unwrap(),
+            txs: invalid_txs.to_vec(),
+            uncles: block_body.uncles().to_vec(),
         });
 
         let expected_tx_root =
@@ -532,11 +531,11 @@ mod tests {
         let block_body = get_14764013_block_body();
         // invalid uncles
         let invalid_uncles = vec![
-            block_body.uncles().unwrap()[0].clone(),
-            block_body.uncles().unwrap()[0].clone(),
+            block_body.uncles()[0].clone(),
+            block_body.uncles()[0].clone(),
         ];
         let invalid_block_body = BlockBody::Legacy(BlockBodyLegacy {
-            txs: block_body.transactions().unwrap(),
+            txs: block_body.transactions().to_vec(),
             uncles: invalid_uncles,
         });
 
