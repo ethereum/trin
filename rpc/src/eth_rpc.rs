@@ -1,8 +1,10 @@
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_rpc_types::{Block, BlockId, BlockTransactions, TransactionRequest};
+use revm::primitives::ExecutionResult;
 use tokio::sync::mpsc;
 
 use ethportal_api::{
+    jsonrpsee::types::{error::CALL_EXECUTION_FAILED_CODE, ErrorObjectOwned},
     types::{
         execution::block_body::BlockBody,
         jsonrpc::{
@@ -144,8 +146,20 @@ impl EthApiServer for EthApi {
         )
         .await
         .map_err(|err| RpcServeError::Message(err.to_string()))?;
-        let output = result_and_state.result.into_output().unwrap_or_default();
-        Ok(output)
+
+        match result_and_state.result {
+            ExecutionResult::Success { output, .. } => Ok(output.into_data()),
+            ExecutionResult::Revert { .. } => Err(ErrorObjectOwned::borrowed(
+                CALL_EXECUTION_FAILED_CODE,
+                "Reverted",
+                None,
+            )),
+            ExecutionResult::Halt { reason, .. } => Err(ErrorObjectOwned::owned(
+                CALL_EXECUTION_FAILED_CODE,
+                format!("{reason:?}"),
+                None::<()>,
+            )),
+        }
     }
 }
 
