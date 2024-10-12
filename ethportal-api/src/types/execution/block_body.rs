@@ -1,10 +1,9 @@
 use std::vec;
 
-use alloy_primitives::B256;
+use alloy_primitives::{keccak256, B256};
 use alloy_rlp::{Decodable, Encodable, Error as RlpError, Header as RlpHeader};
 use anyhow::{anyhow, bail};
 use serde::Deserialize;
-use sha3::{Digest, Keccak256};
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::Encode;
 
@@ -76,7 +75,7 @@ impl ssz::Decode for BlockBody {
 impl BlockBody {
     pub fn validate_against_header(&self, header: &Header) -> anyhow::Result<()> {
         // Validate uncles root
-        let uncles_root = self.uncles_root()?;
+        let uncles_root = self.uncles_root();
         if uncles_root != header.uncles_hash {
             bail!(
                 "Block body uncles root doesn't match header uncles root: {uncles_root:?} - {:?}",
@@ -115,35 +114,43 @@ impl BlockBody {
         }
     }
 
-    pub fn uncles(&self) -> &[Header] {
-        match self {
-            BlockBody::Legacy(body) => &body.uncles,
-            BlockBody::Merge(_) => &[],
-            BlockBody::Shanghai(_) => &[],
-        }
-    }
-
-    pub fn withdrawals(&self) -> anyhow::Result<&[Withdrawal]> {
-        match self {
-            BlockBody::Legacy(_) => bail!("Legacy block body does not have withdrawals"),
-            BlockBody::Merge(_) => bail!("Merge block body does not have withdrawals"),
-            BlockBody::Shanghai(body) => Ok(&body.withdrawals),
-        }
-    }
-
     pub fn transactions_root(&self) -> anyhow::Result<B256> {
         calculate_merkle_patricia_root(self.transactions())
     }
 
-    pub fn uncles_root(&self) -> anyhow::Result<B256> {
-        let mut buf = Vec::<u8>::new();
-        self.uncles().to_vec().encode(&mut buf);
-        let hash = Keccak256::digest(&buf);
-        Ok(B256::from_slice(hash.as_slice()))
+    /// Returns reference to uncle headers.
+    ///
+    /// Returns None post Merge fork.
+    pub fn uncles(&self) -> Option<&[Header]> {
+        match self {
+            BlockBody::Legacy(body) => Some(&body.uncles),
+            BlockBody::Merge(_) => None,
+            BlockBody::Shanghai(_) => None,
+        }
+    }
+
+    pub fn uncles_root(&self) -> B256 {
+        let uncles = self.uncles().unwrap_or_default().to_vec();
+        let encoded_uncles = alloy_rlp::encode(uncles);
+        keccak256(&encoded_uncles)
+    }
+
+    /// Returns reference to block's withdrawals.
+    ///
+    /// Returns None pre Shanghai fork.
+    pub fn withdrawals(&self) -> Option<&[Withdrawal]> {
+        match self {
+            BlockBody::Legacy(_) => None,
+            BlockBody::Merge(_) => None,
+            BlockBody::Shanghai(body) => Some(&body.withdrawals),
+        }
     }
 
     pub fn withdrawals_root(&self) -> anyhow::Result<B256> {
-        calculate_merkle_patricia_root(self.withdrawals()?)
+        let Some(withdrawals) = self.withdrawals() else {
+            bail!("Block body doesn't have withdrawals");
+        };
+        calculate_merkle_patricia_root(withdrawals)
     }
 }
 
@@ -502,10 +509,7 @@ mod tests {
         let block_body = get_14764013_block_body();
         let expected_uncles_root =
             "0x58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191".to_owned();
-        assert_eq!(
-            hex_encode(block_body.uncles_root().unwrap()),
-            expected_uncles_root
-        );
+        assert_eq!(hex_encode(block_body.uncles_root()), expected_uncles_root);
     }
 
     #[test_log::test]
@@ -515,7 +519,7 @@ mod tests {
         let invalid_txs = &block_body.transactions()[..1];
         let invalid_block_body = BlockBody::Legacy(BlockBodyLegacy {
             txs: invalid_txs.to_vec(),
-            uncles: block_body.uncles().to_vec(),
+            uncles: block_body.uncles().unwrap().to_vec(),
         });
 
         let expected_tx_root =
@@ -531,8 +535,8 @@ mod tests {
         let block_body = get_14764013_block_body();
         // invalid uncles
         let invalid_uncles = vec![
-            block_body.uncles()[0].clone(),
-            block_body.uncles()[0].clone(),
+            block_body.uncles().unwrap()[0].clone(),
+            block_body.uncles().unwrap()[0].clone(),
         ];
         let invalid_block_body = BlockBody::Legacy(BlockBodyLegacy {
             txs: block_body.transactions().to_vec(),
@@ -543,7 +547,7 @@ mod tests {
             "0x58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191".to_owned();
         assert_ne!(
             expected_uncles_root,
-            hex_encode(invalid_block_body.uncles_root().unwrap())
+            hex_encode(invalid_block_body.uncles_root())
         );
     }
 
