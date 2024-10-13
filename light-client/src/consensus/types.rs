@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::Result;
 use ethportal_api::{
     consensus::header::BeaconBlockHeader,

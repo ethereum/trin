@@ -5,7 +5,7 @@ pub mod test_utils;
 pub mod utils;
 pub mod versioned;
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use discv5::enr::NodeId;
 use error::ContentStoreError;
 use ethportal_api::types::{
@@ -204,7 +204,7 @@ pub struct DataSize {
 #[allow(clippy::unwrap_used)]
 pub mod test {
     use super::*;
-    use alloy_primitives::B512;
+    use alloy::primitives::B512;
     use ethportal_api::IdentityContentKey;
 
     #[test]

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::{anyhow, bail};
 use ethportal_api::{
     types::{

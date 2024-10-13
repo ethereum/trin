@@ -4,7 +4,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::{anyhow, bail};
 use chrono::Duration;
 use discv5::enr::{CombinedKey, Enr, NodeId};
@@ -204,7 +204,7 @@ mod tests {
     #[case(4)]
     #[case(16)]
     fn test_generate_spaced_private_keys(#[case] count: u8) {
-        use alloy_primitives::U256;
+        use alloy::primitives::U256;
 
         let private_keys = generate_spaced_private_keys(count, None);
         assert_eq!(private_keys.len() as u8, count);

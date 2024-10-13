@@ -11,10 +11,9 @@ categories = ["cryptography::cryptocurrencies"]
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-consensus.workspace = true
-alloy-primitives.workspace = true
+alloy = { workspace = true, features = ["consensus", "rlp", "rpc-types-eth", "serde"] }
 alloy-rlp.workspace = true
-alloy-rpc-types.workspace = true
+alloy-rpc-types-eth = { version = "0.4.2", default-features = false, features = ["serde"] }
 anyhow.workspace = true
 base64 = "0.13.0"
 bimap = "0.6.3"

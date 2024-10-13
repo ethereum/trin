@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::{anyhow, ensure};
 use ssz::Decode;
 use tokio::sync::RwLock;
@@ -126,7 +126,7 @@ mod tests {
     use super::*;
     use std::fs;
 
-    use alloy_primitives::U256;
+    use alloy::primitives::U256;
     use serde_json::Value;
     use ssz::Encode;
 

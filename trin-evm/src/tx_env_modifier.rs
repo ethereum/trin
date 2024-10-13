@@ -1,5 +1,4 @@
-use alloy_primitives::U256;
-use alloy_rpc_types::TransactionRequest;
+use alloy::{primitives::U256, rpc::types::TransactionRequest};
 use ethportal_api::types::execution::transaction::{
     AccessListTransaction, BlobTransaction, EIP1559Transaction, LegacyTransaction, ToAddress,
 };
@@ -21,7 +20,7 @@ impl TxEnvModifier for LegacyTransaction {
             ToAddress::Empty => TransactTo::Create,
         };
         tx_env.value = self.value;
-        tx_env.data = alloy_primitives::Bytes(self.data.clone());
+        tx_env.data = alloy::primitives::Bytes(self.data.clone());
         tx_env.chain_id = if get_spec_id(block_number).is_enabled_in(SpecId::SPURIOUS_DRAGON) {
             Some(1)
         } else {
@@ -44,7 +43,7 @@ impl TxEnvModifier for EIP1559Transaction {
             ToAddress::Empty => TransactTo::Create,
         };
         tx_env.value = self.value;
-        tx_env.data = alloy_primitives::Bytes(self.data.clone());
+        tx_env.data = alloy::primitives::Bytes(self.data.clone());
         tx_env.chain_id = Some(self.chain_id.to::<u64>());
         tx_env.nonce = Some(self.nonce.to::<u64>());
         tx_env.access_list = self
@@ -71,7 +70,7 @@ impl TxEnvModifier for AccessListTransaction {
             ToAddress::Empty => TransactTo::Create,
         };
         tx_env.value = self.value;
-        tx_env.data = alloy_primitives::Bytes(self.data.clone());
+        tx_env.data = alloy::primitives::Bytes(self.data.clone());
         tx_env.chain_id = Some(self.chain_id.to::<u64>());
         tx_env.nonce = Some(self.nonce.to::<u64>());
         tx_env.access_list = self
@@ -98,7 +97,7 @@ impl TxEnvModifier for BlobTransaction {
             ToAddress::Empty => TransactTo::Create,
         };
         tx_env.value = self.value;
-        tx_env.data = alloy_primitives::Bytes(self.data.clone());
+        tx_env.data = alloy::primitives::Bytes(self.data.clone());
         tx_env.chain_id = Some(self.chain_id.to::<u64>());
         tx_env.nonce = Some(self.nonce.to::<u64>());
         tx_env.access_list = self
@@ -154,8 +153,7 @@ impl TxEnvModifier for TransactionRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy_primitives::U64;
-    use alloy_rlp::Bytes;
+    use alloy::primitives::{bytes::Bytes, U64};
     use revm_primitives::TxEnv;
 
     #[test]

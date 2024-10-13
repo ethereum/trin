@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::{anyhow, ensure};
 use e2store::{
     era1::{BlockTuple, Era1},

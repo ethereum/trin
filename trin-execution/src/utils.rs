@@ -1,4 +1,4 @@
-use alloy_primitives::{keccak256, Address, B256};
+use alloy::primitives::{keccak256, Address, B256};
 
 pub fn full_nibble_path_to_address_hash(key_path: &[u8]) -> B256 {
     if key_path.len() != 64 {

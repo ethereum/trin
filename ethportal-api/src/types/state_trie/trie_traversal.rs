@@ -1,4 +1,4 @@
-use alloy_primitives::{Bytes, B256};
+use alloy::primitives::{Bytes, B256};
 use eth_trie::node::Node;
 use thiserror::Error;
 
@@ -115,7 +115,7 @@ impl NodeTraversal for Node {
 mod tests {
     use std::array;
 
-    use alloy_primitives::B256;
+    use alloy::primitives::B256;
     use eth_trie::{nibbles::Nibbles, node::empty_children};
     use rstest::rstest;
 

@@ -12,11 +12,9 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 
 [dependencies]
-alloy-consensus.workspace = true
-alloy-eips.workspace = true
-alloy-primitives.workspace = true
+alloy = { workspace = true, features = ["eips", "rpc-types-engine", "serde"] }
 alloy-rlp.workspace = true
-alloy-rpc-types = { workspace = true, features = ["engine"]}
+alloy-rpc-types-engine = { version = "0.4.2", default-features = false, features = ["serde"] }
 anyhow.workspace = true
 clap.workspace = true
 ethportal-api.workspace = true

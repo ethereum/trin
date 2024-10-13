@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
-use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
-use alloy_rlp::Decodable;
+use alloy::{
+    primitives::{keccak256, Address, Bytes, B256, U256},
+    rlp::Decodable,
+};
 use eth_trie::{node::Node, TrieError};
 use ethportal_api::{
     jsonrpsee::types::ErrorObjectOwned,
@@ -32,7 +34,7 @@ pub enum EvmStateError {
     #[error("Error decoding trie node: {0}")]
     DecodingTrieNode(#[from] TrieError),
     #[error("Error RLP decoding trie value: {0}")]
-    DecodingTrieValue(#[from] alloy_rlp::Error),
+    DecodingTrieValue(#[from] alloy::rlp::Error),
     #[error("Error traversing trie: {0}")]
     TrieTraversal(#[from] TraversalError),
     #[error("Storage value is invalid: {0}")]

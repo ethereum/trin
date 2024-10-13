@@ -1,7 +1,9 @@
-use alloy_primitives::{keccak256, Address, B256, U256, U64};
-use alloy_rlp::{
-    length_of_length, Decodable, Encodable, Error as RlpError, Header as RlpHeader, RlpDecodable,
-    RlpEncodable, EMPTY_STRING_CODE,
+use alloy::{
+    primitives::{keccak256, Address, B256, U256, U64},
+    rlp::{
+        length_of_length, Decodable, Encodable, Error as RlpError, Header as RlpHeader,
+        RlpDecodable, RlpEncodable, EMPTY_STRING_CODE,
+    },
 };
 use bytes::{Buf, BufMut, Bytes};
 use secp256k1::{
@@ -25,7 +27,7 @@ pub enum Transaction {
 impl Transaction {
     /// Returns the Keccak-256 hash of the header.
     pub fn hash(&self) -> B256 {
-        keccak256(alloy_rlp::encode(self))
+        keccak256(alloy::rlp::encode(self))
     }
 
     pub fn get_transaction_sender_address(&self) -> anyhow::Result<Address> {
@@ -112,7 +114,7 @@ impl Transaction {
         }
     }
 
-    pub fn decode_enveloped_transactions(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+    pub fn decode_enveloped_transactions(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
         // at least one byte needs to be present
         if buf.is_empty() {
             return Err(RlpError::InputTooShort);
@@ -150,7 +152,7 @@ impl Encodable for Transaction {
 }
 
 impl Decodable for Transaction {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
         // at least one byte needs to be present
         if buf.is_empty() {
             return Err(RlpError::InputTooShort);
@@ -627,7 +629,7 @@ impl Encodable for ToAddress {
 }
 
 impl Decodable for ToAddress {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
         if let Some(&first) = buf.first() {
             if first == EMPTY_STRING_CODE {
                 buf.advance(1);
@@ -674,7 +676,7 @@ pub struct AccessList {
 }
 
 impl Decodable for AccessList {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
         let list: Vec<AccessListItem> = Decodable::decode(buf)?;
         Ok(Self { list })
     }
@@ -696,7 +698,7 @@ pub struct AccessListItem {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use alloy_rlp::Decodable;
+    use alloy::rlp::Decodable;
 
     use crate::{types::execution::transaction::Transaction, utils::bytes::hex_decode};
 

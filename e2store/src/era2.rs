@@ -32,8 +32,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use alloy_primitives::{hex, B256, U256};
-use alloy_rlp::{Decodable, RlpDecodable, RlpEncodable};
+use alloy::{
+    primitives::{hex, B256, U256},
+    rlp::{Decodable, RlpDecodable, RlpEncodable},
+};
 use anyhow::{bail, ensure};
 use ethportal_api::types::{execution::header::Header, state_trie::account_state::AccountState};
 
@@ -247,7 +249,7 @@ impl TryFrom<AccountEntry> for Entry {
     type Error = anyhow::Error;
 
     fn try_from(value: AccountEntry) -> Result<Self, Self::Error> {
-        let rlp_encoded = alloy_rlp::encode(value);
+        let rlp_encoded = alloy::rlp::encode(value);
         let mut encoder = snap::write::FrameEncoder::new(vec![]);
         let bytes_written = encoder.write(&rlp_encoded)?;
         ensure!(
@@ -300,7 +302,7 @@ impl TryFrom<StorageEntry> for Entry {
     type Error = anyhow::Error;
 
     fn try_from(value: StorageEntry) -> Result<Self, Self::Error> {
-        let rlp_encoded = alloy_rlp::encode(value.0);
+        let rlp_encoded = alloy::rlp::encode(value.0);
         let mut encoder = snap::write::FrameEncoder::new(vec![]);
         let bytes_written = encoder.write(&rlp_encoded)?;
         ensure!(
@@ -314,7 +316,7 @@ impl TryFrom<StorageEntry> for Entry {
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::{Address, Bloom, B64};
+    use alloy::primitives::{Address, Bloom, B64};
     use trin_utils::dir::create_temp_test_dir;
 
     use crate::e2store::types::VersionEntry;

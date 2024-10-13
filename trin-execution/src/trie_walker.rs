@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 
-use alloy_consensus::EMPTY_ROOT_HASH;
-use alloy_primitives::B256;
+use alloy::{consensus::EMPTY_ROOT_HASH, primitives::B256};
 use eth_trie::{decode_node, node::Node};
 use hashbrown::HashMap as BrownHashMap;
 use serde::{Deserialize, Serialize};
@@ -161,7 +160,7 @@ impl TrieWalker {
 mod tests {
     use std::str::FromStr;
 
-    use alloy_primitives::{keccak256, Address, Bytes};
+    use alloy::primitives::{keccak256, Address, Bytes};
     use eth_trie::{RootWithTrieDiff, Trie};
     use trin_utils::dir::create_temp_test_dir;
 

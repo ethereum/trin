@@ -10,7 +10,7 @@ use crate::consensus::{
     pubkey::PubKey,
     sync_committee::SyncCommittee,
 };
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use discv5::enr::k256::elliptic_curve::consts::{U1099511627776, U2048, U4, U65536, U8192};
 use jsonrpsee::core::Serialize;
 use rs_merkle::{algorithms::Sha256, MerkleTree};

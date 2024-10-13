@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
@@ -175,7 +175,7 @@ impl fmt::Display for StateContentKey {
 mod test {
     use std::{path::PathBuf, str::FromStr};
 
-    use alloy_primitives::{bytes, keccak256, Address, Bytes};
+    use alloy::primitives::{bytes, keccak256, Address, Bytes};
     use anyhow::Result;
     use rstest::rstest;
     use serde_yaml::Value;

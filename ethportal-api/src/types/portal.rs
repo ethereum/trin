@@ -1,4 +1,4 @@
-use alloy_primitives::{Bytes, U256};
+use alloy::primitives::{Bytes, U256};
 use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, BitList};
 

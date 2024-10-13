@@ -2601,7 +2601,7 @@ mod tests {
 
     use std::{net::SocketAddr, time::Instant};
 
-    use alloy_primitives::U256;
+    use alloy::primitives::U256;
     use discv5::kbucket;
     use kbucket::KBucketsTable;
     use rstest::*;

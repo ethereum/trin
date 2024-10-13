@@ -1,6 +1,6 @@
 use std::{fmt, ops::Deref};
 
-use alloy_primitives::U256;
+use alloy::primitives::U256;
 
 pub type DataRadius = U256;
 
