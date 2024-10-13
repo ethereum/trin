@@ -11,7 +11,7 @@ description = "Storage library for Trin."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives.workspace = true
+alloy.workspace = true
 discv5.workspace = true
 ethportal-api.workspace = true
 r2d2.workspace = true

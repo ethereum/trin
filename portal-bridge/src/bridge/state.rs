@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use alloy_rlp::Decodable;
+use alloy::rlp::Decodable;
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,

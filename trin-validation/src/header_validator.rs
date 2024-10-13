@@ -6,7 +6,7 @@ use crate::{
     historical_roots_acc::HistoricalRootsAccumulator,
     merkle::proof::verify_merkle_proof,
 };
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::anyhow;
 use ethportal_api::{
     consensus::historical_summaries::HistoricalSummaries,
@@ -223,8 +223,10 @@ mod test {
     use super::*;
     use std::{fs, str::FromStr};
 
-    use alloy_primitives::{Address, Bloom, B256, U256};
-    use alloy_rlp::Decodable;
+    use alloy::{
+        primitives::{Address, Bloom, B256, U256},
+        rlp::Decodable,
+    };
     use rstest::*;
     use serde_json::Value;
     use ssz::{Decode, Encode};

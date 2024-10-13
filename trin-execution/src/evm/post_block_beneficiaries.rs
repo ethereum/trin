@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
-use alloy_consensus::constants::{ETH_TO_WEI, GWEI_TO_WEI};
-use alloy_primitives::Address;
+use alloy::{
+    consensus::constants::{ETH_TO_WEI, GWEI_TO_WEI},
+    primitives::Address,
+};
 use revm::{db::State, Evm};
 use revm_primitives::SpecId;
 use trin_evm::spec_id::get_spec_block_number;

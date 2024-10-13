@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use ethportal_api::{
     consensus::fork::ForkName,
     types::{

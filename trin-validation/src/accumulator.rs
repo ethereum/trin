@@ -1,4 +1,4 @@
-use alloy_primitives::{B256, U256};
+use alloy::primitives::{B256, U256};
 use std::path::PathBuf;
 
 use anyhow::anyhow;

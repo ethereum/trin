@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use eth_trie::TrieError;
 use ethportal_api::types::state_trie::{
     trie_traversal::{EmptyNodeInfo, TraversalError},
@@ -36,7 +36,7 @@ pub enum StateValidationError {
     #[error("Unable to decode node: {0}")]
     DecodingNode(#[from] TrieError),
     #[error("Unable to decode account state: {0}")]
-    DecodingAccountState(#[from] alloy_rlp::Error),
+    DecodingAccountState(#[from] alloy::rlp::Error),
     #[error("Failed to find header for a given hash. Err: {0}")]
     HeaderNotFound(#[from] anyhow::Error),
 }

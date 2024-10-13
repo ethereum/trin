@@ -1,8 +1,7 @@
-use alloy_primitives::{Address, Bytes, B256, U256};
-use alloy_rpc_types::{Block, BlockId, BlockTransactions, TransactionRequest};
-use revm::primitives::ExecutionResult;
-use tokio::sync::mpsc;
-
+use alloy::{
+    primitives::{Address, Bytes, B256, U256},
+    rpc::types::{Block, BlockId, BlockTransactions, TransactionRequest},
+};
 use ethportal_api::{
     jsonrpsee::types::{error::CALL_EXECUTION_FAILED_CODE, ErrorObjectOwned},
     types::{
@@ -15,6 +14,8 @@ use ethportal_api::{
     },
     ContentValue, EthApiServer, Header, HistoryContentKey, HistoryContentValue,
 };
+use revm::primitives::ExecutionResult;
+use tokio::sync::mpsc;
 use trin_evm::{
     async_db::{execute_transaction, AsyncDatabase},
     create_block_env,

@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use ethportal_api::types::{
     bootnodes::Bootnodes,
     cli::{TrinConfig, DEFAULT_UTP_TRANSFER_LIMIT},

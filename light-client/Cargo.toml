@@ -10,7 +10,7 @@ categories = ["cryptography::cryptocurrencies"]
 description = "Beacon chain light client implementation"
 
 [dependencies]
-alloy-primitives.workspace = true
+alloy.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true

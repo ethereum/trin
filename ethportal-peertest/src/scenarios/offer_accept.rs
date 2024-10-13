@@ -1,6 +1,6 @@
 use std::{fs, str::FromStr};
 
-use alloy_primitives::Bytes;
+use alloy::primitives::Bytes;
 use ssz::Decode;
 use tracing::info;
 

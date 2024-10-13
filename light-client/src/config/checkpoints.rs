@@ -1,6 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use anyhow::anyhow;
 use reqwest::Response;
 use serde::{Deserialize, Serialize};

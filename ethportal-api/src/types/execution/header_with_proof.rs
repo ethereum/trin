@@ -1,6 +1,5 @@
 use crate::{types::bytes::ByteList2048, Header};
-use alloy_primitives::B256;
-use alloy_rlp::Decodable;
+use alloy::{primitives::B256, rlp::Decodable};
 use jsonrpsee::core::Serialize;
 use serde::Deserialize;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
@@ -22,7 +21,7 @@ impl ssz::Encode for HeaderWithProof {
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let header = alloy_rlp::encode(&self.header);
+        let header = alloy::rlp::encode(&self.header);
         let header = ByteList2048::from(header);
         let offset = <ByteList2048 as Encode>::ssz_fixed_len()
             + <PreMergeAccumulatorProof as Encode>::ssz_fixed_len();
@@ -33,7 +32,7 @@ impl ssz::Encode for HeaderWithProof {
     }
 
     fn ssz_bytes_len(&self) -> usize {
-        let header = alloy_rlp::encode(&self.header);
+        let header = alloy::rlp::encode(&self.header);
         let header = ByteList2048::from(header);
         header.len() + self.proof.ssz_bytes_len()
     }

@@ -12,7 +12,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 
 [dependencies]
-alloy-primitives.workspace = true
+alloy = { workspace = true, features = ["rlp"] }
 alloy-rlp.workspace = true
 anyhow.workspace = true
 clap = { workspace = true, optional = true }

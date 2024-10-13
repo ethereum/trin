@@ -1,4 +1,4 @@
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use ethportal_api::{ContentValue, HistoryContentKey, HistoryNetworkApiClient};
 
 use crate::{utils::fixture_header_by_hash, Peertest};

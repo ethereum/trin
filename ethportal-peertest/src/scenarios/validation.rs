@@ -4,7 +4,7 @@ use crate::{
     },
     Peertest,
 };
-use alloy_primitives::B256;
+use alloy::primitives::B256;
 use ethportal_api::{
     jsonrpsee::async_client::Client,
     types::{enr::Enr, portal::ContentInfo},

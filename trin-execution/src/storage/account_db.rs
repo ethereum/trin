@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy_primitives::{keccak256, B256};
+use alloy::primitives::{keccak256, B256};
 use eth_trie::DB;
 use rocksdb::DB as RocksDB;
 

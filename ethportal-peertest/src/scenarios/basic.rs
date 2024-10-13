@@ -1,5 +1,5 @@
 use crate::{utils::fixture_header_by_hash, Peertest, PeertestNode};
-use alloy_primitives::{B256, U256};
+use alloy::primitives::{B256, U256};
 use ethportal_api::{
     types::{distance::Distance, network::Subnetwork},
     BeaconNetworkApiClient, ContentValue, Discv5ApiClient, HistoryContentKey,

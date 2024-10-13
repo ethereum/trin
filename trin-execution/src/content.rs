@@ -1,4 +1,4 @@
-use alloy_primitives::{keccak256, B256};
+use alloy::primitives::{keccak256, B256};
 use anyhow::anyhow;
 use ethportal_api::{
     types::{
