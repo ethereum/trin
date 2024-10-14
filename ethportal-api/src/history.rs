@@ -62,15 +62,12 @@ pub trait HistoryNetworkApi {
     ) -> RpcResult<ContentInfo>;
 
     /// Lookup a target content key in the network
-    #[method(name = "historyRecursiveFindContent")]
-    async fn recursive_find_content(
-        &self,
-        content_key: HistoryContentKey,
-    ) -> RpcResult<ContentInfo>;
+    #[method(name = "historyGetContent")]
+    async fn get_content(&self, content_key: HistoryContentKey) -> RpcResult<ContentInfo>;
 
     /// Lookup a target content key in the network. Return tracing info.
-    #[method(name = "historyTraceRecursiveFindContent")]
-    async fn trace_recursive_find_content(
+    #[method(name = "historyTraceGetContent")]
+    async fn trace_get_content(
         &self,
         content_key: HistoryContentKey,
     ) -> RpcResult<TraceContentInfo>;

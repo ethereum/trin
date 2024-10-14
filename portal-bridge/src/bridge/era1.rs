@@ -175,10 +175,7 @@ impl Era1Bridge {
             let mut found = 0;
             let hunter_threshold = (content_keys_to_sample.len() as u64 * threshold / 100) as usize;
             for content_key in content_keys_to_sample {
-                let result = self
-                    .portal_client
-                    .recursive_find_content(content_key.clone())
-                    .await;
+                let result = self.portal_client.get_content(content_key.clone()).await;
                 if let Ok(ContentInfo::Content { .. }) = result {
                     found += 1;
                     if found == hunter_threshold {
@@ -370,9 +367,7 @@ impl Era1Bridge {
         if hunt {
             let header_hash = block_tuple.header.header.hash();
             let header_content_key = HistoryContentKey::new_block_header_by_hash(header_hash);
-            let header_content_info = portal_client
-                .recursive_find_content(header_content_key.clone())
-                .await;
+            let header_content_info = portal_client.get_content(header_content_key.clone()).await;
             if let Ok(ContentInfo::Content { .. }) = header_content_info {
                 info!(
                     "Skipping header by hash at height: {} as header already found",
@@ -423,9 +418,7 @@ impl Era1Bridge {
         if hunt {
             let header_content_key =
                 HistoryContentKey::new_block_header_by_number(block_tuple.header.header.number);
-            let header_content_info = portal_client
-                .recursive_find_content(header_content_key.clone())
-                .await;
+            let header_content_info = portal_client.get_content(header_content_key.clone()).await;
             if let Ok(ContentInfo::Content { .. }) = header_content_info {
                 info!(
                     "Skipping header by number at height: {} as header already found",
@@ -466,9 +459,7 @@ impl Era1Bridge {
         if hunt {
             let body_hash = block_tuple.header.header.hash();
             let body_content_key = HistoryContentKey::new_block_body(body_hash);
-            let body_content_info = portal_client
-                .recursive_find_content(body_content_key.clone())
-                .await;
+            let body_content_info = portal_client.get_content(body_content_key.clone()).await;
             if let Ok(ContentInfo::Content { .. }) = body_content_info {
                 info!(
                     "Skipping body at height: {} as body already found",
@@ -508,7 +499,7 @@ impl Era1Bridge {
             let receipts_hash = block_tuple.header.header.hash();
             let receipts_content_key = HistoryContentKey::new_block_receipts(receipts_hash);
             let receipts_content_info = portal_client
-                .recursive_find_content(receipts_content_key.clone())
+                .get_content(receipts_content_key.clone())
                 .await;
             if let Ok(ContentInfo::Content { .. }) = receipts_content_info {
                 info!(

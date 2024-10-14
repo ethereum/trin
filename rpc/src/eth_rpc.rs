@@ -171,11 +171,11 @@ impl EthApi {
         &self,
         content_key: HistoryContentKey,
     ) -> Result<HistoryContentValue, RpcServeError> {
-        let endpoint = HistoryEndpoint::RecursiveFindContent(content_key.clone());
+        let endpoint = HistoryEndpoint::GetContent(content_key.clone());
         let response: ContentInfo = proxy_to_subnet(&self.history_network, endpoint).await?;
         let ContentInfo::Content { content, .. } = response else {
             return Err(RpcServeError::Message(format!(
-                "Invalid response variant: History RecursiveFindContent should contain content value; got {response:?}"
+                "Invalid response variant: History GetContent should contain content value; got {response:?}"
             )));
         };
 

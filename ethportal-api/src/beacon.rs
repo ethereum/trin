@@ -78,16 +78,13 @@ pub trait BeaconNetworkApi {
         -> RpcResult<ContentInfo>;
 
     /// Lookup a target content key in the network
-    #[method(name = "beaconRecursiveFindContent")]
-    async fn recursive_find_content(&self, content_key: BeaconContentKey)
-        -> RpcResult<ContentInfo>;
+    #[method(name = "beaconGetContent")]
+    async fn get_content(&self, content_key: BeaconContentKey) -> RpcResult<ContentInfo>;
 
     /// Lookup a target content key in the network. Return tracing info.
-    #[method(name = "beaconTraceRecursiveFindContent")]
-    async fn trace_recursive_find_content(
-        &self,
-        content_key: BeaconContentKey,
-    ) -> RpcResult<TraceContentInfo>;
+    #[method(name = "beaconTraceGetContent")]
+    async fn trace_get_content(&self, content_key: BeaconContentKey)
+        -> RpcResult<TraceContentInfo>;
 
     /// Pagination of local content keys
     #[method(name = "beaconPaginateLocalContentKeys")]

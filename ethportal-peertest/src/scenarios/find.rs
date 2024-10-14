@@ -81,7 +81,7 @@ pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) 
     }
 }
 
-pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
+pub async fn test_trace_get_content(peertest: &Peertest) {
     info!("Testing trace recursive find content");
     let (content_key, content_value) = fixture_header_by_hash();
     let store_result = HistoryNetworkApiClient::store(
@@ -95,7 +95,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     assert!(store_result);
 
     let query_start_time = SystemTime::now();
-    let trace_content_info = HistoryNetworkApiClient::trace_recursive_find_content(
+    let trace_content_info = HistoryNetworkApiClient::trace_get_content(
         &peertest.nodes[0].ipc_client,
         content_key.clone(),
     )
@@ -136,11 +136,11 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
 }
 
 // This test ensures that when content is not found the correct response is returned.
-pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Peertest) {
+pub async fn test_trace_get_content_for_absent_content(peertest: &Peertest) {
     let client = &peertest.nodes[0].ipc_client;
     let (content_key, _) = fixture_header_by_hash();
 
-    let error = HistoryNetworkApiClient::trace_recursive_find_content(client, content_key)
+    let error = HistoryNetworkApiClient::trace_get_content(client, content_key)
         .await
         .unwrap_err()
         .to_string();
@@ -150,7 +150,7 @@ pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Pee
     assert!(error.contains("-39001"));
 }
 
-pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
+pub async fn test_trace_get_content_local_db(peertest: &Peertest) {
     let (content_key, content_value) = fixture_header_by_hash();
 
     let store_result = HistoryNetworkApiClient::store(
@@ -163,12 +163,10 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
 
     assert!(store_result);
 
-    let trace_content_info = HistoryNetworkApiClient::trace_recursive_find_content(
-        &peertest.bootnode.ipc_client,
-        content_key,
-    )
-    .await
-    .unwrap();
+    let trace_content_info =
+        HistoryNetworkApiClient::trace_get_content(&peertest.bootnode.ipc_client, content_key)
+            .await
+            .unwrap();
     assert!(!trace_content_info.utp_transfer);
     assert_eq!(trace_content_info.content, content_value.encode());
 

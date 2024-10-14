@@ -52,11 +52,11 @@ impl StateRequestHandler {
             StateEndpoint::FindContent(enr, content_key) => {
                 find_content(network, enr, content_key).await
             }
-            StateEndpoint::RecursiveFindContent(content_key) => {
-                recursive_find_content(network, content_key, /* is_trace= */ false).await
+            StateEndpoint::GetContent(content_key) => {
+                get_content(network, content_key, /* is_trace= */ false).await
             }
-            StateEndpoint::TraceRecursiveFindContent(content_key) => {
-                recursive_find_content(network, content_key, /* is_trace= */ true).await
+            StateEndpoint::TraceGetContent(content_key) => {
+                get_content(network, content_key, /* is_trace= */ true).await
             }
             StateEndpoint::Store(content_key, content_value) => {
                 store(network, content_key, content_value).await
@@ -211,7 +211,7 @@ async fn find_content(
     to_json_result("FindContent", result)
 }
 
-async fn recursive_find_content(
+async fn get_content(
     network: Arc<StateNetwork>,
     content_key: StateContentKey,
     is_trace: bool,

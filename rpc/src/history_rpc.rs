@@ -99,20 +99,17 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Lookup a target content key in the network
-    async fn recursive_find_content(
-        &self,
-        content_key: HistoryContentKey,
-    ) -> RpcResult<ContentInfo> {
-        let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
+    async fn get_content(&self, content_key: HistoryContentKey) -> RpcResult<ContentInfo> {
+        let endpoint = HistoryEndpoint::GetContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Lookup a target content key in the network. Return tracing info.
-    async fn trace_recursive_find_content(
+    async fn trace_get_content(
         &self,
         content_key: HistoryContentKey,
     ) -> RpcResult<TraceContentInfo> {
-        let endpoint = HistoryEndpoint::TraceRecursiveFindContent(content_key);
+        let endpoint = HistoryEndpoint::TraceGetContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

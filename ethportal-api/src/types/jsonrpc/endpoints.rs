@@ -37,9 +37,9 @@ pub enum StateEndpoint {
     /// params: [enr, content_key]
     FindContent(Enr, StateContentKey),
     /// params: content_key
-    RecursiveFindContent(StateContentKey),
+    GetContent(StateContentKey),
     /// params: content_key
-    TraceRecursiveFindContent(StateContentKey),
+    TraceGetContent(StateContentKey),
     /// params: [content_key, content_value]
     Store(StateContentKey, StateContentValue),
     /// params: [enr, Vec<(content_key, content_value>)]
@@ -84,9 +84,9 @@ pub enum HistoryEndpoint {
     /// params: [enr]
     Ping(Enr),
     /// params: content_key
-    RecursiveFindContent(HistoryContentKey),
+    GetContent(HistoryContentKey),
     /// params: content_key
-    TraceRecursiveFindContent(HistoryContentKey),
+    TraceGetContent(HistoryContentKey),
     /// params: [content_key, content_value]
     Store(HistoryContentKey, HistoryContentValue),
     /// params: None
@@ -136,9 +136,9 @@ pub enum BeaconEndpoint {
     /// params: enr
     Ping(Enr),
     /// params: content_key
-    RecursiveFindContent(BeaconContentKey),
+    GetContent(BeaconContentKey),
     /// params: content_key
-    TraceRecursiveFindContent(BeaconContentKey),
+    TraceGetContent(BeaconContentKey),
     /// params: [content_key, content_value]
     Store(BeaconContentKey, BeaconContentValue),
     /// params: None

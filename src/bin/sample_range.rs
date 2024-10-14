@@ -142,7 +142,7 @@ async fn audit_block(
     let header_by_number_ck = HistoryContentKey::new_block_header_by_number(block_number);
     let body_ck = HistoryContentKey::new_block_body(hash);
     let receipts_ck = HistoryContentKey::new_block_receipts(hash);
-    match client.recursive_find_content(header_by_hash_ck).await {
+    match client.get_content(header_by_hash_ck).await {
         Ok(_) => {
             metrics.lock().unwrap().header_by_hash.success_count += 1;
         }
@@ -151,7 +151,7 @@ async fn audit_block(
             metrics.lock().unwrap().header_by_hash.failure_count += 1;
         }
     }
-    match client.recursive_find_content(header_by_number_ck).await {
+    match client.get_content(header_by_number_ck).await {
         Ok(_) => {
             metrics.lock().unwrap().header_by_number.success_count += 1;
         }
@@ -160,7 +160,7 @@ async fn audit_block(
             metrics.lock().unwrap().header_by_number.failure_count += 1;
         }
     }
-    match client.recursive_find_content(body_ck).await {
+    match client.get_content(body_ck).await {
         Ok(_) => {
             metrics.lock().unwrap().block_body.success_count += 1;
         }
@@ -169,7 +169,7 @@ async fn audit_block(
             metrics.lock().unwrap().block_body.failure_count += 1;
         }
     }
-    match client.recursive_find_content(receipts_ck).await {
+    match client.get_content(receipts_ck).await {
         Ok(_) => {
             metrics.lock().unwrap().receipts.success_count += 1;
         }
