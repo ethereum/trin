@@ -3,8 +3,8 @@ use crate::{
         content_key::state::StateContentKey,
         enr::Enr,
         portal::{
-            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo,
+            AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
+            PaginateLocalContentInfo, PongInfo, TraceContentInfo, TraceGossipInfo,
         },
         portal_wire::OfferTrace,
     },
@@ -55,12 +55,16 @@ pub trait StateNetworkApi {
 
     /// Send FINDCONTENT message to get the content with a content key.
     #[method(name = "stateFindContent")]
-    async fn find_content(&self, enr: Enr, content_key: StateContentKey) -> RpcResult<ContentInfo>;
+    async fn find_content(
+        &self,
+        enr: Enr,
+        content_key: StateContentKey,
+    ) -> RpcResult<FindContentInfo>;
 
     /// First checks local storage if content is not found lookup a target content key in the
     /// network
     #[method(name = "stateGetContent")]
-    async fn get_content(&self, content_key: StateContentKey) -> RpcResult<ContentInfo>;
+    async fn get_content(&self, content_key: StateContentKey) -> RpcResult<GetContentInfo>;
 
     /// First checks local storage if content is not found lookup a target content key in the
     /// network. Return tracing info.

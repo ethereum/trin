@@ -5,8 +5,8 @@ use crate::{
         content_key::beacon::BeaconContentKey,
         enr::Enr,
         portal::{
-            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo,
+            AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
+            PaginateLocalContentInfo, PongInfo, TraceContentInfo, TraceGossipInfo,
         },
         portal_wire::OfferTrace,
     },
@@ -74,13 +74,16 @@ pub trait BeaconNetworkApi {
 
     /// Send FINDCONTENT message to get the content with a content key.
     #[method(name = "beaconFindContent")]
-    async fn find_content(&self, enr: Enr, content_key: BeaconContentKey)
-        -> RpcResult<ContentInfo>;
+    async fn find_content(
+        &self,
+        enr: Enr,
+        content_key: BeaconContentKey,
+    ) -> RpcResult<FindContentInfo>;
 
     /// First checks local storage if content is not found lookup a target content key in the
     /// network
     #[method(name = "beaconGetContent")]
-    async fn get_content(&self, content_key: BeaconContentKey) -> RpcResult<ContentInfo>;
+    async fn get_content(&self, content_key: BeaconContentKey) -> RpcResult<GetContentInfo>;
 
     /// First checks local storage if content is not found lookup a target content key in the
     /// network. Return tracing info.

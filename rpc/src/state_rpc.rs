@@ -6,8 +6,9 @@ use ethportal_api::{
         enr::Enr,
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
         portal::{
-            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo, MAX_CONTENT_KEYS_PER_OFFER,
+            AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
+            PaginateLocalContentInfo, PongInfo, TraceContentInfo, TraceGossipInfo,
+            MAX_CONTENT_KEYS_PER_OFFER,
         },
         portal_wire::OfferTrace,
     },
@@ -89,14 +90,18 @@ impl StateNetworkApiServer for StateNetworkApi {
     }
 
     /// Send FINDCONTENT message to get the content with a content key.
-    async fn find_content(&self, enr: Enr, content_key: StateContentKey) -> RpcResult<ContentInfo> {
+    async fn find_content(
+        &self,
+        enr: Enr,
+        content_key: StateContentKey,
+    ) -> RpcResult<FindContentInfo> {
         let endpoint = StateEndpoint::FindContent(enr, content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// First checks local storage if content is not found lookup a target content key in the
     /// network
-    async fn get_content(&self, content_key: StateContentKey) -> RpcResult<ContentInfo> {
+    async fn get_content(&self, content_key: StateContentKey) -> RpcResult<GetContentInfo> {
         let endpoint = StateEndpoint::GetContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }

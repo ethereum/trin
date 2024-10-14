@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::{content_key::overlay::OverlayContentKey, portal::ContentInfo},
+    types::{content_key::overlay::OverlayContentKey, portal::GetContentInfo},
     HistoryContentKey, HistoryNetworkApiClient,
 };
 use futures::StreamExt;
@@ -15,7 +15,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 use tracing::{debug, info, warn};
 use url::Url;
 
@@ -103,10 +103,6 @@ pub async fn main() -> Result<()> {
     init_tracing_logger();
     info!("Running Poll Latest script.");
     let audit_config = AuditConfig::parse();
-    let timeout = match audit_config.timeout {
-        Some(timeout) => Duration::from_secs(timeout),
-        None => MAX_TIMEOUT,
-    };
     let infura_project_id = std::env::var("TRIN_INFURA_PROJECT_ID")?;
     let ws = WsConnect::new(format!("wss://mainnet.infura.io/ws/v3/{infura_project_id}"));
     let provider = ProviderBuilder::new().on_ws(ws).await?;
@@ -123,8 +119,6 @@ pub async fn main() -> Result<()> {
             block_hash,
             block_number,
             timestamp,
-            timeout,
-            audit_config.backoff,
             metrics,
             client.clone(),
         ));
@@ -136,38 +130,24 @@ async fn audit_block(
     hash: B256,
     block_number: u64,
     timestamp: Instant,
-    timeout: Duration,
-    backoff: Backoff,
     metrics: Arc<Mutex<Metrics>>,
     client: HttpClient,
 ) -> Result<()> {
     metrics.lock().unwrap().active_audit_count += 3;
     let header_by_hash_handle = tokio::spawn(audit_content_key(
         HistoryContentKey::new_block_header_by_hash(hash),
-        timestamp,
-        timeout,
-        backoff,
         client.clone(),
     ));
     let header_by_number_handle = tokio::spawn(audit_content_key(
         HistoryContentKey::new_block_header_by_number(block_number),
-        timestamp,
-        timeout,
-        backoff,
         client.clone(),
     ));
     let block_body_handle = tokio::spawn(audit_content_key(
         HistoryContentKey::new_block_body(hash),
-        timestamp,
-        timeout,
-        backoff,
         client.clone(),
     ));
     let receipts_handle = tokio::spawn(audit_content_key(
         HistoryContentKey::new_block_receipts(hash),
-        timestamp,
-        timeout,
-        backoff,
         client.clone(),
     ));
     match header_by_hash_handle.await? {
@@ -230,33 +210,19 @@ async fn audit_block(
 
 async fn audit_content_key(
     content_key: HistoryContentKey,
-    timestamp: Instant,
-    timeout: Duration,
-    backoff: Backoff,
     client: HttpClient,
 ) -> anyhow::Result<Instant> {
-    let mut attempts = 0;
-    while Instant::now() - timestamp < timeout {
-        match client.get_content(content_key.clone()).await? {
-            ContentInfo::Content { .. } => {
-                return Ok(Instant::now());
-            }
-            _ => {
-                attempts += 1;
-                let sleep_time = match backoff {
-                    Backoff::Exponential => attempts * 2,
-                    Backoff::Linear(delay) => delay,
-                };
-                sleep(Duration::from_secs(sleep_time)).await;
-            }
+    match client.get_content(content_key.clone()).await {
+        Ok(GetContentInfo { .. }) => Ok(Instant::now()),
+        Err(err) => {
+            let err_msg = format!(
+                "Unable to find content_key: {:?} error: {err:?}",
+                content_key.to_hex(),
+            );
+            warn!(err_msg);
+            Err(anyhow!("{err_msg}"))
         }
     }
-    let err_msg = format!(
-        "Unable to find content_key: {:?} within {timeout:?}",
-        content_key.to_hex(),
-    );
-    warn!("{}", err_msg);
-    Err(anyhow!("{}", err_msg))
 }
 
 // CLI Parameter Handling

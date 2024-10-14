@@ -4,7 +4,7 @@ use crate::{
 };
 use discv5::enr::NodeId;
 use ethportal_api::{
-    types::portal::{ContentInfo, TraceContentInfo},
+    types::portal::{GetContentInfo, TraceContentInfo},
     ContentValue, HistoryNetworkApiClient,
 };
 use tracing::info;
@@ -32,22 +32,17 @@ pub async fn test_recursive_utp(peertest: &Peertest) {
 
     assert!(store_result);
 
-    let content_info = peertest.nodes[0]
+    let GetContentInfo {
+        content,
+        utp_transfer,
+    } = peertest.nodes[0]
         .ipc_client
         .get_content(content_key)
         .await
         .unwrap();
 
-    if let ContentInfo::Content {
-        content,
-        utp_transfer,
-    } = content_info
-    {
-        assert_eq!(content, content_value.encode());
-        assert!(utp_transfer);
-    } else {
-        panic!("Error: Unexpected content info response");
-    }
+    assert_eq!(content, content_value.encode());
+    assert!(utp_transfer);
 }
 
 pub async fn test_trace_recursive_utp(peertest: &Peertest) {

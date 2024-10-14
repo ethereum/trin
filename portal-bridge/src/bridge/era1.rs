@@ -36,7 +36,7 @@ use crate::{
 };
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
-    types::{execution::accumulator::EpochAccumulator, portal::ContentInfo},
+    types::{execution::accumulator::EpochAccumulator, portal::GetContentInfo},
     HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use trin_validation::{
@@ -176,7 +176,7 @@ impl Era1Bridge {
             let hunter_threshold = (content_keys_to_sample.len() as u64 * threshold / 100) as usize;
             for content_key in content_keys_to_sample {
                 let result = self.portal_client.get_content(content_key.clone()).await;
-                if let Ok(ContentInfo::Content { .. }) = result {
+                if let Ok(GetContentInfo { .. }) = result {
                     found += 1;
                     if found == hunter_threshold {
                         info!("Hunter found enough content ({hunter_threshold}) to stop hunting in epoch {epoch}");
@@ -368,7 +368,7 @@ impl Era1Bridge {
             let header_hash = block_tuple.header.header.hash();
             let header_content_key = HistoryContentKey::new_block_header_by_hash(header_hash);
             let header_content_info = portal_client.get_content(header_content_key.clone()).await;
-            if let Ok(ContentInfo::Content { .. }) = header_content_info {
+            if let Ok(GetContentInfo { .. }) = header_content_info {
                 info!(
                     "Skipping header by hash at height: {} as header already found",
                     block_tuple.header.header.number
@@ -419,7 +419,7 @@ impl Era1Bridge {
             let header_content_key =
                 HistoryContentKey::new_block_header_by_number(block_tuple.header.header.number);
             let header_content_info = portal_client.get_content(header_content_key.clone()).await;
-            if let Ok(ContentInfo::Content { .. }) = header_content_info {
+            if let Ok(GetContentInfo { .. }) = header_content_info {
                 info!(
                     "Skipping header by number at height: {} as header already found",
                     block_tuple.header.header.number
@@ -460,7 +460,7 @@ impl Era1Bridge {
             let body_hash = block_tuple.header.header.hash();
             let body_content_key = HistoryContentKey::new_block_body(body_hash);
             let body_content_info = portal_client.get_content(body_content_key.clone()).await;
-            if let Ok(ContentInfo::Content { .. }) = body_content_info {
+            if let Ok(GetContentInfo { .. }) = body_content_info {
                 info!(
                     "Skipping body at height: {} as body already found",
                     block_tuple.header.header.number
@@ -501,7 +501,7 @@ impl Era1Bridge {
             let receipts_content_info = portal_client
                 .get_content(receipts_content_key.clone())
                 .await;
-            if let Ok(ContentInfo::Content { .. }) = receipts_content_info {
+            if let Ok(GetContentInfo { .. }) = receipts_content_info {
                 info!(
                     "Skipping receipts at height: {} as receipts already found",
                     block_tuple.header.header.number
