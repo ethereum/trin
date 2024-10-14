@@ -25,7 +25,6 @@ use tokio::sync::{
     mpsc::{self, Receiver},
     RwLock,
 };
-use trin_utils::dir::create_temp_test_dir;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
@@ -167,8 +166,7 @@ pub async fn run_test_app(
         ..Default::default()
     };
 
-    let temp_dir = create_temp_test_dir()?.into_path();
-    let mut discovery = Discovery::new(config, &temp_dir, MAINNET.clone()).unwrap();
+    let mut discovery = Discovery::new(config, MAINNET.clone()).unwrap();
     let talk_req_rx = discovery.start().await.unwrap();
     let enr = discovery.local_enr();
     let discovery = Arc::new(discovery);
