@@ -14,14 +14,6 @@ pub type RawContentValue = Bytes;
 pub type DataRadius = U256;
 pub type Distance = U256;
 
-/// Part of a TraceGetContent response
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NodeInfo {
-    pub enr: Enr,
-    pub distance: Distance,
-}
-
 /// Response for Ping endpoint
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

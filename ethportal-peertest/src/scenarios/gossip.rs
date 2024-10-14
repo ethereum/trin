@@ -297,11 +297,7 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
         .unwrap();
 
     // send find_content request from fresh target to target
-    let _result = fresh_target
-        //.find_content(target.node_info().await.unwrap().enr, acc_key_2.clone())
-        .get_content(body_key_2.clone())
-        .await
-        .unwrap();
+    let _result = fresh_target.get_content(body_key_2.clone()).await.unwrap();
 
     // check that the fresh target has stored body_2 stored
     assert_eq!(

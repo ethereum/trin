@@ -98,13 +98,15 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
-    /// Lookup a target content key in the network
+    /// First checks local storage if content is not found lookup a target content key in the
+    /// network
     async fn get_content(&self, content_key: HistoryContentKey) -> RpcResult<ContentInfo> {
         let endpoint = HistoryEndpoint::GetContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
-    /// Lookup a target content key in the network. Return tracing info.
+    /// First checks local storage if content is not found lookup a target content key in the
+    /// network. Return tracing info.
     async fn trace_get_content(
         &self,
         content_key: HistoryContentKey,

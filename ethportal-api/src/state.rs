@@ -57,11 +57,13 @@ pub trait StateNetworkApi {
     #[method(name = "stateFindContent")]
     async fn find_content(&self, enr: Enr, content_key: StateContentKey) -> RpcResult<ContentInfo>;
 
-    /// Lookup a target content key in the network
+    /// First checks local storage if content is not found lookup a target content key in the
+    /// network
     #[method(name = "stateGetContent")]
     async fn get_content(&self, content_key: StateContentKey) -> RpcResult<ContentInfo>;
 
-    /// Lookup a target content key in the network. Return tracing info.
+    /// First checks local storage if content is not found lookup a target content key in the
+    /// network. Return tracing info.
     #[method(name = "stateTraceGetContent")]
     async fn trace_get_content(&self, content_key: StateContentKey) -> RpcResult<TraceContentInfo>;
 
