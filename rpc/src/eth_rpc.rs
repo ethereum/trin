@@ -1,11 +1,11 @@
 use alloy::{
     primitives::{Address, Bytes, B256, U256},
-    rpc::types::{Block, BlockId, BlockTransactions, TransactionRequest},
+    rpc::types::{Block, BlockId, BlockNumberOrTag, BlockTransactions, TransactionRequest},
 };
 use ethportal_api::{
     jsonrpsee::types::{error::CALL_EXECUTION_FAILED_CODE, ErrorObjectOwned},
     types::{
-        execution::block_body::BlockBody,
+        execution::{block_body::BlockBody, transaction::Transaction},
         jsonrpc::{
             endpoints::HistoryEndpoint,
             request::{HistoryJsonRpcRequest, StateJsonRpcRequest},
@@ -52,41 +52,22 @@ impl EthApiServer for EthApi {
         Ok(U256::from(CHAIN_ID))
     }
 
+    async fn get_block_by_number(
+        &self,
+        block_number_or_tag: BlockNumberOrTag,
+        hydrated_transactions: bool,
+    ) -> RpcResult<Block> {
+        let header = self.fetch_header_by_number(block_number_or_tag).await?;
+        Ok(self.fetch_block(header, hydrated_transactions).await?)
+    }
+
     async fn get_block_by_hash(
         &self,
         block_hash: B256,
         hydrated_transactions: bool,
     ) -> RpcResult<Block> {
-        if hydrated_transactions {
-            return Err(RpcServeError::Message(
-                "replying with all transaction bodies is not supported yet".into(),
-            )
-            .into());
-        }
-
         let header = self.fetch_header_by_hash(block_hash).await?;
-        let body = self.fetch_block_body(block_hash).await?;
-        let transactions = match body {
-            BlockBody::Legacy(body) => body.txs,
-            BlockBody::Merge(body) => body.txs,
-            BlockBody::Shanghai(body) => body.txs,
-        };
-        let transactions = BlockTransactions::Hashes(
-            transactions
-                .into_iter()
-                .map(|tx| tx.hash().0.into())
-                .collect(),
-        );
-
-        // Combine header and block body into the single json representation of the block.
-        let block = Block {
-            header: header.into(),
-            transactions,
-            uncles: vec![],
-            size: None,
-            withdrawals: None,
-        };
-        Ok(block)
+        Ok(self.fetch_block(header, hydrated_transactions).await?)
     }
 
     async fn get_balance(&self, address: Address, block: BlockId) -> RpcResult<U256> {
@@ -183,6 +164,24 @@ impl EthApi {
         Ok(content_value)
     }
 
+    async fn fetch_header_by_number(
+        &self,
+        block_number_or_tag: BlockNumberOrTag,
+    ) -> Result<Header, RpcServeError> {
+        let block_number = block_number_or_tag
+            .as_number()
+            .ok_or_else(|| RpcServeError::Message("Block tag is not supported yet.".to_string()))?;
+        let content_value = self
+            .fetch_history_content(HistoryContentKey::new_block_header_by_number(block_number))
+            .await?;
+        let HistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value else {
+            return Err(RpcServeError::Message(format!(
+                "Invalid response: expected block header; got {content_value:?}"
+            )));
+        };
+        Ok(header_with_proof.header)
+    }
+
     async fn fetch_header_by_hash(&self, block_hash: B256) -> Result<Header, RpcServeError> {
         let content_value = self
             .fetch_history_content(HistoryContentKey::new_block_header_by_hash(block_hash))
@@ -193,6 +192,32 @@ impl EthApi {
             )));
         };
         Ok(header_with_proof.header)
+    }
+
+    async fn fetch_block(
+        &self,
+        header: Header,
+        hydrated_transactions: bool,
+    ) -> Result<Block, RpcServeError> {
+        if hydrated_transactions {
+            return Err(RpcServeError::Message(
+                "replying with all transaction bodies is not supported yet".to_string(),
+            ));
+        }
+
+        let body = self.fetch_block_body(header.hash()).await?;
+        let transactions =
+            BlockTransactions::Hashes(body.transactions().iter().map(Transaction::hash).collect());
+
+        // Combine header and block body into the single json representation of the block.
+        let block = Block {
+            header: header.into(),
+            transactions,
+            uncles: vec![],
+            size: None,
+            withdrawals: None,
+        };
+        Ok(block)
     }
 
     async fn fetch_block_body(&self, block_hash: B256) -> Result<BlockBody, RpcServeError> {
@@ -215,8 +240,12 @@ impl EthApi {
                 "State network not enabled. Can't process request!".to_string(),
             ));
         };
-        let block_hash = as_block_hash(block)?;
-        let header = self.fetch_header_by_hash(block_hash).await?;
+        let header = match block {
+            BlockId::Hash(block_hash) => self.fetch_header_by_hash(block_hash.block_hash).await?,
+            BlockId::Number(block_number_or_tag) => {
+                self.fetch_header_by_number(block_number_or_tag).await?
+            }
+        };
         Ok(EvmBlockState::new(header, state_network.clone()))
     }
 }
@@ -225,10 +254,4 @@ impl std::fmt::Debug for EthApi {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("EthApi").finish_non_exhaustive()
     }
-}
-
-fn as_block_hash(block: BlockId) -> Result<B256, RpcServeError> {
-    block.as_block_hash().ok_or_else(|| {
-        RpcServeError::Message("Only block hash is accepted as block id".to_string())
-    })
 }
