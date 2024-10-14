@@ -1,6 +1,7 @@
 use alloy::{
     primitives::Address,
     rlp::{RlpDecodable, RlpEncodable},
+    rpc::types::Withdrawal as AlloyWithdrawal,
 };
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -29,6 +30,17 @@ where
 
 impl From<&ConsensusWithdrawal> for Withdrawal {
     fn from(withdrawal: &ConsensusWithdrawal) -> Self {
+        Self {
+            index: withdrawal.index,
+            validator_index: withdrawal.validator_index,
+            address: withdrawal.address,
+            amount: withdrawal.amount,
+        }
+    }
+}
+
+impl From<&Withdrawal> for AlloyWithdrawal {
+    fn from(withdrawal: &Withdrawal) -> Self {
         Self {
             index: withdrawal.index,
             validator_index: withdrawal.validator_index,
