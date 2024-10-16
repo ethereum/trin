@@ -277,7 +277,7 @@ impl From<Header> for RpcHeader {
             excess_blob_gas: excess_blob_gas.map(|v| v.to()),
             hash,
             parent_beacon_block_root: parent_beacon_block_root.map(|h264| h264.0.into()),
-            total_difficulty: Some(difficulty),
+            total_difficulty: None,
             requests_root: None,
         }
     }
