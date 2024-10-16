@@ -120,6 +120,7 @@ pub async fn test_lookup_enr(subnetwork: Subnetwork, peertest: &Peertest) {
 pub async fn test_ping(subnetwork: Subnetwork, target: &Client, peertest: &Peertest) {
     info!("Testing ping for {subnetwork}");
     let bootnode_enr = peertest.bootnode.enr.clone();
+    let bootnode_sequence = bootnode_enr.seq();
     let result = match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::ping(target, bootnode_enr),
         Subnetwork::History => HistoryNetworkApiClient::ping(target, bootnode_enr),
@@ -132,7 +133,7 @@ pub async fn test_ping(subnetwork: Subnetwork, target: &Client, peertest: &Peert
         result.data_radius,
         U256::from_be_slice(Distance::MAX.as_ssz_bytes().as_slice())
     );
-    assert_eq!(result.enr_seq, 1);
+    assert_eq!(result.enr_seq, bootnode_sequence);
 }
 
 pub async fn test_ping_cross_network(mainnet_target: &Client, angelfood_node: &PeertestNode) {

@@ -1,9 +1,8 @@
 use std::{
-    fmt, fs,
+    fmt,
     hash::{Hash, Hasher},
     io,
     net::{Ipv4Addr, SocketAddr},
-    path::Path,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -36,9 +35,6 @@ const TALKREQ_CHANNEL_BUFFER: usize = 100;
 
 /// ENR key for portal network client version.
 pub const ENR_PORTAL_CLIENT_KEY: &str = "c";
-
-/// ENR file name saving enr history to disk.
-const ENR_FILE_NAME: &str = "trin.enr";
 
 pub type ProtocolRequest = Vec<u8>;
 
@@ -80,7 +76,6 @@ impl fmt::Debug for Discovery {
 impl Discovery {
     pub fn new(
         portal_config: PortalnetConfig,
-        node_data_dir: &Path,
         network_spec: Arc<NetworkSpec>,
     ) -> Result<Self, String> {
         let listen_all_ips = SocketAddr::new(
@@ -128,12 +123,20 @@ impl Discovery {
             CombinedKey::secp256k1_from_bytes(portal_config.private_key.0.clone().as_mut_slice())
                 .map_err(|e| format!("Unable to create enr key: {:?}", e.to_string()))?;
 
-        let mut enr = {
+        let enr = {
             let mut builder = Discv5Enr::builder();
             if let Some(ip_address) = enr_address {
                 builder.ip(ip_address);
             }
             builder.udp4(enr_port);
+
+            // Set the ENR sequence number to the current timestamp this prevents other nodes from
+            // storing outdated Trin Enr's
+            let epoch_timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| format!("When getting current time: {e:?}"))?
+                .as_secs();
+            builder.seq(epoch_timestamp);
 
             let trin_version = get_trin_version();
             // Use "t" as short-hand for "Trin" to save bytes in ENR.
@@ -144,31 +147,6 @@ impl Discovery {
                 .build(&enr_key)
                 .map_err(|e| format!("When adding key to servers ENR: {e:?}"))?
         };
-
-        // Check if we have an old version of our Enr and if we do, increase our sequence number
-        let trin_enr_path = node_data_dir.join(ENR_FILE_NAME);
-        if trin_enr_path.is_file() {
-            let data = fs::read_to_string(trin_enr_path.clone())
-                .expect("Unable to read Trin Enr from file");
-            let old_enr = Enr::from_str(&data).expect("Expected to read valid Trin Enr from file");
-            enr.set_seq(old_enr.seq(), &enr_key)
-                .expect("Unable to set Enr sequence number");
-
-            // If the content is different then increase the sequence number
-            if !enr.compare_content(&old_enr) {
-                enr.set_seq(old_enr.seq() + 1, &enr_key)
-                    .expect("Unable to increase Enr sequence number");
-                fs::write(trin_enr_path, enr.to_base64())
-                    .expect("Unable to update Trin Enr to file");
-            } else {
-                // the content is the same, we don't want to change signatures on restart
-                // so set enr to old one to keep the same signature per sequence number
-                enr = old_enr;
-            }
-        } else {
-            // Write enr to disk
-            fs::write(trin_enr_path, enr.to_base64()).expect("Unable to write Trin Enr to file");
-        }
 
         let listen_config = ListenConfig::Ipv4 {
             ip: Ipv4Addr::UNSPECIFIED,
@@ -515,64 +493,5 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
             }
             None => Err(io::Error::from(io::ErrorKind::NotConnected)),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::utils::db::configure_node_data_dir;
-    use ethportal_api::types::portal_wire::MAINNET;
-    use trin_utils::dir::create_temp_test_dir;
-
-    #[test]
-    fn test_enr_file() {
-        // Setup temp trin data directory, as if we're in ephemeral mode
-        let temp_dir = create_temp_test_dir().unwrap();
-
-        // Configure node data dir based on the provided private key
-        let (node_data_dir, private_key) =
-            configure_node_data_dir(temp_dir.path(), None, MAINNET.network()).unwrap();
-
-        let mut portalnet_config = PortalnetConfig {
-            private_key,
-            bootnodes: vec![],
-            ..Default::default()
-        };
-
-        // test file doesn't already exist
-        let trin_enr_file_location = node_data_dir.join(ENR_FILE_NAME);
-        assert!(!trin_enr_file_location.is_file());
-
-        // test trin.enr is made on first run
-        let discovery =
-            Discovery::new(portalnet_config.clone(), &node_data_dir, MAINNET.clone()).unwrap();
-        let data = fs::read_to_string(trin_enr_file_location.clone()).unwrap();
-        let old_enr = Enr::from_str(&data).unwrap();
-        assert_eq!(discovery.local_enr(), old_enr);
-        assert_eq!(old_enr.seq(), 1);
-
-        // test if Enr changes the Enr sequence is increased and if it is written to disk
-        portalnet_config.listen_port = 2424;
-        let discovery =
-            Discovery::new(portalnet_config.clone(), &node_data_dir, MAINNET.clone()).unwrap();
-        assert_ne!(discovery.local_enr(), old_enr);
-        let data = fs::read_to_string(trin_enr_file_location.clone()).unwrap();
-        let old_enr = Enr::from_str(&data).unwrap();
-        assert_eq!(discovery.local_enr().seq(), 2);
-        assert_eq!(old_enr.seq(), 2);
-        assert_eq!(discovery.local_enr(), old_enr);
-
-        // test if the enr isn't changed that it's sequence stays the same
-        let discovery = Discovery::new(portalnet_config, &node_data_dir, MAINNET.clone()).unwrap();
-        assert_eq!(discovery.local_enr(), old_enr);
-        let data = fs::read_to_string(trin_enr_file_location).unwrap();
-        let old_enr = Enr::from_str(&data).unwrap();
-        assert_eq!(discovery.local_enr().seq(), 2);
-        assert_eq!(old_enr.seq(), 2);
-        assert_eq!(discovery.local_enr(), old_enr);
-
-        // close and remove temp directory
-        temp_dir.close().unwrap();
     }
 }

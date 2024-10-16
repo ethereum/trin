@@ -9,7 +9,6 @@ use tokio::{
     sync::{mpsc, mpsc::unbounded_channel, RwLock as TokioRwLock},
     time::{self, Duration},
 };
-use trin_utils::dir::create_temp_test_dir;
 use utp_rs::socket::UtpSocket;
 
 use ethportal_api::{
@@ -113,9 +112,7 @@ async fn overlay() {
         external_addr: Some(SocketAddr::new(ip_addr, 8001)),
         ..PortalnetConfig::default()
     };
-    let temp_dir_one = create_temp_test_dir().unwrap();
-    let mut discovery_one =
-        Discovery::new(portal_config_one, temp_dir_one.path(), MAINNET.clone()).unwrap();
+    let mut discovery_one = Discovery::new(portal_config_one, MAINNET.clone()).unwrap();
     let talk_req_rx_one = discovery_one.start().await.unwrap();
     let discovery_one = Arc::new(discovery_one);
     let overlay_one = Arc::new(init_overlay(Arc::clone(&discovery_one), protocol).await);
@@ -128,9 +125,7 @@ async fn overlay() {
         external_addr: Some(SocketAddr::new(ip_addr, 8002)),
         ..PortalnetConfig::default()
     };
-    let temp_dir_two = create_temp_test_dir().unwrap();
-    let mut discovery_two =
-        Discovery::new(portal_config_two, temp_dir_two.path(), MAINNET.clone()).unwrap();
+    let mut discovery_two = Discovery::new(portal_config_two, MAINNET.clone()).unwrap();
     let talk_req_rx_two = discovery_two.start().await.unwrap();
     let discovery_two = Arc::new(discovery_two);
     let overlay_two = Arc::new(init_overlay(Arc::clone(&discovery_two), protocol).await);
@@ -143,9 +138,7 @@ async fn overlay() {
         external_addr: Some(SocketAddr::new(ip_addr, 8003)),
         ..PortalnetConfig::default()
     };
-    let temp_dir_three = create_temp_test_dir().unwrap();
-    let mut discovery_three =
-        Discovery::new(portal_config_three, temp_dir_three.path(), MAINNET.clone()).unwrap();
+    let mut discovery_three = Discovery::new(portal_config_three, MAINNET.clone()).unwrap();
     let talk_req_rx_three = discovery_three.start().await.unwrap();
     let discovery_three = Arc::new(discovery_three);
     let overlay_three = Arc::new(init_overlay(Arc::clone(&discovery_three), protocol).await);
@@ -161,7 +154,7 @@ async fn overlay() {
     // Node two should be in node one's routing table.
     match overlay_one.send_ping(overlay_two.local_enr()).await {
         Ok(pong) => {
-            assert_eq!(1, pong.enr_seq);
+            assert_eq!(overlay_two.local_enr().seq(), pong.enr_seq);
         }
         Err(err) => panic!("Unable to respond to ping: {err}"),
     }
@@ -253,10 +246,6 @@ async fn overlay() {
         .unwrap();
     assert_eq!(found_content, content);
     assert!(!utp_transfer);
-
-    temp_dir_one.close().unwrap();
-    temp_dir_two.close().unwrap();
-    temp_dir_three.close().unwrap();
 }
 
 #[tokio::test]
@@ -266,11 +255,8 @@ async fn overlay_event_stream() {
         no_upnp: true,
         ..Default::default()
     };
-    let temp_dir = create_temp_test_dir().unwrap();
-    let discovery =
-        Arc::new(Discovery::new(portal_config, temp_dir.path(), MAINNET.clone()).unwrap());
+    let discovery = Arc::new(Discovery::new(portal_config, MAINNET.clone()).unwrap());
     let overlay = init_overlay(discovery, Subnetwork::Beacon).await;
 
     overlay.event_stream().await.unwrap();
-    temp_dir.close().unwrap();
 }

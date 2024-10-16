@@ -2606,13 +2606,11 @@ mod tests {
     use kbucket::KBucketsTable;
     use rstest::*;
     use serial_test::serial;
-    use tempfile::TempDir;
     use tokio::{
         sync::{mpsc::unbounded_channel, RwLock as TokioRwLock},
         time::timeout,
     };
     use tokio_test::{assert_pending, assert_ready, task};
-    use trin_utils::dir::create_temp_test_dir;
 
     use crate::{
         config::PortalnetConfig,
@@ -2637,15 +2635,13 @@ mod tests {
     }
 
     fn build_service(
-        temp_dir: &TempDir,
     ) -> OverlayService<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore> {
         let portal_config = PortalnetConfig {
             no_stun: true,
             no_upnp: true,
             ..Default::default()
         };
-        let discovery =
-            Arc::new(Discovery::new(portal_config, temp_dir.path(), MAINNET.clone()).unwrap());
+        let discovery = Arc::new(Discovery::new(portal_config, MAINNET.clone()).unwrap());
 
         let header_oracle = HeaderOracle::default();
         let header_oracle = Arc::new(TokioRwLock::new(header_oracle));
@@ -2725,8 +2721,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_ping_source_in_table_higher_enr_seq() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
@@ -2779,8 +2774,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_ping_source_not_in_table() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
@@ -2799,8 +2793,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_request_failure() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, destination) = generate_random_remote_enr();
         let node_id = destination.node_id();
@@ -2835,8 +2828,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_pong_source_in_table_higher_enr_seq() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, source) = generate_random_remote_enr();
         let status = NodeStatus {
@@ -2888,8 +2880,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_pong_source_not_in_table() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, source) = generate_random_remote_enr();
         let data_radius = Distance::MAX;
@@ -2907,8 +2898,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_local_enr() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
         let local_enr = service.discovery.local_enr();
         service.process_discovered_enrs(vec![local_enr.clone()]);
 
@@ -2927,8 +2917,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_unknown_enrs() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         // Generate random ENRs to simulate.
         let (_, enr1) = generate_random_remote_enr();
@@ -2969,8 +2958,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_known_enrs() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         // Generate random ENRs to simulate.
         let (sk1, mut enr1) = generate_random_remote_enr();
@@ -3020,8 +3008,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn poke_content() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
         let content = vec![0xef];
@@ -3065,8 +3052,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn poke_content_unknown_peers() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
         let content = vec![0xef];
@@ -3091,8 +3077,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn poke_content_peers_with_sufficient_radius() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
         let content = vec![0xef];
@@ -3143,8 +3128,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn request_node() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, destination) = generate_random_remote_enr();
         service.request_node(&destination);
@@ -3179,8 +3163,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn ping_node() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, destination) = generate_random_remote_enr();
         service.ping_node(&destination);
@@ -3208,8 +3191,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn connect_node() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
@@ -3237,8 +3219,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn update_node_connection_state_disconnected_to_connected() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
@@ -3276,8 +3257,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn update_node_connection_state_connected_to_disconnected() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
@@ -3336,8 +3316,7 @@ mod tests {
 
     #[test_log::test(tokio::test)]
     async fn test_init_find_nodes_query() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, bootnode1) = generate_random_remote_enr();
         let (_, bootnode2) = generate_random_remote_enr();
@@ -3377,8 +3356,7 @@ mod tests {
 
     #[test_log::test(tokio::test)]
     async fn test_advance_findnodes_query() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = build_service(&temp_dir);
+        let mut service = build_service();
 
         let (_, bootnode) = generate_random_remote_enr();
         let bootnodes = vec![bootnode.clone()];
@@ -3499,8 +3477,7 @@ mod tests {
 
     #[test_log::test(tokio::test)]
     async fn test_find_enrs() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, bootnode) = generate_random_remote_enr();
         let bootnodes = vec![bootnode.clone()];
@@ -3558,8 +3535,7 @@ mod tests {
 
     #[tokio::test]
     async fn init_find_content_query() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, bootnode_enr) = generate_random_remote_enr();
 
@@ -3608,8 +3584,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_content_no_nodes() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
@@ -3622,8 +3597,7 @@ mod tests {
 
     #[tokio::test]
     async fn advance_find_content_query_with_enrs() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, bootnode_enr) = generate_random_remote_enr();
 
@@ -3682,8 +3656,7 @@ mod tests {
 
     #[tokio::test]
     async fn advance_find_content_query_with_content() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, bootnode_enr) = generate_random_remote_enr();
         let bootnode_node_id = bootnode_enr.node_id();
@@ -3745,8 +3718,7 @@ mod tests {
 
     #[tokio::test]
     async fn advance_find_content_query_with_connection_id() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, bootnode_enr) = generate_random_remote_enr();
         let bootnode_node_id = bootnode_enr.node_id();
@@ -3811,8 +3783,7 @@ mod tests {
 
     #[test_log::test(tokio::test)]
     async fn handle_find_content_query_event() {
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
 
         let (_, bootnode_enr) = generate_random_remote_enr();
 
@@ -3927,8 +3898,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_stream() {
         // Get overlay service event stream
-        let temp_dir = create_temp_test_dir().unwrap();
-        let mut service = task::spawn(build_service(&temp_dir));
+        let mut service = task::spawn(build_service());
         let (sender, mut receiver) = broadcast::channel(1);
         service.event_stream = sender;
         // Emit LightClientUpdate event
