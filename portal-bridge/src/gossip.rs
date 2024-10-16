@@ -60,8 +60,7 @@ async fn beacon_trace_gossip(
             }
         }
         // if not, make rfc request to see if data is available on network
-        let result =
-            BeaconNetworkApiClient::recursive_find_content(&client, content_key.clone()).await;
+        let result = BeaconNetworkApiClient::get_content(&client, content_key.clone()).await;
         if let Ok(ContentInfo::Content { .. }) = result {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             found = true;
@@ -133,8 +132,7 @@ async fn history_trace_gossip(
             }
         }
         // if not, make rfc request to see if data is available on network
-        let result =
-            HistoryNetworkApiClient::recursive_find_content(&client, content_key.clone()).await;
+        let result = HistoryNetworkApiClient::get_content(&client, content_key.clone()).await;
         if let Ok(ContentInfo::Content { .. }) = result {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             found = true;

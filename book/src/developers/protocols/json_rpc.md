@@ -16,7 +16,7 @@ The specification for these endpoints can be found [here](https://playground.ope
 - `portal_historyLocalContent`
 - `portal_historyPing`
 - `portal_historyOffer`
-- `portal_historyRecursiveFindContent`
+- `portal_historyGetContent`
 - `portal_historyStore`
 - `portal_stateFindContent`
 - `portal_stateFindNodes`
@@ -30,7 +30,7 @@ The specification for these endpoints can be found [here](https://playground.ope
 The following endpoints are not part of the Portal Network specification and are defined
 in subsequent sections:
 - [`portal_historyRadius`](#portal_historyradius)
-- [`portal_historyTraceRecursiveFindContent`](#portal_historytracerecursivefindcontent)
+- [`portal_historyTraceGetContent`](#portal_historytracegetcontent)
 - [`portal_paginateLocalContentKeys`](#portal_paginatelocalcontentkeys)
 - [`portal_stateRadius`](#portal_stateradius)
 
@@ -54,8 +54,8 @@ Returns the current data storage radius being used for the History network.
 }
 ```
 
-## `portal_historyTraceRecursiveFindContent`
-Same as `portal_historyRecursiveFindContent`, but will also return a "route" with the content. The "route" contains all of the ENR's contacted during the lookup, and their respective distance to the target content. If the content is available in local storage, the route will contain an empty array.
+## `portal_historyTraceGetContent`
+Same as `portal_historyGetContent`, but will also return a "route" with the content. The "route" contains all of the ENR's contacted during the lookup, and their respective distance to the target content. If the content is available in local storage, the route will contain an empty array.
 
 ### Parameters
 - `content_key`: Target content key.

@@ -161,13 +161,13 @@ impl EvmBlockState {
             return Ok(value.clone());
         }
 
-        let endpoint = StateEndpoint::RecursiveFindContent(content_key.clone());
+        let endpoint = StateEndpoint::GetContent(content_key.clone());
         let response: ContentInfo = proxy_to_subnet(&self.state_network, endpoint)
             .await
             .map_err(|err| EvmStateError::InternalError(err.to_string()))?;
         let ContentInfo::Content { content, .. } = response else {
             return Err(EvmStateError::InternalError(format!(
-                "Invalid response variant: State RecursiveFindContent should contain content value; got {response:?}"
+                "Invalid response variant: State GetContent should contain content value; got {response:?}"
             )));
         };
 

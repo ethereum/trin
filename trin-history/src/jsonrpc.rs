@@ -46,11 +46,9 @@ async fn complete_request(network: Arc<HistoryNetwork>, request: HistoryJsonRpcR
         HistoryEndpoint::Store(content_key, content_value) => {
             store(network, content_key, content_value).await
         }
-        HistoryEndpoint::RecursiveFindContent(content_key) => {
-            recursive_find_content(network, content_key, false).await
-        }
-        HistoryEndpoint::TraceRecursiveFindContent(content_key) => {
-            recursive_find_content(network, content_key, true).await
+        HistoryEndpoint::GetContent(content_key) => get_content(network, content_key, false).await,
+        HistoryEndpoint::TraceGetContent(content_key) => {
+            get_content(network, content_key, true).await
         }
         HistoryEndpoint::AddEnr(enr) => add_enr(network, enr).await,
         HistoryEndpoint::DataRadius => {
@@ -86,8 +84,8 @@ async fn complete_request(network: Arc<HistoryNetwork>, request: HistoryJsonRpcR
     let _ = request.resp.send(response);
 }
 
-/// Constructs a JSON call for the RecursiveFindContent method.
-async fn recursive_find_content(
+/// Constructs a JSON call for the GetContent method.
+async fn get_content(
     network: Arc<HistoryNetwork>,
     content_key: HistoryContentKey,
     is_trace: bool,

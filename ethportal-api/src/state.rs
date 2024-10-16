@@ -57,16 +57,15 @@ pub trait StateNetworkApi {
     #[method(name = "stateFindContent")]
     async fn find_content(&self, enr: Enr, content_key: StateContentKey) -> RpcResult<ContentInfo>;
 
-    /// Lookup a target content key in the network
-    #[method(name = "stateRecursiveFindContent")]
-    async fn recursive_find_content(&self, content_key: StateContentKey) -> RpcResult<ContentInfo>;
+    /// First checks local storage if content is not found lookup a target content key in the
+    /// network
+    #[method(name = "stateGetContent")]
+    async fn get_content(&self, content_key: StateContentKey) -> RpcResult<ContentInfo>;
 
-    /// Lookup a target content key in the network. Return tracing info.
-    #[method(name = "stateTraceRecursiveFindContent")]
-    async fn trace_recursive_find_content(
-        &self,
-        content_key: StateContentKey,
-    ) -> RpcResult<TraceContentInfo>;
+    /// First checks local storage if content is not found lookup a target content key in the
+    /// network. Return tracing info.
+    #[method(name = "stateTraceGetContent")]
+    async fn trace_get_content(&self, content_key: StateContentKey) -> RpcResult<TraceContentInfo>;
 
     /// Pagination of local content keys
     #[method(name = "statePaginateLocalContentKeys")]

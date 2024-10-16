@@ -34,7 +34,7 @@ pub async fn test_recursive_utp(peertest: &Peertest) {
 
     let content_info = peertest.nodes[0]
         .ipc_client
-        .recursive_find_content(content_key)
+        .get_content(content_key)
         .await
         .unwrap();
 
@@ -76,7 +76,7 @@ pub async fn test_trace_recursive_utp(peertest: &Peertest) {
 
     let trace_content_info: TraceContentInfo = peertest.nodes[0]
         .ipc_client
-        .trace_recursive_find_content(content_key)
+        .trace_get_content(content_key)
         .await
         .unwrap();
 

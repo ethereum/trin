@@ -237,7 +237,7 @@ async fn audit_content_key(
 ) -> anyhow::Result<Instant> {
     let mut attempts = 0;
     while Instant::now() - timestamp < timeout {
-        match client.recursive_find_content(content_key.clone()).await? {
+        match client.get_content(content_key.clone()).await? {
             ContentInfo::Content { .. } => {
                 return Ok(Instant::now());
             }

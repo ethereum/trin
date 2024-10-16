@@ -14,14 +14,6 @@ pub type RawContentValue = Bytes;
 pub type DataRadius = U256;
 pub type Distance = U256;
 
-/// Part of a TraceRecursiveFindContent response
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NodeInfo {
-    pub enr: Enr,
-    pub distance: Distance,
-}
-
 /// Response for Ping endpoint
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,7 +45,7 @@ pub struct TraceGossipInfo {
     pub transferred: Vec<String>,
 }
 
-/// Response for FindContent & RecursiveFindContent endpoints
+/// Response for FindContent & GetContent endpoints
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
@@ -69,7 +61,7 @@ pub enum ContentInfo {
     Enrs { enrs: Vec<Enr> },
 }
 
-/// Parsed response for TraceRecursiveFindContent endpoint
+/// Parsed response for TraceGetContent endpoint
 ///
 /// This struct represents the content info, and is only used
 /// when the content is found locally or on the network.

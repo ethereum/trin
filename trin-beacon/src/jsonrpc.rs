@@ -47,11 +47,9 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
         BeaconEndpoint::Store(content_key, content_value) => {
             store(network, content_key, content_value).await
         }
-        BeaconEndpoint::RecursiveFindContent(content_key) => {
-            recursive_find_content(network, content_key, false).await
-        }
-        BeaconEndpoint::TraceRecursiveFindContent(content_key) => {
-            recursive_find_content(network, content_key, true).await
+        BeaconEndpoint::GetContent(content_key) => get_content(network, content_key, false).await,
+        BeaconEndpoint::TraceGetContent(content_key) => {
+            get_content(network, content_key, true).await
         }
         BeaconEndpoint::AddEnr(enr) => add_enr(network, enr).await,
         BeaconEndpoint::DataRadius => {
@@ -125,8 +123,8 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
     let _ = request.resp.send(response);
 }
 
-/// Constructs a JSON call for the RecursiveFindContent method.
-async fn recursive_find_content(
+/// Constructs a JSON call for the GetContent method.
+async fn get_content(
     network: Arc<BeaconNetwork>,
     content_key: BeaconContentKey,
     is_trace: bool,

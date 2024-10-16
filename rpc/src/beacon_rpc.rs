@@ -125,21 +125,20 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
-    /// Lookup a target content key in the network
-    async fn recursive_find_content(
-        &self,
-        content_key: BeaconContentKey,
-    ) -> RpcResult<ContentInfo> {
-        let endpoint = BeaconEndpoint::RecursiveFindContent(content_key);
+    /// First checks local storage if content is not found lookup a target content key in the
+    /// network
+    async fn get_content(&self, content_key: BeaconContentKey) -> RpcResult<ContentInfo> {
+        let endpoint = BeaconEndpoint::GetContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
-    /// Lookup a target content key in the network. Return tracing info.
-    async fn trace_recursive_find_content(
+    /// First checks local storage if content is not found lookup a target content key in the
+    /// network. Return tracing info.
+    async fn trace_get_content(
         &self,
         content_key: BeaconContentKey,
     ) -> RpcResult<TraceContentInfo> {
-        let endpoint = BeaconEndpoint::TraceRecursiveFindContent(content_key);
+        let endpoint = BeaconEndpoint::TraceGetContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

@@ -94,18 +94,17 @@ impl StateNetworkApiServer for StateNetworkApi {
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
-    /// Lookup a target content key in the network
-    async fn recursive_find_content(&self, content_key: StateContentKey) -> RpcResult<ContentInfo> {
-        let endpoint = StateEndpoint::RecursiveFindContent(content_key);
+    /// First checks local storage if content is not found lookup a target content key in the
+    /// network
+    async fn get_content(&self, content_key: StateContentKey) -> RpcResult<ContentInfo> {
+        let endpoint = StateEndpoint::GetContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
-    /// Lookup a target content key in the network. Return tracing info.
-    async fn trace_recursive_find_content(
-        &self,
-        content_key: StateContentKey,
-    ) -> RpcResult<TraceContentInfo> {
-        let endpoint = StateEndpoint::TraceRecursiveFindContent(content_key);
+    /// First checks local storage if content is not found lookup a target content key in the
+    /// network. Return tracing info.
+    async fn trace_get_content(&self, content_key: StateContentKey) -> RpcResult<TraceContentInfo> {
+        let endpoint = StateEndpoint::TraceGetContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

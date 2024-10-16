@@ -112,31 +112,30 @@ async fn peertest_find_content_return_enr() {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
-async fn peertest_trace_recursive_find_content_local_db() {
+async fn peertest_trace_get_content_local_db() {
     let (peertest, _target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
-    peertest::scenarios::find::test_trace_recursive_find_content_local_db(&peertest).await;
+    peertest::scenarios::find::test_trace_get_content_local_db(&peertest).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
-async fn peertest_trace_recursive_find_content_for_absent_content() {
+async fn peertest_trace_get_content_for_absent_content() {
     let (peertest, _target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
-    peertest::scenarios::find::test_trace_recursive_find_content_for_absent_content(&peertest)
-        .await;
+    peertest::scenarios::find::test_trace_get_content_for_absent_content(&peertest).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
-async fn peertest_trace_recursive_find_content() {
+async fn peertest_trace_get_content() {
     let (peertest, _target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
-    peertest::scenarios::find::test_trace_recursive_find_content(&peertest).await;
+    peertest::scenarios::find::test_trace_get_content(&peertest).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
 }
