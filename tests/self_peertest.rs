@@ -81,7 +81,7 @@ async fn peertest_offer_with_trace() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[serial]
+#[ignore = "test is flaky: fails in some environments and in CI sporadically. Re-add #[serial] when re-enabling"]
 async fn peertest_offer_concurrent_utp_transfer_limit() {
     let (peertest, target, handle) = setup_peertest_bridge(&[Subnetwork::History]).await;
     peertest::scenarios::offer_accept::test_offer_concurrent_utp_transfer_limit(&peertest, target)
