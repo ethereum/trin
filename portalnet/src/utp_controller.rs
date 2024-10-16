@@ -1,7 +1,7 @@
 use crate::discovery::UtpEnr;
 use anyhow::anyhow;
 use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tracing::debug;
 use trin_metrics::{
@@ -26,7 +26,13 @@ pub struct UtpController {
 
 lazy_static! {
     /// The default configuration to use for uTP connections.
-    pub static ref UTP_CONN_CFG: ConnectionConfig = ConnectionConfig { max_packet_size: 1024, ..Default::default()};
+    pub static ref UTP_CONN_CFG: ConnectionConfig = ConnectionConfig {
+        max_packet_size: 1024,
+        // 10 seconds of idle timeout is plenty for transfer, and allows 5 attempts at
+        //   the initial connection before giving up.
+        max_idle_timeout: Duration::from_secs(10),
+        ..Default::default()
+    };
 }
 
 /// An enum for deciding to initiate the uTP connection as connecting or accepting.
