@@ -156,7 +156,7 @@ impl BlockBody {
     }
 }
 
-fn rlp_encode_transaction_list(out: &mut dyn bytes::BufMut, txs: &[Transaction]) {
+pub fn rlp_encode_transaction_list(out: &mut dyn bytes::BufMut, txs: &[Transaction]) {
     let mut transactions_list = Vec::<u8>::new();
     for tx in txs {
         tx.encode_with_envelope(&mut transactions_list, true);
