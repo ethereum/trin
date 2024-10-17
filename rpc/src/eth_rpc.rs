@@ -1,11 +1,13 @@
 use alloy::{
     primitives::{Address, Bytes, B256, U256},
+    rlp::{BufMut, Encodable, Header as RlpHeader},
     rpc::types::{
         Block, BlockId, BlockNumberOrTag, BlockTransactions, TransactionRequest, Withdrawal,
     },
 };
 use ethportal_api::{
     jsonrpsee::types::{error::CALL_EXECUTION_FAILED_CODE, ErrorObjectOwned},
+    rlp_encode_transaction_list,
     types::{
         execution::{block_body::BlockBody, transaction::Transaction},
         jsonrpc::{
@@ -210,27 +212,40 @@ impl EthApi {
         let body = self.fetch_block_body(header.hash()).await?;
         let transactions =
             BlockTransactions::Hashes(body.transactions().iter().map(Transaction::hash).collect());
-        let uncles = body
+        let uncles: Vec<B256> = body
             .uncles()
             .unwrap_or_default()
             .iter()
             .map(|uncle| uncle.hash())
             .collect();
-        let withdrawals = body
+        let withdrawals: Option<Vec<Withdrawal>> = body
             .withdrawals()
             .map(|withdrawals| withdrawals.iter().map(Withdrawal::from).collect());
 
-        // TODO: Add calculation for the block's size:
-        //   len(rlp(header, transactions, uncles, withdrawals))
-        // NOTE: Transactions should be encoded with envelope
-        let size = None;
+        // Calculate block's encoded size:
+        // len(rlp(header, transactions, uncles, withdrawals))
+        let mut out = Vec::<u8>::new();
+        let mut list = Vec::<u8>::new();
+        header.encode(&mut list);
+        rlp_encode_transaction_list(&mut list, body.transactions());
+        uncles.encode(&mut list);
+        if let BlockBody::Shanghai(_) = &body {
+            withdrawals.clone().unwrap_or_default().encode(&mut list);
+        }
+        let rlp_header = RlpHeader {
+            list: true,
+            payload_length: list.len(),
+        };
+        rlp_header.encode(&mut out);
+        out.put_slice(list.as_slice());
+        let size = out.len();
 
         // Combine header and block body into the single json representation of the block.
         let block = Block {
             header: header.into(),
             transactions,
             uncles,
-            size,
+            size: Some(U256::from(size)),
             withdrawals,
         };
         Ok(block)
