@@ -176,7 +176,7 @@ impl Era1Bridge {
             let hunter_threshold = (content_keys_to_sample.len() as u64 * threshold / 100) as usize;
             for content_key in content_keys_to_sample {
                 let result = self.portal_client.get_content(content_key.clone()).await;
-                if let Ok(GetContentInfo { .. }) = result {
+                if result.is_ok() {
                     found += 1;
                     if found == hunter_threshold {
                         info!("Hunter found enough content ({hunter_threshold}) to stop hunting in epoch {epoch}");

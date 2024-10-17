@@ -67,7 +67,7 @@ pub struct GetContentInfo {
     pub utp_transfer: bool,
 }
 
-/// Parsed response for TraceRecursiveFindContent endpoint
+/// Parsed response for TraceGetContent endpoint
 /// This struct represents the content info, and is only used
 /// when the content is found locally or on the network.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
