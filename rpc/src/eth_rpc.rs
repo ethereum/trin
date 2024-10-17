@@ -1,6 +1,5 @@
 use alloy::{
     primitives::{Address, Bytes, B256, U256},
-    rlp,
     rpc::types::{
         Block, BlockId, BlockNumberOrTag, BlockTransactions, TransactionRequest, Withdrawal,
     },
@@ -221,23 +220,17 @@ impl EthApi {
             .withdrawals()
             .map(|withdrawals| withdrawals.iter().map(Withdrawal::from).collect());
 
-        // Calculate block's encoded size:
-        // len(rlp(header, transactions, uncles, withdrawals))
-        let mut items = Vec::<Box<dyn rlp::Encodable>>::new();
-        items.push(Box::new(header.clone()));
-        items.push(Box::new(body.transactions().to_vec()));
-        items.push(Box::new(body.uncles().unwrap_or_default().to_vec()));
-        if let Some(withdrawals) = body.withdrawals() {
-            items.push(Box::new(withdrawals.to_vec()));
-        }
-        let size = rlp::Encodable::length(&items);
+        // TODO: Add calculation for the block's size:
+        //   len(rlp(header, transactions, uncles, withdrawals))
+        // NOTE: Transactions should be encoded with envelope
+        let size = None;
 
         // Combine header and block body into the single json representation of the block.
         let block = Block {
             header: header.into(),
             transactions,
             uncles,
-            size: Some(U256::from(size)),
+            size,
             withdrawals,
         };
         Ok(block)
