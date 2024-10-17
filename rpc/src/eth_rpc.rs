@@ -1,6 +1,8 @@
 use alloy::{
     primitives::{Address, Bytes, B256, U256},
-    rpc::types::{Block, BlockId, BlockNumberOrTag, BlockTransactions, TransactionRequest},
+    rpc::types::{
+        Block, BlockId, BlockNumberOrTag, BlockTransactions, TransactionRequest, Withdrawal,
+    },
 };
 use ethportal_api::{
     jsonrpsee::types::{error::CALL_EXECUTION_FAILED_CODE, ErrorObjectOwned},
@@ -208,14 +210,28 @@ impl EthApi {
         let body = self.fetch_block_body(header.hash()).await?;
         let transactions =
             BlockTransactions::Hashes(body.transactions().iter().map(Transaction::hash).collect());
+        let uncles = body
+            .uncles()
+            .unwrap_or_default()
+            .iter()
+            .map(|uncle| uncle.hash())
+            .collect();
+        let withdrawals = body
+            .withdrawals()
+            .map(|withdrawals| withdrawals.iter().map(Withdrawal::from).collect());
+
+        // TODO: Add calculation for the block's size:
+        //   len(rlp(header, transactions, uncles, withdrawals))
+        // NOTE: Transactions should be encoded with envelope
+        let size = None;
 
         // Combine header and block body into the single json representation of the block.
         let block = Block {
             header: header.into(),
             transactions,
-            uncles: vec![],
-            size: None,
-            withdrawals: None,
+            uncles,
+            size,
+            withdrawals,
         };
         Ok(block)
     }
