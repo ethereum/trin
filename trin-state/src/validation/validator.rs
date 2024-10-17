@@ -161,7 +161,7 @@ mod tests {
         types::{
             execution::header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
             jsonrpc::{endpoints::HistoryEndpoint, json_rpc_mock::MockJsonRpcBuilder},
-            portal::ContentInfo,
+            portal::GetContentInfo,
         },
         Header, HistoryContentKey, HistoryContentValue, OverlayContentKey,
     };
@@ -188,7 +188,7 @@ mod tests {
                 HistoryEndpoint::GetContent(HistoryContentKey::new_block_header_by_hash(
                     header.hash(),
                 )),
-                ContentInfo::Content {
+                GetContentInfo {
                     content: history_content_value.encode(),
                     utp_transfer: false,
                 },

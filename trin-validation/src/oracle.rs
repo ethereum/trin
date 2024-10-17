@@ -14,7 +14,7 @@ use ethportal_api::{
             endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint},
             request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
         },
-        portal::ContentInfo,
+        portal::GetContentInfo,
     },
     ContentValue, Enr, HistoryContentKey, HistoryContentValue,
 };
@@ -68,20 +68,8 @@ impl HeaderOracle {
             }
             None => return Err(anyhow!("No response from chain history subnetwork")),
         };
-        let content = match serde_json::from_value(content)? {
-            ContentInfo::Content { content, .. } => content,
-            ContentInfo::ConnectionId { .. } => {
-                return Err(anyhow!(
-                    "Invalid ContentInfo (cid) received from HeaderWithProof lookup"
-                ))
-            }
-            ContentInfo::Enrs { .. } => {
-                return Err(anyhow!(
-                    "Invalid ContentInfo (enrs) received from HeaderWithProof lookup"
-                ))
-            }
-        };
-        let content = HistoryContentValue::decode(&content_key, &content)?;
+        let GetContentInfo { content, .. } = serde_json::from_value(content)?;
+        let content: HistoryContentValue = HistoryContentValue::decode(&content_key, &content)?;
 
         match content {
             HistoryContentValue::BlockHeaderWithProof(content) => Ok(content),

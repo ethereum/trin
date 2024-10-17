@@ -6,8 +6,9 @@ use ethportal_api::{
         enr::Enr,
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
         portal::{
-            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo, MAX_CONTENT_KEYS_PER_OFFER,
+            AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
+            PaginateLocalContentInfo, PongInfo, TraceContentInfo, TraceGossipInfo,
+            MAX_CONTENT_KEYS_PER_OFFER,
         },
         portal_wire::OfferTrace,
     },
@@ -93,14 +94,14 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         &self,
         enr: Enr,
         content_key: HistoryContentKey,
-    ) -> RpcResult<ContentInfo> {
+    ) -> RpcResult<FindContentInfo> {
         let endpoint = HistoryEndpoint::FindContent(enr, content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// First checks local storage if content is not found lookup a target content key in the
     /// network
-    async fn get_content(&self, content_key: HistoryContentKey) -> RpcResult<ContentInfo> {
+    async fn get_content(&self, content_key: HistoryContentKey) -> RpcResult<GetContentInfo> {
         let endpoint = HistoryEndpoint::GetContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }

@@ -10,7 +10,7 @@ use ethportal_api::{
     types::{
         content_key::state::{AccountTrieNodeKey, ContractBytecodeKey, ContractStorageTrieNodeKey},
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
-        portal::ContentInfo,
+        portal::GetContentInfo,
         state_trie::{
             account_state::AccountState,
             nibbles::Nibbles,
@@ -162,15 +162,10 @@ impl EvmBlockState {
         }
 
         let endpoint = StateEndpoint::GetContent(content_key.clone());
-        let response: ContentInfo = proxy_to_subnet(&self.state_network, endpoint)
-            .await
-            .map_err(|err| EvmStateError::InternalError(err.to_string()))?;
-        let ContentInfo::Content { content, .. } = response else {
-            return Err(EvmStateError::InternalError(format!(
-                "Invalid response variant: State GetContent should contain content value; got {response:?}"
-            )));
-        };
-
+        let GetContentInfo { content, .. } =
+            proxy_to_subnet(&self.state_network, endpoint)
+                .await
+                .map_err(|err| EvmStateError::InternalError(err.to_string()))?;
         let content_value = StateContentValue::decode(&content_key, &content)?;
         self.cache.insert(content_key, content_value.clone());
         Ok(content_value)

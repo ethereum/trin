@@ -12,7 +12,7 @@ use ethportal_api::{
             endpoints::HistoryEndpoint,
             request::{HistoryJsonRpcRequest, StateJsonRpcRequest},
         },
-        portal::ContentInfo,
+        portal::GetContentInfo,
     },
     ContentValue, EthApiServer, Header, HistoryContentKey, HistoryContentValue,
 };
@@ -155,13 +155,8 @@ impl EthApi {
         content_key: HistoryContentKey,
     ) -> Result<HistoryContentValue, RpcServeError> {
         let endpoint = HistoryEndpoint::GetContent(content_key.clone());
-        let response: ContentInfo = proxy_to_subnet(&self.history_network, endpoint).await?;
-        let ContentInfo::Content { content, .. } = response else {
-            return Err(RpcServeError::Message(format!(
-                "Invalid response variant: History GetContent should contain content value; got {response:?}"
-            )));
-        };
-
+        let GetContentInfo { content, .. } =
+            proxy_to_subnet(&self.history_network, endpoint).await?;
         let content_value = HistoryContentValue::decode(&content_key, &content)?;
         Ok(content_value)
     }

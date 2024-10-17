@@ -3,8 +3,8 @@ use crate::{
         content_key::history::HistoryContentKey,
         enr::Enr,
         portal::{
-            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo,
+            AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
+            PaginateLocalContentInfo, PongInfo, TraceContentInfo, TraceGossipInfo,
         },
         portal_wire::OfferTrace,
     },
@@ -59,12 +59,12 @@ pub trait HistoryNetworkApi {
         &self,
         enr: Enr,
         content_key: HistoryContentKey,
-    ) -> RpcResult<ContentInfo>;
+    ) -> RpcResult<FindContentInfo>;
 
     /// First checks local storage if content is not found lookup a target content key in the
     /// network
     #[method(name = "historyGetContent")]
-    async fn get_content(&self, content_key: HistoryContentKey) -> RpcResult<ContentInfo>;
+    async fn get_content(&self, content_key: HistoryContentKey) -> RpcResult<GetContentInfo>;
 
     /// First checks local storage if content is not found lookup a target content key in the
     /// network. Return tracing info.

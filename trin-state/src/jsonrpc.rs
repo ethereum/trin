@@ -13,7 +13,7 @@ use ethportal_api::{
     types::{
         distance::Distance,
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
-        portal::{AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo},
+        portal::{AcceptInfo, FindNodesInfo, GetContentInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
         query_trace::QueryTrace,
     },
@@ -275,7 +275,7 @@ async fn get_content(
             trace: trace.ok_or("Content query trace requested but none provided.".to_string())?,
         }))
     } else {
-        Ok(json!(ContentInfo::Content {
+        Ok(json!(GetContentInfo {
             content: RawContentValue::from(content_bytes),
             utp_transfer
         }))

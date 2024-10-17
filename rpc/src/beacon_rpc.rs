@@ -14,8 +14,9 @@ use ethportal_api::{
         enr::Enr,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
         portal::{
-            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo, MAX_CONTENT_KEYS_PER_OFFER,
+            AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
+            PaginateLocalContentInfo, PongInfo, TraceContentInfo, TraceGossipInfo,
+            MAX_CONTENT_KEYS_PER_OFFER,
         },
         portal_wire::OfferTrace,
     },
@@ -120,14 +121,14 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         &self,
         enr: Enr,
         content_key: BeaconContentKey,
-    ) -> RpcResult<ContentInfo> {
+    ) -> RpcResult<FindContentInfo> {
         let endpoint = BeaconEndpoint::FindContent(enr, content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// First checks local storage if content is not found lookup a target content key in the
     /// network
-    async fn get_content(&self, content_key: BeaconContentKey) -> RpcResult<ContentInfo> {
+    async fn get_content(&self, content_key: BeaconContentKey) -> RpcResult<GetContentInfo> {
         let endpoint = BeaconEndpoint::GetContent(content_key);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
