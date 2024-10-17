@@ -15,6 +15,7 @@ pub struct BridgeMetrics {
     pub process_timer: HistogramVec,
     pub bridge_info: IntGaugeVec,
     pub gossip_total: IntCounterVec,
+    pub offer_total: IntCounterVec,
     pub current_block: IntGaugeVec,
 }
 
@@ -41,6 +42,11 @@ impl BridgeMetrics {
             &["bridge", "success", "type"],
             registry
         )?;
+        let offer_total = register_int_counter_vec_with_registry!(
+            opts!("bridge_offer_total", "counts all content offer requests"),
+            &["bridge", "type", "result"],
+            registry
+        )?;
         let current_block = register_int_gauge_vec_with_registry!(
             opts!(
                 "bridge_current_block",
@@ -53,6 +59,7 @@ impl BridgeMetrics {
             process_timer,
             bridge_info,
             gossip_total,
+            offer_total,
             current_block,
         })
     }
@@ -91,6 +98,13 @@ impl BridgeMetricsReporter {
         self.bridge_metrics
             .gossip_total
             .with_label_values(&labels)
+            .inc();
+    }
+
+    pub fn report_offer(&self, content_type: &str, status: &str) {
+        self.bridge_metrics
+            .offer_total
+            .with_label_values(&[&self.bridge, content_type, status])
             .inc();
     }
 

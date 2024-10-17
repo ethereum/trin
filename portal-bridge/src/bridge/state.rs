@@ -317,7 +317,8 @@ impl StateBridge {
             let global_offer_report = self.global_offer_report.clone();
             tokio::spawn(async move {
                 let timer = metrics.start_process_timer("spawn_offer_state_proof");
-                match timeout(
+
+                let result = timeout(
                     SERVE_BLOCK_TIMEOUT,
                     StateNetworkApiClient::trace_offer(
                         &portal_client,
@@ -326,43 +327,49 @@ impl StateBridge {
                         content_value.encode(),
                     ),
                 )
-                .await
-                {
-                    Ok(result) => match result {
-                        Ok(result) => {
-                            global_offer_report
-                                .lock()
-                                .expect("to acquire lock")
-                                .update(&result);
-                            offer_report
-                                .lock()
-                                .expect("to acquire lock")
-                                .update(&enr, &result);
+                .await;
+
+                let offer_trace = match &result {
+                    Ok(Ok(result)) => {
+                        if matches!(result, &OfferTrace::Failed) {
+                            warn!("Internal error offering to: {enr}");
                         }
-                        Err(e) => {
-                            global_offer_report
-                                .lock()
-                                .expect("to acquire lock")
-                                .update(&OfferTrace::Failed);
-                            offer_report
-                                .lock()
-                                .expect("to acquire lock")
-                                .update(&enr, &OfferTrace::Failed);
-                            warn!("Error offering to: {enr}, error: {e:?}");
-                        }
-                    },
+                        result
+                    }
+                    Ok(Err(err)) => {
+                        warn!("Error offering to: {enr}, error: {err:?}");
+                        &OfferTrace::Failed
+                    }
                     Err(_) => {
-                        global_offer_report
-                            .lock()
-                            .expect("to acquire lock")
-                            .update(&OfferTrace::Failed);
-                        offer_report
-                            .lock()
-                            .expect("to acquire lock")
-                            .update(&enr, &OfferTrace::Failed);
                         error!("trace_offer timed out on state proof {content_key}: indicating a bug is present");
+                        &OfferTrace::Failed
                     }
                 };
+
+                // Update report and metrics
+                global_offer_report
+                    .lock()
+                    .expect("to acquire lock")
+                    .update(offer_trace);
+                offer_report
+                    .lock()
+                    .expect("to acquire lock")
+                    .update(&enr, offer_trace);
+
+                metrics.report_offer(
+                    match content_key {
+                        StateContentKey::AccountTrieNode(_) => "account_trie_node",
+                        StateContentKey::ContractStorageTrieNode(_) => "contract_storage_trie_node",
+                        StateContentKey::ContractBytecode(_) => "contract_bytecode",
+                    },
+                    match offer_trace {
+                        OfferTrace::Success(_) => "success",
+                        OfferTrace::Declined => "declined",
+                        OfferTrace::Failed => "failed",
+                    },
+                );
+
+                // Release permit
                 drop(permit);
                 metrics.stop_process_timer(timer);
             });
