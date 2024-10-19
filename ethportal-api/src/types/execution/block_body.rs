@@ -121,8 +121,6 @@ impl BlockBody {
     }
 
     /// Returns reference to uncle headers.
-    ///
-    /// Returns None post Merge fork.
     pub fn uncles(&self) -> &[Header] {
         match self {
             BlockBody::Legacy(body) => &body.uncles,
@@ -191,7 +189,7 @@ impl Decodable for BlockBodyLegacy {
     fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
         let mut payload_view = rlp::Header::decode_bytes(buf, true)?;
         let txs = rlp_decode_transaction_list_with_header(&mut payload_view)?;
-        let uncles = Vec::<Header>::decode(buf)?;
+        let uncles = Vec::<Header>::decode(&mut payload_view)?;
         Ok(Self { txs, uncles })
     }
 }
@@ -353,7 +351,7 @@ impl Decodable for BlockBodyShanghai {
     fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
         let mut payload_view = rlp::Header::decode_bytes(buf, true)?;
         let txs = rlp_decode_transaction_list_with_header(&mut payload_view)?;
-        let withdrawals = Vec::<Withdrawal>::decode(buf)?;
+        let withdrawals = Vec::<Withdrawal>::decode(&mut payload_view)?;
         Ok(Self { txs, withdrawals })
     }
 }
