@@ -1,8 +1,7 @@
 use alloy::{
     primitives::{keccak256, Address, B256, U256, U64},
     rlp::{
-        length_of_length, Decodable, Encodable, Error as RlpError, Header as RlpHeader,
-        RlpDecodable, RlpEncodable, EMPTY_STRING_CODE,
+        self, Decodable, Encodable, RlpDecodable, RlpEncodable, EMPTY_LIST_CODE, EMPTY_STRING_CODE,
     },
 };
 use bytes::{Buf, BufMut, Bytes};
@@ -16,6 +15,7 @@ use serde_json::{json, Value};
 use super::receipts::TransactionId;
 use crate::utils::bytes::hex_decode;
 
+/// The Transaction Envelope type.
 #[derive(Eq, Debug, Clone, PartialEq)]
 pub enum Transaction {
     Legacy(LegacyTransaction),
@@ -27,7 +27,7 @@ pub enum Transaction {
 impl Transaction {
     /// Returns the Keccak-256 hash of the header.
     pub fn hash(&self) -> B256 {
-        keccak256(alloy::rlp::encode(self))
+        keccak256(rlp::encode(self))
     }
 
     pub fn get_transaction_sender_address(&self) -> anyhow::Result<Address> {
@@ -71,103 +71,59 @@ impl Transaction {
             Transaction::Blob(tx) => tx.signature_hash(),
         }
     }
+}
 
-    pub fn encode_with_envelope(&self, out: &mut dyn bytes::BufMut, with_header: bool) {
+impl Encodable for Transaction {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
         match self {
             Self::Legacy(tx) => tx.encode(out),
             Self::AccessList(tx) => {
-                let payload_length = tx.fields_len();
-                if with_header {
-                    RlpHeader {
-                        list: false,
-                        payload_length: 1 + length_of_length(payload_length) + payload_length,
-                    }
-                    .encode(out);
-                }
                 out.put_u8(TransactionId::AccessList as u8);
                 tx.encode(out);
             }
             Self::EIP1559(tx) => {
-                let payload_length = tx.fields_len();
-                if with_header {
-                    RlpHeader {
-                        list: false,
-                        payload_length: 1 + length_of_length(payload_length) + payload_length,
-                    }
-                    .encode(out);
-                }
                 out.put_u8(TransactionId::EIP1559 as u8);
                 tx.encode(out);
             }
             Self::Blob(tx) => {
-                let payload_length = tx.fields_len();
-                if with_header {
-                    RlpHeader {
-                        list: false,
-                        payload_length: 1 + length_of_length(payload_length) + payload_length,
-                    }
-                    .encode(out);
-                }
                 out.put_u8(TransactionId::Blob as u8);
                 tx.encode(out);
             }
         }
     }
 
-    pub fn decode_enveloped_transactions(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
-        // at least one byte needs to be present
-        if buf.is_empty() {
-            return Err(RlpError::InputTooShort);
+    fn length(&self) -> usize {
+        match self {
+            Self::Legacy(tx) => tx.length(),
+            Self::AccessList(tx) => 1 + tx.length(),
+            Self::EIP1559(tx) => 1 + tx.length(),
+            Self::Blob(tx) => 1 + tx.length(),
         }
-        let original_encoding = *buf;
-        let header = RlpHeader::decode(buf)?;
-        let value = &mut &buf[..header.payload_length];
-        buf.advance(header.payload_length);
-        if !header.list {
-            let id = TransactionId::try_from(value[0])
-                .map_err(|_| RlpError::Custom("Unknown transaction id"))?;
-            value.advance(1);
-            match id {
-                TransactionId::EIP1559 => Ok(Self::EIP1559(EIP1559Transaction::decode(value)?)),
-                TransactionId::AccessList => {
-                    Ok(Self::AccessList(AccessListTransaction::decode(value)?))
-                }
-                TransactionId::Legacy => {
-                    unreachable!("Legacy transactions should be wrapped in a list")
-                }
-                TransactionId::Blob => Ok(Self::Blob(BlobTransaction::decode(value)?)),
-            }
-        } else {
-            Ok(Self::Legacy(LegacyTransaction::decode(
-                &mut &original_encoding[..(header.payload_length + header.length())],
-            )?))
-        }
-    }
-}
-
-impl Encodable for Transaction {
-    fn encode(&self, out: &mut dyn bytes::BufMut) {
-        self.encode_with_envelope(out, false)
     }
 }
 
 impl Decodable for Transaction {
-    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
+    fn decode(buf: &mut &[u8]) -> rlp::Result<Self> {
         // at least one byte needs to be present
         if buf.is_empty() {
-            return Err(RlpError::InputTooShort);
+            return Err(rlp::Error::InputTooShort);
         }
         let id = TransactionId::try_from(buf[0])
-            .map_err(|_| RlpError::Custom("Unknown transaction id"))?;
+            .map_err(|_| rlp::Error::Custom("Unknown transaction id"))?;
         match id {
-            TransactionId::EIP1559 => {
-                Ok(Self::EIP1559(EIP1559Transaction::decode(&mut &buf[1..])?))
+            TransactionId::Blob => {
+                buf.advance(1);
+                BlobTransaction::decode(buf).map(Self::Blob)
             }
-            TransactionId::AccessList => Ok(Self::AccessList(AccessListTransaction::decode(
-                &mut &buf[1..],
-            )?)),
-            TransactionId::Legacy => Ok(Self::Legacy(LegacyTransaction::decode(buf)?)),
-            TransactionId::Blob => Ok(Self::Blob(BlobTransaction::decode(&mut &buf[1..])?)),
+            TransactionId::EIP1559 => {
+                buf.advance(1);
+                EIP1559Transaction::decode(buf).map(Self::EIP1559)
+            }
+            TransactionId::AccessList => {
+                buf.advance(1);
+                AccessListTransaction::decode(buf).map(Self::AccessList)
+            }
+            TransactionId::Legacy => LegacyTransaction::decode(buf).map(Self::Legacy),
         }
     }
 }
@@ -213,6 +169,96 @@ impl<'de> Deserialize<'de> for Transaction {
     }
 }
 
+/// The wrapper around [Transaction] structure, that has different RLP encoding.
+///
+/// In most cases, RLP encoding of [Transaction] object is the correct one, but in some rare cases,
+/// this one is used instead. If unsure, use basic type.
+///
+/// The RLP encoding of this type is done in a following way:
+///
+/// - Legacy transactions are always encoded in the same way: `rlp(tx)`.
+/// - Other transactions are encoded as: `rlp(type + rlp(tx))` (where `+` represents concatenation)
+///   - `type` is a single byte represending the transaction type
+///
+/// The basic type differs in the way it encodes non-legacy transaction. The basic type doesn't have
+/// extra RLP wrapper around it, meaning it's just: `type + rlp(tx)`.
+pub struct TransactionWithRlpHeader(pub Transaction);
+
+impl Encodable for TransactionWithRlpHeader {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
+        let (transaction_id, tx): (TransactionId, Box<dyn Encodable>) = match &self.0 {
+            // Legacy transaction is encoded as is (no header)
+            Transaction::Legacy(tx) => {
+                tx.encode(out);
+                return;
+            }
+            Transaction::AccessList(tx) => (TransactionId::AccessList, Box::new(tx)),
+            Transaction::EIP1559(tx) => (TransactionId::EIP1559, Box::new(tx)),
+            Transaction::Blob(tx) => (TransactionId::Blob, Box::new(tx)),
+        };
+        rlp::Header {
+            list: false,
+            payload_length: 1 + tx.length(),
+        }
+        .encode(out);
+        out.put_u8(transaction_id as u8);
+        tx.encode(out);
+    }
+
+    fn length(&self) -> usize {
+        let payload_length = match &self.0 {
+            Transaction::Legacy(tx) => {
+                // Legacy transaction is encoded as is (no header)
+                return tx.length();
+            }
+            Transaction::AccessList(tx) => 1 + tx.length(),
+            Transaction::EIP1559(tx) => 1 + tx.length(),
+            Transaction::Blob(tx) => 1 + tx.length(),
+        };
+        // Add Header length
+        payload_length + rlp::length_of_length(payload_length)
+    }
+}
+
+impl Decodable for TransactionWithRlpHeader {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        // at least one byte needs to be present
+        if buf.is_empty() {
+            return Err(rlp::Error::InputTooShort);
+        }
+
+        // Legacy transaction is encoded as list. Others are wrapped in a string header.
+        if buf[0] >= EMPTY_LIST_CODE {
+            return LegacyTransaction::decode(buf).map(|tx| Self(Transaction::Legacy(tx)));
+        }
+
+        let mut payload_view = rlp::Header::decode_bytes(buf, /* is_list= */ false)?;
+
+        if payload_view.is_empty() {
+            return Err(rlp::Error::InputTooShort);
+        }
+
+        let id = TransactionId::try_from(payload_view[0])
+            .map_err(|_| rlp::Error::Custom("Unknown transaction id"))?;
+        payload_view.advance(1);
+        let tx = match id {
+            TransactionId::Blob => Transaction::Blob(BlobTransaction::decode(&mut payload_view)?),
+            TransactionId::EIP1559 => {
+                Transaction::EIP1559(EIP1559Transaction::decode(&mut payload_view)?)
+            }
+            TransactionId::AccessList => {
+                Transaction::AccessList(AccessListTransaction::decode(&mut payload_view)?)
+            }
+            TransactionId::Legacy => {
+                return Err(rlp::Error::Custom(
+                    "Legacy transactions should be wrapped in a list",
+                ));
+            }
+        };
+        Ok(Self(tx))
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct LegacyTransaction {
     pub nonce: U256,
@@ -227,18 +273,6 @@ pub struct LegacyTransaction {
 }
 
 impl LegacyTransaction {
-    pub fn fields_len(&self) -> usize {
-        self.nonce.length()
-            + self.gas_price.length()
-            + self.gas.length()
-            + self.to.length()
-            + self.value.length()
-            + self.data.length()
-            + self.v.length()
-            + self.r.length()
-            + self.s.length()
-    }
-
     pub fn signature_hash(&self, encode_chain_id: bool) -> B256 {
         let mut buf = Vec::<u8>::new();
         let mut list = Vec::<u8>::new();
@@ -253,7 +287,7 @@ impl LegacyTransaction {
             0x00u8.encode(&mut list);
             0x00u8.encode(&mut list);
         }
-        let header = RlpHeader {
+        let header = rlp::Header {
             list: true,
             payload_length: list.len(),
         };
@@ -311,20 +345,6 @@ pub struct AccessListTransaction {
 }
 
 impl AccessListTransaction {
-    pub fn fields_len(&self) -> usize {
-        self.chain_id.length()
-            + self.nonce.length()
-            + self.gas_price.length()
-            + self.gas_limit.length()
-            + self.to.length()
-            + self.value.length()
-            + self.data.length()
-            + self.access_list.length()
-            + self.y_parity.length()
-            + self.r.length()
-            + self.s.length()
-    }
-
     pub fn signature_hash(&self) -> B256 {
         let mut buf = Vec::<u8>::new();
         let mut list = Vec::<u8>::new();
@@ -336,7 +356,7 @@ impl AccessListTransaction {
         self.value.encode(&mut list);
         self.data.encode(&mut list);
         self.access_list.encode(&mut list);
-        let header = RlpHeader {
+        let header = rlp::Header {
             list: true,
             payload_length: list.len(),
         };
@@ -404,21 +424,6 @@ pub struct EIP1559Transaction {
 }
 
 impl EIP1559Transaction {
-    pub fn fields_len(&self) -> usize {
-        self.chain_id.length()
-            + self.nonce.length()
-            + self.max_priority_fee_per_gas.length()
-            + self.max_fee_per_gas.length()
-            + self.gas_limit.length()
-            + self.to.length()
-            + self.value.length()
-            + self.data.length()
-            + self.access_list.length()
-            + self.y_parity.length()
-            + self.r.length()
-            + self.s.length()
-    }
-
     pub fn signature_hash(&self) -> B256 {
         let mut buf = Vec::<u8>::new();
         let mut list = Vec::<u8>::new();
@@ -431,7 +436,7 @@ impl EIP1559Transaction {
         self.value.encode(&mut list);
         self.data.encode(&mut list);
         self.access_list.encode(&mut list);
-        let header = RlpHeader {
+        let header = rlp::Header {
             list: true,
             payload_length: list.len(),
         };
@@ -503,23 +508,6 @@ pub struct BlobTransaction {
 }
 
 impl BlobTransaction {
-    pub fn fields_len(&self) -> usize {
-        self.chain_id.length()
-            + self.nonce.length()
-            + self.max_priority_fee_per_gas.length()
-            + self.max_fee_per_gas.length()
-            + self.gas_limit.length()
-            + self.to.length()
-            + self.value.length()
-            + self.data.len()
-            + self.access_list.length()
-            + self.max_fee_per_blob_gas.length()
-            + self.blob_versioned_hashes.length()
-            + self.y_parity.length()
-            + self.r.length()
-            + self.s.length()
-    }
-
     pub fn signature_hash(&self) -> B256 {
         let mut buf = Vec::<u8>::new();
         let mut list = Vec::<u8>::new();
@@ -534,7 +522,7 @@ impl BlobTransaction {
         self.access_list.encode(&mut list);
         self.max_fee_per_blob_gas.encode(&mut list);
         self.blob_versioned_hashes.encode(&mut list);
-        let header = RlpHeader {
+        let header = rlp::Header {
             list: true,
             payload_length: list.len(),
         };
@@ -629,7 +617,7 @@ impl Encodable for ToAddress {
 }
 
 impl Decodable for ToAddress {
-    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
+    fn decode(buf: &mut &[u8]) -> rlp::Result<Self> {
         if let Some(&first) = buf.first() {
             if first == EMPTY_STRING_CODE {
                 buf.advance(1);
@@ -638,7 +626,7 @@ impl Decodable for ToAddress {
                 Ok(ToAddress::Exists(Address::decode(buf)?))
             }
         } else {
-            Err(RlpError::InputTooShort)
+            Err(rlp::Error::InputTooShort)
         }
     }
 }
@@ -676,7 +664,7 @@ pub struct AccessList {
 }
 
 impl Decodable for AccessList {
-    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
+    fn decode(buf: &mut &[u8]) -> rlp::Result<Self> {
         let list: Vec<AccessListItem> = Decodable::decode(buf)?;
         Ok(Self { list })
     }
@@ -698,9 +686,7 @@ pub struct AccessListItem {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use alloy::rlp::Decodable;
-
-    use crate::{types::execution::transaction::Transaction, utils::bytes::hex_decode};
+    use super::*;
 
     #[rstest::rstest]
     // Block 46170 https://etherscan.io/tx/0x9e6e19637bb625a8ff3d052b7c2fe57dc78c55a15d258d77c43d5a9c160b0384
@@ -746,8 +732,8 @@ mod tests {
         #[case] sender_address: &str,
     ) {
         let transaction_rlp = hex_decode(transaction).unwrap();
-        let transaction: Transaction =
-            Decodable::decode(&mut transaction_rlp.as_slice()).expect("error decoding transaction");
+        let transaction = Transaction::decode(&mut transaction_rlp.as_slice())
+            .expect("error decoding transaction");
         assert_eq!(
             format!("{:?}", transaction.signature_hash(post_eip155)),
             signature

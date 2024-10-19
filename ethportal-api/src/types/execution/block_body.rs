@@ -2,14 +2,17 @@ use std::vec;
 
 use alloy::{
     primitives::{keccak256, B256},
-    rlp::{Decodable, Encodable, Error as RlpError, Header as RlpHeader},
+    rlp::{self, Decodable, Encodable},
 };
 use anyhow::{anyhow, bail};
 use serde::Deserialize;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::Encode;
 
-use super::{header::Header, transaction::Transaction};
+use super::{
+    header::Header,
+    transaction::{Transaction, TransactionWithRlpHeader},
+};
 use crate::{
     types::execution::withdrawal::Withdrawal, utils::roots::calculate_merkle_patricia_root,
 };
@@ -45,7 +48,7 @@ impl Decodable for BlockBody {
         } else if let Ok(val) = BlockBodyShanghai::decode(buf) {
             Ok(BlockBody::Shanghai(val))
         } else {
-            Err(RlpError::Custom("Invalid block body rlp"))
+            Err(rlp::Error::Custom("Invalid block body rlp"))
         }
     }
 }
@@ -121,19 +124,16 @@ impl BlockBody {
     }
 
     /// Returns reference to uncle headers.
-    ///
-    /// Returns None post Merge fork.
-    pub fn uncles(&self) -> Option<&[Header]> {
+    pub fn uncles(&self) -> &[Header] {
         match self {
-            BlockBody::Legacy(body) => Some(&body.uncles),
-            BlockBody::Merge(_) => None,
-            BlockBody::Shanghai(_) => None,
+            BlockBody::Legacy(body) => &body.uncles,
+            BlockBody::Merge(_) => &[],
+            BlockBody::Shanghai(_) => &[],
         }
     }
 
     pub fn uncles_root(&self) -> B256 {
-        let uncles = self.uncles().unwrap_or_default().to_vec();
-        let encoded_uncles = alloy_rlp::encode(uncles);
+        let encoded_uncles = alloy_rlp::encode(self.uncles().to_vec());
         keccak256(&encoded_uncles)
     }
 
@@ -156,17 +156,17 @@ impl BlockBody {
     }
 }
 
-fn rlp_encode_transaction_list(out: &mut dyn bytes::BufMut, txs: &[Transaction]) {
-    let mut transactions_list = Vec::<u8>::new();
-    for tx in txs {
-        tx.encode_with_envelope(&mut transactions_list, true);
-    }
-    let header = RlpHeader {
-        list: true,
-        payload_length: transactions_list.len(),
-    };
-    header.encode(out);
-    out.put_slice(transactions_list.as_slice());
+fn rlp_encode_transaction_list_with_header(out: &mut dyn bytes::BufMut, txs: &[Transaction]) {
+    txs.iter()
+        .cloned()
+        .map(TransactionWithRlpHeader)
+        .collect::<Vec<_>>()
+        .encode(out);
+}
+
+fn rlp_decode_transaction_list_with_header(buf: &mut &[u8]) -> rlp::Result<Vec<Transaction>> {
+    let txs = Vec::<TransactionWithRlpHeader>::decode(buf)?;
+    Ok(txs.into_iter().map(|tx| tx.0).collect())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
@@ -178,9 +178,9 @@ pub struct BlockBodyLegacy {
 impl Encodable for BlockBodyLegacy {
     fn encode(&self, out: &mut dyn bytes::BufMut) {
         let mut list = Vec::<u8>::new();
-        rlp_encode_transaction_list(&mut list, &self.txs);
+        rlp_encode_transaction_list_with_header(&mut list, &self.txs);
         self.uncles.encode(&mut list);
-        let header = RlpHeader {
+        let header = rlp::Header {
             list: true,
             payload_length: list.len(),
         };
@@ -191,17 +191,9 @@ impl Encodable for BlockBodyLegacy {
 
 impl Decodable for BlockBodyLegacy {
     fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        let header = RlpHeader::decode(buf)?;
-        if !header.list {
-            return Err(RlpError::UnexpectedString);
-        }
-        let mut bytes = RlpHeader::decode_bytes(buf, true)?;
-        let mut txs: Vec<Transaction> = vec![];
-        let payload_view = &mut bytes;
-        while !payload_view.is_empty() {
-            txs.push(Transaction::decode_enveloped_transactions(payload_view)?);
-        }
-        let uncles: Vec<Header> = Decodable::decode(buf)?;
+        let mut payload_view = rlp::Header::decode_bytes(buf, true)?;
+        let txs = rlp_decode_transaction_list_with_header(&mut payload_view)?;
+        let uncles = Vec::<Header>::decode(&mut payload_view)?;
         Ok(Self { txs, uncles })
     }
 }
@@ -264,8 +256,8 @@ pub struct BlockBodyMerge {
 impl Encodable for BlockBodyMerge {
     fn encode(&self, out: &mut dyn bytes::BufMut) {
         let mut list = Vec::<u8>::new();
-        rlp_encode_transaction_list(&mut list, &self.txs);
-        let header = RlpHeader {
+        rlp_encode_transaction_list_with_header(&mut list, &self.txs);
+        let header = rlp::Header {
             list: true,
             payload_length: list.len(),
         };
@@ -276,17 +268,8 @@ impl Encodable for BlockBodyMerge {
 
 impl Decodable for BlockBodyMerge {
     fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        let header = RlpHeader::decode(buf)?;
-        if !header.list {
-            return Err(RlpError::UnexpectedString);
-        }
-        let mut bytes = RlpHeader::decode_bytes(buf, true)?;
-        let mut txs: Vec<Transaction> = vec![];
-        let payload_view = &mut bytes;
-        while !payload_view.is_empty() {
-            txs.push(Transaction::decode_enveloped_transactions(payload_view)?);
-        }
-
+        let mut payload_view = rlp::Header::decode_bytes(buf, true)?;
+        let txs = rlp_decode_transaction_list_with_header(&mut payload_view)?;
         Ok(Self { txs })
     }
 }
@@ -357,9 +340,9 @@ pub struct BlockBodyShanghai {
 impl Encodable for BlockBodyShanghai {
     fn encode(&self, out: &mut dyn bytes::BufMut) {
         let mut list = Vec::<u8>::new();
-        rlp_encode_transaction_list(&mut list, &self.txs);
+        rlp_encode_transaction_list_with_header(&mut list, &self.txs);
         self.withdrawals.encode(&mut list);
-        let header = RlpHeader {
+        let header = rlp::Header {
             list: true,
             payload_length: list.len(),
         };
@@ -370,17 +353,9 @@ impl Encodable for BlockBodyShanghai {
 
 impl Decodable for BlockBodyShanghai {
     fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        let header = RlpHeader::decode(buf)?;
-        if !header.list {
-            return Err(RlpError::UnexpectedString);
-        }
-        let mut bytes = RlpHeader::decode_bytes(buf, true)?;
-        let mut txs: Vec<Transaction> = vec![];
-        let payload_view = &mut bytes;
-        while !payload_view.is_empty() {
-            txs.push(Transaction::decode_enveloped_transactions(payload_view)?);
-        }
-        let withdrawals: Vec<Withdrawal> = Decodable::decode(buf)?;
+        let mut payload_view = rlp::Header::decode_bytes(buf, true)?;
+        let txs = rlp_decode_transaction_list_with_header(&mut payload_view)?;
+        let withdrawals = Vec::<Withdrawal>::decode(&mut payload_view)?;
         Ok(Self { txs, withdrawals })
     }
 }
@@ -483,7 +458,7 @@ mod tests {
     #[case(TX6, 41942)]
     fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u32) {
         let tx_rlp = hex_decode(tx).unwrap();
-        let tx = Decodable::decode(&mut tx_rlp.as_slice()).expect("error decoding tx");
+        let tx = Transaction::decode(&mut tx_rlp.as_slice()).expect("error decoding tx");
         let expected_nonce = U256::from(expected_nonce);
         match &tx {
             Transaction::Legacy(tx) => assert_eq!(tx.nonce, expected_nonce),
@@ -521,7 +496,7 @@ mod tests {
         let invalid_txs = &block_body.transactions()[..1];
         let invalid_block_body = BlockBody::Legacy(BlockBodyLegacy {
             txs: invalid_txs.to_vec(),
-            uncles: block_body.uncles().unwrap().to_vec(),
+            uncles: block_body.uncles().to_vec(),
         });
 
         let expected_tx_root =
@@ -537,8 +512,8 @@ mod tests {
         let block_body = get_14764013_block_body();
         // invalid uncles
         let invalid_uncles = vec![
-            block_body.uncles().unwrap()[0].clone(),
-            block_body.uncles().unwrap()[0].clone(),
+            block_body.uncles()[0].clone(),
+            block_body.uncles()[0].clone(),
         ];
         let invalid_block_body = BlockBody::Legacy(BlockBodyLegacy {
             txs: block_body.transactions().to_vec(),
