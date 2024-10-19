@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::{content_key::overlay::OverlayContentKey, portal::ContentInfo},
+    types::content_key::overlay::OverlayContentKey,
     HistoryContentKey, HistoryNetworkApiClient,
 };
 use futures::StreamExt;
@@ -237,10 +237,8 @@ async fn audit_content_key(
 ) -> anyhow::Result<Instant> {
     let mut attempts = 0;
     while Instant::now() - timestamp < timeout {
-        match client.get_content(content_key.clone()).await? {
-            ContentInfo::Content { .. } => {
-                return Ok(Instant::now());
-            }
+        match client.get_content(content_key.clone()).await {
+            Ok(_) => return Ok(Instant::now()),
             _ => {
                 attempts += 1;
                 let sleep_time = match backoff {

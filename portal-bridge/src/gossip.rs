@@ -6,9 +6,9 @@ use tracing::{debug, warn, Instrument};
 
 use crate::stats::{BeaconSlotStats, HistoryBlockStats, StatsReporter};
 use ethportal_api::{
-    types::portal::{ContentInfo, TraceGossipInfo},
-    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, ContentValue, HistoryContentKey,
-    HistoryContentValue, HistoryNetworkApiClient, OverlayContentKey,
+    types::portal::TraceGossipInfo, BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient,
+    ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
+    OverlayContentKey,
 };
 
 const GOSSIP_RETRY_COUNT: u64 = 3;
@@ -61,7 +61,7 @@ async fn beacon_trace_gossip(
         }
         // if not, make rfc request to see if data is available on network
         let result = BeaconNetworkApiClient::get_content(&client, content_key.clone()).await;
-        if let Ok(ContentInfo::Content { .. }) = result {
+        if result.is_ok() {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             found = true;
             return GossipReport {
@@ -133,7 +133,7 @@ async fn history_trace_gossip(
         }
         // if not, make rfc request to see if data is available on network
         let result = HistoryNetworkApiClient::get_content(&client, content_key.clone()).await;
-        if let Ok(ContentInfo::Content { .. }) = result {
+        if result.is_ok() {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             found = true;
             return GossipReport {

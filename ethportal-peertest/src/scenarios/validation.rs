@@ -7,7 +7,7 @@ use crate::{
 use alloy::primitives::B256;
 use ethportal_api::{
     jsonrpsee::async_client::Client,
-    types::{enr::Enr, portal::ContentInfo},
+    types::{enr::Enr, portal::FindContentInfo},
     ContentValue, HistoryContentKey, HistoryNetworkApiClient,
 };
 use std::str::FromStr;
@@ -38,7 +38,7 @@ pub async fn test_validate_pre_merge_header_by_hash(peertest: &Peertest, target:
         .unwrap();
 
     match result {
-        ContentInfo::Content {
+        FindContentInfo::Content {
             content,
             utp_transfer,
         } => {
@@ -74,7 +74,7 @@ pub async fn test_validate_pre_merge_header_by_number(peertest: &Peertest, targe
         .unwrap();
 
     match result {
-        ContentInfo::Content {
+        FindContentInfo::Content {
             content,
             utp_transfer,
         } => {
@@ -146,7 +146,7 @@ pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Cl
         .unwrap();
 
     match result {
-        ContentInfo::Content {
+        FindContentInfo::Content {
             content,
             utp_transfer,
         } => {
@@ -189,7 +189,7 @@ pub async fn test_validate_pre_merge_receipts(peertest: &Peertest, target: &Clie
         .unwrap();
 
     match result {
-        ContentInfo::Content {
+        FindContentInfo::Content {
             content,
             utp_transfer,
         } => {

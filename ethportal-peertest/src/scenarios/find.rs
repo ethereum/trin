@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::{utils::fixture_header_by_hash, Peertest};
 use ethportal_api::{
-    types::{network::Subnetwork, portal::ContentInfo},
+    types::{network::Subnetwork, portal::FindContentInfo},
     utils::bytes::hex_decode,
     BeaconNetworkApiClient, ContentValue, Enr, HistoryNetworkApiClient, OverlayContentKey,
     StateNetworkApiClient,
@@ -69,7 +69,7 @@ pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) 
     )
     .await;
 
-    let enrs = if let Ok(ContentInfo::Enrs { enrs }) = result {
+    let enrs = if let Ok(FindContentInfo::Enrs { enrs }) = result {
         enrs
     } else {
         panic!("Error: Invalid response from FINDCONTENT request, expected ENRs got: {result:?}");

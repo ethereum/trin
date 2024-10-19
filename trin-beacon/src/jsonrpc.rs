@@ -6,7 +6,7 @@ use ethportal_api::{
         content_value::ContentValue,
         distance::Distance,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
-        portal::{AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo},
+        portal::{AcceptInfo, FindNodesInfo, GetContentInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
         query_trace::QueryTrace,
     },
@@ -187,7 +187,7 @@ async fn get_content(
 
     // If tracing is not required, return content.
     if !is_trace {
-        return Ok(json!(ContentInfo::Content {
+        return Ok(json!(GetContentInfo {
             content: serde_json::from_value(content_response_string).map_err(|e| e.to_string())?,
             utp_transfer,
         }));

@@ -45,13 +45,10 @@ pub struct TraceGossipInfo {
     pub transferred: Vec<String>,
 }
 
-/// Response for FindContent & GetContent endpoints
+/// Response for the FindContent endpoint
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-#[allow(clippy::large_enum_variant)]
-pub enum ContentInfo {
-    #[serde(rename_all = "camelCase")]
-    ConnectionId { connection_id: u16 },
+pub enum FindContentInfo {
     #[serde(rename_all = "camelCase")]
     Content {
         content: RawContentValue,
@@ -61,8 +58,15 @@ pub enum ContentInfo {
     Enrs { enrs: Vec<Enr> },
 }
 
+/// Response for the GetContent endpoint
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetContentInfo {
+    pub content: RawContentValue,
+    pub utp_transfer: bool,
+}
+
 /// Parsed response for TraceGetContent endpoint
-///
 /// This struct represents the content info, and is only used
 /// when the content is found locally or on the network.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
