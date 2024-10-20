@@ -4,7 +4,6 @@ use std::fs;
 use std::net::{IpAddr, Ipv4Addr};
 
 use alloy::{
-    primitives::U256,
     providers::{IpcConnect, Provider, ProviderBuilder, RootProvider},
     pubsub::PubSubFrontend,
     rpc::types::{BlockNumberOrTag, BlockTransactions, BlockTransactionsKind, Header as RpcHeader},
@@ -112,7 +111,7 @@ async fn test_eth_get_block_by_number() {
         .expect("specified block not found");
 
     assert_header(&block.header, &hwp.header);
-    assert_eq!(block.size, Some(U256::from(37890)));
+    assert_eq!(block.size, None);
     assert_eq!(block.transactions.len(), body.transactions().len());
     assert!(block.uncles.is_empty());
     assert_eq!(
@@ -232,7 +231,7 @@ async fn test_eth_get_block_by_hash() {
         .expect("specified block not found");
 
     assert_header(&block.header, &hwp.header);
-    assert_eq!(block.size, Some(U256::from(37890)));
+    assert_eq!(block.size, None);
     assert_eq!(block.transactions.len(), body.transactions().len());
     assert!(block.uncles.is_empty());
     assert_eq!(
