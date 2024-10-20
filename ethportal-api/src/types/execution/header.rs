@@ -1,8 +1,9 @@
 use alloy::{
     primitives::{keccak256, Address, Bloom, Bytes, B256, B64, U256, U64},
-    rlp::{Decodable, Encodable, Header as RlpHeader},
+    rlp::{self, Decodable, Encodable},
     rpc::types::Header as RpcHeader,
 };
+use bytes::Buf;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::utils::bytes::{hex_decode, hex_encode};
@@ -87,88 +88,109 @@ where
 impl Header {
     /// Returns the Keccak-256 hash of the header.
     pub fn hash(&self) -> B256 {
-        keccak256(alloy::rlp::encode(self))
+        keccak256(rlp::encode(self))
+    }
+
+    /// Calculates the byte length of the RLP encoding without RLP header.
+    fn rlp_payload_length(&self) -> usize {
+        self.parent_hash.length()
+            + self.uncles_hash.length()
+            + self.author.length()
+            + self.state_root.length()
+            + self.transactions_root.length()
+            + self.receipts_root.length()
+            + self.logs_bloom.length()
+            + self.difficulty.length()
+            + self.number.length()
+            + self.gas_limit.length()
+            + self.gas_used.length()
+            + self.timestamp.length()
+            + self.extra_data.as_slice().length()
+            + self.mix_hash.as_ref().map_or(0, Encodable::length)
+            + self.nonce.as_ref().map_or(0, Encodable::length)
+            + self.base_fee_per_gas.as_ref().map_or(0, Encodable::length)
+            + self.withdrawals_root.as_ref().map_or(0, Encodable::length)
+            + self.blob_gas_used.as_ref().map_or(0, Encodable::length)
+            + self.excess_blob_gas.as_ref().map_or(0, Encodable::length)
+            + self
+                .parent_beacon_block_root
+                .as_ref()
+                .map_or(0, Encodable::length)
     }
 }
 
 impl Encodable for Header {
     fn encode(&self, out: &mut dyn bytes::BufMut) {
-        let mut list = vec![];
-        self.parent_hash.encode(&mut list);
-        self.uncles_hash.encode(&mut list);
-        self.author.encode(&mut list);
-        self.state_root.encode(&mut list);
-        self.transactions_root.encode(&mut list);
-        self.receipts_root.encode(&mut list);
-        self.logs_bloom.encode(&mut list);
-        self.difficulty.encode(&mut list);
-        self.number.encode(&mut list);
-        self.gas_limit.encode(&mut list);
-        self.gas_used.encode(&mut list);
-        self.timestamp.encode(&mut list);
-        self.extra_data.as_slice().encode(&mut list);
-
-        if let Some(val) = self.mix_hash {
-            val.encode(&mut list);
-        }
-
-        if let Some(val) = self.nonce {
-            val.encode(&mut list);
-        }
-
-        if let Some(val) = self.base_fee_per_gas {
-            val.encode(&mut list);
-        }
-
-        if let Some(val) = self.withdrawals_root {
-            val.encode(&mut list);
-        }
-
-        if let Some(val) = self.blob_gas_used {
-            val.encode(&mut list);
-        }
-
-        if let Some(val) = self.excess_blob_gas {
-            val.encode(&mut list);
-        }
-
-        if let Some(val) = self.parent_beacon_block_root {
-            val.encode(&mut list);
-        }
-
-        let header = RlpHeader {
+        rlp::Header {
             list: true,
-            payload_length: list.len(),
-        };
-        header.encode(out);
-        out.put_slice(list.as_slice());
+            payload_length: self.rlp_payload_length(),
+        }
+        .encode(out);
+
+        self.parent_hash.encode(out);
+        self.uncles_hash.encode(out);
+        self.author.encode(out);
+        self.state_root.encode(out);
+        self.transactions_root.encode(out);
+        self.receipts_root.encode(out);
+        self.logs_bloom.encode(out);
+        self.difficulty.encode(out);
+        self.number.encode(out);
+        self.gas_limit.encode(out);
+        self.gas_used.encode(out);
+        self.timestamp.encode(out);
+        self.extra_data.as_slice().encode(out);
+
+        if let Some(val) = &self.mix_hash {
+            val.encode(out);
+        }
+        if let Some(val) = &self.nonce {
+            val.encode(out);
+        }
+        if let Some(val) = &self.base_fee_per_gas {
+            val.encode(out);
+        }
+        if let Some(val) = &self.withdrawals_root {
+            val.encode(out);
+        }
+        if let Some(val) = &self.blob_gas_used {
+            val.encode(out);
+        }
+        if let Some(val) = &self.excess_blob_gas {
+            val.encode(out);
+        }
+        if let Some(val) = &self.parent_beacon_block_root {
+            val.encode(out);
+        }
+    }
+
+    fn length(&self) -> usize {
+        let payload_length = self.rlp_payload_length();
+        payload_length + rlp::length_of_length(payload_length)
     }
 }
 
 impl Decodable for Header {
-    /// Attempt to decode a header from RLP bytes.
-    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
-        let rlp_head = alloy::rlp::Header::decode(buf)?;
-        if !rlp_head.list {
-            return Err(alloy::rlp::Error::UnexpectedString);
-        }
-        let started_len = buf.len();
+    fn decode(buf: &mut &[u8]) -> rlp::Result<Self> {
+        let mut payload_view = rlp::Header::decode_bytes(buf, /* is_list= */ true)?;
+        let payload_size = payload_view.remaining();
+
         let mut header = Header {
-            parent_hash: Decodable::decode(buf)?,
-            uncles_hash: Decodable::decode(buf)?,
-            author: Decodable::decode(buf)?,
-            state_root: Decodable::decode(buf)?,
-            transactions_root: Decodable::decode(buf)?,
-            receipts_root: Decodable::decode(buf)?,
-            logs_bloom: Decodable::decode(buf)?,
-            difficulty: Decodable::decode(buf)?,
-            number: Decodable::decode(buf)?,
-            gas_limit: Decodable::decode(buf)?,
-            gas_used: Decodable::decode(buf)?,
-            timestamp: Decodable::decode(buf)?,
-            extra_data: Bytes::decode(buf)?.to_vec(),
-            mix_hash: Some(Decodable::decode(buf)?),
-            nonce: Some(Decodable::decode(buf)?),
+            parent_hash: Decodable::decode(&mut payload_view)?,
+            uncles_hash: Decodable::decode(&mut payload_view)?,
+            author: Decodable::decode(&mut payload_view)?,
+            state_root: Decodable::decode(&mut payload_view)?,
+            transactions_root: Decodable::decode(&mut payload_view)?,
+            receipts_root: Decodable::decode(&mut payload_view)?,
+            logs_bloom: Decodable::decode(&mut payload_view)?,
+            difficulty: Decodable::decode(&mut payload_view)?,
+            number: Decodable::decode(&mut payload_view)?,
+            gas_limit: Decodable::decode(&mut payload_view)?,
+            gas_used: Decodable::decode(&mut payload_view)?,
+            timestamp: Decodable::decode(&mut payload_view)?,
+            extra_data: Bytes::decode(&mut payload_view)?.to_vec(),
+            mix_hash: Some(Decodable::decode(&mut payload_view)?),
+            nonce: Some(Decodable::decode(&mut payload_view)?),
             base_fee_per_gas: None,
             withdrawals_root: None,
             blob_gas_used: None,
@@ -176,24 +198,28 @@ impl Decodable for Header {
             parent_beacon_block_root: None,
         };
 
-        if started_len - buf.len() < rlp_head.payload_length {
-            header.base_fee_per_gas = Some(Decodable::decode(buf)?)
+        if payload_view.has_remaining() {
+            header.base_fee_per_gas = Some(Decodable::decode(&mut payload_view)?)
+        }
+        if payload_view.has_remaining() {
+            header.withdrawals_root = Some(Decodable::decode(&mut payload_view)?)
+        }
+        if payload_view.has_remaining() {
+            header.blob_gas_used = Some(Decodable::decode(&mut payload_view)?)
+        }
+        if payload_view.has_remaining() {
+            header.excess_blob_gas = Some(Decodable::decode(&mut payload_view)?)
+        }
+        if payload_view.has_remaining() {
+            header.parent_beacon_block_root = Some(Decodable::decode(&mut payload_view)?)
         }
 
-        if started_len - buf.len() < rlp_head.payload_length {
-            header.withdrawals_root = Some(Decodable::decode(buf)?)
-        }
-
-        if started_len - buf.len() < rlp_head.payload_length {
-            header.blob_gas_used = Some(Decodable::decode(buf)?)
-        }
-
-        if started_len - buf.len() < rlp_head.payload_length {
-            header.excess_blob_gas = Some(Decodable::decode(buf)?)
-        }
-
-        if started_len - buf.len() < rlp_head.payload_length {
-            header.parent_beacon_block_root = Some(Decodable::decode(buf)?)
+        if payload_view.has_remaining() {
+            let consumed = payload_size - payload_view.remaining();
+            return Err(rlp::Error::ListLengthMismatch {
+                expected: payload_size,
+                got: consumed,
+            });
         }
 
         Ok(header)
@@ -333,7 +359,7 @@ mod tests {
             )
         );
 
-        let encoded_header = alloy::rlp::encode(header);
+        let encoded_header = rlp::encode(header);
         assert_eq!(header_rlp, encoded_header);
     }
 
@@ -353,7 +379,7 @@ mod tests {
                     .unwrap()
             )
         );
-        let encoded_header = alloy::rlp::encode(header);
+        let encoded_header = rlp::encode(header);
         assert_eq!(header_rlp, encoded_header);
     }
 
@@ -466,7 +492,7 @@ mod tests {
             B256::from_str("0x10aca3ebb4cf6ddd9e945a5db19385f9c105ede7374380c50d56384c3d233785")
                 .unwrap();
         assert_eq!(decoded.hash(), expected_hash);
-        let expected_header = alloy::rlp::encode(expected);
+        let expected_header = rlp::encode(expected);
         assert_eq!(data, expected_header);
     }
 
