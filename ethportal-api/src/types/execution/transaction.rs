@@ -233,6 +233,7 @@ impl Decodable for TransactionWithRlpHeader {
         }
 
         let mut payload_view = rlp::Header::decode_bytes(buf, /* is_list= */ false)?;
+        let payload_length = payload_view.remaining();
 
         if payload_view.is_empty() {
             return Err(rlp::Error::InputTooShort);
@@ -255,6 +256,15 @@ impl Decodable for TransactionWithRlpHeader {
                 ));
             }
         };
+
+        if payload_view.has_remaining() {
+            let consumed = payload_length - payload_view.remaining();
+            return Err(rlp::Error::ListLengthMismatch {
+                expected: payload_length,
+                got: consumed,
+            });
+        }
+
         Ok(Self(tx))
     }
 }

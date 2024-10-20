@@ -5,6 +5,7 @@ use alloy::{
     rlp::{self, Decodable, Encodable},
 };
 use anyhow::{anyhow, bail};
+use bytes::Buf;
 use serde::Deserialize;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::Encode;
@@ -191,9 +192,20 @@ impl Encodable for BlockBodyLegacy {
 
 impl Decodable for BlockBodyLegacy {
     fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        let mut payload_view = rlp::Header::decode_bytes(buf, true)?;
+        let mut payload_view = rlp::Header::decode_bytes(buf, /* is_list= */ true)?;
+        let payload_length = payload_view.remaining();
+
         let txs = rlp_decode_transaction_list_with_header(&mut payload_view)?;
         let uncles = Vec::<Header>::decode(&mut payload_view)?;
+
+        if payload_view.has_remaining() {
+            let consumed = payload_length - payload_view.remaining();
+            return Err(rlp::Error::ListLengthMismatch {
+                expected: payload_length,
+                got: consumed,
+            });
+        }
+
         Ok(Self { txs, uncles })
     }
 }
@@ -268,8 +280,19 @@ impl Encodable for BlockBodyMerge {
 
 impl Decodable for BlockBodyMerge {
     fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        let mut payload_view = rlp::Header::decode_bytes(buf, true)?;
+        let mut payload_view = rlp::Header::decode_bytes(buf, /* is_list= */ true)?;
+        let payload_length = payload_view.remaining();
+
         let txs = rlp_decode_transaction_list_with_header(&mut payload_view)?;
+
+        if payload_view.has_remaining() {
+            let consumed = payload_length - payload_view.remaining();
+            return Err(rlp::Error::ListLengthMismatch {
+                expected: payload_length,
+                got: consumed,
+            });
+        }
+
         Ok(Self { txs })
     }
 }
@@ -353,9 +376,20 @@ impl Encodable for BlockBodyShanghai {
 
 impl Decodable for BlockBodyShanghai {
     fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        let mut payload_view = rlp::Header::decode_bytes(buf, true)?;
+        let mut payload_view = rlp::Header::decode_bytes(buf, /* is_list= */ true)?;
+        let payload_length = payload_view.remaining();
+
         let txs = rlp_decode_transaction_list_with_header(&mut payload_view)?;
         let withdrawals = Vec::<Withdrawal>::decode(&mut payload_view)?;
+
+        if payload_view.has_remaining() {
+            let consumed = payload_length - payload_view.remaining();
+            return Err(rlp::Error::ListLengthMismatch {
+                expected: payload_length,
+                got: consumed,
+            });
+        }
+
         Ok(Self { txs, withdrawals })
     }
 }
