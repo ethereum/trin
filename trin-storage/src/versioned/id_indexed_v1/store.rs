@@ -202,7 +202,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 named_params! { ":content_id": content_id.to_vec() },
                 |row| {
                     let bytes: Vec<u8> = row.get("content_key")?;
-                    TContentKey::try_from(bytes.into()).map_err(|e| {
+                    TContentKey::try_from_bytes(bytes).map_err(|e| {
                         rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
                     })
                 },
@@ -337,7 +337,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 },
                 |row| {
                     let bytes = row.get::<&str, Vec<u8>>("content_key")?;
-                    TContentKey::try_from(bytes.into()).map_err(|e| {
+                    TContentKey::try_from_bytes(bytes).map_err(|e| {
                         rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
                     })
                 },
@@ -480,7 +480,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                     let key_bytes: Vec<u8> = row.get("content_key")?;
                     let value_bytes: Vec<u8> = row.get("content_value")?;
                     let size: u64 = row.get("content_size")?;
-                    TContentKey::try_from(key_bytes.into())
+                    TContentKey::try_from_bytes(key_bytes)
                         .map(|key| (key, value_bytes, size))
                         .map_err(|e| {
                             rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())

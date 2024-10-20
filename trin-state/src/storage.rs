@@ -33,7 +33,6 @@ impl ContentStore for StateStorage {
         key: Self::Key,
         value: V,
     ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
-        let key = StateContentKey::try_from(key.to_bytes())?;
         let value = StateContentValue::decode(&key, value.as_ref())?;
 
         match &key {

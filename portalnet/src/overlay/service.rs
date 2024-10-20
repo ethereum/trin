@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    fmt::Debug,
     marker::{PhantomData, Sync},
     sync::Arc,
     task::Poll,
@@ -175,8 +174,6 @@ impl<
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
         TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
     > OverlayService<TContentKey, TMetric, TValidator, TStore>
-where
-    <TContentKey as TryFrom<RawContentKey>>::Error: Debug,
 {
     /// Spawns the overlay network service.
     ///
@@ -201,10 +198,7 @@ where
         findnodes_query_distances_per_peer: usize,
         disable_poke: bool,
         gossip_dropped: bool,
-    ) -> UnboundedSender<OverlayCommand<TContentKey>>
-    where
-        <TContentKey as TryFrom<RawContentKey>>::Error: Send,
-    {
+    ) -> UnboundedSender<OverlayCommand<TContentKey>> {
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let internal_command_tx = command_tx.clone();
 
@@ -1018,7 +1012,7 @@ where
             "Handling FindContent message",
         );
 
-        let content_key = match (TContentKey::try_from)(request.content_key.into()) {
+        let content_key = match TContentKey::try_from_bytes(&request.content_key) {
             Ok(key) => key,
             Err(_) => {
                 return Err(OverlayRequestError::InvalidRequest(
@@ -1122,8 +1116,8 @@ where
 
         let content_keys: Vec<TContentKey> = request
             .content_keys
-            .into_iter()
-            .map(TContentKey::try_from)
+            .iter()
+            .map(TContentKey::try_from_bytes)
             .collect::<Result<Vec<TContentKey>, _>>()
             .map_err(|_| {
                 OverlayRequestError::AcceptError(
@@ -2042,11 +2036,10 @@ where
         accept_message: &Accept,
         content_keys_offered: Vec<RawContentKey>,
     ) -> anyhow::Result<Vec<Vec<u8>>> {
-        let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> =
-            content_keys_offered
-                .into_iter()
-                .map(TContentKey::try_from)
-                .collect();
+        let content_keys_offered = content_keys_offered
+            .iter()
+            .map(TContentKey::try_from_bytes)
+            .collect::<Result<Vec<_>, _>>();
 
         let content_keys_offered: Vec<TContentKey> = content_keys_offered
             .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;

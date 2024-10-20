@@ -2,11 +2,6 @@ use alloy::primitives::B256;
 use ethportal_api::{
     consensus::fork::ForkName,
     types::{
-        content_key::beacon::{
-            HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX, LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX,
-            LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX, LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX,
-            LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX,
-        },
         content_value::beacon::{
             ForkVersionedLightClientBootstrap, ForkVersionedLightClientFinalityUpdate,
             ForkVersionedLightClientOptimisticUpdate, ForkVersionedLightClientUpdate,
@@ -16,7 +11,7 @@ use ethportal_api::{
         network::Subnetwork,
         portal::PaginateLocalContentInfo,
     },
-    BeaconContentKey, OverlayContentKey, RawContentKey,
+    BeaconContentKey, OverlayContentKey,
 };
 use r2d2::Pool;
 use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
@@ -125,14 +120,7 @@ impl ContentStore for BeaconStorage {
     type Key = BeaconContentKey;
 
     fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
-        let content_key: RawContentKey = key.to_bytes();
-        let beacon_content_key = BeaconContentKey::try_from(content_key).map_err(|err| {
-            ContentStoreError::InvalidData {
-                message: format!("Error deserializing BeaconContentKey value: {err:?}"),
-            }
-        })?;
-
-        match beacon_content_key {
+        match key {
             BeaconContentKey::LightClientBootstrap(content_key) => self
                 .lookup_lc_bootstrap_value(&content_key.block_hash)
                 .map_err(|err| {
@@ -217,14 +205,7 @@ impl ContentStore for BeaconStorage {
         &self,
         key: &Self::Key,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
-        let content_key: RawContentKey = key.to_bytes();
-        let beacon_content_key = BeaconContentKey::try_from(content_key).map_err(|err| {
-            ContentStoreError::InvalidData {
-                message: format!("Error deserializing BeaconContentKey value: {err:?}"),
-            }
-        })?;
-
-        match beacon_content_key {
+        match key {
             BeaconContentKey::LightClientBootstrap(content_key) => {
                 let is_key_available = self
                     .lookup_lc_bootstrap_block_root(&content_key.block_hash)
@@ -375,14 +356,13 @@ impl BeaconStorage {
 
     pub fn store(
         &mut self,
-        key: &impl OverlayContentKey,
+        key: &BeaconContentKey,
         value: &Vec<u8>,
     ) -> Result<(), ContentStoreError> {
         let content_id = key.content_id();
-        let content_key: RawContentKey = key.to_bytes();
 
-        match content_key.first() {
-            Some(&LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX) => {
+        match key {
+            BeaconContentKey::LightClientBootstrap(_) => {
                 let bootstrap = ForkVersionedLightClientBootstrap::from_ssz_bytes(value.as_slice())
                     .map_err(|err| ContentStoreError::InvalidData {
                         message: format!(
@@ -442,44 +422,26 @@ impl BeaconStorage {
                     self.metrics.increase_entry_count();
                 }
             }
-            Some(&LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX) => {
-                if let Ok(update) = BeaconContentKey::try_from(content_key) {
-                    match update {
-                        BeaconContentKey::LightClientUpdatesByRange(update) => {
-                            // Build a range of values starting with update.start_period and len
-                            // update.count
-                            let periods = update.start_period..(update.start_period + update.count);
-                            let update_values = LightClientUpdatesByRange::from_ssz_bytes(
-                                    value.as_slice(),
-                                )
-                                    .map_err(|err| {
-                                        ContentStoreError::InvalidData {
-                                            message: format!(
-                                                "Error deserializing LightClientUpdatesByRange value: {err:?}"
-                                            ),
-                                        }
-                                    })?;
+            BeaconContentKey::LightClientUpdatesByRange(update) => {
+                // Build a range of values starting with update.start_period and len
+                // update.count
+                let periods = update.start_period..(update.start_period + update.count);
+                let update_values = LightClientUpdatesByRange::from_ssz_bytes(value.as_slice())
+                    .map_err(|err| ContentStoreError::InvalidData {
+                        message: format!(
+                            "Error deserializing LightClientUpdatesByRange value: {err:?}"
+                        ),
+                    })?;
 
-                            for (period, value) in periods.zip(update_values.as_ref()) {
-                                if let Err(err) = self.db_insert_lc_update(&period, &value.encode())
-                                {
-                                    debug!("Error writing light client update by range content ID {content_id:?} to beacon network db: {err:?}");
-                                } else {
-                                    self.metrics.increase_entry_count();
-                                }
-                            }
-                        }
-                        _ => {
-                            // Unknown content type
-                            return Err(ContentStoreError::InvalidData {
-                                message: "Unexpected LightClientUpdatesByRange content key"
-                                    .to_string(),
-                            });
-                        }
+                for (period, value) in periods.zip(update_values.as_ref()) {
+                    if let Err(err) = self.db_insert_lc_update(&period, &value.encode()) {
+                        debug!("Error writing light client update by range content ID {content_id:?} to beacon network db: {err:?}");
+                    } else {
+                        self.metrics.increase_entry_count();
                     }
                 }
             }
-            Some(&LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX) => {
+            BeaconContentKey::LightClientFinalityUpdate(_) => {
                 self.cache.set_finality_update(
                         ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(value.as_slice())
                             .map_err(|err| ContentStoreError::InvalidData {
@@ -489,7 +451,7 @@ impl BeaconStorage {
                             })?,
                     );
             }
-            Some(&LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX) => {
+            BeaconContentKey::LightClientOptimisticUpdate(_) => {
                 self.cache.set_optimistic_update(
                         ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(value.as_slice()).map_err(
                             |err| ContentStoreError::InvalidData {
@@ -500,39 +462,16 @@ impl BeaconStorage {
                         )?,
                     );
             }
-            Some(&HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX) => {
-                if let Ok(historical_summaries) = BeaconContentKey::try_from(content_key) {
-                    match historical_summaries {
-                        BeaconContentKey::HistoricalSummariesWithProof(
-                            historical_summaries_key,
-                        ) => {
-                            if let Err(err) = self
-                                .db_insert_or_replace_historical_summaries_with_proof(
-                                    &historical_summaries_key.epoch,
-                                    value,
-                                )
-                            {
-                                debug!("Error writing historical summaries with proof to beacon network db: {err:?}");
-                                return Err(err);
-                            } else {
-                                self.metrics.increase_entry_count();
-                            }
-                        }
-                        _ => {
-                            // Unknown content type
-                            return Err(ContentStoreError::InvalidData {
-                                message: "Unexpected HistoricalSummariesWithProof content key"
-                                    .to_string(),
-                            });
-                        }
-                    }
+            BeaconContentKey::HistoricalSummariesWithProof(historical_summaries_key) => {
+                if let Err(err) = self.db_insert_or_replace_historical_summaries_with_proof(
+                    &historical_summaries_key.epoch,
+                    value,
+                ) {
+                    debug!("Error writing historical summaries with proof to beacon network db: {err:?}");
+                    return Err(err);
+                } else {
+                    self.metrics.increase_entry_count();
                 }
-            }
-            _ => {
-                // Unknown content type
-                return Err(ContentStoreError::InvalidData {
-                    message: "Unknown beacon content key".to_string(),
-                });
             }
         }
 

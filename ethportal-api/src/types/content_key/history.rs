@@ -1,6 +1,6 @@
+use bytes::{BufMut, BytesMut};
 use rand::{seq::SliceRandom, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use sha2::{Digest as Sha2Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
 use std::{fmt, hash::Hash};
@@ -49,8 +49,7 @@ impl HistoryContentKey {
             };
         rand::thread_rng().fill_bytes(&mut random_bytes[..]);
         random_bytes.insert(0, *random_prefix);
-        let random_bytes: RawContentKey = random_bytes.into();
-        Self::try_from(random_bytes).map_err(anyhow::Error::msg)
+        Self::try_from_bytes(&random_bytes).map_err(anyhow::Error::msg)
     }
 
     pub fn new_block_header_by_hash(block_hash: impl Into<[u8; 32]>) -> Self {
@@ -87,7 +86,7 @@ impl Serialize for HistoryContentKey {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_hex())
+        self.to_bytes().serialize(serializer)
     }
 }
 
@@ -96,8 +95,8 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Self::from_hex(&s).map_err(serde::de::Error::custom)
+        let bytes = RawContentKey::deserialize(deserializer)?;
+        Self::try_from_bytes(bytes).map_err(serde::de::Error::custom)
     }
 }
 
@@ -127,39 +126,6 @@ pub struct BlockBodyKey {
 pub struct BlockReceiptsKey {
     /// Hash of the block.
     pub block_hash: [u8; 32],
-}
-
-impl TryFrom<RawContentKey> for HistoryContentKey {
-    type Error = ContentKeyError;
-
-    fn try_from(value: RawContentKey) -> Result<Self, Self::Error> {
-        let Some((&selector, key)) = value.split_first() else {
-            return Err(ContentKeyError::InvalidLength {
-                received: value.len(),
-                expected: 1,
-            });
-        };
-        match selector {
-            HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX => BlockHeaderByHashKey::from_ssz_bytes(key)
-                .map(Self::BlockHeaderByHash)
-                .map_err(|e| ContentKeyError::from_decode_error(e, value)),
-            HISTORY_BLOCK_BODY_KEY_PREFIX => BlockBodyKey::from_ssz_bytes(key)
-                .map(Self::BlockBody)
-                .map_err(|e| ContentKeyError::from_decode_error(e, value)),
-            HISTORY_BLOCK_RECEIPTS_KEY_PREFIX => BlockReceiptsKey::from_ssz_bytes(key)
-                .map(Self::BlockReceipts)
-                .map_err(|e| ContentKeyError::from_decode_error(e, value)),
-            HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX => {
-                BlockHeaderByNumberKey::from_ssz_bytes(key)
-                    .map(Self::BlockHeaderByNumber)
-                    .map_err(|e| ContentKeyError::from_decode_error(e, value))
-            }
-            _ => Err(ContentKeyError::from_decode_error(
-                DecodeError::UnionSelectorInvalid(selector),
-                value,
-            )),
-        }
-    }
 }
 
 impl fmt::Display for HistoryContentKey {
@@ -192,35 +158,63 @@ impl fmt::Display for HistoryContentKey {
 }
 
 impl OverlayContentKey for HistoryContentKey {
-    fn content_id(&self) -> [u8; 32] {
-        let mut sha256 = Sha256::new();
-        sha256.update(self.to_bytes());
-        sha256.finalize().into()
-    }
-
     fn to_bytes(&self) -> RawContentKey {
-        let mut bytes: Vec<u8> = Vec::new();
+        let mut bytes;
 
         match self {
-            HistoryContentKey::BlockHeaderByHash(k) => {
-                bytes.push(HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX);
-                bytes.extend_from_slice(&k.block_hash);
+            HistoryContentKey::BlockHeaderByHash(key) => {
+                bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
+                bytes.put_u8(HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX);
+                bytes.put_slice(&key.as_ssz_bytes());
             }
-            HistoryContentKey::BlockBody(k) => {
-                bytes.push(HISTORY_BLOCK_BODY_KEY_PREFIX);
-                bytes.extend_from_slice(&k.block_hash);
+            HistoryContentKey::BlockBody(key) => {
+                bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
+                bytes.put_u8(HISTORY_BLOCK_BODY_KEY_PREFIX);
+                bytes.put_slice(&key.as_ssz_bytes());
             }
-            HistoryContentKey::BlockReceipts(k) => {
-                bytes.push(HISTORY_BLOCK_RECEIPTS_KEY_PREFIX);
-                bytes.extend_from_slice(&k.block_hash);
+            HistoryContentKey::BlockReceipts(key) => {
+                bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
+                bytes.put_u8(HISTORY_BLOCK_RECEIPTS_KEY_PREFIX);
+                bytes.put_slice(&key.as_ssz_bytes());
             }
-            HistoryContentKey::BlockHeaderByNumber(k) => {
-                bytes.push(HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX);
-                bytes.extend_from_slice(&k.block_number.as_ssz_bytes());
+            HistoryContentKey::BlockHeaderByNumber(key) => {
+                bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
+                bytes.put_u8(HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX);
+                bytes.put_slice(&key.as_ssz_bytes());
             }
         }
 
-        bytes.into()
+        RawContentKey::from(bytes.freeze())
+    }
+
+    fn try_from_bytes(bytes: impl AsRef<[u8]>) -> Result<Self, ContentKeyError> {
+        let bytes = bytes.as_ref();
+        let Some((&selector, key)) = bytes.split_first() else {
+            return Err(ContentKeyError::InvalidLength {
+                received: bytes.len(),
+                expected: 1,
+            });
+        };
+        match selector {
+            HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX => BlockHeaderByHashKey::from_ssz_bytes(key)
+                .map(Self::BlockHeaderByHash)
+                .map_err(|e| ContentKeyError::from_decode_error(e, bytes)),
+            HISTORY_BLOCK_BODY_KEY_PREFIX => BlockBodyKey::from_ssz_bytes(key)
+                .map(Self::BlockBody)
+                .map_err(|e| ContentKeyError::from_decode_error(e, bytes)),
+            HISTORY_BLOCK_RECEIPTS_KEY_PREFIX => BlockReceiptsKey::from_ssz_bytes(key)
+                .map(Self::BlockReceipts)
+                .map_err(|e| ContentKeyError::from_decode_error(e, bytes)),
+            HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX => {
+                BlockHeaderByNumberKey::from_ssz_bytes(key)
+                    .map(Self::BlockHeaderByNumber)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, bytes))
+            }
+            _ => Err(ContentKeyError::from_decode_error(
+                DecodeError::UnionSelectorInvalid(selector),
+                bytes,
+            )),
+        }
     }
 }
 
@@ -280,7 +274,7 @@ mod test {
         let key = HistoryContentKey::BlockHeaderByNumber(header);
 
         // round trip
-        let decoded = HistoryContentKey::try_from(key.to_bytes()).unwrap();
+        let decoded = HistoryContentKey::try_from_bytes(key.to_bytes()).unwrap();
         assert_eq!(decoded, key);
 
         assert_eq!(key.to_bytes(), expected_content_key);
@@ -310,7 +304,7 @@ mod test {
         let key = HistoryContentKey::BlockBody(body);
 
         // round trip
-        let decoded = HistoryContentKey::try_from(key.to_bytes()).unwrap();
+        let decoded = HistoryContentKey::try_from_bytes(key.to_bytes()).unwrap();
         assert_eq!(decoded, key);
 
         assert_eq!(key.to_bytes(), expected_content_key);
