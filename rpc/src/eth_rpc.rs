@@ -205,12 +205,7 @@ impl EthApi {
         let body = self.fetch_block_body(header.hash()).await?;
         let transactions =
             BlockTransactions::Hashes(body.transactions().iter().map(Transaction::hash).collect());
-        let uncles = body
-            .uncles()
-            .unwrap_or_default()
-            .iter()
-            .map(|uncle| uncle.hash())
-            .collect();
+        let uncles = body.uncles().iter().map(|uncle| uncle.hash()).collect();
         let withdrawals = body
             .withdrawals()
             .map(|withdrawals| withdrawals.iter().map(Withdrawal::from).collect());
