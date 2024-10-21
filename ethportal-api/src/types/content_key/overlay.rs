@@ -10,7 +10,8 @@ use crate::{
 use std::str::FromStr;
 
 /// Types whose values represent keys to lookup content items in an overlay network.
-/// Keys are serializable.
+///
+/// Keys are serializable as "0x" prefixed hex strings.
 pub trait OverlayContentKey:
     TryFrom<RawContentKey, Error = ContentKeyError>
     + Clone
@@ -26,6 +27,10 @@ pub trait OverlayContentKey:
     fn content_id(&self) -> [u8; 32];
 
     /// Returns the bytes of the content key.
+    ///
+    /// The [RawContentKey] is better suited than `Vec<u8>` for representing content key bytes.
+    /// For more details, see [RawContentKey] documentation. If `Vec<u8>` is still desired, one can
+    /// obtain it with: `key.to_bytes().to_vec()`.
     fn to_bytes(&self) -> RawContentKey;
 
     /// Returns the content key as a hex encoded "0x"-prefixed string.
