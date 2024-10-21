@@ -1,5 +1,6 @@
 use alloy::{
     primitives::{Address, Bytes, B256, U256},
+    rlp::{self, Encodable},
     rpc::types::{
         Block, BlockId, BlockNumberOrTag, BlockTransactions, TransactionRequest, Withdrawal,
     },
@@ -7,7 +8,10 @@ use alloy::{
 use ethportal_api::{
     jsonrpsee::types::{error::CALL_EXECUTION_FAILED_CODE, ErrorObjectOwned},
     types::{
-        execution::{block_body::BlockBody, transaction::Transaction},
+        execution::{
+            block_body::BlockBody,
+            transaction::{Transaction, TransactionWithRlpHeader},
+        },
         jsonrpc::{
             endpoints::HistoryEndpoint,
             request::{HistoryJsonRpcRequest, StateJsonRpcRequest},
@@ -210,17 +214,32 @@ impl EthApi {
             .withdrawals()
             .map(|withdrawals| withdrawals.iter().map(Withdrawal::from).collect());
 
-        // TODO: Add calculation for the block's size:
+        // Calculate block size:
         //   len(rlp(header, transactions, uncles, withdrawals))
-        // NOTE: Transactions should be encoded with envelope
-        let size = None;
+        // Note: transactions are encoded with header
+        let size = {
+            let payload_size = header.length()
+                + body
+                    .transactions()
+                    .iter()
+                    .cloned()
+                    .map(TransactionWithRlpHeader)
+                    .collect::<Vec<_>>()
+                    .length()
+                + rlp::list_length(body.uncles())
+                + match body.withdrawals() {
+                    Some(withdrawals) => rlp::list_length(withdrawals),
+                    None => 0,
+                };
+            payload_size + rlp::length_of_length(payload_size)
+        };
 
         // Combine header and block body into the single json representation of the block.
         let block = Block {
             header: header.into(),
             transactions,
             uncles,
-            size,
+            size: Some(U256::from(size)),
             withdrawals,
         };
         Ok(block)
