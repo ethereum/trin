@@ -57,10 +57,8 @@ is likely to have what data based on these names.
 ```mermaid
 sequenceDiagram
     Alice-->>Bob: Looking for data 0xabc
-    Bob-->>Alice: Sorry, but try Charlie (gives address)
+    Bob->>Alice: Sorry, but try Charlie (gives address)
     Alice-->>Charlie: Looking for data 0xabc
-    Charlie-->>Alice: I have it, do you want?
-    Alice-->>Charlie: Yes
     Charlie->>Alice: Data 0xabc
 ```
 
@@ -76,4 +74,4 @@ graph TD;
     id4[(Charlie, medium)]
 ```
 
-In addition to Trin, other portal clients are in development and participate in the same network.
+In addition to Trin, [several other Portal clients](https://ethportal.net/clients#more-information) participate in the same network.

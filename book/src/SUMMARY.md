@@ -1,7 +1,7 @@
 # Summary
 
 - [Introduction](introduction/README.md)
-    - [Portal Network](introduction/portal_network.md)
+    - [Quickstart](introduction/quickstart.md)
 - [Users](users/README.md)
     - [Requirements](users/requirements.md)
     - [Startup](users/startup.md)
@@ -12,6 +12,8 @@
     - [Monitoring](users/monitoring.md)
     - [Problems](users/problems.md)
     - [FAQ](users/faq.md)
+- [Concepts](concepts/README.md)
+    - [Portal Network](introduction/portal_network.md)
 - [Developers](developers/README.md)
     - [Quick setup](developers/quick_setup.md)
     - [Developer stories](developers/developer_stories.md)
