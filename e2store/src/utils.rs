@@ -47,10 +47,12 @@ pub async fn download_era_links(
 pub async fn get_era_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
     let era_files = download_era_links(http_client, ERA_DIR_URL).await?;
     ensure!(!era_files.is_empty(), "No era files found at {ERA_DIR_URL}");
-    ensure!(
-        (0..era_files.len()).all(|epoch| era_files.contains_key(&(epoch as u64))),
-        "Epoch indices are not starting from zero or not consecutive",
-    );
+    for epoch_num in 0..era_files.len() {
+        ensure!(
+            era_files.contains_key(&(epoch_num as u64)),
+            "Epoch indices are not starting from zero or not consecutive: missing epoch {epoch_num}",
+        );
+    }
     Ok(era_files)
 }
 
