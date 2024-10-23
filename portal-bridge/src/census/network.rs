@@ -1,12 +1,18 @@
-use anyhow::anyhow;
+use std::time::Duration;
+
+use anyhow::{anyhow, bail};
 use discv5::enr::NodeId;
 use ethportal_api::{
-    generate_random_remote_enr, jsonrpsee::http_client::HttpClient, types::network::Subnetwork,
+    generate_random_node_ids, jsonrpsee::http_client::HttpClient, types::network::Subnetwork,
     BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, StateNetworkApiClient,
 };
-use futures::StreamExt;
-use tokio::time::Instant;
-use tracing::{error, info, warn};
+use futures::{future::JoinAll, StreamExt};
+use itertools::Itertools;
+use tokio::{
+    sync::Semaphore,
+    time::{Instant, Interval},
+};
+use tracing::{debug, error, info, warn};
 
 use crate::{
     census::CensusError,
@@ -15,10 +21,52 @@ use crate::{
 
 use super::peers::Peers;
 
-/// The network struct is responsible for maintaining a list of known peers
-/// in the given subnetwork.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The result of the liveness check.
+enum LivenessResult {
+    /// We pinged the peer successfully
+    Pass,
+    /// We failed to ping peer
+    Fail,
+    /// Peer is already registered and not expired (we didn't try to ping the peer)
+    AlreadyRegistered,
+}
+
+#[derive(Debug, Clone)]
+/// The configuration for [Network] initialization. See [Network::init] for details.
+pub(super) struct NetworkInitializationConfig {
+    /// The number of requests to execute in parallel.
+    concurrency: usize,
+    /// Controls the number of recursive-find-nodes requests per "node discovery" iteration.
+    ///
+    /// The actual number of requests will be: `2^discovery_degree`.
+    /// Value has to be between `0` (1 request) and `8` (256 requests), inclusively.
+    discovery_degree: u32,
+    /// Controls when to stop "node discovery" loop.
+    stop_fraction_threshold: f64,
+}
+
+impl NetworkInitializationConfig {
+    const DEFAULT_DISCOVERY_DEGREE: u32 = 4;
+    const DEFAULT_STOP_FRACTION_THRESHOLD: f64 = 0.1;
+}
+
+impl Default for NetworkInitializationConfig {
+    fn default() -> Self {
+        Self {
+            concurrency: 1 << Self::DEFAULT_DISCOVERY_DEGREE,
+            discovery_degree: Self::DEFAULT_DISCOVERY_DEGREE,
+            stop_fraction_threshold: Self::DEFAULT_STOP_FRACTION_THRESHOLD,
+        }
+    }
+}
+
+/// `Network` is responsible for maintaining a list of known peers in a subnetwork.
+///
+/// The [Network::init] should be used to initialize our view of the network, and [NetworkManager]
+/// should be used in a background task to keep it up-to-date.
 #[derive(Clone)]
-pub struct Network {
+pub(super) struct Network {
     peers: Peers,
     client: HttpClient,
     subnetwork: Subnetwork,
@@ -44,12 +92,16 @@ impl Network {
         }
     }
 
+    pub fn create_manager(&self) -> NetworkManager {
+        NetworkManager::new(self.clone())
+    }
+
     // Look up all known interested enrs for a given content id
     pub fn get_interested_enrs(&self, content_id: &[u8; 32]) -> Result<Vec<Enr>, CensusError> {
         if self.peers.is_empty() {
             error!(
-                "No known peers in {} census, unable to look up interested enrs",
-                self.subnetwork
+                subnetwork = %self.subnetwork,
+                "No known peers, unable to look up interested enrs",
             );
             return Err(CensusError::NoPeers);
         }
@@ -58,129 +110,140 @@ impl Network {
             .get_interested_enrs(content_id, self.enr_offer_limit))
     }
 
-    /// Initialize the peers.
+    /// Returns whether `enr` represents eligible peer.
     ///
-    /// We initialize a network with a random rfn lookup to get an initial view of the network
-    /// and then iterate through the rfn of each peer to find new peers. Since this initialization
-    /// blocks the bridge's gossip feature, there is a tradeoff between the time taken to initialize
-    /// the census and the time taken to start gossiping. In the future, we might consider updating
-    /// the initialization process to be considered complete after it has found ~100% of the network
-    /// peers. However, since the census continues to iterate through the peers after
-    /// initialization, the initialization is just to reach a critical mass of peers so that gossip
-    /// can begin.
-    pub async fn init(&self) -> Result<(), CensusError> {
-        match self.filter_clients.is_empty() {
-            true => info!("Initializing {} network census", self.subnetwork),
-            false => info!(
-                "Initializing {} network census with filtered clients: {:?}",
-                self.subnetwork, self.filter_clients
-            ),
-        }
-        let (_, random_enr) = generate_random_remote_enr();
-        let Ok(initial_enrs) = self.recursive_find_nodes(random_enr.node_id()).await else {
-            error!(
-                "Failed to initialize {} census, RFN failed",
-                self.subnetwork
-            );
-            return Err(CensusError::FailedInitialization(
-                "RecursiveFindNodes failed",
-            ));
-        };
+    /// Currently this only filters out peers based on client type (using `filter_client` field).
+    fn is_eligible(&self, enr: &Enr) -> bool {
+        self.filter_clients.is_empty() || !self.filter_clients.contains(&ClientType::from(enr))
+    }
 
-        // if this initialization is too slow, we can consider
-        // refactoring the peers structure so that it can be
-        // run in parallel
-        for enr in initial_enrs {
-            self.process_enr(enr).await;
+    /// Initializes the peers.
+    ///
+    /// Runs "node discovery" in a loop, and stops once number of newly discovered nodes is less
+    /// than fraction of all peers, configured by `config.stop_fraction_threshold`.
+    ///
+    /// Each "node discovery" iteration will generate `2^config.discovery_degree` random Node Ids.
+    /// Each Node Id will have unique `config.discovery_degree` most significant bits, in order to
+    /// spread Node Ids across key space.
+    pub async fn init(&mut self, config: &NetworkInitializationConfig) -> Result<(), CensusError> {
+        info!(
+            subnetwork = %self.subnetwork,
+            filter_clients = ?self.filter_clients,
+            "init: started",
+        );
+
+        let semaphore = Semaphore::new(config.concurrency);
+
+        loop {
+            // Generate random Node Ids
+            let node_ids = generate_random_node_ids(config.discovery_degree);
+
+            // Concurrent execution of recursive_find_nodes
+            let results = node_ids
+                .iter()
+                .map(|node_id| async {
+                    if let Ok(_permit) = semaphore.acquire().await {
+                        self.recursive_find_nodes(*node_id).await
+                    } else {
+                        bail!("failed to acquire permit")
+                    }
+                })
+                .collect::<JoinAll<_>>()
+                .await;
+
+            let enrs = results
+                .into_iter()
+                // Extract all ENRs
+                .flat_map(|result| match result {
+                    Ok(enrs) => enrs,
+                    Err(err) => {
+                        error!(
+                            subnetwork = %self.subnetwork,
+                            "init: RFN failed - err: {err}",
+                        );
+                        vec![]
+                    }
+                })
+                // Group by NodeId
+                .into_grouping_map_by(|enr| enr.node_id())
+                // Select ENR with maximum sequence number
+                .max_by_key(|_node_id, enr| enr.seq())
+                .into_values()
+                .collect_vec();
+
+            // Concurrent execution of liveness check
+            let new_peers = enrs
+                .iter()
+                .map(|enr| async {
+                    if let Ok(_permit) = semaphore.acquire().await {
+                        self.liveness_check(enr.clone()).await
+                    } else {
+                        error!(
+                            subnetwork = %self.subnetwork,
+                            "init: liveness check failed - permit",
+                        );
+                        LivenessResult::Fail
+                    }
+                })
+                .collect::<JoinAll<_>>()
+                .await
+                .into_iter()
+                .filter(|liveness_result| liveness_result == &LivenessResult::Pass)
+                .count();
+
+            let total_peers = self.peers.len();
+
+            debug!(
+                subnetwork = %self.subnetwork,
+                "init: added {new_peers} / {total_peers} peers",
+            );
+
+            // Stop if number of new peers is less than a threshold fraction of all peers
+            if (new_peers as f64) < (total_peers as f64) * config.stop_fraction_threshold {
+                break;
+            }
         }
+
         if self.peers.is_empty() {
             error!(
-                "Failed to initialize {} census, couldn't find any peers.",
-                self.subnetwork
+                subnetwork = %self.subnetwork,
+                "init: failed - couldn't find any peers",
             );
             return Err(CensusError::FailedInitialization("No peers found"));
         }
+
         info!(
-            "Initialized {} census: found {} peers",
-            self.subnetwork,
-            self.peers.len()
+            subnetwork = %self.subnetwork,
+            "init: finished - found {} peers",
+            self.peers.len(),
         );
         Ok(())
     }
 
-    /// Returns next peer to process.
-    pub async fn peer_to_process(&mut self) -> Option<Result<Enr, String>> {
-        self.peers.next().await
-    }
-
-    /// Processes the peer.
-    ///
-    /// If no peer is found, re-initilizes the network.
-    pub async fn process_peer(&self, peer: Option<Result<Enr, String>>) {
-        let subnetwork = &self.subnetwork;
-        match peer {
-            Some(Ok(enr)) => {
-                self.process_enr(enr).await;
-            }
-            Some(Err(err)) => {
-                error!("Error getting peer to process for {subnetwork} subnetwork: {err}");
-            }
-            None => {
-                warn!("No peers pending! Re-initializing {subnetwork} subnetwork");
-                if let Err(err) = self.init().await {
-                    error!("Error initializing {subnetwork} subnetwork: {err}");
-                }
-            }
-        }
-    }
-
-    /// Only processes an enr (iterating through its rfn) if the enr's
-    /// liveness delay has expired
-    async fn process_enr(&self, enr: Enr) {
-        // ping for liveliness check
-        if !self.liveness_check(enr.clone()).await {
-            return;
-        }
-        // iterate peers routing table via rfn over various distances
-        for distance in 245..257 {
-            let Ok(result) = self.find_nodes(enr.clone(), vec![distance]).await else {
-                warn!("Find nodes request failed for enr: {}", enr);
-                continue;
-            };
-            for found_enr in result {
-                self.liveness_check(found_enr).await;
-            }
-        }
-        info!(
-            "Updated {} census. Available peers: {}",
-            self.subnetwork,
-            self.peers.len(),
-        );
-    }
-
     /// Performs liveness check.
     ///
-    /// Liveness check will pass if
-    /// If they are registered but expired, we shouldn't perform liveness checked now as it will be
-    /// done when they are polled as expired (soon).
-    pub async fn liveness_check(&self, enr: Enr) -> bool {
-        // skip if client type is filtered
-        let client_type = ClientType::from(&enr);
-        if self.filter_clients.contains(&client_type) {
-            return false;
-        }
-
+    /// Liveness check will pass if peer respond to a Ping request. It returns
+    /// `LivenessResult::AlreadyRegistered` if peer is already registered and not expired.
+    async fn liveness_check(&self, enr: Enr) -> LivenessResult {
         // if enr is already registered, check if delay map deadline has expired
         if let Some(deadline) = self.peers.deadline(&enr) {
             if Instant::now() < deadline {
-                return false;
+                return LivenessResult::AlreadyRegistered;
             }
         }
 
-        self.ping(enr).await
+        if self.ping(enr).await {
+            LivenessResult::Pass
+        } else {
+            LivenessResult::Fail
+        }
     }
 
     async fn ping(&self, enr: Enr) -> bool {
+        if !self.is_eligible(&enr) {
+            return false;
+        }
+
         let future_response = match self.subnetwork {
             Subnetwork::History => HistoryNetworkApiClient::ping(&self.client, enr.clone()),
             Subnetwork::State => StateNetworkApiClient::ping(&self.client, enr.clone()),
@@ -191,35 +254,140 @@ impl Network {
         self.peers.process_ping_response(enr, response)
     }
 
-    async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> anyhow::Result<Vec<Enr>> {
-        let result = match self.subnetwork {
+    async fn recursive_find_nodes(&self, node_id: NodeId) -> anyhow::Result<Vec<Enr>> {
+        let enrs = match self.subnetwork {
             Subnetwork::History => {
-                HistoryNetworkApiClient::find_nodes(&self.client, enr, distances).await
+                HistoryNetworkApiClient::recursive_find_nodes(&self.client, node_id).await?
             }
             Subnetwork::State => {
-                StateNetworkApiClient::find_nodes(&self.client, enr, distances).await
+                StateNetworkApiClient::recursive_find_nodes(&self.client, node_id).await?
             }
             Subnetwork::Beacon => {
-                BeaconNetworkApiClient::find_nodes(&self.client, enr, distances).await
+                BeaconNetworkApiClient::recursive_find_nodes(&self.client, node_id).await?
             }
             _ => unreachable!("Unsupported subnetwork: {}", self.subnetwork),
         };
-        result.map_err(|e| anyhow!(e))
+        Ok(enrs
+            .into_iter()
+            .filter(|enr| self.is_eligible(enr))
+            .collect())
+    }
+}
+
+/// The action to execute in order to keep up-to-date view of the subnetwork.
+pub enum NetworkAction {
+    /// Peers re-initialization (required when no peers are available)
+    ReInitialization,
+    /// Run peer discovery (RFN for random Node Id)
+    PeerDiscovery,
+    /// Check the liveness of the discovered peer
+    LivenessCheck(Enr),
+}
+
+/// `NetworkManager` is responsible for keeping `Network`'s view of the network up to date.
+///
+/// It should be used in a background task.
+pub(super) struct NetworkManager {
+    network: Network,
+    peer_discovery_interval: Interval,
+}
+
+impl NetworkManager {
+    /// Configures how frequently to run recursive-find-nodes for a random NodeId in order to keep
+    /// discovering new nodes.
+    const PEER_DISCOVERY_INTERVAL: Duration = Duration::from_secs(60);
+
+    pub fn new(network: Network) -> Self {
+        Self {
+            network,
+            peer_discovery_interval: tokio::time::interval(Self::PEER_DISCOVERY_INTERVAL),
+        }
     }
 
-    async fn recursive_find_nodes(&self, node_id: NodeId) -> anyhow::Result<Vec<Enr>> {
-        let result = match self.subnetwork {
-            Subnetwork::History => {
-                HistoryNetworkApiClient::recursive_find_nodes(&self.client, node_id).await
+    /// Returns next action that should be executed.
+    pub async fn next_action(&mut self) -> NetworkAction {
+        loop {
+            tokio::select! {
+                _ = self.peer_discovery_interval.tick() => {
+                    return NetworkAction::PeerDiscovery;
+                }
+                peer = self.network.peers.next() => {
+                    match peer {
+                        Some(Ok(enr)) => {
+                            return NetworkAction::LivenessCheck(enr);
+                        }
+                        Some(Err(err)) => {
+                            error!(
+                                subnetwork = %self.network.subnetwork,
+                                "next-action: error getting peer - err: {err}",
+                            );
+                        }
+                        None => {
+                            warn!(
+                                subnetwork = %self.network.subnetwork,
+                                "next-action: no pending peers - re-initializing",
+                            );
+                            return NetworkAction::ReInitialization;
+                        }
+                    }
+                }
             }
-            Subnetwork::State => {
-                StateNetworkApiClient::recursive_find_nodes(&self.client, node_id).await
+        }
+    }
+
+    pub async fn execute_action(&mut self, action: NetworkAction) {
+        match action {
+            NetworkAction::ReInitialization => {
+                if let Err(err) = self
+                    .network
+                    .init(&NetworkInitializationConfig {
+                        concurrency: 1,
+                        ..Default::default()
+                    })
+                    .await
+                {
+                    error!(
+                        subnetwork = %self.network.subnetwork,
+                        "execute-action: error re-initializing - err: {err}",
+                    );
+                }
             }
-            Subnetwork::Beacon => {
-                BeaconNetworkApiClient::recursive_find_nodes(&self.client, node_id).await
+            NetworkAction::PeerDiscovery => self.peer_discovery().await,
+            NetworkAction::LivenessCheck(enr) => {
+                if self.network.liveness_check(enr).await == LivenessResult::AlreadyRegistered {
+                    warn!(
+                        subnetwork = %self.network.subnetwork,
+                        "execute-action: liveness check on already registered peer",
+                    );
+                }
             }
-            _ => unreachable!("Unsupported subnetwork: {}", self.subnetwork),
+        }
+    }
+
+    async fn peer_discovery(&mut self) {
+        let node_id = NodeId::random();
+        let enrs = match self.network.recursive_find_nodes(node_id).await {
+            Ok(enrs) => enrs,
+            Err(err) => {
+                error!(
+                    subnetwork = %self.network.subnetwork,
+                    "peer-discovery: RFN failed - err: {err}",
+                );
+                return;
+            }
         };
-        result.map_err(|e| anyhow!(e))
+
+        let mut new_peers = 0;
+        for enr in enrs {
+            if self.network.liveness_check(enr).await == LivenessResult::Pass {
+                new_peers += 1;
+            }
+        }
+
+        let total_peers = self.network.peers.len();
+        info!(
+            subnetwork = %self.network.subnetwork,
+            "peer-discovery: finished - discovered {new_peers} / {total_peers} peers",
+        );
     }
 }
