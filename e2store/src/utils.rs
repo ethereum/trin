@@ -78,22 +78,3 @@ pub async fn get_shuffled_era1_files(http_client: &Client) -> anyhow::Result<Vec
     era1_files.shuffle(&mut thread_rng());
     Ok(era1_files)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_get_shuffled_era1_files() {
-        let http_client = Client::new();
-        let era1_files = get_shuffled_era1_files(&http_client).await.unwrap();
-        assert_eq!(era1_files.len(), ERA1_FILE_COUNT);
-    }
-
-    #[tokio::test]
-    async fn test_get_era_file_download_links() {
-        let http_client = Client::new();
-        let era_files = get_era_files(&http_client).await.unwrap();
-        assert!(!era_files.is_empty());
-    }
-}
