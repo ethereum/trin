@@ -171,6 +171,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "This test downloads data from a remote server"]
     async fn test_we_generate_the_correct_state_root_for_the_first_8192_blocks() {
         let temp_directory = create_temp_test_dir().unwrap();
         let mut trin_execution = TrinExecution::new(temp_directory.path(), StateConfig::default())
