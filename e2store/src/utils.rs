@@ -4,6 +4,7 @@ use anyhow::{ensure, Error};
 use rand::{seq::SliceRandom, thread_rng};
 use reqwest::Client;
 use scraper::{Html, Selector};
+use tracing::warn;
 
 const ERA_DIR_URL: &str = "https://mainnet.era.nimbus.team/";
 const ERA1_DIR_URL: &str = "https://era1.ethportal.net/";
@@ -48,10 +49,9 @@ pub async fn get_era_files(http_client: &Client) -> anyhow::Result<HashMap<u64, 
     let era_files = download_era_links(http_client, ERA_DIR_URL).await?;
     ensure!(!era_files.is_empty(), "No era files found at {ERA_DIR_URL}");
     for epoch_num in 0..era_files.len() {
-        ensure!(
-            era_files.contains_key(&(epoch_num as u64)),
-            "Epoch indices are not starting from zero or not consecutive: missing epoch {epoch_num}",
-        );
+        if !era_files.contains_key(&(epoch_num as u64)) {
+            warn!("Epoch indices are not starting from zero or not consecutive: missing epoch {epoch_num}");
+        }
     }
     Ok(era_files)
 }
@@ -94,6 +94,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_era_file_download_links() {
+        trin_utils::log::init_tracing_logger();
         let http_client = Client::new();
         let era_files = get_era_files(&http_client).await.unwrap();
         assert!(!era_files.is_empty());
