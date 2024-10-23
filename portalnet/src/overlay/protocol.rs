@@ -2,7 +2,6 @@
 
 use std::{
     collections::HashSet,
-    fmt::{Debug, Display},
     future::Future,
     marker::{PhantomData, Sync},
     sync::Arc,
@@ -95,8 +94,6 @@ impl<
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
         TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
     > OverlayProtocol<TContentKey, TMetric, TValidator, TStore>
-where
-    <TContentKey as TryFrom<RawContentKey>>::Error: Debug + Display + Send,
 {
     pub async fn new(
         config: OverlayConfig,
@@ -394,7 +391,7 @@ where
         let direction = RequestDirection::Outgoing {
             destination: enr.clone(),
         };
-        let content_key = TContentKey::try_from(content_key.into()).map_err(|err| {
+        let content_key = TContentKey::try_from_bytes(&content_key).map_err(|err| {
             OverlayRequestError::FailedValidation(format!(
                 "Error decoding content key for received utp content: {err}"
             ))

@@ -3,8 +3,8 @@ use crate::{
     utils::bytes::hex_encode_compact,
     RawContentKey,
 };
+use bytes::{BufMut, BytesMut};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use sha2::{Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
 use std::{fmt, hash::Hash};
@@ -82,48 +82,6 @@ pub struct HistoricalSummariesWithProofKey {
     pub epoch: u64,
 }
 
-impl TryFrom<RawContentKey> for BeaconContentKey {
-    type Error = ContentKeyError;
-
-    fn try_from(value: RawContentKey) -> Result<Self, Self::Error> {
-        let Some((&selector, key)) = value.split_first() else {
-            return Err(ContentKeyError::InvalidLength {
-                received: value.len(),
-                expected: 1,
-            });
-        };
-        match selector {
-            LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX => LightClientBootstrapKey::from_ssz_bytes(key)
-                .map(Self::LightClientBootstrap)
-                .map_err(|e| ContentKeyError::from_decode_error(e, value)),
-            LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX => {
-                LightClientUpdatesByRangeKey::from_ssz_bytes(key)
-                    .map(Self::LightClientUpdatesByRange)
-                    .map_err(|e| ContentKeyError::from_decode_error(e, value))
-            }
-            LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX => {
-                LightClientFinalityUpdateKey::from_ssz_bytes(key)
-                    .map(Self::LightClientFinalityUpdate)
-                    .map_err(|e| ContentKeyError::from_decode_error(e, value))
-            }
-            LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX => {
-                LightClientOptimisticUpdateKey::from_ssz_bytes(key)
-                    .map(Self::LightClientOptimisticUpdate)
-                    .map_err(|e| ContentKeyError::from_decode_error(e, value))
-            }
-            HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX => {
-                HistoricalSummariesWithProofKey::from_ssz_bytes(key)
-                    .map(Self::HistoricalSummariesWithProof)
-                    .map_err(|e| ContentKeyError::from_decode_error(e, value))
-            }
-            _ => Err(ContentKeyError::from_decode_error(
-                DecodeError::UnionSelectorInvalid(selector),
-                value,
-            )),
-        }
-    }
-}
-
 impl fmt::Display for BeaconContentKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
@@ -153,39 +111,77 @@ impl fmt::Display for BeaconContentKey {
 }
 
 impl OverlayContentKey for BeaconContentKey {
-    fn content_id(&self) -> [u8; 32] {
-        let mut sha256 = Sha256::new();
-        sha256.update(self.to_bytes());
-        sha256.finalize().into()
-    }
-
     fn to_bytes(&self) -> RawContentKey {
-        let mut bytes: Vec<u8> = Vec::new();
+        let mut bytes;
 
         match self {
             BeaconContentKey::LightClientBootstrap(key) => {
-                bytes.push(LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX);
-                bytes.extend_from_slice(&key.as_ssz_bytes());
+                bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
+                bytes.put_u8(LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX);
+                bytes.put_slice(&key.as_ssz_bytes());
             }
             BeaconContentKey::LightClientUpdatesByRange(key) => {
-                bytes.push(LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX);
-                bytes.extend_from_slice(&key.as_ssz_bytes());
+                bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
+                bytes.put_u8(LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX);
+                bytes.put_slice(&key.as_ssz_bytes());
             }
             BeaconContentKey::LightClientFinalityUpdate(key) => {
-                bytes.push(LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX);
-                bytes.extend_from_slice(&key.as_ssz_bytes())
+                bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
+                bytes.put_u8(LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX);
+                bytes.put_slice(&key.as_ssz_bytes());
             }
             BeaconContentKey::LightClientOptimisticUpdate(key) => {
-                bytes.push(LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX);
-                bytes.extend_from_slice(&key.as_ssz_bytes())
+                bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
+                bytes.put_u8(LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX);
+                bytes.put_slice(&key.as_ssz_bytes());
             }
             BeaconContentKey::HistoricalSummariesWithProof(key) => {
-                bytes.push(HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX);
-                bytes.extend_from_slice(&key.as_ssz_bytes())
+                bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
+                bytes.put_u8(HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX);
+                bytes.put_slice(&key.as_ssz_bytes());
             }
         }
 
-        bytes.into()
+        RawContentKey::from(bytes.freeze())
+    }
+
+    fn try_from_bytes(bytes: impl AsRef<[u8]>) -> Result<Self, ContentKeyError> {
+        let bytes = bytes.as_ref();
+        let Some((&selector, key)) = bytes.split_first() else {
+            return Err(ContentKeyError::InvalidLength {
+                received: bytes.len(),
+                expected: 1,
+            });
+        };
+        match selector {
+            LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX => LightClientBootstrapKey::from_ssz_bytes(key)
+                .map(Self::LightClientBootstrap)
+                .map_err(|e| ContentKeyError::from_decode_error(e, bytes)),
+            LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX => {
+                LightClientUpdatesByRangeKey::from_ssz_bytes(key)
+                    .map(Self::LightClientUpdatesByRange)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, bytes))
+            }
+            LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX => {
+                LightClientFinalityUpdateKey::from_ssz_bytes(key)
+                    .map(Self::LightClientFinalityUpdate)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, bytes))
+            }
+            LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX => {
+                LightClientOptimisticUpdateKey::from_ssz_bytes(key)
+                    .map(Self::LightClientOptimisticUpdate)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, bytes))
+            }
+            HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX => {
+                HistoricalSummariesWithProofKey::from_ssz_bytes(key)
+                    .map(Self::HistoricalSummariesWithProof)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, bytes))
+            }
+            _ => Err(ContentKeyError::from_decode_error(
+                DecodeError::UnionSelectorInvalid(selector),
+                bytes,
+            )),
+        }
     }
 }
 
@@ -194,7 +190,7 @@ impl Serialize for BeaconContentKey {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_hex())
+        self.to_bytes().serialize(serializer)
     }
 }
 
@@ -203,8 +199,8 @@ impl<'de> Deserialize<'de> for BeaconContentKey {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Self::from_hex(&s).map_err(serde::de::Error::custom)
+        let bytes = RawContentKey::deserialize(deserializer)?;
+        Self::try_from_bytes(bytes).map_err(serde::de::Error::custom)
     }
 }
 
@@ -217,7 +213,7 @@ mod test {
 
     fn test_encode_decode(content_key: &BeaconContentKey) {
         let bytes = content_key.to_bytes();
-        let decoded_key = BeaconContentKey::try_from(bytes).unwrap();
+        let decoded_key = BeaconContentKey::try_from_bytes(bytes).unwrap();
         assert_eq!(*content_key, decoded_key);
     }
 

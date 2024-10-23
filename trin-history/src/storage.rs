@@ -17,21 +17,21 @@ pub struct HistoryStorage {
 impl ContentStore for HistoryStorage {
     type Key = HistoryContentKey;
 
-    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    fn get(&self, key: &HistoryContentKey) -> Result<Option<Vec<u8>>, ContentStoreError> {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
     fn put<V: AsRef<[u8]>>(
         &mut self,
-        key: Self::Key,
+        key: HistoryContentKey,
         value: V,
-    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(HistoryContentKey, Vec<u8>)>, ContentStoreError> {
         self.store.insert(&key, value.as_ref().to_vec())
     }
 
     fn is_key_within_radius_and_unavailable(
         &self,
-        key: &Self::Key,
+        key: &HistoryContentKey,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_id = ContentId::from(key.content_id());
         if self.store.distance_to_content_id(&content_id) > self.store.radius() {
