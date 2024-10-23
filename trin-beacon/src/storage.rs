@@ -119,7 +119,7 @@ pub struct BeaconStorage {
 impl ContentStore for BeaconStorage {
     type Key = BeaconContentKey;
 
-    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    fn get(&self, key: &BeaconContentKey) -> Result<Option<Vec<u8>>, ContentStoreError> {
         match key {
             BeaconContentKey::LightClientBootstrap(content_key) => self
                 .lookup_lc_bootstrap_value(&content_key.block_hash)
@@ -193,9 +193,9 @@ impl ContentStore for BeaconStorage {
 
     fn put<V: AsRef<[u8]>>(
         &mut self,
-        key: Self::Key,
+        key: BeaconContentKey,
         value: V,
-    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(BeaconContentKey, Vec<u8>)>, ContentStoreError> {
         // in the beacon network we don't return any dropped content for propagation
         self.store(&key, &value.as_ref().to_vec()).and(Ok(vec![]))
     }
@@ -203,7 +203,7 @@ impl ContentStore for BeaconStorage {
     /// The "radius" concept is not applicable for Beacon network
     fn is_key_within_radius_and_unavailable(
         &self,
-        key: &Self::Key,
+        key: &BeaconContentKey,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         match key {
             BeaconContentKey::LightClientBootstrap(content_key) => {

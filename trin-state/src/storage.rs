@@ -24,15 +24,15 @@ pub struct StateStorage {
 impl ContentStore for StateStorage {
     type Key = StateContentKey;
 
-    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    fn get(&self, key: &StateContentKey) -> Result<Option<Vec<u8>>, ContentStoreError> {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
     fn put<V: AsRef<[u8]>>(
         &mut self,
-        key: Self::Key,
+        key: StateContentKey,
         value: V,
-    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
         let value = StateContentValue::decode(&key, value.as_ref())?;
 
         match &key {
@@ -51,7 +51,7 @@ impl ContentStore for StateStorage {
 
     fn is_key_within_radius_and_unavailable(
         &self,
-        key: &Self::Key,
+        key: &StateContentKey,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_id = ContentId::from(key.content_id());
         if self.store.distance_to_content_id(&content_id) > self.store.radius() {
