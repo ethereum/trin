@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::anyhow;
+use bytes::Bytes;
 use discv5::{
     enr::NodeId,
     kbucket::{FailureReason, InsertResult, KBucketsTable, NodeStatus},
@@ -453,7 +454,7 @@ impl<
         &self,
         enr: Enr,
         conn_id: u16,
-    ) -> Result<Vec<u8>, OverlayRequestError> {
+    ) -> Result<Bytes, OverlayRequestError> {
         let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
             send: conn_id.wrapping_add(1),

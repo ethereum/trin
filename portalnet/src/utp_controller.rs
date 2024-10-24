@@ -1,5 +1,6 @@
 use crate::discovery::UtpEnr;
 use anyhow::anyhow;
+use bytes::Bytes;
 use lazy_static::lazy_static;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -89,26 +90,20 @@ impl UtpController {
         }
     }
 
-    pub async fn connect_inbound_stream(
-        &self,
-        cid: ConnectionId<UtpEnr>,
-    ) -> anyhow::Result<Vec<u8>> {
+    pub async fn connect_inbound_stream(&self, cid: ConnectionId<UtpEnr>) -> anyhow::Result<Bytes> {
         self.inbound_stream(cid, UtpConnectionSide::Connect).await
     }
 
-    pub async fn accept_inbound_stream(
-        &self,
-        cid: ConnectionId<UtpEnr>,
-    ) -> anyhow::Result<Vec<u8>> {
+    pub async fn accept_inbound_stream(&self, cid: ConnectionId<UtpEnr>) -> anyhow::Result<Bytes> {
         self.inbound_stream(cid, UtpConnectionSide::Accept).await
     }
 
-    pub async fn connect_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: Vec<u8>) -> bool {
+    pub async fn connect_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: Bytes) -> bool {
         self.outbound_stream(cid, data, UtpConnectionSide::Connect)
             .await
     }
 
-    pub async fn accept_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: Vec<u8>) -> bool {
+    pub async fn accept_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: Bytes) -> bool {
         self.outbound_stream(cid, data, UtpConnectionSide::Accept)
             .await
     }
@@ -117,7 +112,7 @@ impl UtpController {
         &self,
         cid: ConnectionId<UtpEnr>,
         side: UtpConnectionSide,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> anyhow::Result<Bytes> {
         // Wait for an incoming connection with the given CID. Then, read the data from the uTP
         // stream.
         self.metrics
@@ -159,13 +154,13 @@ impl UtpController {
         // report utp tx as successful, even if we go on to fail to process the payload
         self.metrics
             .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
-        Ok(data)
+        Ok(Bytes::from(data))
     }
 
     async fn outbound_stream(
         &self,
         cid: ConnectionId<UtpEnr>,
-        data: Vec<u8>,
+        data: Bytes,
         side: UtpConnectionSide,
     ) -> bool {
         self.metrics
