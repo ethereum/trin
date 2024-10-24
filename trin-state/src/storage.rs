@@ -7,7 +7,7 @@ use ethportal_api::{
         network::Subnetwork,
         portal::PaginateLocalContentInfo,
     },
-    ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
+    ContentValue, OverlayContentKey, RawContentValue, StateContentKey, StateContentValue,
 };
 use trin_storage::{
     error::ContentStoreError,
@@ -24,7 +24,7 @@ pub struct StateStorage {
 impl ContentStore for StateStorage {
     type Key = StateContentKey;
 
-    fn get(&self, key: &StateContentKey) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    fn get(&self, key: &StateContentKey) -> Result<Option<RawContentValue>, ContentStoreError> {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
@@ -32,7 +32,7 @@ impl ContentStore for StateStorage {
         &mut self,
         key: StateContentKey,
         value: V,
-    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, RawContentValue)>, ContentStoreError> {
         let value = StateContentValue::decode(&key, value.as_ref())?;
 
         match &key {
@@ -101,7 +101,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &AccountTrieNodeKey,
         value: StateContentValue,
-    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, RawContentValue)>, ContentStoreError> {
         let StateContentValue::AccountTrieNodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(
@@ -128,10 +128,8 @@ impl StateStorage {
         let trie_node = TrieNode {
             node: last_trie_node.clone(),
         };
-        self.store.insert(
-            content_key,
-            StateContentValue::TrieNode(trie_node).encode().to_vec(),
-        )
+        self.store
+            .insert(content_key, StateContentValue::TrieNode(trie_node).encode())
     }
 
     fn put_contract_storage_trie_node(
@@ -139,7 +137,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &ContractStorageTrieNodeKey,
         value: StateContentValue,
-    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, RawContentValue)>, ContentStoreError> {
         let StateContentValue::ContractStorageTrieNodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(
@@ -166,10 +164,8 @@ impl StateStorage {
         let trie_node = TrieNode {
             node: last_trie_node.clone(),
         };
-        self.store.insert(
-            content_key,
-            StateContentValue::TrieNode(trie_node).encode().to_vec(),
-        )
+        self.store
+            .insert(content_key, StateContentValue::TrieNode(trie_node).encode())
     }
 
     fn put_contract_bytecode(
@@ -177,7 +173,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &ContractBytecodeKey,
         value: StateContentValue,
-    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, RawContentValue)>, ContentStoreError> {
         let StateContentValue::ContractBytecodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(
@@ -200,9 +196,7 @@ impl StateStorage {
 
         self.store.insert(
             content_key,
-            StateContentValue::ContractBytecode(contract_code)
-                .encode()
-                .to_vec(),
+            StateContentValue::ContractBytecode(contract_code).encode(),
         )
     }
 }
@@ -244,7 +238,10 @@ pub mod test {
 
             storage.put(test_case.key.clone(), test_case.store_value)?;
 
-            assert_eq!(storage.get(&test_case.key)?, Some(test_case.lookup_value));
+            assert_eq!(
+                storage.get(&test_case.key)?,
+                Some(test_case.lookup_value.into())
+            );
         }
 
         Ok(())

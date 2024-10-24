@@ -11,7 +11,7 @@ use ethportal_api::{
         network::Subnetwork,
         portal::PaginateLocalContentInfo,
     },
-    BeaconContentKey, OverlayContentKey,
+    BeaconContentKey, OverlayContentKey, RawContentValue,
 };
 use r2d2::Pool;
 use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
@@ -119,10 +119,11 @@ pub struct BeaconStorage {
 impl ContentStore for BeaconStorage {
     type Key = BeaconContentKey;
 
-    fn get(&self, key: &BeaconContentKey) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    fn get(&self, key: &BeaconContentKey) -> Result<Option<RawContentValue>, ContentStoreError> {
         match key {
             BeaconContentKey::LightClientBootstrap(content_key) => self
                 .lookup_lc_bootstrap_value(&content_key.block_hash)
+                .map(|value| value.map(RawContentValue::from))
                 .map_err(|err| {
                     ContentStoreError::Database(format!(
                         "Error looking up LightClientBootstrap content value: {err:?}"
@@ -161,17 +162,17 @@ impl ContentStore for BeaconStorage {
                         ),
                     ))?;
 
-                Ok(Some(result.as_ssz_bytes()))
+                Ok(Some(result.as_ssz_bytes().into()))
             }
             BeaconContentKey::LightClientFinalityUpdate(content_key) => {
                 match self.cache.get_finality_update(content_key.finalized_slot) {
-                    Some(finality_update) => Ok(Some(finality_update.as_ssz_bytes())),
+                    Some(finality_update) => Ok(Some(finality_update.as_ssz_bytes().into())),
                     None => Ok(None),
                 }
             }
             BeaconContentKey::LightClientOptimisticUpdate(content_key) => {
                 match self.cache.get_optimistic_update(content_key.signature_slot) {
-                    Some(optimistic_update) => Ok(Some(optimistic_update.as_ssz_bytes())),
+                    Some(optimistic_update) => Ok(Some(optimistic_update.as_ssz_bytes().into())),
                     None => Ok(None),
                 }
             }
@@ -184,7 +185,7 @@ impl ContentStore for BeaconStorage {
                             "Error looking up HistoricalSummariesWithProof content value: {err:?}"
                         ))
                     })? {
-                    Some(result) => Ok(Some(result)),
+                    Some(result) => Ok(Some(result.into())),
                     None => Ok(None),
                 }
             }
@@ -195,7 +196,7 @@ impl ContentStore for BeaconStorage {
         &mut self,
         key: BeaconContentKey,
         value: V,
-    ) -> Result<Vec<(BeaconContentKey, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(BeaconContentKey, RawContentValue)>, ContentStoreError> {
         // in the beacon network we don't return any dropped content for propagation
         self.store(&key, &value.as_ref().to_vec()).and(Ok(vec![]))
     }

@@ -131,7 +131,7 @@ async fn get_content(
 ) -> Result<Value, String> {
     // Check whether we have the data locally.
     let local_content: Option<Vec<u8>> = match network.overlay.store.read().get(&content_key) {
-        Ok(Some(data)) => Some(data),
+        Ok(Some(data)) => Some(data.into()),
         Ok(None) => None,
         Err(err) => {
             error!(

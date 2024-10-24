@@ -1030,7 +1030,7 @@ impl<
         ) {
             (Ok(Some(content)), Some(permit)) => {
                 if content.len() <= MAX_PORTAL_CONTENT_PAYLOAD_SIZE {
-                    Ok(Content::Content(content.into()))
+                    Ok(Content::Content(content))
                 } else {
                     // Generate a connection ID for the uTP connection.
                     let enr = self.find_enr(source).ok_or_else(|| {
@@ -1689,12 +1689,7 @@ impl<
                         if !dropped_content.is_empty() && utp_processing.gossip_dropped {
                             // add dropped content to validation result, so it will be propagated
                             debug!("Dropped {:?} pieces of content after inserting new content, propagating them back into the network.", dropped_content.len());
-                            content_to_propagate.extend(
-                                dropped_content
-                                    .clone()
-                                    .into_iter()
-                                    .map(|(a, b)| (a, b.into())),
-                            );
+                            content_to_propagate.extend(dropped_content.clone());
                         }
                     }
                     Err(err) => warn!(
@@ -1915,7 +1910,7 @@ impl<
         let local_value = utp_processing.store.read().get(&content_key);
         if let Ok(Some(val)) = local_value {
             // todo validate & replace content value if different & punish bad peer
-            content = val.into();
+            content = val;
         } else {
             let content_id = content_key.content_id();
             let validation_result = utp_processing
@@ -1980,12 +1975,7 @@ impl<
                                 "Dropped {:?} pieces of content after inserting new content, propagating them back into the network.",
                                 dropped_content.len(),
                             );
-                            content_to_propagate.extend(
-                                dropped_content
-                                    .clone()
-                                    .into_iter()
-                                    .map(|(a, b)| (a, b.into())),
-                            );
+                            content_to_propagate.extend(dropped_content.clone());
                         }
                         propagate_gossip_cross_thread::<_, TMetric>(
                             content_to_propagate.into_iter().collect(),
@@ -2074,7 +2064,7 @@ impl<
             if i {
                 match store.read().get(key) {
                     Ok(content) => match content {
-                        Some(content) => content_items.push(content.into()),
+                        Some(content) => content_items.push(content),
                         None => return Err(anyhow!("Unable to read offered content!")),
                     },
                     Err(err) => {

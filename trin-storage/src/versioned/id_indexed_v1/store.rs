@@ -15,7 +15,7 @@ use crate::{
     versioned::{usage_stats::UsageStats, ContentType, StoreVersion, VersionedContentStore},
     ContentId,
 };
-use ethportal_api::{types::distance::Distance, OverlayContentKey};
+use ethportal_api::{types::distance::Distance, OverlayContentKey, RawContentValue};
 use trin_metrics::storage::StorageMetricsReporter;
 
 /// The result of looking for the farthest content.
@@ -217,7 +217,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
     pub fn lookup_content_value(
         &self,
         content_id: &ContentId,
-    ) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    ) -> Result<Option<RawContentValue>, ContentStoreError> {
         let timer = self.metrics.start_process_timer("lookup_content_value");
 
         let value = self
@@ -232,7 +232,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             .optional()?;
 
         self.metrics.stop_process_timer(timer);
-        Ok(value)
+        Ok(value.map(RawContentValue::from))
     }
 
     /// Inserts content key/value pair into storage and prunes the db if necessary.
@@ -241,8 +241,8 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
     pub fn insert(
         &mut self,
         content_key: &TContentKey,
-        content_value: Vec<u8>,
-    ) -> Result<Vec<(TContentKey, Vec<u8>)>, ContentStoreError> {
+        content_value: RawContentValue,
+    ) -> Result<Vec<(TContentKey, RawContentValue)>, ContentStoreError> {
         let insert_with_pruning_timer = self.metrics.start_process_timer("insert_with_pruning");
 
         let content_id = content_key.content_id();
@@ -265,7 +265,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             named_params! {
                 ":content_id": content_id,
                 ":content_key": content_key,
-                ":content_value": content_value,
+                ":content_value": content_value.to_vec(),
                 ":distance_short": distance.big_endian_u32(),
                 ":content_size": content_size,
             },
@@ -445,8 +445,8 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
 
     /// Prunes database and updates `radius`.
     /// Returns any content items that were pruned.
-    fn prune(&mut self) -> Result<Vec<(TContentKey, Vec<u8>)>, ContentStoreError> {
-        let mut deleted_content: Vec<(TContentKey, Vec<u8>)> = Vec::new();
+    fn prune(&mut self) -> Result<Vec<(TContentKey, RawContentValue)>, ContentStoreError> {
+        let mut deleted_content: Vec<(TContentKey, RawContentValue)> = Vec::new();
         if !self.pruning_strategy.should_prune(&self.usage_stats) {
             warn!(Db = %self.config.content_type,
                 "Pruning requested but not needed. Skipping");
@@ -510,7 +510,11 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             self.usage_stats.entry_count -= to_delete;
             self.usage_stats.total_entry_size_bytes -= deleted_content_size;
             self.usage_stats.report_metrics(&self.metrics);
-            deleted_content.extend(deleted_content_values);
+            deleted_content.extend(
+                deleted_content_values
+                    .into_iter()
+                    .map(|(k, v)| (k, RawContentValue::from(v))),
+            );
         }
         // Free connection.
         drop(delete_query);
@@ -811,12 +815,15 @@ mod tests {
         assert!(!store.has_content(&id)?);
         let usage_stats = store.usage_stats();
 
-        store.insert(&key, value.clone())?;
+        store.insert(&key, value.clone().into())?;
 
         // Check that lookup works
         assert!(store.has_content(&id)?);
         assert_eq!(store.lookup_content_key(&id)?, Some(key));
-        assert_eq!(store.lookup_content_value(&id)?, Some(value));
+        assert_eq!(
+            store.lookup_content_value(&id)?,
+            Some(RawContentValue::from(value))
+        );
 
         // Check that usage stats are updated
         assert_eq!(store.usage_stats.entry_count, usage_stats.entry_count + 1);
@@ -842,7 +849,7 @@ mod tests {
         assert!(!store.has_content(&id)?);
         let usage_stats = store.usage_stats();
 
-        store.insert(&key, value)?;
+        store.insert(&key, value.into())?;
         // Check that content is stored and usage stats are updated.
         assert!(store.has_content(&id)?);
         assert_eq!(store.usage_stats.entry_count, usage_stats.entry_count + 1);
@@ -869,14 +876,14 @@ mod tests {
         let mut important_keys = vec![];
         for _ in 0..80 {
             let (key, value) = generate_key_value(&config, 0);
-            store.insert(&key, value)?;
+            store.insert(&key, value.into())?;
             important_keys.push(key);
         }
 
         // Insert 20 keys and check that nothing is pruned
         for _ in 0..20 {
             let (key, value) = generate_key_value(&config, 0xFF);
-            store.insert(&key, value)?;
+            store.insert(&key, value.into())?;
         }
         assert_eq!(store.usage_stats.entry_count, 100);
 
@@ -884,7 +891,7 @@ mod tests {
         // - we pruned down to 95 elements (target capacity)
         // - radius is no longer MAX
         let (key, value) = generate_key_value(&config, 0xFF);
-        store.insert(&key, value)?;
+        store.insert(&key, value.into())?;
         assert_eq!(store.usage_stats.entry_count, 95);
         assert_eq!(
             store.usage_stats.total_entry_size_bytes,
@@ -901,7 +908,7 @@ mod tests {
             // Use `0xFF-i` for distance so we are sure they will be accepted
             // (radius will decrease over time)
             let (key, value) = generate_key_value(&config, 0xFF - i);
-            store.insert(&key, value)?;
+            store.insert(&key, value.into())?;
             assert!(store.usage_stats.total_entry_size_bytes <= config.storage_capacity_bytes);
 
             assert!(store.radius() <= last_radius);
@@ -940,7 +947,7 @@ mod tests {
                 0,
                 rng.gen_range((CONTENT_DEFAULT_SIZE_BYTES)..(4 * CONTENT_DEFAULT_SIZE_BYTES)),
             );
-            store.insert(&key, value)?;
+            store.insert(&key, value.into())?;
             important_keys.push(key);
         }
 
@@ -956,7 +963,7 @@ mod tests {
                 0xFF - i,
                 rng.gen_range((CONTENT_DEFAULT_SIZE_BYTES)..(3 * CONTENT_DEFAULT_SIZE_BYTES)),
             );
-            store.insert(&key, value)?;
+            store.insert(&key, value.into())?;
             assert!(store.usage_stats.total_entry_size_bytes <= config.storage_capacity_bytes);
 
             assert!(store.radius() <= last_radius);
@@ -992,7 +999,7 @@ mod tests {
             /* distance = */ 0,
             store.config.storage_capacity_bytes / 2,
         );
-        store.insert(&big_value_key, value)?;
+        store.insert(&big_value_key, value.into())?;
         assert_eq!(store.usage_stats.entry_count, 51);
         assert_eq!(
             store.usage_stats.total_entry_size_bytes,
@@ -1002,7 +1009,7 @@ mod tests {
         // Insert one more key/value that is 1%.
         // We should be have 52 elements and be at 101% capacity and trigger pruning.
         let (key, value) = generate_key_value(&config, 0x80);
-        store.insert(&key, value)?;
+        store.insert(&key, value.into())?;
 
         // Prune should deleted 6% (rounded to 4 elements),
         // leaving us with 48 elements and between target and full capacity.
@@ -1030,7 +1037,7 @@ mod tests {
         // insert 10_000 entries, each 0x01% of storage size -> storage fully used
         for _ in 0..10_000 {
             let (key, value) = generate_key_value(&config, 0x80);
-            store.insert(&key, value)?;
+            store.insert(&key, value.into())?;
         }
         assert_eq!(store.radius(), Distance::MAX);
         assert_eq!(store.usage_stats.entry_count, 10_000);
@@ -1041,7 +1048,7 @@ mod tests {
 
         // insert one more entry
         let (key, value) = generate_key_value(&config, 0x80);
-        store.insert(&key, value)?;
+        store.insert(&key, value.into())?;
 
         // radius should be smaller than MAX
         assert!(store.radius() < Distance::MAX);
@@ -1070,7 +1077,7 @@ mod tests {
         // insert 10_000 entries, each 0x01% of storage size -> storage fully used
         for _ in 0..10_000 {
             let (key, value) = generate_key_value(&config, 0x80);
-            store.insert(&key, value)?;
+            store.insert(&key, value.into())?;
         }
         assert_eq!(store.radius(), Distance::MAX);
         assert_eq!(store.usage_stats.entry_count, 10_000);
@@ -1088,7 +1095,7 @@ mod tests {
             /* distance = */ 0,
             store.config.storage_capacity_bytes / 2,
         );
-        store.insert(&big_value_key, value)?;
+        store.insert(&big_value_key, value.into())?;
 
         // big_value_key should still be stored
         assert!(store.has_content(&big_value_key.content_id().into())?);
@@ -1135,7 +1142,7 @@ mod tests {
         let mut content_keys = vec![];
         for _ in 0..entry_count {
             let (key, value) = generate_key_value(&config, 0);
-            store.insert(&key, value).unwrap();
+            store.insert(&key, value.into()).unwrap();
             content_keys.push(key);
         }
         content_keys.sort_by_key(|key| key.to_vec());

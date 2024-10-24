@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use alloy::primitives::Bytes;
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
@@ -91,7 +92,7 @@ async fn get_content(
     is_trace: bool,
 ) -> Result<Value, String> {
     // Check whether we have the data locally.
-    let local_content: Option<Vec<u8>> = match network.overlay.store.read().get(&content_key) {
+    let local_content: Option<Bytes> = match network.overlay.store.read().get(&content_key) {
         Ok(Some(data)) => Some(data),
         Ok(None) => None,
         Err(err) => {
@@ -127,9 +128,7 @@ async fn get_content(
             .await
             .map_err(|err| err.to_string())?
         {
-            Ok((content_bytes, utp_transfer, trace)) => {
-                (content_bytes.to_vec(), utp_transfer, trace)
-            }
+            Ok((content_bytes, utp_transfer, trace)) => (content_bytes, utp_transfer, trace),
             Err(err) => match err.clone() {
                 OverlayRequestError::ContentNotFound {
                     message,
