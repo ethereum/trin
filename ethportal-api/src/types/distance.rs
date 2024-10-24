@@ -43,6 +43,10 @@ impl Distance {
         be_bytes.copy_from_slice(&self.big_endian()[..4]);
         u32::from_be_bytes(be_bytes)
     }
+
+    pub fn max_practical_radius() -> Self {
+        Self(U256::MAX / U256::from(8))
+    }
 }
 
 impl From<U256> for Distance {

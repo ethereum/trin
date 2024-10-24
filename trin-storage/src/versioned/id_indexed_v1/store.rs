@@ -85,7 +85,7 @@ impl<TContentKey: OverlayContentKey> VersionedContentStore for IdIndexedV1Store<
 
         let mut store = Self {
             config,
-            radius: Distance::MAX,
+            radius: Distance::max_practical_radius(),
             pruning_strategy,
             usage_stats: UsageStats::default(),
             metrics: StorageMetricsReporter::new(subnetwork),
@@ -137,7 +137,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 self.usage_stats.total_entry_size_bytes,
                 self.pruning_strategy.target_capacity_bytes()
             );
-            self.radius = Distance::MAX;
+            self.radius = Distance::max_practical_radius();
             self.metrics.report_radius(self.radius);
         }
 
@@ -432,11 +432,14 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                     self.radius = Distance::ZERO;
                 } else {
                     error!(Db = %self.config.content_type, "Farthest not found!");
-                    self.radius = Distance::MAX;
+                    self.radius = Distance::max_practical_radius();
                 }
             }
             Some(farthest) => {
-                self.radius = self.distance_to_content_id(&farthest.content_id);
+                self.radius = std::cmp::min(
+                    self.distance_to_content_id(&farthest.content_id),
+                    Distance::max_practical_radius(),
+                );
             }
         }
         self.metrics.report_radius(self.radius);
