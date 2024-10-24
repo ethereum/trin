@@ -16,3 +16,36 @@ pub fn generate_random_node_id(target_bucket_idx: u8, local_node_id: NodeId) -> 
 
     raw_bytes.into()
 }
+
+/// Generates `2 ^ unique_bits` random `NodeId`s.
+///
+/// The most significant bits of each `NodeId` will be unique.
+///
+/// The `unique_bits` has to be in `(0..=8)` range, panics otherwise. Can be easily upgraded to
+/// support wider range.
+pub fn generate_random_node_ids(unique_bits: u32) -> Vec<NodeId> {
+    assert!(
+        (0..=8).contains(&unique_bits),
+        "Invalid bits value: {unique_bits}"
+    );
+
+    let insignificant_bits = u8::BITS - unique_bits;
+    let insignificant_bits_mask = u8::MAX.checked_shr(unique_bits).unwrap_or_default();
+
+    (0usize..1 << unique_bits)
+        .map(|index| {
+            // shift bits to most significant positions
+            let unique_bits = (index as u8)
+                .checked_shl(insignificant_bits)
+                .unwrap_or_default();
+
+            let mut node_id = rand::random::<[u8; 32]>();
+
+            // set most significant bits of the first byte
+            node_id[0] &= insignificant_bits_mask;
+            node_id[0] |= unique_bits;
+
+            NodeId::from(node_id)
+        })
+        .collect()
+}

@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let handle = build_trin(&bridge_config).map_err(|e| e.to_string())?;
 
     let web3_http_address = format!("http://127.0.0.1:{}", bridge_config.base_rpc_port);
-    sleep(Duration::from_secs(5)).await;
+    sleep(Duration::from_secs(10)).await;
 
     let portal_client: HttpClient = HttpClientBuilder::default()
         // increase default timeout to allow for trace_gossip requests that can take a long
@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         // Create and initialize the census to acquire critical view of network before gossiping
         let mut census = Census::new(portal_client.clone(), &bridge_config);
-        census_handle = Some(census.init([Subnetwork::State]).await);
+        census_handle = Some(census.init([Subnetwork::State]).await?);
 
         let state_bridge = StateBridge::new(
             bridge_config.mode.clone(),
@@ -152,6 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     futures::future::join_all(bridge_tasks).await;
     drop(handle);
     if let Some(census_handle) = census_handle {
+        census_handle.abort();
         drop(census_handle);
     }
     Ok(())
