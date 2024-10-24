@@ -16,9 +16,9 @@ pub const DEFAULT_WEB3_HTTP_PORT: u16 = 8545;
 pub const DEFAULT_WEB3_WS_PORT: u16 = 8546;
 pub const DEFAULT_DISCOVERY_PORT: u16 = 9009;
 pub const DEFAULT_UTP_TRANSFER_LIMIT: usize = 50;
-const DEFAULT_SUBNETWORKS: &str = "history";
+const DEFAULT_SUBNETWORKS: &str = "history,state";
 pub const DEFAULT_NETWORK: &str = "mainnet";
-pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "100";
+pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
 use crate::dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
