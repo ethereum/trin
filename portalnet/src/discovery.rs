@@ -10,6 +10,7 @@ use std::{
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use bytes::Bytes;
 use discv5::{
     enr::{CombinedKey, Enr as Discv5Enr, NodeId},
     ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
@@ -36,7 +37,14 @@ const TALKREQ_CHANNEL_BUFFER: usize = 100;
 /// ENR key for portal network client version.
 pub const ENR_PORTAL_CLIENT_KEY: &str = "c";
 
+<<<<<<< HEAD
 pub type ProtocolRequest = Vec<u8>;
+=======
+/// ENR file name saving enr history to disk.
+const ENR_FILE_NAME: &str = "trin.enr";
+
+pub type ProtocolRequest = Bytes;
+>>>>>>> 1daad075 (feat: converting Vec<u8> to bytes::Bytes)
 
 /// The contact info for a remote node.
 #[derive(Clone, Debug)]
@@ -314,7 +322,7 @@ impl Discovery {
         enr: Enr,
         subnetwork: Subnetwork,
         request: ProtocolRequest,
-    ) -> Result<Vec<u8>, RequestError> {
+    ) -> Result<Bytes, RequestError> {
         // Send empty protocol id if unable to convert it to bytes
         let protocol = match self
             .network_spec
@@ -328,8 +336,11 @@ impl Discovery {
             }
         };
 
-        let response = self.discv5.talk_req(enr, protocol, request).await?;
-        Ok(response)
+        let response = self
+            .discv5
+            .talk_req(enr, protocol, request.to_vec())
+            .await?;
+        Ok(Bytes::from(response))
     }
 }
 
@@ -460,7 +471,7 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
     async fn send_to(&mut self, buf: &[u8], target: &UtpEnr) -> io::Result<usize> {
         let discv5 = Arc::clone(&self.discv5);
         let target = target.0.clone();
-        let data = buf.to_vec();
+        let data = Bytes::from(buf.to_vec());
         tokio::spawn(async move {
             match discv5.send_talk_req(target, Subnetwork::Utp, data).await {
                 // We drop the talk response because it is ignored in the uTP protocol.

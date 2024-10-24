@@ -587,7 +587,11 @@ impl From<Accept> for Value {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
+<<<<<<< HEAD
     use alloy::primitives::bytes;
+=======
+    use alloy_primitives::{bytes, Bytes};
+>>>>>>> 1daad075 (feat: converting Vec<u8> to bytes::Bytes)
     use ssz_types::Error::OutOfBounds;
     use std::str::FromStr;
     use test_log::test;
@@ -703,13 +707,13 @@ mod test {
 
     #[test]
     fn message_encoding_find_content() {
-        let content_key = hex_decode("0x706f7274616c").unwrap();
+        let content_key = Bytes::from("0x706f7274616c");
         let find_content = FindContent { content_key };
         let find_content = Message::FindContent(find_content);
 
         let encoded: Vec<u8> = find_content.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0404000000706f7274616c";
+        let expected_encoded = "0x04040000003078373036663732373436313663";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -733,13 +737,14 @@ mod test {
 
     #[test]
     fn message_encoding_content_content() {
-        let content_val = hex_decode("0x7468652063616b652069732061206c6965").unwrap();
+        let content_val = Bytes::from("0x7468652063616b652069732061206c6965");
         let content = Content::Content(content_val);
         let content = Message::Content(content);
 
         let encoded: Vec<u8> = content.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x05017468652063616b652069732061206c6965";
+        let expected_encoded =
+            "0x0501307837343638363532303633363136623635323036393733323036313230366336393635";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();

@@ -212,7 +212,7 @@ async fn overlay() {
     // because node two is the local node.
     let content_key = IdentityContentKey::new([0u8; 32]);
     let content_enrs = match overlay_two
-        .send_find_content(overlay_one.local_enr(), content_key.into())
+        .send_find_content(overlay_one.local_enr(), content_key.to_vec().into())
         .await
     {
         Ok((content, utp_transfer)) => match content {

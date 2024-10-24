@@ -663,7 +663,9 @@ mod tests {
                                     let peer_node_id = k.preimage();
                                     query.on_success(
                                         peer_node_id,
-                                        FindContentQueryResponse::Content(found_content.clone()),
+                                        FindContentQueryResponse::Content(
+                                            found_content.clone().into(),
+                                        ),
                                     );
                                     // The peer that returned content is now validating.
                                     new_validations.push_back(k);
