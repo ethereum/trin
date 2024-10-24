@@ -81,7 +81,7 @@ use ethportal_api::{
         query_trace::{QueryFailureKind, QueryTrace},
     },
     utils::bytes::hex_encode_compact,
-    OverlayContentKey, RawContentKey,
+    OverlayContentKey, RawContentKey, RawContentValue,
 };
 use trin_metrics::overlay::OverlayMetricsReporter;
 use trin_storage::{ContentStore, ShouldWeStoreContent};
@@ -699,7 +699,7 @@ impl<
                                 .connect_inbound_stream(cid)
                                 .await
                             {
-                                Ok(data) => data,
+                                Ok(data) => data.into(),
                                 Err(e) => {
                                     debug!(
                                         %e,
@@ -815,7 +815,7 @@ impl<
         kbuckets: &SharedKBucketsTable,
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
         content_key: TContentKey,
-        content: Vec<u8>,
+        content: RawContentValue,
         nodes_to_poke: Vec<NodeId>,
         utp_controller: Arc<UtpController>,
     ) {
@@ -833,7 +833,7 @@ impl<
             let is_within_radius =
                 TMetric::distance(&node_id.raw(), &content_id) <= node.data_radius;
             if is_within_radius {
-                let content_items: Vec<(RawContentKey, Vec<u8>)> =
+                let content_items: Vec<(RawContentKey, RawContentValue)> =
                     vec![(content_key.to_bytes(), content.clone())];
                 let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
 
@@ -1042,7 +1042,7 @@ impl<
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_controller);
                     tokio::spawn(async move {
-                        utp.accept_outbound_stream(cid, content).await;
+                        utp.accept_outbound_stream(cid, content.into()).await;
                         drop(permit);
                     });
 
@@ -1238,7 +1238,7 @@ impl<
             // Spawn fallback FINDCONTENT tasks for each content key
             // in payloads that failed to be accepted.
             let content_values =
-                match decode_and_validate_content_payload(&accepted_keys, data.clone()) {
+                match decode_and_validate_content_payload(&accepted_keys, data.clone().into()) {
                     Ok(content_values) => content_values,
                     Err(_) => {
                         let handles: Vec<JoinHandle<_>> = content_keys
@@ -1287,7 +1287,7 @@ impl<
                     })
                 })
                 .collect::<Vec<_>>();
-            let validated_content: Vec<(TContentKey, Vec<u8>)> = join_all(handles)
+            let validated_content: Vec<(TContentKey, RawContentValue)> = join_all(handles)
                 .await
                 .into_iter()
                 .enumerate()
@@ -1337,10 +1337,14 @@ impl<
         // which will be received in the main loop.
         tokio::spawn(async move {
             let response = match discovery
-                .send_talk_req(destination, protocol, Message::from(request).into())
+                .send_talk_req(
+                    destination,
+                    protocol,
+                    Bytes::from(Message::from(request).as_ssz_bytes()),
+                )
                 .await
             {
-                Ok(talk_resp) => match Message::try_from(talk_resp) {
+                Ok(talk_resp) => match Message::try_from(talk_resp.to_vec()) {
                     Ok(message) => match Response::try_from(message) {
                         Ok(response) => Ok(response),
                         Err(_) => Err(OverlayRequestError::InvalidResponse),
@@ -1595,7 +1599,7 @@ impl<
                 }
             };
             let result = utp_controller
-                .connect_outbound_stream(cid, content_payload.to_vec())
+                .connect_outbound_stream(cid, content_payload.into())
                 .await;
             if let Some(tx) = gossip_result_tx {
                 if result {
@@ -1621,9 +1625,9 @@ impl<
     // non-blocking requests to this/other overlay networks).
     async fn validate_and_store_content(
         key: TContentKey,
-        content_value: Vec<u8>,
+        content_value: RawContentValue,
         utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
-    ) -> Option<Vec<(TContentKey, Vec<u8>)>> {
+    ) -> Option<Vec<(TContentKey, RawContentValue)>> {
         // Validate received content
         let validation_result = utp_processing
             .validator
@@ -1732,7 +1736,7 @@ impl<
             }
         };
         let request = Request::FindContent(FindContent {
-            content_key: content_key.to_bytes().to_vec(),
+            content_key: content_key.to_bytes(),
         });
         let direction = RequestDirection::Outgoing {
             destination: fallback_peer.clone(),
@@ -1750,7 +1754,7 @@ impl<
         let data: Vec<u8> = match rx.await? {
             Ok(Response::Content(found_content)) => {
                 match found_content {
-                    Content::Content(content) => content,
+                    Content::Content(content) => content.to_vec(),
                     Content::Enrs(_) => return Err(anyhow!("expected content, got ENRs")),
                     // Init uTP stream if `connection_id` is received
                     Content::ConnectionId(conn_id) => {
@@ -1764,6 +1768,7 @@ impl<
                             .utp_controller
                             .connect_inbound_stream(cid)
                             .await?
+                            .to_vec()
                     }
                 }
             }
@@ -1771,7 +1776,7 @@ impl<
         };
         let validated_content = match Self::validate_and_store_content(
             content_key,
-            data,
+            data.into(),
             utp_processing.clone(),
         )
         .await
@@ -1784,7 +1789,7 @@ impl<
         };
 
         propagate_gossip_cross_thread::<_, TMetric>(
-            validated_content,
+            validated_content.into_iter().collect(),
             &utp_processing.kbuckets,
             utp_processing.command_tx.clone(),
             Some(utp_processing.utp_controller),
@@ -1886,7 +1891,7 @@ impl<
     // requests to this/other overlay services.
     #[allow(clippy::too_many_arguments)]
     async fn process_received_content(
-        content: Vec<u8>,
+        content: RawContentValue,
         utp_transfer: bool,
         content_key: TContentKey,
         nodes_to_poke: Vec<NodeId>,
@@ -1969,7 +1974,7 @@ impl<
                             content_to_propagate.extend(dropped_content.clone());
                         }
                         propagate_gossip_cross_thread::<_, TMetric>(
-                            content_to_propagate,
+                            content_to_propagate.into_iter().collect(),
                             &utp_processing.kbuckets,
                             utp_processing.command_tx.clone(),
                             Some(utp_processing.utp_controller.clone()),
@@ -2035,7 +2040,7 @@ impl<
         store: Arc<RwLock<TStore>>,
         accept_message: &Accept,
         content_keys_offered: Vec<RawContentKey>,
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    ) -> anyhow::Result<Vec<RawContentValue>> {
         let content_keys_offered = content_keys_offered
             .iter()
             .map(TContentKey::try_from_bytes)
@@ -2044,7 +2049,7 @@ impl<
         let content_keys_offered: Vec<TContentKey> = content_keys_offered
             .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
 
-        let mut content_items: Vec<Vec<u8>> = Vec::new();
+        let mut content_items: Vec<RawContentValue> = Vec::new();
 
         for (i, key) in accept_message
             .content_keys
@@ -2158,7 +2163,7 @@ impl<
         &mut self,
         query_id: &QueryId,
         source: Enr,
-        content: Vec<u8>,
+        content: RawContentValue,
     ) {
         let pool = &mut self.find_content_query_pool;
         if let Some((query_info, query)) = pool.get_mut(*query_id) {
@@ -2571,9 +2576,9 @@ where
 
 fn decode_and_validate_content_payload<TContentKey>(
     accepted_keys: &[TContentKey],
-    payload: Vec<u8>,
-) -> anyhow::Result<Vec<Vec<u8>>> {
-    let content_values = portal_wire::decode_content_payload(payload)?;
+    payload: RawContentValue,
+) -> anyhow::Result<Vec<RawContentValue>> {
+    let content_values = portal_wire::decode_content_payload(payload.into())?;
     // Accepted content keys len should match content value len
     let keys_len = accepted_keys.len();
     let vals_len = content_values.len();
@@ -2584,7 +2589,7 @@ fn decode_and_validate_content_payload<TContentKey>(
             vals_len
         ));
     }
-    Ok(content_values)
+    Ok(content_values.iter().map(|v| v.clone().into()).collect())
 }
 
 #[cfg(test)]
@@ -2594,7 +2599,7 @@ mod tests {
 
     use std::{net::SocketAddr, time::Instant};
 
-    use alloy::primitives::U256;
+    use alloy::primitives::{Bytes, U256};
     use discv5::kbucket;
     use kbucket::KBucketsTable;
     use rstest::*;
@@ -3004,7 +3009,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
-        let content = vec![0xef];
+        let content = Bytes::from("0xef");
 
         let status = NodeStatus {
             state: ConnectionState::Connected,
@@ -3048,7 +3053,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
-        let content = vec![0xef];
+        let content = Bytes::from("0xef");
 
         let (_, enr1) = generate_random_remote_enr();
         let (_, enr2) = generate_random_remote_enr();
@@ -3073,7 +3078,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
-        let content = vec![0xef];
+        let content = Bytes::from("0xef");
 
         let status = NodeStatus {
             state: ConnectionState::Connected,
@@ -3687,7 +3692,7 @@ mod tests {
         }
 
         // Simulate a response from the bootnode.
-        let content: Vec<u8> = vec![0, 1, 2, 3];
+        let content = Bytes::from("0x00010203");
         service.advance_find_content_query_with_content(&query_id, bootnode_enr, content.clone());
 
         let pool = &mut service.find_content_query_pool;
@@ -3834,7 +3839,7 @@ mod tests {
         assert_eq!(request.query_id, Some(query_id));
 
         // Simulate a response from the bootnode.
-        let content: Vec<u8> = vec![0, 1, 2, 3];
+        let content = Bytes::from("0x00010203");
         service.advance_find_content_query_with_content(
             &query_id,
             bootnode_enr.clone(),

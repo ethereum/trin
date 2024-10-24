@@ -26,7 +26,7 @@ use crate::{
         network::{Network, Subnetwork},
     },
     utils::bytes::{hex_decode, hex_encode},
-    RawContentKey,
+    RawContentKey, RawContentValue,
 };
 
 /// The maximum size of a Discv5 packet.
@@ -494,14 +494,14 @@ impl From<Nodes> for Value {
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct FindContent {
     // TODO: Use some version of H256
-    pub content_key: Vec<u8>,
+    pub content_key: RawContentKey,
 }
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 #[ssz(enum_behaviour = "union")]
 pub enum Content {
     ConnectionId(u16),
-    Content(Vec<u8>),
+    Content(RawContentValue),
     Enrs(Vec<SszEnr>),
 }
 
@@ -530,7 +530,7 @@ pub struct Offer {
 #[derive(Debug, Clone)]
 pub struct PopulatedOffer {
     /// All the offered content, pairing the keys and values
-    pub content_items: Vec<(RawContentKey, Vec<u8>)>,
+    pub content_items: Vec<(RawContentKey, RawContentValue)>,
 }
 
 impl From<PopulatedOffer> for Offer {
@@ -548,7 +548,7 @@ impl From<PopulatedOffer> for Offer {
 #[derive(Debug, Clone)]
 pub struct PopulatedOfferWithResult {
     /// The offered content key & value
-    pub content_item: (RawContentKey, Vec<u8>),
+    pub content_item: (RawContentKey, RawContentValue),
     /// The channel to send the result of the offer to
     pub result_tx: tokio::sync::mpsc::UnboundedSender<OfferTrace>,
 }
@@ -587,7 +587,7 @@ impl From<Accept> for Value {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-    use alloy::primitives::bytes;
+    use alloy::primitives::{bytes, Bytes};
     use ssz_types::Error::OutOfBounds;
     use std::str::FromStr;
     use test_log::test;
@@ -703,13 +703,13 @@ mod test {
 
     #[test]
     fn message_encoding_find_content() {
-        let content_key = hex_decode("0x706f7274616c").unwrap();
+        let content_key = Bytes::from("0x706f7274616c");
         let find_content = FindContent { content_key };
         let find_content = Message::FindContent(find_content);
 
         let encoded: Vec<u8> = find_content.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0404000000706f7274616c";
+        let expected_encoded = "0x04040000003078373036663732373436313663";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -733,13 +733,14 @@ mod test {
 
     #[test]
     fn message_encoding_content_content() {
-        let content_val = hex_decode("0x7468652063616b652069732061206c6965").unwrap();
+        let content_val = Bytes::from("0x7468652063616b652069732061206c6965");
         let content = Content::Content(content_val);
         let content = Message::Content(content);
 
         let encoded: Vec<u8> = content.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x05017468652063616b652069732061206c6965";
+        let expected_encoded =
+            "0x0501307837343638363532303633363136623635323036393733323036313230366336393635";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();

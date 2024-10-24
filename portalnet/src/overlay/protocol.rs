@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::anyhow;
+use bytes::Bytes;
 use discv5::{
     enr::NodeId,
     kbucket::{FailureReason, InsertResult, KBucketsTable, NodeStatus},
@@ -50,7 +51,7 @@ use ethportal_api::{
         },
     },
     utils::bytes::hex_encode,
-    OverlayContentKey, RawContentKey,
+    OverlayContentKey, RawContentKey, RawContentValue,
 };
 use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
 use trin_storage::ContentStore;
@@ -205,7 +206,7 @@ impl<
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
-    pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
+    pub fn propagate_gossip(&self, content: Vec<(TContentKey, RawContentValue)>) -> usize {
         propagate_gossip_cross_thread::<_, TMetric>(
             content,
             &self.kbuckets,
@@ -219,7 +220,7 @@ impl<
     pub async fn propagate_gossip_trace(
         &self,
         content_key: TContentKey,
-        data: Vec<u8>,
+        data: RawContentValue,
     ) -> GossipResult {
         trace_propagate_gossip_cross_thread::<_, TMetric>(
             content_key,
@@ -382,7 +383,7 @@ impl<
     pub async fn send_find_content(
         &self,
         enr: Enr,
-        content_key: Vec<u8>,
+        content_key: RawContentKey,
     ) -> Result<FindContentResult, OverlayRequestError> {
         // Construct the request.
         let request = FindContent {
@@ -417,7 +418,9 @@ impl<
                     // Init uTP stream if `connection_id` is received
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
-                        let content = self.init_find_content_stream(enr, conn_id).await?;
+                        let content = RawContentValue::from(
+                            self.init_find_content_stream(enr, conn_id).await?,
+                        );
                         match self.validate_content(&content_key, &content).await {
                             Ok(_) => Ok((Content::Content(content), true)),
                             Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
@@ -451,7 +454,7 @@ impl<
         &self,
         enr: Enr,
         conn_id: u16,
-    ) -> Result<Vec<u8>, OverlayRequestError> {
+    ) -> Result<Bytes, OverlayRequestError> {
         let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
             send: conn_id.wrapping_add(1),
@@ -471,7 +474,7 @@ impl<
     pub async fn send_offer(
         &self,
         enr: Enr,
-        content_items: Vec<(RawContentKey, Vec<u8>)>,
+        content_items: Vec<(RawContentKey, RawContentValue)>,
     ) -> Result<Accept, OverlayRequestError> {
         // Construct the request.
         let request = Request::PopulatedOffer(PopulatedOffer { content_items });
@@ -493,7 +496,7 @@ impl<
         &self,
         enr: Enr,
         content_key: RawContentKey,
-        content_value: Vec<u8>,
+        content_value: RawContentValue,
     ) -> Result<OfferTrace, OverlayRequestError> {
         // Construct the request.
         let (result_tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
