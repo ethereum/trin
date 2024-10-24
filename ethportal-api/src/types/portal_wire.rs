@@ -587,11 +587,7 @@ impl From<Accept> for Value {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-<<<<<<< HEAD
-    use alloy::primitives::bytes;
-=======
-    use alloy_primitives::{bytes, Bytes};
->>>>>>> 1daad075 (feat: converting Vec<u8> to bytes::Bytes)
+    use alloy::primitives::{bytes, Bytes};
     use ssz_types::Error::OutOfBounds;
     use std::str::FromStr;
     use test_log::test;

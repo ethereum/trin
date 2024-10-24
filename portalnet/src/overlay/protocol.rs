@@ -470,41 +470,6 @@ impl<
             })
     }
 
-    /// Offer is sent in order to store content to k nodes with radii that contain content-id
-    /// Offer is also sent to nodes after FindContent (POKE)
-    pub async fn send_wire_offer(
-        &self,
-        enr: Enr,
-        content_keys: Vec<TContentKey>,
-    ) -> Result<Accept, OverlayRequestError> {
-        let content_items = content_keys
-            .into_iter()
-            .map(|key| match self.store.read().get(&key) {
-                Ok(Some(content)) => Ok((key.to_bytes(), RawContentValue::from(content))),
-                _ => Err(OverlayRequestError::ContentNotFound {
-                    message: format!("Content key not found in local store: {key:02X?}"),
-                    utp: false,
-                    trace: None,
-                }),
-            })
-            .collect::<Result<Vec<(RawContentKey, RawContentValue)>, OverlayRequestError>>()?;
-        // Construct the request.
-        let request = PopulatedOffer { content_items };
-        let direction = RequestDirection::Outgoing {
-            destination: enr.clone(),
-        };
-
-        // Send the request and wait on the response.
-        match self
-            .send_overlay_request(Request::PopulatedOffer(request), direction)
-            .await
-        {
-            Ok(Response::Accept(accept)) => Ok(accept),
-            Ok(_) => Err(OverlayRequestError::InvalidResponse),
-            Err(error) => Err(error),
-        }
-    }
-
     /// Send Offer request without storing the content into db
     pub async fn send_offer(
         &self,
