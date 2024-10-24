@@ -160,7 +160,7 @@ async fn recursive_find_nodes(
 fn local_storage_lookup(
     network: &Arc<StateNetwork>,
     content_key: &StateContentKey,
-) -> Result<Option<Vec<u8>>, String> {
+) -> Result<Option<RawContentValue>, String> {
     network
         .overlay
         .store
@@ -244,7 +244,6 @@ async fn get_content(
             .overlay
             .lookup_content(content_key.clone(), is_trace)
             .await
-            .map(|result| result.map(|(bytes, a, b)| (bytes.to_vec(), a, b)))
             .map_err(|err| err.to_string())?
             .map_err(|err| match err {
                 OverlayRequestError::ContentNotFound {

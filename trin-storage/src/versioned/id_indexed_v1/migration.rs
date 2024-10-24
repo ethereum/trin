@@ -50,7 +50,9 @@ mod tests {
     use std::collections::HashMap;
 
     use anyhow::Result;
-    use ethportal_api::{types::network::Subnetwork, IdentityContentKey, OverlayContentKey};
+    use ethportal_api::{
+        types::network::Subnetwork, IdentityContentKey, OverlayContentKey, RawContentValue,
+    };
     use rand::Rng;
 
     use crate::{
@@ -167,7 +169,9 @@ mod tests {
         let store = IdIndexedV1Store::<IdentityContentKey>::create(ContentType::History, config)?;
         for (key, value) in key_value_map.into_iter() {
             assert_eq!(
-                store.lookup_content_value(&key.content_id().into())?,
+                store
+                    .lookup_content_value(&key.content_id().into())?
+                    .map(RawContentValue::into),
                 Some(value),
             );
         }
