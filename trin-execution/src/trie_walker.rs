@@ -167,6 +167,7 @@ mod tests {
     use crate::{config::StateConfig, execution::TrinExecution, trie_walker::TrieWalker};
 
     #[tokio::test]
+    #[ignore = "This test downloads data from a remote server"]
     async fn test_trie_walker_builds_valid_proof() {
         let temp_directory = create_temp_test_dir().unwrap();
         let mut trin_execution = TrinExecution::new(temp_directory.path(), StateConfig::default())

@@ -23,6 +23,7 @@ use trin_utils::dir::create_temp_test_dir;
 /// ```
 #[tokio::test]
 #[traced_test]
+#[ignore = "This test downloads data from a remote server"]
 async fn execute_export_import_execute() -> anyhow::Result<()> {
     let blocks = std::env::var("BLOCKS")
         .ok()

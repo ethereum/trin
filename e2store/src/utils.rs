@@ -47,9 +47,15 @@ pub async fn download_era_links(
 pub async fn get_era_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
     let era_files = download_era_links(http_client, ERA_DIR_URL).await?;
     ensure!(!era_files.is_empty(), "No era files found at {ERA_DIR_URL}");
+    let missing_epochs: Vec<String> = (0..era_files.len())
+        .filter(|&epoch_num| !era_files.contains_key(&(epoch_num as u64)))
+        .map(|epoch_num| epoch_num.to_string())
+        .collect();
+
     ensure!(
-        (0..era_files.len()).all(|epoch| era_files.contains_key(&(epoch as u64))),
-        "Epoch indices are not starting from zero or not consecutive",
+        missing_epochs.is_empty(),
+        "Epoch indices are not starting from zero or not consecutive: missing epochs [{}]",
+        missing_epochs.join(", ")
     );
     Ok(era_files)
 }
@@ -77,23 +83,4 @@ pub async fn get_shuffled_era1_files(http_client: &Client) -> anyhow::Result<Vec
     let mut era1_files: Vec<String> = era1_files.into_values().collect();
     era1_files.shuffle(&mut thread_rng());
     Ok(era1_files)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_get_shuffled_era1_files() {
-        let http_client = Client::new();
-        let era1_files = get_shuffled_era1_files(&http_client).await.unwrap();
-        assert_eq!(era1_files.len(), ERA1_FILE_COUNT);
-    }
-
-    #[tokio::test]
-    async fn test_get_era_file_download_links() {
-        let http_client = Client::new();
-        let era_files = get_era_files(&http_client).await.unwrap();
-        assert!(!era_files.is_empty());
-    }
 }
