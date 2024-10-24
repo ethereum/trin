@@ -312,7 +312,7 @@ async fn offer(
 ) -> Result<Value, String> {
     let content_items = content_items
         .into_iter()
-        .map(|(key, value)| (key.to_bytes(), value.encode().to_vec()))
+        .map(|(key, value)| (key.to_bytes(), value.encode()))
         .collect();
 
     to_json_result(

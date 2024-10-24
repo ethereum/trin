@@ -37,14 +37,7 @@ const TALKREQ_CHANNEL_BUFFER: usize = 100;
 /// ENR key for portal network client version.
 pub const ENR_PORTAL_CLIENT_KEY: &str = "c";
 
-<<<<<<< HEAD
-pub type ProtocolRequest = Vec<u8>;
-=======
-/// ENR file name saving enr history to disk.
-const ENR_FILE_NAME: &str = "trin.enr";
-
 pub type ProtocolRequest = Bytes;
->>>>>>> 1daad075 (feat: converting Vec<u8> to bytes::Bytes)
 
 /// The contact info for a remote node.
 #[derive(Clone, Debug)]

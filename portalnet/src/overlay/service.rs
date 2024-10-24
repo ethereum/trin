@@ -2615,11 +2615,7 @@ mod tests {
 
     use std::{net::SocketAddr, time::Instant};
 
-<<<<<<< HEAD
-    use alloy::primitives::U256;
-=======
-    use alloy_primitives::{Bytes, U256};
->>>>>>> 1daad075 (feat: converting Vec<u8> to bytes::Bytes)
+    use alloy::primitives::{Bytes, U256};
     use discv5::kbucket;
     use kbucket::KBucketsTable;
     use rstest::*;
