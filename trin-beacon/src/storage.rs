@@ -681,7 +681,7 @@ mod test {
         let value = test_utils::get_light_client_bootstrap(0);
         let block_root = value
             .bootstrap
-            .header_capella()
+            .header_deneb()
             .unwrap()
             .beacon
             .tree_hash_root();
@@ -740,7 +740,7 @@ mod test {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
         let mut storage = BeaconStorage::new(config).unwrap();
         let value = test_utils::get_light_client_finality_update(0);
-        let finalized_slot = value.update.finalized_header_capella().unwrap().beacon.slot;
+        let finalized_slot = value.update.finalized_header_deneb().unwrap().beacon.slot;
         let key = BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
             finalized_slot,
         });

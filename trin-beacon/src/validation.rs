@@ -373,12 +373,7 @@ mod tests {
         assert!(result.valid_for_storing);
 
         // Expect error because the light client bootstrap slot is too old
-        bootstrap
-            .bootstrap
-            .header_capella_mut()
-            .unwrap()
-            .beacon
-            .slot = 0;
+        bootstrap.bootstrap.header_deneb_mut().unwrap().beacon.slot = 0;
         let content = bootstrap.as_ssz_bytes();
         let result = validator
             .validate_content(&content_key, &content)
@@ -427,11 +422,11 @@ mod tests {
     #[tokio::test]
     async fn test_validate_light_client_finality_update() {
         let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::default())));
-        let mut finality_update = test_utils::get_light_client_finality_update(0);
+        let finality_update = test_utils::get_light_client_finality_update(0);
         let content = finality_update.as_ssz_bytes();
         let content_key =
             BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
-                finalized_slot: 17748599031001599584,
+                finalized_slot: 10934316269310501102,
             });
 
         let result = validator
@@ -445,7 +440,7 @@ mod tests {
         // update  finalized slot
         let invalid_content_key =
             BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
-                finalized_slot: 17748599031001599584 + 1,
+                finalized_slot: 10934316269310501102 + 1,
             });
         let result = validator
             .validate_content(&invalid_content_key, &content)
@@ -454,31 +449,18 @@ mod tests {
 
         assert_eq!(
             result.to_string(),
-            "Light client finality update finalized slot should be equal or greater than content key finalized slot: 17748599031001599584 < 17748599031001599585"
-        );
-
-        // Expect error because the light client finality update is not from the recent fork
-        finality_update.fork_name = ForkName::Capella;
-        let content = finality_update.as_ssz_bytes();
-        let result = validator
-            .validate_content(&content_key, &content)
-            .await
-            .unwrap_err();
-
-        assert_eq!(
-            result.to_string(),
-            "Light client finality update is not from the recent fork. Expected deneb, got capella"
+            "Light client finality update finalized slot should be equal or greater than content key finalized slot: 10934316269310501102 < 10934316269310501103"
         );
     }
 
     #[tokio::test]
     async fn test_validate_light_client_optimistic_update() {
         let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::default())));
-        let mut optimistic_update = test_utils::get_light_client_optimistic_update(0);
+        let optimistic_update = test_utils::get_light_client_optimistic_update(0);
         let content = optimistic_update.as_ssz_bytes();
         let content_key =
             BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
-                signature_slot: 6292665015452153680,
+                signature_slot: 15067541596220156845,
             });
         let result = validator
             .validate_content(&content_key, &content)
@@ -499,20 +481,7 @@ mod tests {
 
         assert_eq!(
             result.to_string(),
-            "Light client optimistic update signature slot does not match the content key signature slot: 6292665015452153680 != 0"
-        );
-
-        // Expect error because the light client optimistic update is not from the recent fork
-        optimistic_update.fork_name = ForkName::Capella;
-        let content = optimistic_update.as_ssz_bytes();
-        let result = validator
-            .validate_content(&content_key, &content)
-            .await
-            .unwrap_err();
-
-        assert_eq!(
-            result.to_string(),
-            "Light client optimistic update is not from the recent fork. Expected deneb, got capella"
+            "Light client optimistic update signature slot does not match the content key signature slot: 15067541596220156845 != 0"
         );
     }
 

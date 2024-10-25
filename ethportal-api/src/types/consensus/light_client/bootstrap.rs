@@ -1,5 +1,6 @@
 use crate::{
     consensus::header::BeaconBlockHeader,
+    light_client::header::LightClientHeaderDeneb,
     types::consensus::{
         fork::ForkName,
         light_client::header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
@@ -34,7 +35,7 @@ pub struct LightClientBootstrap {
     #[superstruct(only(Capella), partial_getter(rename = "header_capella"))]
     pub header: LightClientHeaderCapella,
     #[superstruct(only(Deneb), partial_getter(rename = "header_deneb"))]
-    pub header: LightClientHeaderCapella,
+    pub header: LightClientHeaderDeneb,
     /// Current sync committee corresponding to `header.beacon.state_root`
     pub current_sync_committee: SyncCommittee,
     pub current_sync_committee_branch: FixedVector<B256, CurrentSyncCommitteeProofLen>,
@@ -150,6 +151,41 @@ mod test {
         let mut decoder = snap::raw::Decoder::new();
         let expected = decoder.decompress_vec(&compressed).unwrap();
         LightClientBootstrap::from_ssz_bytes(&expected, ForkName::Capella).unwrap();
+        assert_eq!(content.as_ssz_bytes(), expected);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn serde_light_client_bootstrap_deneb(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/deneb/LightClientBootstrap/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: LightClientBootstrapDeneb = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(content).unwrap();
+        assert_eq!(serialized, value);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn ssz_light_client_bootstrap_deneb(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/deneb/LightClientBootstrap/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: LightClientBootstrapDeneb = serde_json::from_value(value).unwrap();
+
+        let compressed = std::fs::read(format!(
+            "../test_assets/beacon/deneb/LightClientBootstrap/ssz_random/{case}/serialized.ssz_snappy"
+        ))
+            .expect("cannot find test asset");
+        let mut decoder = snap::raw::Decoder::new();
+        let expected = decoder.decompress_vec(&compressed).unwrap();
+        LightClientBootstrap::from_ssz_bytes(&expected, ForkName::Deneb).unwrap();
         assert_eq!(content.as_ssz_bytes(), expected);
     }
 }
