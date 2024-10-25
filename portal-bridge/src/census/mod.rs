@@ -6,7 +6,7 @@ use tokio::task::JoinHandle;
 use tracing::{error, info, Instrument};
 
 use crate::cli::BridgeConfig;
-use network::Network;
+use network::{Network, NetworkAction, NetworkInitializationConfig, NetworkManager};
 
 mod network;
 mod peers;
@@ -40,6 +40,9 @@ pub struct Census {
 }
 
 impl Census {
+    const SUPPORTED_SUBNETWORKS: [Subnetwork; 3] =
+        [Subnetwork::Beacon, Subnetwork::History, Subnetwork::State];
+
     pub fn new(client: HttpClient, bridge_config: &BridgeConfig) -> Self {
         Self {
             history: Network::new(client.clone(), Subnetwork::History, bridge_config),
@@ -71,50 +74,74 @@ impl Census {
         &mut self,
         subnetworks: impl IntoIterator<Item = Subnetwork>,
     ) -> Result<JoinHandle<()>, CensusError> {
+        info!("Initializing census");
+
         if self.initialized {
             return Err(CensusError::AlreadyInitialized);
         }
         self.initialized = true;
 
-        let subnetworks = HashSet::from_iter(subnetworks);
+        let subnetworks = HashSet::<Subnetwork>::from_iter(subnetworks);
         if subnetworks.is_empty() {
             return Err(CensusError::FailedInitialization("No subnetwork"));
         }
         for subnetwork in &subnetworks {
-            info!("Initializing {subnetwork} subnetwork");
-            match subnetwork {
-                Subnetwork::History => self.history.init().await?,
-                Subnetwork::State => self.state.init().await?,
-                Subnetwork::Beacon => self.beacon.init().await?,
-                _ => return Err(CensusError::UnsupportedSubnetwork(*subnetwork)),
+            if !Self::SUPPORTED_SUBNETWORKS.contains(subnetwork) {
+                return Err(CensusError::UnsupportedSubnetwork(*subnetwork));
             }
         }
 
-        Ok(self.start_background_service(subnetworks))
-    }
+        let initialization_config = NetworkInitializationConfig::default();
 
-    /// Starts background service that is responsible for keeping view of the network up to date.
-    ///
-    /// Selects available tasks and runs them. Tasks are provided by enabled subnetworks.
-    fn start_background_service(&self, subnetworks: HashSet<Subnetwork>) -> JoinHandle<()> {
-        let mut history_network = self.history.clone();
-        let mut state_network = self.state.clone();
-        let mut beacon_network = self.beacon.clone();
+        let mut beacon_manager = if subnetworks.contains(&Subnetwork::Beacon) {
+            self.beacon.init(&initialization_config).await?;
+            Some(self.beacon.create_manager())
+        } else {
+            None
+        };
+        let mut history_manager = if subnetworks.contains(&Subnetwork::History) {
+            self.history.init(&initialization_config).await?;
+            Some(self.history.create_manager())
+        } else {
+            None
+        };
+        let mut state_manager = if subnetworks.contains(&Subnetwork::State) {
+            self.state.init(&initialization_config).await?;
+            Some(self.state.create_manager())
+        } else {
+            None
+        };
+
         let service = async move {
             loop {
                 tokio::select! {
-                    peer = history_network.peer_to_process(), if subnetworks.contains(&Subnetwork::History) => {
-                        history_network.process_peer(peer).await;
+                    Some(action) = next_action(&mut beacon_manager) => {
+                        if let Some(manager) = &mut beacon_manager {
+                            manager.execute_action(action).await;
+                        }
                     }
-                    peer = state_network.peer_to_process(), if subnetworks.contains(&Subnetwork::State) => {
-                        state_network.process_peer(peer).await;
+                    Some(action) = next_action(&mut history_manager) => {
+                        if let Some(manager) = &mut history_manager {
+                            manager.execute_action(action).await;
+                        }
                     }
-                    peer = beacon_network.peer_to_process(), if subnetworks.contains(&Subnetwork::Beacon) => {
-                        beacon_network.process_peer(peer).await;
+                    Some(action) = next_action(&mut state_manager) => {
+                        if let Some(manager) = &mut state_manager {
+                            manager.execute_action(action).await;
+                        }
                     }
                 }
             }
         };
-        tokio::spawn(service.instrument(tracing::trace_span!("census").or_current()))
+        Ok(tokio::spawn(
+            service.instrument(tracing::trace_span!("census").or_current()),
+        ))
+    }
+}
+
+async fn next_action(manager: &mut Option<NetworkManager>) -> Option<NetworkAction> {
+    match manager {
+        Some(manager) => Some(manager.next_action().await),
+        None => None,
     }
 }

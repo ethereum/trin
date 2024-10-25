@@ -17,10 +17,10 @@ use futures::Stream;
 use rand::seq::IteratorRandom;
 use tokio::time::Instant;
 
-/// Ping delay for liveness check of peers in census
-/// One hour was chosen after 2mins was too slow, and can be adjusted
-/// in the future based on performance
-const LIVENESS_CHECK_DELAY: Duration = Duration::from_secs(3600);
+/// How frequently liveness check should be done.
+///
+/// Five minutes is chosen arbitrarily.
+const LIVENESS_CHECK_DELAY: Duration = Duration::from_secs(300);
 
 type PeersHashMapDelay = HashMapDelay<[u8; 32], (Enr, Distance)>;
 
