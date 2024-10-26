@@ -1,8 +1,12 @@
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::uninlined_format_args)]
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
+use cpu_time::ProcessTime;
 use network::StateNetwork;
 use tokio::{
     sync::{broadcast, mpsc, RwLock},
@@ -113,14 +117,19 @@ pub fn spawn_state_heartbeat(network: Arc<StateNetwork>) {
         let mut heart_interval = interval(Duration::from_millis(30000));
 
         loop {
+            let clock_time = Instant::now();
+            let process_time = ProcessTime::now();
             // Don't want to wait to display 1st log, but a bug seems to skip the first wait, so put
             // this wait at the top. Otherwise, we get two log lines immediately on startup.
             heart_interval.tick().await;
 
+            let cpu_percent =
+                100.0 * process_time.elapsed().as_secs_f64() / clock_time.elapsed().as_secs_f64();
+
             let storage_log = network.overlay.store.read().get_summary_info();
             let message_log = network.overlay.get_message_summary();
             let utp_log = network.overlay.get_utp_summary();
-            info!("reports~ data: {storage_log}; msgs: {message_log}");
+            info!("reports~ data: {storage_log}; msgs: {message_log}; cpu={cpu_percent:.1}%");
             info!("reports~ utp: {utp_log}");
         }
     });
