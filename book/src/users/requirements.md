@@ -5,17 +5,17 @@
 Suitable:
 - Processor: x86 or Arm based. Minimum spec TBD.
 - RAM: Minimum TBD.
-- Disk: Any.
+- Disk: 50 MB
+
+We are eager to hear about a device that is too slow or small to run Trin. The minimum permitted setting for storage usage is technically 1MB. Though the trin binary itself is 41MB at the moment. Tell us if that isn't working for you!
 
 Testing and reports of performance on the following are welcome:
 - RISC-V based processor.
 - Resource constrained (CPU/RAM)
 
-
 ## Software
 
-- Unix based operating system
-- Rust installation (minimum `v1.66`)
+- Linux, MacOS, or Windows
 
 ## Network
 

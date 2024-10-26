@@ -1,42 +1,55 @@
-# Startup
+# Running Trin
 
-Configuration occurs at startup via flags:
+Configuration occurs at startup via standard flags. Launch trin with 5GB of storage space like this:
 
-```sh
-cargo run -p trin -- --flag1 value --flag2 value
-```
-Backslashes allow flags to be on new lines for easier reading.
-```sh
-cargo run -p trin -- \
-    --flag1 value \
-    --flag2 value \
-    --flag3 value1,value2 \
+```text
+trin --mb 5000
 ```
 
-## Flags
+For the [full list of flags](cli.md), run:
 
-For the most up to date flags run:
-
-```sh
-cargo run -p trin -- --help
+```text
+trin --help
 ```
-### Bootnodes
 
-Trin automatically connects to the Portal Network bootnodes.
-Use the `--bootnodes` cli flag to connect to a specific node
-or to none.
+## Data storage limits
 
-### Control disk use
+When setting a storage usage limit, here's how to think about the tradeoffs:
 
-Trin can be tuned to control how much disk space is used:
-
-|Selected size|Data access|Network contribution|
+|Storage size|Data access|Network contribution|
 |-|-|-|
 |Smaller|Slower|Less|
 |Larger|Faster|More|
 
-See the `--mb` flag.
 
+## Select which networks to join
+
+Eventually, by default, trin will connect to all Portal Networks. Each network stores different types of data. Some examples are the consensus-layer network for confirming the latest headers, and several execution-layer networks like:
+
+- **History Network** - blocks & receipts
+- **State Network** - account info
+- **Transaction Gossip Network** - mempool
+- **Canonical Indices Network** - tx lookups
+
+For now, only the history network is on by default, because the others are still under active development. At the moment, the state network has only the first one million blocks of state data.
+
+To try out state access, you can turn it on like this:
+
+```text
+trin --mb 5000 --portal-subnetworks history,state
+```
+
+Note that to access state, you must also run with history enabled, in order to validate peer responses.
+
+## Advanced flags
+
+The following flags all have reasonable defaults and most people won't need to touch them:
+
+### Bootnodes
+
+Trin automatically connects to some standard Portal Network bootnodes.
+Use the `--bootnodes` cli flag to connect to a specific node
+or to none.
 
 ### Private Key management
 
@@ -48,22 +61,9 @@ every time Trin is restarted. The only exceptions are if...
 - User deletes the `TRIN_DATA_DIR` or changes the `TRIN_DATA_DIR`. In which 
   case a new private key will be randomly generated and used.
 
-### Sub-Protocols
-
-Trin can connect to different sub-protocols to have access to
-different types of data. One more more can be selected, but be aware
-that not all sub-protocols are ready:
-
-- Execution State Network
-- Execution History Network
-- Execution Transaction Gossip Network
-- Execution Canonical Indices Network
-
 ### Networking configuration
 
 Optionally one can specify Trin's network properties:
-- What sort of network connections (HTTP vs IPC)
+- What sort of connection to query with (HTTP vs IPC)
 - Port answering Ethereum-related queries
 - Port for connecting to other nodes
-
-These types of flags have defaults.

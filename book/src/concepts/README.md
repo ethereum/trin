@@ -1,6 +1,6 @@
 # Concepts
 
-## Why Portal Network?
+## Why does Portal Network exist?
 
 Portal is an important way to support the evolution of the core Ethereum protocol.
 
@@ -9,7 +9,7 @@ likely future upgrade.
 
 When that happens, the Portal Network can supply users with that purged data.
 
-## Why do Portal clients use less space?
+## How do Portal clients use less space?
 
 Each Portal Network client stores a user-configurable fraction of the data. The client retrieves any missing data from peers, on demand. Just like a full node, the client can cryptographically prove the data it serves.
 
