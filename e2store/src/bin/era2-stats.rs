@@ -9,7 +9,7 @@ use tracing::info;
 #[derive(Debug, Parser)]
 #[command(
     name = "Era2 stats",
-    about = "Reads the era2 file, validates it, and prints stats about it."
+    about = "Reads the era2 file, validates the format, and prints stats about it."
 )]
 struct Config {
     #[arg(help = "The path to the era2 file.")]
@@ -24,7 +24,7 @@ struct Stats {
     storage_item_count: usize,
 }
 
-/// Reads the era2 file, validates it, and prints stats about it.
+/// Reads the era2 file, validates the format, and prints stats about it.
 ///
 /// It can be run with following command:
 ///
