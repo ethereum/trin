@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use alloy::primitives::{keccak256, B256};
 use anyhow::bail;
 use clap::Parser;
-use e2store::era2::{AccountOrStorageEntry, Era2Reader};
+use e2store::era2::{self, AccountOrStorageEntry, Era2Reader};
 use tracing::info;
 
 #[derive(Debug, Parser)]
@@ -79,11 +79,15 @@ fn main() -> anyhow::Result<()> {
             stats.storage_entry_count += 1;
             stats.storage_item_count += storage.len();
 
+            // Check that every storage entry is full (has 10M items), except the last one.
             if index + 1 < account.storage_count {
                 assert_eq!(
                     storage.len(),
-                    10_000_000,
-                    "Non-final storage entry doesn't have 10M items",
+                    era2::MAX_STORAGE_ITEMS,
+                    "Non-final storage entry (address_hash: {}, index: {index}/{}) should be full, but has {} items instead",
+                    account.address_hash,
+                    account.storage_count,
+                    storage.len(),
                 );
             }
 
