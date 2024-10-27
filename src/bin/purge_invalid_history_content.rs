@@ -4,7 +4,10 @@ use clap::Parser;
 use discv5::enr::{CombinedKey, Enr};
 use tracing::info;
 
-use ethportal_api::types::network::{Network, Subnetwork};
+use ethportal_api::types::{
+    cli::StorageCapacityConfig,
+    network::{Network, Subnetwork},
+};
 use portalnet::utils::db::{configure_node_data_dir, configure_trin_data_dir};
 use trin_storage::{
     versioned::{ContentType, IdIndexedV1StoreConfig},
@@ -29,13 +32,16 @@ pub fn main() -> Result<()> {
     info!("DB Path: {node_data_dir:?}");
 
     let config = PortalStorageConfigFactory::new(
-        script_config.capacity as u64,
-        &[Subnetwork::History],
+        StorageCapacityConfig::Combined {
+            total_mb: script_config.capacity as u32,
+            subnetworks: vec![Subnetwork::History],
+        },
         node_id,
         node_data_dir,
     )
     .unwrap()
-    .create(&Subnetwork::History);
+    .create(&Subnetwork::History)
+    .unwrap();
     let config = IdIndexedV1StoreConfig::new(ContentType::History, Subnetwork::History, config);
     let sql_connection_pool = config.sql_connection_pool.clone();
     let total_count = sql_connection_pool

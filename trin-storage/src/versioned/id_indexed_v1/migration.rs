@@ -60,7 +60,7 @@ mod tests {
 
     use super::*;
 
-    const STORAGE_CAPACITY_MB: u64 = 10;
+    const STORAGE_CAPACITY_MB: u32 = 10;
 
     mod legacy_history {
         // Minimal code needed to test migration (since original code is deleted)
