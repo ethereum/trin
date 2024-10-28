@@ -264,7 +264,7 @@ impl Network {
     }
 
     async fn ping(&self, enr: &Enr) -> anyhow::Result<PongInfo> {
-        ensure!(self.is_eligible(enr), "ping: peer is not supported");
+        ensure!(self.is_eligible(enr), "ping: peer is filtered out");
 
         match self.subnetwork {
             Subnetwork::History => HistoryNetworkApiClient::ping(&self.client, enr.clone()),
@@ -280,7 +280,7 @@ impl Network {
     ///
     /// Should be used when ENR sequence returned by Ping request is higher than the one we know.
     async fn fetch_enr(&self, enr: &Enr) -> anyhow::Result<Enr> {
-        ensure!(self.is_eligible(enr), "fetch_enr: peer is not supported");
+        ensure!(self.is_eligible(enr), "fetch_enr: peer is filtered out");
 
         let enrs = self.find_nodes(enr, /* distances= */ vec![0]).await?;
         if enrs.len() != 1 {
@@ -323,7 +323,10 @@ impl Network {
             Subnetwork::Beacon => {
                 BeaconNetworkApiClient::recursive_find_nodes(&self.client, node_id).await?
             }
-            _ => unreachable!("rfn: unsupported subnetwork: {}", self.subnetwork),
+            _ => unreachable!(
+                "recursive_find_nodes: unsupported subnetwork: {}",
+                self.subnetwork
+            ),
         };
         Ok(enrs
             .into_iter()
