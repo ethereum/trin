@@ -7,15 +7,13 @@ use std::{
 
 use delay_map::HashMapDelay;
 use ethportal_api::{
-    types::{
-        distance::{Distance, Metric, XorMetric},
-        portal::PongInfo,
-    },
+    types::distance::{Distance, Metric, XorMetric},
     Enr,
 };
 use futures::Stream;
 use rand::seq::IteratorRandom;
 use tokio::time::Instant;
+use tracing::warn;
 
 /// How frequently liveness check should be done.
 ///
@@ -55,18 +53,17 @@ impl Peers {
             .deadline(&enr.node_id().raw())
     }
 
-    pub fn process_ping_response(&self, enr: Enr, ping_response: anyhow::Result<PongInfo>) -> bool {
+    pub fn record_successful_liveness_check(&self, enr: Enr, radius: Distance) {
+        self.peers
+            .write()
+            .expect("to get peers lock")
+            .insert(enr.node_id().raw(), (enr, radius));
+    }
+
+    pub fn record_failed_liveness_check(&self, enr: &Enr) {
         let mut peers = self.peers.write().expect("to get peers lock");
-        match ping_response {
-            Ok(pong_info) => {
-                let data_radius = Distance::from(pong_info.data_radius);
-                peers.insert(enr.node_id().raw(), (enr, data_radius));
-                true
-            }
-            Err(_) => {
-                peers.remove(&enr.node_id().raw());
-                false
-            }
+        if peers.remove(&enr.node_id().raw()).is_some() {
+            warn!("liveness check failed, peer removed: {}", enr.node_id());
         }
     }
 
