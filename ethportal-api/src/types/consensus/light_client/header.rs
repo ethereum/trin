@@ -1,5 +1,8 @@
-use crate::types::consensus::{
-    execution_payload::ExecutionPayloadHeaderCapella, fork::ForkName, header::BeaconBlockHeader,
+use crate::{
+    consensus::execution_payload::ExecutionPayloadHeaderDeneb,
+    types::consensus::{
+        execution_payload::ExecutionPayloadHeaderCapella, fork::ForkName, header::BeaconBlockHeader,
+    },
 };
 use alloy::primitives::B256;
 use serde::{Deserialize, Serialize};
@@ -33,8 +36,10 @@ pub type ExecutionBranchLen = U4;
 #[tree_hash(enum_behaviour = "transparent")]
 pub struct LightClientHeader {
     pub beacon: BeaconBlockHeader,
-    #[superstruct(only(Capella, Deneb))]
+    #[superstruct(only(Capella), partial_getter(rename = "execution_capella"))]
     pub execution: ExecutionPayloadHeaderCapella,
+    #[superstruct(only(Deneb), partial_getter(rename = "execution_deneb"))]
+    pub execution: ExecutionPayloadHeaderDeneb,
     #[superstruct(only(Capella, Deneb))]
     pub execution_branch: FixedVector<B256, ExecutionBranchLen>,
 }
@@ -144,6 +149,41 @@ mod test {
         let mut decoder = snap::raw::Decoder::new();
         let expected = decoder.decompress_vec(&compressed).unwrap();
         LightClientHeader::from_ssz_bytes(&expected, ForkName::Capella).unwrap();
+        assert_eq!(content.as_ssz_bytes(), expected);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn serde_light_client_header_deneb(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/deneb/LightClientHeader/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: LightClientHeaderDeneb = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(content).unwrap();
+        assert_eq!(serialized, value);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn ssz_light_client_header_deneb(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/deneb/LightClientHeader/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: LightClientHeaderDeneb = serde_json::from_value(value).unwrap();
+
+        let compressed = std::fs::read(format!(
+            "../test_assets/beacon/deneb/LightClientHeader/ssz_random/{case}/serialized.ssz_snappy"
+        ))
+        .expect("cannot find test asset");
+        let mut decoder = snap::raw::Decoder::new();
+        let expected = decoder.decompress_vec(&compressed).unwrap();
+        LightClientHeader::from_ssz_bytes(&expected, ForkName::Deneb).unwrap();
         assert_eq!(content.as_ssz_bytes(), expected);
     }
 }
