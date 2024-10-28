@@ -8,7 +8,6 @@ use ethportal_api::{
     },
     ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
 };
-use revm::DatabaseRef;
 use revm_primitives::keccak256;
 use tracing::info;
 use tracing_test::traced_test;
@@ -96,7 +95,7 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
     let mut trin_execution = TrinExecution::new(
         temp_directory.path(),
         StateConfig {
-            cache_contract_storage_changes: true,
+            cache_contract_changes: true,
             block_to_trace: BlockToTrace::None,
         },
     )
@@ -158,16 +157,18 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
             // check contract code content key/value
             if account.code_hash != keccak256([]) {
-                let code = trin_execution
+                if let Some(code) = trin_execution
                     .database
-                    .code_by_hash_ref(account.code_hash)?;
-
-                let content_key = create_contract_content_key(address_hash, account.code_hash)
-                    .expect("Content key should be present");
-                let content_value = create_contract_content_value(block_hash, &account_proof, code)
-                    .expect("Content key should be present");
-                block_stats.check_content(&content_key, &content_value);
-                stats.check_content(&content_key, &content_value);
+                    .get_newly_created_contract(account.code_hash)
+                {
+                    let content_key = create_contract_content_key(address_hash, account.code_hash)
+                        .expect("Content key should be present");
+                    let content_value =
+                        create_contract_content_value(block_hash, &account_proof, code)
+                            .expect("Content key should be present");
+                    block_stats.check_content(&content_key, &content_value);
+                    stats.check_content(&content_key, &content_value);
+                }
             }
 
             // check contract storage content key/value
@@ -188,7 +189,7 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
         // flush the database cache
         // This is used for gossiping storage trie diffs
-        trin_execution.database.storage_cache.lock().clear();
+        trin_execution.database.clear_contract_cache();
         info!("Block {block_number} finished: {block_stats:?}");
     }
     temp_directory.close()?;
