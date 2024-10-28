@@ -11,7 +11,6 @@ use ethportal_api::{
     ContentValue, Enr, OverlayContentKey, StateContentKey, StateContentValue,
     StateNetworkApiClient,
 };
-use revm::Database;
 use revm_primitives::{keccak256, Bytecode, SpecId, B256};
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -104,7 +103,7 @@ impl StateBridge {
 
         // Enable contract storage changes caching required for gossiping the storage trie
         let state_config = StateConfig {
-            cache_contract_storage_changes: true,
+            cache_contract_changes: true,
             block_to_trace: BlockToTrace::None,
         };
         let mut trin_execution = TrinExecution::new(temp_directory.path(), state_config).await?;
@@ -115,7 +114,7 @@ impl StateBridge {
                 .process_range_of_blocks(start_block - 1, None)
                 .await?;
             // flush the database cache
-            trin_execution.database.storage_cache.lock().clear();
+            trin_execution.database.clear_contract_cache();
         }
 
         info!("Gossiping state data from block {start_block} to {end_block} (inclusively)");
@@ -194,17 +193,21 @@ impl StateBridge {
             // if the code_hash is empty then then don't try to gossip the contract bytecode
             if account.code_hash != keccak256([]) {
                 // gossip contract bytecode
-                let code = trin_execution.database.code_by_hash(account.code_hash)?;
-                self.gossip_contract_bytecode(
-                    address_hash,
-                    &account_proof,
-                    block_hash,
-                    account.code_hash,
-                    code,
-                    content_idx,
-                )
-                .await?;
-                content_idx += 1;
+                if let Some(code) = trin_execution
+                    .database
+                    .get_newly_created_contract_if_available(account.code_hash)
+                {
+                    self.gossip_contract_bytecode(
+                        address_hash,
+                        &account_proof,
+                        block_hash,
+                        account.code_hash,
+                        code,
+                        content_idx,
+                    )
+                    .await?;
+                    content_idx += 1;
+                }
             }
 
             // gossip contract storage
@@ -227,8 +230,8 @@ impl StateBridge {
         }
 
         // flush the database cache
-        // This is used for gossiping storage trie diffs
-        trin_execution.database.storage_cache.lock().clear();
+        // This is used for gossiping storage trie diffs and newly created contracts
+        trin_execution.database.clear_contract_cache();
 
         Ok(())
     }

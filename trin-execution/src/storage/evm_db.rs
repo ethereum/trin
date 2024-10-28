@@ -39,8 +39,10 @@ fn start_processing_timer(name: &str) -> HistogramTimer {
 pub struct EvmDB {
     /// State config
     pub config: StateConfig,
-    /// Storage cache for the accounts used optionally for gossiping, keyed by address hash.
-    pub storage_cache: Arc<Mutex<FbHashMap<32, HashSet<B256>>>>,
+    /// Storage cache for the accounts required for gossiping stat diffs, keyed by address hash.
+    storage_cache: Arc<Mutex<FbHashMap<32, HashSet<B256>>>>,
+    /// Cache for newly created contracts required for gossiping stat diffs, keyed by code hash.
+    newly_created_contracts: Arc<Mutex<FbHashMap<32, Bytecode>>>,
     /// The underlying database.
     pub db: Arc<RocksDB>,
     /// To get proofs and to verify trie state.
@@ -68,9 +70,11 @@ impl EvmDB {
         ));
 
         let storage_cache = Arc::new(Mutex::new(FbHashMap::default()));
+        let newly_created_contracts = Arc::new(Mutex::new(FbHashMap::default()));
         Ok(Self {
             config,
             storage_cache,
+            newly_created_contracts,
             db,
             trie,
         })
@@ -100,6 +104,15 @@ impl EvmDB {
             }
         }
         trie_diff
+    }
+
+    pub fn get_newly_created_contract_if_available(&self, code_hash: B256) -> Option<Bytecode> {
+        self.newly_created_contracts.lock().get(&code_hash).cloned()
+    }
+
+    pub fn clear_contract_cache(&self) {
+        self.storage_cache.lock().clear();
+        self.newly_created_contracts.lock().clear();
     }
 
     fn commit_account(
@@ -228,7 +241,7 @@ impl EvmDB {
             trie_diff,
         } = trie.root_hash_with_changed_nodes()?;
 
-        if self.config.cache_contract_storage_changes {
+        if self.config.cache_contract_changes {
             let mut storage_cache_guard = self.storage_cache.lock();
             let account_storage_cache = storage_cache_guard.entry(address_hash).or_default();
             for key in trie_diff.keys() {
@@ -295,6 +308,12 @@ impl EvmDB {
         // TODO: Delete contract code if no accounts point to it: https://github.com/ethereum/trin/issues/1428
         let timer = start_commit_timer("contract:committing_contracts_total");
         for (hash, bytecode) in plain_state.contracts {
+            // Cache contract code for gossiping if flag is set
+            if self.config.cache_contract_changes {
+                self.newly_created_contracts
+                    .lock()
+                    .insert(hash, bytecode.clone());
+            }
             let timer = start_commit_timer("committing_contract");
             self.db
                 .put(hash, bytecode.original_bytes().as_ref())
