@@ -159,7 +159,7 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
             if account.code_hash != keccak256([]) {
                 if let Some(code) = trin_execution
                     .database
-                    .get_newly_created_contract_if_available(account.code_hash)
+                    .get_newly_created_contract(account.code_hash)
                 {
                     let content_key = create_contract_content_key(address_hash, account.code_hash)
                         .expect("Content key should be present");

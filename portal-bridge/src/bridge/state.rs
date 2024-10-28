@@ -195,7 +195,7 @@ impl StateBridge {
                 // gossip contract bytecode
                 if let Some(code) = trin_execution
                     .database
-                    .get_newly_created_contract_if_available(account.code_hash)
+                    .get_newly_created_contract(account.code_hash)
                 {
                     self.gossip_contract_bytecode(
                         address_hash,

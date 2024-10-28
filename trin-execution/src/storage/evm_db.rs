@@ -106,7 +106,7 @@ impl EvmDB {
         trie_diff
     }
 
-    pub fn get_newly_created_contract_if_available(&self, code_hash: B256) -> Option<Bytecode> {
+    pub fn get_newly_created_contract(&self, code_hash: B256) -> Option<Bytecode> {
         self.newly_created_contracts.lock().get(&code_hash).cloned()
     }
 
