@@ -51,6 +51,12 @@ pub struct QueryConfig {
     /// the peer when evaluating the termination conditions, until and unless a
     /// result is delivered. Defaults to `10` seconds.
     pub peer_timeout: Duration,
+
+    /// The timeout for the entire query.
+    ///
+    /// If the result is not found within this timeout, it is considered failed.
+    /// Defaults to `60` seconds.
+    pub overall_timeout: Duration,
 }
 
 impl Default for QueryConfig {
@@ -59,6 +65,7 @@ impl Default for QueryConfig {
             parallelism: 3,
             num_results: 20,
             peer_timeout: Duration::from_secs(2),
+            overall_timeout: Duration::from_secs(60),
         }
     }
 }
@@ -117,6 +124,9 @@ pub trait Query<TNodeId> {
     /// Returns a result that is waiting for validation. The attached peer is used to look up which
     /// pending result to return.
     fn pending_validation_result(&self, sending_peer: TNodeId) -> Self::PendingValidationResult;
+
+    /// Return the configuration used to launch this query
+    fn config(&self) -> &QueryConfig;
 }
 
 /// Stage of the query.

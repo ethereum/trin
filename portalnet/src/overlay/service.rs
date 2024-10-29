@@ -138,6 +138,8 @@ where
     content_query_trace_events_rx: UnboundedReceiver<QueryTraceEvent>,
     /// Timeout after which a peer in an ongoing query is marked unresponsive.
     query_peer_timeout: Duration,
+    /// Timeout for each complete query
+    query_timeout: Duration,
     /// Number of peers to request data from in parallel for a single query.
     query_parallelism: usize,
     /// Number of new peers to discover before considering a FINDNODES query complete.
@@ -223,11 +225,12 @@ impl<
                 command_rx,
                 command_tx: internal_command_tx,
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
-                find_node_query_pool: QueryPool::new(query_timeout),
-                find_content_query_pool: QueryPool::new(query_timeout),
+                find_node_query_pool: QueryPool::new(),
+                find_content_query_pool: QueryPool::new(),
                 content_query_trace_events_tx,
                 content_query_trace_events_rx,
                 query_peer_timeout,
+                query_timeout,
                 query_parallelism,
                 query_num_results,
                 findnodes_query_distances_per_peer,
@@ -340,7 +343,7 @@ impl<
                         OverlayCommand::Request(request) => self.process_request(request),
                         OverlayCommand::Event(event) => self.process_event(event),
                         OverlayCommand::FindContentQuery { target, callback, is_trace } => {
-                            if let Some(query_id) = self.init_find_content_query(target.clone(), Some(callback), is_trace) {
+                            if let Some(query_id) = self.init_find_content_query(target.clone(), Some(callback), is_trace, None) {
                                 trace!(
                                     query.id = %query_id,
                                     content.id = %hex_encode_compact(target.content_id()),
@@ -2325,6 +2328,7 @@ impl<
             parallelism: self.query_parallelism,
             num_results: self.query_num_results,
             peer_timeout: self.query_peer_timeout,
+            overall_timeout: self.query_timeout,
         };
 
         let query_info = QueryInfo {
@@ -2362,6 +2366,7 @@ impl<
         target: TContentKey,
         callback: Option<oneshot::Sender<RecursiveFindContentResult>>,
         is_trace: bool,
+        custom_timeout: Option<Duration>,
     ) -> Option<QueryId> {
         debug!("Starting query for content key: {}", target);
 
@@ -2373,6 +2378,7 @@ impl<
             parallelism: self.query_parallelism,
             num_results: self.query_num_results,
             peer_timeout: self.query_peer_timeout,
+            overall_timeout: custom_timeout.unwrap_or(self.query_timeout),
         };
 
         let closest_enrs = self
@@ -2690,11 +2696,12 @@ mod tests {
             command_tx,
             command_rx,
             active_outgoing_requests,
-            find_node_query_pool: QueryPool::new(overlay_config.query_timeout),
-            find_content_query_pool: QueryPool::new(overlay_config.query_timeout),
+            find_node_query_pool: QueryPool::new(),
+            find_content_query_pool: QueryPool::new(),
             content_query_trace_events_tx,
             content_query_trace_events_rx,
             query_peer_timeout: overlay_config.query_peer_timeout,
+            query_timeout: overlay_config.query_timeout,
             query_parallelism: overlay_config.query_parallelism,
             query_num_results: overlay_config.query_num_results,
             findnodes_query_distances_per_peer: overlay_config.findnodes_query_distances_per_peer,
@@ -3549,7 +3556,8 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service.init_find_content_query(target_content_key.clone(), None, false);
+        let query_id =
+            service.init_find_content_query(target_content_key.clone(), None, false, None);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let pool = &mut service.find_content_query_pool;
@@ -3582,7 +3590,8 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
         let (tx, rx) = oneshot::channel();
-        let query_id = service.init_find_content_query(target_content_key.clone(), Some(tx), false);
+        let query_id =
+            service.init_find_content_query(target_content_key.clone(), Some(tx), false, None);
 
         assert!(query_id.is_none());
         assert!(rx.await.unwrap().is_err());
@@ -3611,7 +3620,7 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service.init_find_content_query(target_content_key, None, false);
+        let query_id = service.init_find_content_query(target_content_key, None, false, None);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         // update query in own span so mut ref is dropped after poll
@@ -3671,7 +3680,7 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service.init_find_content_query(target_content_key, None, false);
+        let query_id = service.init_find_content_query(target_content_key, None, false, None);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         // update query in own span so mut ref is dropped after poll
@@ -3733,7 +3742,7 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service.init_find_content_query(target_content_key, None, false);
+        let query_id = service.init_find_content_query(target_content_key, None, false, None);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         // update query in own span so mut ref is dropped after poll
@@ -3798,8 +3807,12 @@ mod tests {
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
         let (callback_tx, callback_rx) = oneshot::channel();
-        let query_id =
-            service.init_find_content_query(target_content_key.clone(), Some(callback_tx), false);
+        let query_id = service.init_find_content_query(
+            target_content_key.clone(),
+            Some(callback_tx),
+            false,
+            None,
+        );
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let query_event =

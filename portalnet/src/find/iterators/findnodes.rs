@@ -62,6 +62,10 @@ where
     type Result = Vec<TNodeId>;
     type PendingValidationResult = ();
 
+    fn config(&self) -> &QueryConfig {
+        &self.config
+    }
+
     fn target(&self) -> Key<TNodeId> {
         self.target_key.clone()
     }
@@ -352,6 +356,7 @@ mod tests {
             parallelism: rng.gen_range(1..10),
             num_results: rng.gen_range(1..25),
             peer_timeout: Duration::from_secs(rng.gen_range(10..30)),
+            overall_timeout: Duration::from_secs(rng.gen_range(30..120)),
         };
         FindNodeQuery::with_config(config, target.into(), known_closest_peers)
     }
