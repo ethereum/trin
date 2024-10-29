@@ -149,7 +149,7 @@ mod test {
 
     #[test_log::test]
     fn test_bootnodes_default_with_default_bootnodes() {
-        let config = TrinConfig::new_from(["trin"].iter()).unwrap();
+        let config = TrinConfig::new_from(["trin"]).unwrap();
         assert_eq!(config.bootnodes, Bootnodes::Default);
         let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
         assert_eq!(bootnodes.len(), 11);
@@ -157,7 +157,7 @@ mod test {
 
     #[test_log::test]
     fn test_bootnodes_default_with_explicit_default_bootnodes() {
-        let config = TrinConfig::new_from(["trin", "--bootnodes", "default"].iter()).unwrap();
+        let config = TrinConfig::new_from(["trin", "--bootnodes", "default"]).unwrap();
         assert_eq!(config.bootnodes, Bootnodes::Default);
         let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
         assert_eq!(bootnodes.len(), 11);
@@ -165,7 +165,7 @@ mod test {
 
     #[test_log::test]
     fn test_bootnodes_default_with_no_bootnodes() {
-        let config = TrinConfig::new_from(["trin", "--bootnodes", "none"].iter()).unwrap();
+        let config = TrinConfig::new_from(["trin", "--bootnodes", "none"]).unwrap();
         assert_eq!(config.bootnodes, Bootnodes::None);
         let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
         assert_eq!(bootnodes.len(), 0);
@@ -176,7 +176,7 @@ mod test {
     #[case("enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg,invalid")]
     #[should_panic]
     fn test_bootnodes_invalid_enr(#[case] bootnode: &str) {
-        TrinConfig::new_from(["trin", "--bootnodes", bootnode].iter()).unwrap();
+        TrinConfig::new_from(["trin", "--bootnodes", bootnode]).unwrap();
     }
 
     #[rstest]
@@ -184,7 +184,7 @@ mod test {
     #[case("enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg,enr:-IS4QPUT9hwV4YfNTxazR2ltch4qKzvX_HwxQBw8gUN3q1MDfNyaD1EHc1wQZRTUzQQD-RVYx3h4nA1Sqk0Wx9DwzNABgmlkgnY0gmlwhM69ZOyJc2VjcDI1NmsxoQLaI-m2CDIjpwcnUf1ESspvOctJLpIrLA8AZ4zbo_1bFIN1ZHCCIyg", 2)]
     #[case("enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg,enr:-IS4QPUT9hwV4YfNTxazR2ltch4qKzvX_HwxQBw8gUN3q1MDfNyaD1EHc1wQZRTUzQQD-RVYx3h4nA1Sqk0Wx9DwzNABgmlkgnY0gmlwhM69ZOyJc2VjcDI1NmsxoQLaI-m2CDIjpwcnUf1ESspvOctJLpIrLA8AZ4zbo_1bFIN1ZHCCIyg,enr:-IS4QB77AROcGX-TSkY-U-SaZJ5ma9ICQj6ETO3FqUdCnTZeJ0mDrdCKUqd5AQ0jrHa7m9-mOLvFFKMV_-tBD8uDYZUBgmlkgnY0gmlwhJ_fCDaJc2VjcDI1NmsxoQN9rahqamBOJfj4u6yssJQJ1-EZoyAw-7HIgp1FwNUdnoN1ZHCCIyg", 3)]
     fn test_bootnodes_valid_enrs(#[case] bootnode: &str, #[case] expected_length: usize) {
-        let config = TrinConfig::new_from(["trin", "--bootnodes", bootnode].iter()).unwrap();
+        let config = TrinConfig::new_from(["trin", "--bootnodes", bootnode]).unwrap();
         match config.bootnodes.clone() {
             Bootnodes::Custom(bootnodes) => {
                 assert_eq!(bootnodes.len(), expected_length);
@@ -197,7 +197,7 @@ mod test {
 
     #[rstest]
     fn test_angelfood_network_defaults_to_correct_bootnodes() {
-        let config = TrinConfig::new_from(["trin", "--network", "angelfood"].iter()).unwrap();
+        let config = TrinConfig::new_from(["trin", "--network", "angelfood"]).unwrap();
         assert_eq!(config.bootnodes, Bootnodes::Default);
         let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Angelfood);
         assert_eq!(bootnodes.len(), 1);
@@ -207,8 +207,7 @@ mod test {
     fn test_custom_bootnodes_override_angelfood_default() {
         let enr = "enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg";
         let config =
-            TrinConfig::new_from(["trin", "--network", "angelfood", "--bootnodes", enr].iter())
-                .unwrap();
+            TrinConfig::new_from(["trin", "--network", "angelfood", "--bootnodes", enr]).unwrap();
         assert_eq!(
             config.bootnodes,
             Bootnodes::Custom(vec![Bootnode {

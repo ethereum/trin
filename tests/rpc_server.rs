@@ -36,21 +36,18 @@ async fn setup_web3_server() -> (RpcServerHandle, RootProvider<PubSubFrontend>, 
     let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
 
     // Run a client, to be tested
-    let trin_config = TrinConfig::new_from(
-        [
-            "trin",
-            "--external-address",
-            external_addr.as_str(),
-            "--web3-ipc-path",
-            DEFAULT_WEB3_IPC_PATH,
-            "--ephemeral",
-            "--discovery-port",
-            &test_discovery_port.to_string(),
-            "--bootnodes",
-            "none",
-        ]
-        .iter(),
-    )
+    let trin_config = TrinConfig::new_from([
+        "trin",
+        "--external-address",
+        external_addr.as_str(),
+        "--web3-ipc-path",
+        DEFAULT_WEB3_IPC_PATH,
+        "--ephemeral",
+        "--discovery-port",
+        &test_discovery_port.to_string(),
+        "--bootnodes",
+        "none",
+    ])
     .unwrap();
 
     let web3_server = trin::run_trin(trin_config).await.unwrap();

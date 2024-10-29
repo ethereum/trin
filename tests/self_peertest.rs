@@ -324,25 +324,22 @@ async fn peertest_ping_cross_discv5_protocol_id() {
     let test_discovery_port = 8999;
     let external_addr = format!("{}:{test_discovery_port}", Ipv4Addr::new(127, 0, 0, 1));
 
-    let trin_config = TrinConfig::new_from(
-        [
-            "trin",
-            "--network",
-            &Network::Mainnet.to_string(),
-            "--portal-subnetworks",
-            &Subnetwork::History.to_cli_arg(),
-            "--external-address",
-            external_addr.as_str(),
-            "--web3-ipc-path",
-            DEFAULT_WEB3_IPC_PATH,
-            "--ephemeral",
-            "--discovery-port",
-            test_discovery_port.to_string().as_ref(),
-            "--bootnodes",
-            "none",
-        ]
-        .iter(),
-    )
+    let trin_config = TrinConfig::new_from([
+        "trin",
+        "--network",
+        &Network::Mainnet.to_string(),
+        "--portal-subnetworks",
+        &Subnetwork::History.to_cli_arg(),
+        "--external-address",
+        external_addr.as_str(),
+        "--web3-ipc-path",
+        DEFAULT_WEB3_IPC_PATH,
+        "--ephemeral",
+        "--discovery-port",
+        test_discovery_port.to_string().as_ref(),
+        "--bootnodes",
+        "none",
+    ])
     .unwrap();
     let mainnet_handle = trin::run_trin(trin_config).await.unwrap();
     let mainnet_target = reth_ipc::client::IpcClientBuilder::default()
@@ -376,29 +373,26 @@ async fn setup_peertest(
     let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
 
     // Run a client, to be tested
-    let trin_config = TrinConfig::new_from(
-        [
-            "trin",
-            "--network",
-            &network.to_string(),
-            "--portal-subnetworks",
-            &subnetworks
-                .iter()
-                .map(|s| s.to_cli_arg())
-                .collect::<Vec<String>>()
-                .join(","),
-            "--external-address",
-            external_addr.as_str(),
-            "--web3-ipc-path",
-            DEFAULT_WEB3_IPC_PATH,
-            "--ephemeral",
-            "--discovery-port",
-            test_discovery_port.to_string().as_ref(),
-            "--bootnodes",
-            "none",
-        ]
-        .iter(),
-    )
+    let trin_config = TrinConfig::new_from([
+        "trin",
+        "--network",
+        &network.to_string(),
+        "--portal-subnetworks",
+        &subnetworks
+            .iter()
+            .map(|s| s.to_cli_arg())
+            .collect::<Vec<String>>()
+            .join(","),
+        "--external-address",
+        external_addr.as_str(),
+        "--web3-ipc-path",
+        DEFAULT_WEB3_IPC_PATH,
+        "--ephemeral",
+        "--discovery-port",
+        test_discovery_port.to_string().as_ref(),
+        "--bootnodes",
+        "none",
+    ])
     .unwrap();
 
     let test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
@@ -434,28 +428,25 @@ async fn setup_peertest_bridge(
     env::set_var("PANDAOPS_CLIENT_ID", "xxx");
     env::set_var("PANDAOPS_CLIENT_SECRET", "xxx");
     // Run a client, to be tested
-    let trin_config = TrinConfig::new_from(
-        [
-            "trin",
-            "--network",
-            &network.to_string(),
-            "--portal-subnetworks",
-            &subnetworks,
-            "--external-address",
-            external_addr.as_str(),
-            // Run bridge test with http, since bridge doesn't support ipc yet.
-            "--web3-transport",
-            "http",
-            "--web3-http-address",
-            DEFAULT_WEB3_HTTP_ADDRESS,
-            "--ephemeral",
-            "--discovery-port",
-            test_discovery_port.to_string().as_ref(),
-            "--bootnodes",
-            &peertest.bootnode.enr.to_base64(),
-        ]
-        .iter(),
-    )
+    let trin_config = TrinConfig::new_from([
+        "trin",
+        "--network",
+        &network.to_string(),
+        "--portal-subnetworks",
+        &subnetworks,
+        "--external-address",
+        external_addr.as_str(),
+        // Run bridge test with http, since bridge doesn't support ipc yet.
+        "--web3-transport",
+        "http",
+        "--web3-http-address",
+        DEFAULT_WEB3_HTTP_ADDRESS,
+        "--ephemeral",
+        "--discovery-port",
+        test_discovery_port.to_string().as_ref(),
+        "--bootnodes",
+        &peertest.bootnode.enr.to_base64(),
+    ])
     .unwrap();
 
     let test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();

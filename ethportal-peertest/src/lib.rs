@@ -89,7 +89,7 @@ fn generate_trin_config(
         .join(",");
     let network = network.to_string();
 
-    let trin_config_args = vec![
+    let trin_config_args = [
         "trin",
         "--network",
         &network,
@@ -107,7 +107,7 @@ fn generate_trin_config(
         private_key.as_str(),
         "--ephemeral",
     ];
-    TrinConfig::new_from(trin_config_args.iter()).unwrap()
+    TrinConfig::new_from(trin_config_args).unwrap()
 }
 
 pub async fn launch_peertest_nodes(

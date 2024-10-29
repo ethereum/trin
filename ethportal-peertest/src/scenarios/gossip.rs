@@ -349,28 +349,25 @@ fn fresh_node_config() -> (String, TrinConfig) {
     let test_discovery_port = 8889;
     let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
     let fresh_ipc_path = format!("/tmp/trin-jsonrpc-{test_discovery_port}.ipc");
-    let trin_config = TrinConfig::new_from(
-        [
-            "trin",
-            "--portal-subnetworks",
-            "history",
-            "--external-address",
-            external_addr.as_str(),
-            "--mb",
-            "1", // set storage to 1mb so that we can easily test dropping data
-            "--web3-ipc-path",
-            fresh_ipc_path.as_str(),
-            "--ephemeral",
-            "--discovery-port",
-            test_discovery_port.to_string().as_ref(),
-            "--bootnodes",
-            "none",
-            "--unsafe-private-key",
-            // node id: 0x27128939ed60d6f4caef0374da15361a2c1cd6baa1a5bccebac1acd18f485900
-            "0x9ca7889c09ef1162132251b6284bd48e64bd3e71d75ea33b959c37be0582a2fd",
-        ]
-        .iter(),
-    )
+    let trin_config = TrinConfig::new_from([
+        "trin",
+        "--portal-subnetworks",
+        "history",
+        "--external-address",
+        external_addr.as_str(),
+        "--mb",
+        "1", // set storage to 1mb so that we can easily test dropping data
+        "--web3-ipc-path",
+        fresh_ipc_path.as_str(),
+        "--ephemeral",
+        "--discovery-port",
+        test_discovery_port.to_string().as_ref(),
+        "--bootnodes",
+        "none",
+        "--unsafe-private-key",
+        // node id: 0x27128939ed60d6f4caef0374da15361a2c1cd6baa1a5bccebac1acd18f485900
+        "0x9ca7889c09ef1162132251b6284bd48e64bd3e71d75ea33b959c37be0582a2fd",
+    ])
     .unwrap();
     (fresh_ipc_path, trin_config)
 }
