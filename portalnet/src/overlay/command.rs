@@ -2,7 +2,7 @@ use discv5::enr::NodeId;
 use futures::channel::oneshot;
 use tokio::sync::broadcast;
 
-use super::request::OverlayRequest;
+use super::{config::FindContentConfig, request::OverlayRequest};
 use crate::{events::EventEnvelope, find::query_info::RecursiveFindContentResult};
 use ethportal_api::types::enr::Enr;
 
@@ -26,8 +26,8 @@ pub enum OverlayCommand<TContentKey> {
         target: TContentKey,
         /// A callback channel to transmit the result of the query.
         callback: oneshot::Sender<RecursiveFindContentResult>,
-        /// Whether or not a trace for the content query should be kept and returned.
-        is_trace: bool,
+        /// The configuration for the query.
+        config: FindContentConfig,
     },
     FindNodeQuery {
         /// The query target.

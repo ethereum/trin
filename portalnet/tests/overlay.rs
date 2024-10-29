@@ -24,7 +24,10 @@ use ethportal_api::{
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
-    overlay::{config::OverlayConfig, protocol::OverlayProtocol},
+    overlay::{
+        config::{FindContentConfig, OverlayConfig},
+        protocol::OverlayProtocol,
+    },
 };
 use trin_storage::{ContentStore, DistanceFunction, MemoryContentStore};
 use trin_validation::{oracle::HeaderOracle, validator::MockValidator};
@@ -240,7 +243,7 @@ async fn overlay() {
         .put(content_key.clone(), &content)
         .expect("Unable to store content");
     let (found_content, utp_transfer, _) = overlay_one
-        .lookup_content(content_key, false)
+        .lookup_content(content_key, FindContentConfig::default())
         .await
         .unwrap()
         .unwrap();

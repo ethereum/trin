@@ -1,7 +1,7 @@
 use std::{fmt::Debug, sync::Arc};
 
 use discv5::{enr::NodeId, Enr};
-use portalnet::overlay::errors::OverlayRequestError;
+use portalnet::overlay::{config::FindContentConfig, errors::OverlayRequestError};
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tracing::error;
@@ -242,7 +242,13 @@ async fn get_content(
         }
         None => network
             .overlay
-            .lookup_content(content_key.clone(), is_trace)
+            .lookup_content(
+                content_key.clone(),
+                FindContentConfig {
+                    is_trace,
+                    ..Default::default()
+                },
+            )
             .await
             .map_err(|err| err.to_string())?
             .map_err(|err| match err {

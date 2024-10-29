@@ -46,3 +46,17 @@ impl Default for OverlayConfig {
         }
     }
 }
+
+/// A configuration used by a single query to find content.
+#[derive(Debug, Default)]
+pub struct FindContentConfig {
+    /// Whether to trace the actions of each peer during the query
+    ///
+    /// This is useful for debugging and understanding the query process, but adds some overhead.
+    pub is_trace: bool,
+
+    /// Customize the timeout for the query.
+    ///
+    /// If set to None, the default timeout is used.
+    pub timeout: Option<Duration>,
+}
