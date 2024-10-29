@@ -26,10 +26,7 @@ use ethportal_api::OverlayContentKey;
 
 use discv5::kbucket::Key;
 use fnv::FnvHashMap;
-use std::{
-    marker::PhantomData,
-    time::{Duration, Instant},
-};
+use std::{marker::PhantomData, time::Instant};
 
 pub trait TargetKey<TNodeId> {
     fn key(&self) -> Key<TNodeId>;
@@ -42,9 +39,19 @@ pub trait TargetKey<TNodeId> {
 /// peers involved in the query should be contacted.
 pub struct QueryPool<TNodeId, TQuery, TContentKey> {
     next_id: QueryId,
-    query_timeout: Duration,
     queries: FnvHashMap<QueryId, (QueryInfo<TContentKey>, TQuery)>,
     _marker: PhantomData<TNodeId>,
+}
+
+impl<TNodeId, TQuery, TContentKey> Default for QueryPool<TNodeId, TQuery, TContentKey>
+where
+    TNodeId: Into<Key<TNodeId>> + Eq + Clone,
+    TQuery: Query<TNodeId>,
+    TContentKey: OverlayContentKey,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
@@ -82,10 +89,9 @@ where
     TContentKey: OverlayContentKey,
 {
     /// Creates a new `QueryPool` with the given configuration.
-    pub fn new(query_timeout: Duration) -> Self {
+    pub fn new() -> Self {
         QueryPool {
             next_id: QueryId(0),
-            query_timeout,
             queries: Default::default(),
             _marker: PhantomData,
         }
@@ -136,7 +142,7 @@ where
                 }
                 QueryState::Waiting(None) | QueryState::WaitingAtCapacity => {
                     let elapsed = now - query.started().unwrap_or(now);
-                    if elapsed >= self.query_timeout {
+                    if elapsed >= query.config().overall_timeout {
                         timeout = Some(query_id);
                         break;
                     }
