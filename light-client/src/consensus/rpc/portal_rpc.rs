@@ -55,7 +55,7 @@ impl ConsensusRpc for PortalRpc {
         let overlay_command = OverlayCommand::FindContentQuery {
             target: bootstrap_key.clone(),
             callback: tx,
-            is_trace: false,
+            config: Default::default(),
         };
 
         if let Err(err) = self.overlay_tx.send(overlay_command) {
@@ -112,7 +112,7 @@ impl ConsensusRpc for PortalRpc {
         let overlay_command = OverlayCommand::FindContentQuery {
             target: updates_key.clone(),
             callback: tx,
-            is_trace: false,
+            config: Default::default(),
         };
 
         if let Err(err) = self.overlay_tx.send(overlay_command) {
@@ -183,7 +183,7 @@ impl ConsensusRpc for PortalRpc {
         let overlay_command = OverlayCommand::FindContentQuery {
             target: finality_update_key.clone(),
             callback: tx,
-            is_trace: false,
+            config: Default::default(),
         };
 
         if let Err(err) = self.overlay_tx.send(overlay_command) {
@@ -244,7 +244,7 @@ impl ConsensusRpc for PortalRpc {
         let overlay_command = OverlayCommand::FindContentQuery {
             target: optimistic_update_key.clone(),
             callback: tx,
-            is_trace: false,
+            config: Default::default(),
         };
 
         if let Err(err) = self.overlay_tx.send(overlay_command) {

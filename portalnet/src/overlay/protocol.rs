@@ -26,7 +26,7 @@ use crate::{
     gossip::{propagate_gossip_cross_thread, trace_propagate_gossip_cross_thread, GossipResult},
     overlay::{
         command::OverlayCommand,
-        config::OverlayConfig,
+        config::{FindContentConfig, OverlayConfig},
         errors::OverlayRequestError,
         request::{OverlayRequest, RequestDirection},
         service::OverlayService,
@@ -572,7 +572,7 @@ impl<
     pub async fn lookup_content(
         &self,
         target: TContentKey,
-        is_trace: bool,
+        config: FindContentConfig,
     ) -> Result<RecursiveFindContentResult, OverlayRequestError> {
         let (tx, rx) = oneshot::channel();
         let content_id = target.content_id();
@@ -580,7 +580,7 @@ impl<
         if let Err(err) = self.command_tx.send(OverlayCommand::FindContentQuery {
             target,
             callback: tx,
-            is_trace,
+            config,
         }) {
             warn!(
                 protocol = %self.protocol,
