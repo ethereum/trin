@@ -19,7 +19,7 @@ pub struct PortalStorageConfigFactory {
 
 impl PortalStorageConfigFactory {
     const HISTORY_CAPACITY_WEIGHT: u64 = 1;
-    const STATE_CAPACITY_WEIGHT: u64 = 99;
+    const STATE_CAPACITY_WEIGHT: u64 = 1;
     const BEACON_CAPACITY_WEIGHT: u64 = 0; // Beacon doesn't care about given capacity
 
     pub fn new(
