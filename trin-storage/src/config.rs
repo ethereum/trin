@@ -130,11 +130,11 @@ mod tests {
     #[case::history_history(vec![Subnetwork::History], 100, Subnetwork::History, Some(100_000_000))]
     #[case::history_state(vec![Subnetwork::History], 100, Subnetwork::State, None)]
     #[case::historystate_beacon(vec![Subnetwork::History, Subnetwork::State], 100, Subnetwork::Beacon, None)]
-    #[case::historystate_history(vec![Subnetwork::History, Subnetwork::State], 100, Subnetwork::History, Some(1_000_000))]
-    #[case::historystate_state(vec![Subnetwork::History, Subnetwork::State], 100, Subnetwork::State, Some(99_000_000))]
+    #[case::historystate_history(vec![Subnetwork::History, Subnetwork::State], 100, Subnetwork::History, Some(50_000_000))]
+    #[case::historystate_state(vec![Subnetwork::History, Subnetwork::State], 100, Subnetwork::State, Some(50_000_000))]
     #[case::beaconhistorystate_beacon(vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State], 100, Subnetwork::Beacon, Some(0))]
-    #[case::beaconhistorystate_history(vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State], 100, Subnetwork::History, Some(1_000_000))]
-    #[case::beaconhistorystate_state(vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State], 100, Subnetwork::State, Some(99_000_000))]
+    #[case::beaconhistorystate_history(vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State], 100, Subnetwork::History, Some(50_000_000))]
+    #[case::beaconhistorystate_state(vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State], 100, Subnetwork::State, Some(50_000_000))]
     fn combined_capacity_config(
         #[case] subnetworks: Vec<Subnetwork>,
         #[case] total_mb: u32,
