@@ -1,6 +1,5 @@
-use std::sync::Arc;
-
 use parking_lot::RwLock as PLRwLock;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use utp_rs::socket::UtpSocket;
 
@@ -44,6 +43,7 @@ impl HistoryNetwork {
             disable_poke: portal_config.disable_poke,
             gossip_dropped: GOSSIP_DROPPED,
             utp_transfer_limit: portal_config.utp_transfer_limit,
+            query_timeout: portal_config.query_timeout,
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(HistoryStorage::new(storage_config)?));

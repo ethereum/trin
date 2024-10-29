@@ -20,6 +20,7 @@ const DEFAULT_SUBNETWORKS: &str = "history";
 pub const DEFAULT_NETWORK: &str = "mainnet";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
+pub const DEFAULT_QUERY_TIMEOUT: u64 = 60;
 
 use crate::dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
 
@@ -212,6 +213,13 @@ pub struct TrinConfig {
     )]
     pub utp_transfer_limit: usize,
 
+    #[arg(
+        long = "query-timeout",
+        help = "The timeout for a content query in seconds",
+        default_value_t = DEFAULT_QUERY_TIMEOUT,
+    )]
+    pub query_timeout: u64,
+
     #[command(subcommand)]
     pub command: Option<TrinConfigCommands>,
 }
@@ -245,6 +253,7 @@ impl Default for TrinConfig {
             command: None,
             utp_transfer_limit: DEFAULT_UTP_TRANSFER_LIMIT,
             network: MAINNET.clone(),
+            query_timeout: DEFAULT_QUERY_TIMEOUT,
         }
     }
 }

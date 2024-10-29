@@ -5,7 +5,10 @@ use std::time::Duration;
 use discv5::kbucket::{Filter, MAX_NODES_PER_BUCKET};
 
 use crate::types::node::Node;
-use ethportal_api::types::{cli::DEFAULT_UTP_TRANSFER_LIMIT, enr::Enr};
+use ethportal_api::types::{
+    cli::{DEFAULT_QUERY_TIMEOUT, DEFAULT_UTP_TRANSFER_LIMIT},
+    enr::Enr,
+};
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
@@ -37,7 +40,7 @@ impl Default for OverlayConfig {
             ping_queue_interval: None,
             query_parallelism: 3, // (recommended α from kademlia paper)
             query_peer_timeout: Duration::from_secs(2),
-            query_timeout: Duration::from_secs(60),
+            query_timeout: Duration::from_secs(DEFAULT_QUERY_TIMEOUT),
             query_num_results: MAX_NODES_PER_BUCKET,
             findnodes_query_distances_per_peer: 3,
             disable_poke: false,

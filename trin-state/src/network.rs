@@ -49,6 +49,7 @@ impl StateNetwork {
             disable_poke: DISABLE_POKE,
             gossip_dropped: GOSSIP_DROPPED,
             utp_transfer_limit: portal_config.utp_transfer_limit,
+            query_timeout: portal_config.query_timeout,
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(StateStorage::new(storage_config)?));

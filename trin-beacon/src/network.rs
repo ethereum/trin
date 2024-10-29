@@ -43,6 +43,7 @@ impl BeaconNetwork {
             bootnode_enrs: portal_config.bootnodes,
             utp_transfer_limit: portal_config.utp_transfer_limit,
             gossip_dropped: GOSSIP_DROPPED,
+            query_timeout: portal_config.query_timeout,
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(BeaconStorage::new(storage_config)?));

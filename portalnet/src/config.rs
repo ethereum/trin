@@ -1,12 +1,11 @@
-use std::net::SocketAddr;
-
 use alloy::primitives::B256;
 use ethportal_api::types::{
     bootnodes::Bootnodes,
-    cli::{TrinConfig, DEFAULT_UTP_TRANSFER_LIMIT},
+    cli::{TrinConfig, DEFAULT_QUERY_TIMEOUT, DEFAULT_UTP_TRANSFER_LIMIT},
     enr::Enr,
     network::Network,
 };
+use std::{net::SocketAddr, time::Duration};
 
 /// Capacity of the cache for observed `NodeAddress` values.
 /// Provides capacity for 32 full k-buckets. This capacity will be shared among all active portal
@@ -26,6 +25,7 @@ pub struct PortalnetConfig {
     pub trusted_block_root: Option<B256>,
     // the max number of concurrent utp transfers
     pub utp_transfer_limit: usize,
+    pub query_timeout: Duration,
 }
 
 // to be used inside test code only
@@ -42,6 +42,7 @@ impl Default for PortalnetConfig {
             disable_poke: false,
             trusted_block_root: None,
             utp_transfer_limit: DEFAULT_UTP_TRANSFER_LIMIT,
+            query_timeout: Duration::from_secs(DEFAULT_QUERY_TIMEOUT),
         }
     }
 }
@@ -59,6 +60,7 @@ impl PortalnetConfig {
             disable_poke: trin_config.disable_poke,
             trusted_block_root: trin_config.trusted_block_root,
             utp_transfer_limit: trin_config.utp_transfer_limit,
+            query_timeout: Duration::from_secs(trin_config.query_timeout),
         }
     }
 }
