@@ -25,9 +25,9 @@ use trin_execution::{
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
     execution::TrinExecution,
-    trie_walker::TrieWalker,
     types::{block_to_trace::BlockToTrace, trie_proof::TrieProof},
     utils::full_nibble_path_to_address_hash,
+    walkers::{memory_db::ReadOnlyMemoryDB, trie_walker::TrieWalker},
 };
 use trin_metrics::bridge::BridgeMetricsReporter;
 use trin_utils::dir::create_temp_dir;
@@ -159,13 +159,14 @@ impl StateBridge {
             .header
             .hash();
 
-        let walk_diff = TrieWalker::new(root_with_trie_diff.root, root_with_trie_diff.trie_diff);
+        let walk_diff = TrieWalker::new_partial_trie(
+            root_with_trie_diff.root,
+            ReadOnlyMemoryDB::new(root_with_trie_diff.trie_diff),
+        )?;
 
         // gossip block's new state transitions
         let mut content_idx = 0;
-        for node in walk_diff.nodes.keys() {
-            let account_proof = walk_diff.get_proof(*node);
-
+        for account_proof in walk_diff {
             // gossip the account
             self.gossip_account(&account_proof, block_hash, content_idx)
                 .await?;
@@ -213,10 +214,12 @@ impl StateBridge {
             // gossip contract storage
             let storage_changed_nodes = trin_execution.database.get_storage_trie_diff(address_hash);
 
-            let storage_walk_diff = TrieWalker::new(account.storage_root, storage_changed_nodes);
+            let storage_walk_diff = TrieWalker::new_partial_trie(
+                account.storage_root,
+                ReadOnlyMemoryDB::new(storage_changed_nodes),
+            )?;
 
-            for storage_node in storage_walk_diff.nodes.keys() {
-                let storage_proof = storage_walk_diff.get_proof(*storage_node);
+            for storage_proof in storage_walk_diff {
                 self.gossip_storage(
                     &account_proof,
                     &storage_proof,
