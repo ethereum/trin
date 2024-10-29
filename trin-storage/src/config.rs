@@ -123,6 +123,9 @@ mod tests {
     #[case::none_beacon(vec![], 100, Subnetwork::Beacon, None)]
     #[case::none_history(vec![], 100, Subnetwork::History, None)]
     #[case::none_state(vec![], 100, Subnetwork::State, None)]
+    #[case::historystate_zero_capacity_beacon(vec![Subnetwork::History, Subnetwork::State], 0, Subnetwork::Beacon, None)]
+    #[case::historystate_zero_capacity_history(vec![Subnetwork::History, Subnetwork::State], 0, Subnetwork::History, Some(0))]
+    #[case::historystate_zero_capacity_state(vec![Subnetwork::History, Subnetwork::State], 0, Subnetwork::State, Some(0))]
     #[case::history_beacon(vec![Subnetwork::History], 100, Subnetwork::Beacon, None)]
     #[case::history_history(vec![Subnetwork::History], 100, Subnetwork::History, Some(100_000_000))]
     #[case::history_state(vec![Subnetwork::History], 100, Subnetwork::State, None)]
@@ -226,6 +229,37 @@ mod tests {
             factory.create(&Subnetwork::State).is_err(),
             "Creating for State should fail"
         );
+        temp_dir.close().unwrap();
+    }
+
+    #[test]
+    fn specific_capacity_zero() {
+        let temp_dir = TempDir::new().unwrap();
+        let factory = PortalStorageConfigFactory::new(
+            StorageCapacityConfig::Specific {
+                beacon_mb: Some(0),
+                history_mb: Some(100),
+                state_mb: None,
+            },
+            NodeId::random(),
+            temp_dir.path().to_path_buf(),
+        )
+        .unwrap();
+        assert_eq!(
+            factory
+                .create(&Subnetwork::Beacon)
+                .unwrap()
+                .storage_capacity_bytes,
+            0,
+        );
+        assert_eq!(
+            factory
+                .create(&Subnetwork::History)
+                .unwrap()
+                .storage_capacity_bytes,
+            100_000_000,
+        );
+        assert!(factory.create(&Subnetwork::State).is_err());
         temp_dir.close().unwrap();
     }
 }
