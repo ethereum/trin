@@ -21,11 +21,11 @@
 // This basis of this file has been taken from the rust-libp2p codebase:
 // https://github.com/libp2p/rust-libp2p
 
-use super::super::query_pool::QueryState;
-
 use std::time::{Duration, Instant};
 
 use discv5::kbucket::Key;
+
+use crate::{constants::DEFAULT_QUERY_TIMEOUT, find::query_pool::QueryState};
 
 // Configuration for a `Query`.
 #[derive(Debug, Clone)]
@@ -65,7 +65,7 @@ impl Default for QueryConfig {
             parallelism: 3,
             num_results: 20,
             peer_timeout: Duration::from_secs(2),
-            overall_timeout: Duration::from_secs(60),
+            overall_timeout: DEFAULT_QUERY_TIMEOUT,
         }
     }
 }
