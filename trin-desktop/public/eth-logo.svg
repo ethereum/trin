@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 252 440">
+  <!-- Main shapes -->
+  <path d="M126 0L0 210L126 282L126 0Z" fill="black"/>
+  <path d="M126 0L252 210L126 282L126 0Z" fill="black"/>
+  <path d="M126 338L0 261L126 440L126 338Z" fill="black"/>
+  <path d="M126 338L252 261L126 440L126 338Z" fill="black"/>
+  
+  <!-- White dividing lines -->
+  <path d="M126 0L126 282" 
+        stroke="white" 
+        stroke-width="4" 
+        fill="none"/>
+  <path d="M126 338L126 440" 
+        stroke="white" 
+        stroke-width="4" 
+        fill="none"/>
+  <path d="M0 210L126 145" 
+        stroke="white" 
+        stroke-width="4" 
+        fill="none"/>
+  <path d="M126 145L252 210" 
+        stroke="white" 
+        stroke-width="4" 
+        fill="none"/>
+        
+  <!-- Angled vertical black lines in gap, exactly 41.5px apart -->
+  <line x1="3" y1="210" x2="3" y2="263" stroke="black" stroke-width="4"/>
+  <line x1="44.5" y1="225" x2="44.5" y2="295" stroke="black" stroke-width="4"/>
+  <line x1="86" y1="245" x2="86" y2="338" stroke="black" stroke-width="4"/>
+  <line x1="126" y1="282" x2="126" y2="338" stroke="black" stroke-width="4"/>
+  <line x1="166" y1="245" x2="166" y2="338" stroke="black" stroke-width="4"/>
+  <line x1="207.5" y1="225" x2="207.5" y2="295" stroke="black" stroke-width="4"/>
+  <line x1="249" y1="210" x2="249" y2="263" stroke="black" stroke-width="4"/>
+</svg>

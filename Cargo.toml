@@ -67,6 +67,7 @@ members = [
     "trin-beacon",
     "trin-evm",
     "trin-execution",
+	"trin-desktop/src-tauri",
     "trin-history",
     "trin-state",
     "trin-storage",
