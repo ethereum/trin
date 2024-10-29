@@ -88,7 +88,7 @@ pub mod test {
 
     use super::*;
 
-    const CAPACITY_MB: u64 = 2;
+    const CAPACITY_MB: u32 = 2;
 
     #[test_log::test(tokio::test)]
     #[serial]

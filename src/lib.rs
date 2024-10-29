@@ -91,8 +91,7 @@ pub async fn run_trin(
     let utp_socket = Arc::new(utp_socket);
 
     let storage_config_factory = PortalStorageConfigFactory::new(
-        trin_config.mb as u64,
-        &trin_config.portal_subnetworks,
+        trin_config.storage_capacity_config(),
         discovery.local_enr().node_id(),
         node_data_dir,
     )?;
@@ -104,7 +103,7 @@ pub async fn run_trin(
                 &discovery,
                 utp_socket.clone(),
                 portalnet_config.clone(),
-                storage_config_factory.create(&Subnetwork::State),
+                storage_config_factory.create(&Subnetwork::State)?,
                 header_oracle.clone(),
             )
             .await?
@@ -124,7 +123,7 @@ pub async fn run_trin(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config_factory.create(&Subnetwork::Beacon),
+            storage_config_factory.create(&Subnetwork::Beacon)?,
             header_oracle.clone(),
         )
         .await?
@@ -147,7 +146,7 @@ pub async fn run_trin(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config_factory.create(&Subnetwork::History),
+            storage_config_factory.create(&Subnetwork::History)?,
             header_oracle.clone(),
         )
         .await?

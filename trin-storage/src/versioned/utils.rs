@@ -91,7 +91,7 @@ pub mod test {
 
     use super::*;
 
-    const STORAGE_CAPACITY_MB: u64 = 10;
+    const STORAGE_CAPACITY_MB: u32 = 10;
 
     #[test]
     fn get_store_version_missing() -> Result<()> {
