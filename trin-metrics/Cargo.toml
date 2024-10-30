@@ -1,13 +1,15 @@
 [package]
 name = "trin-metrics"
-version = "0.1.0"
-edition = "2021"
-repository = "https://github.com/ethereum/trin"
-license = "GPL-3.0"
-readme = "README.md"
-keywords = ["ethereum", "portal-network"]
-categories = ["cryptography::cryptocurrencies"]
 description = "Trin metrics"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
 anyhow.workspace = true

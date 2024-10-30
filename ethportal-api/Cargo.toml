@@ -1,14 +1,15 @@
 [package]
 name = "ethportal-api"
 version = "0.2.2"
-edition = "2021"
 description = "Definitions for various Ethereum Portal Network JSONRPC APIs"
-license = "GPL-3.0"
-repository = "https://github.com/ethereum/trin/tree/master/ethportal-api"
-readme = "README.md"
-keywords = ["ethereum", "portal-network"]
-categories = ["cryptography::cryptocurrencies"]
-authors = ["https://github.com/ethereum/trin/graphs/contributors"]
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 alloy = { workspace = true, features = ["consensus", "rlp", "rpc-types-eth", "serde"] }

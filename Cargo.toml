@@ -1,16 +1,16 @@
 [package]
 name = "trin"
-version = "0.1.0"
-authors = ["https://github.com/ethereum/trin/graphs/contributors"]
-edition = "2021"
-rust-version = "1.81.0"
 default-run = "trin"
-repository = "https://github.com/ethereum/trin"
-license = "GPL-3.0"
-readme = "README.md"
-keywords = ["ethereum", "portal-network"]
-categories = ["cryptography::cryptocurrencies"]
 description = "A Rust implementation of the Ethereum Portal Network"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
 alloy = { workspace = true, features = ["eips", "provider-ipc", "provider-ws", "pubsub", "reqwest", "rpc-types"] }
@@ -74,6 +74,17 @@ members = [
     "trin-validation",
     "utp-testing",
 ]
+
+[workspace.package]
+authors = ["https://github.com/ethereum/trin/graphs/contributors"]
+categories = ["cryptography::cryptocurrencies"]
+edition = "2021"
+keywords = ["ethereum", "portal-network"]
+license = "GPL-3.0"
+readme = "README.md"
+repository = "https://github.com/ethereum/trin"
+rust-version = "1.81.0"
+version = "0.1.0"
 
 [workspace.dependencies]
 alloy = { version = "0.4.2", default-features = false, features = ["std"] }
