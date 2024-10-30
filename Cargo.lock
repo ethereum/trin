@@ -2114,8 +2114,9 @@ dependencies = [
 
 [[package]]
 name = "eth_trie"
-version = "0.4.0"
-source = "git+https://github.com/ethereum/eth-trie.rs?tag=v0.1.0-alpha.2#46da867d8a7eace0a9e912271b236b2007e4cd41"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7ffb0d2fa42ad87f02c0683c04b31cb41bf3853f2327d037738345bc5b56671"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
