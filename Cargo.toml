@@ -99,7 +99,7 @@ directories = "3.0"
 discv5 = { version = "0.4.1", features = ["serde"] }
 e2store = { path = "e2store" }
 env_logger = "0.9.0"
-eth_trie = { tag = "v0.1.0-alpha.2", git = "https://github.com/ethereum/eth-trie.rs" }
+eth_trie = "0.5.0"
 ethereum_ssz = "0.7.1"
 ethereum_ssz_derive = "0.7.1"
 ethportal-api = { path = "ethportal-api" }
