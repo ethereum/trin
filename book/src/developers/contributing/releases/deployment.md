@@ -26,6 +26,11 @@
 - Log in to Docker with: `docker login`
 - Ask Nick to be added as collaborator on Docker repo
 
+- Needed for [rebooting nodes](#what-do-i-do-if-ansible-says-a-node-is-unreachable)
+    - [Install doctl](https://docs.digitalocean.com/reference/doctl/how-to/install/)
+    - Contact `@paulj` to get `doctl` API key
+    - Make sure API key works by running: `doctl auth init`
+
 ## Each Deployment
 
 ### Prepare
@@ -135,10 +140,16 @@ It means your key isn't working. Check with `@paulj`.
 If using `gpg` and decryption problems persist, see [this potential fix](https://github.com/getsops/sops/issues/304#issuecomment-377195341).
 
 ### What do I do if Ansible says a node is unreachable?
-You might see this during a deployment:
-> fatal: [trin-ams3-18]: UNREACHABLE! => {"changed": false, "msg": "Failed to connect to the host via ssh: ssh: connect to host 178.128.253.26 port 22: Connection timed out", "unreachable": true}
 
-Retry once more. If it times out again, ask `@paulj` to reboot the machine.
+You might see this during a deployment:
+
+> fatal: [trin-ams3-1]: UNREACHABLE! => {"changed": false, "msg": "Failed to connect to the host via ssh: ssh: connect to host XXX.XXX.XXX.XXX port XX: Connection timed out", "unreachable": true}
+
+Retry once more. If it times out again, run [reboot script](https://github.com/ethereum/cluster/blob/master/portal-network/trin/ansible/reboot_node.sh) (check [First time Setup](#first-time-setup) chapter for setup):
+
+```shell
+./reboot_node.sh <host name1>,<host name2>,...,<host nameN>
+```
 
 ### What if everything breaks and I need to rollback the deployment?
 If you observe things breaking or (significantly) degraded network performance after a deployment, you might want to rollback the changes to a previously working version until the breaking change can be identified and fixed. Keep in mind that you might want to rollback just the bridge nodes, or the backfill nodes, as opposed to every node on the network.
