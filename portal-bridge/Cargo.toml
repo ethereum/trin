@@ -1,15 +1,15 @@
 [package]
 name = "portal-bridge"
-version = "0.1.0"
-edition = "2021"
-repository = "https://github.com/ethereum/trin/tree/master/portal-bridge"
-license = "GPL-3.0"
-readme = "README.md"
-keywords = ["ethereum", "portal-network"]
-categories = ["cryptography::cryptocurrencies"]
 description = "Bridge node for the Portal Network"
-authors = ["https://github.com/ethereum/trin/graphs/contributors"]
-
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
 alloy.workspace = true

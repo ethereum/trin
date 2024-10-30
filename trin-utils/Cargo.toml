@@ -1,15 +1,16 @@
 [package]
 name = "trin-utils"
-version = "0.1.1-alpha.1"
-edition = "2021"
-repository = "https://github.com/ethereum/trin/tree/main/trin-utils"
-license = "GPL-3.0"
-readme = "README.md"
-keywords = ["ethereum", "portal-network"]
-categories = ["cryptography::cryptocurrencies"]
 description = "Utils library for Trin."
-authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 build = "build.rs"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
 directories.workspace = true

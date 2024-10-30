@@ -6800,7 +6800,7 @@ dependencies = [
 
 [[package]]
 name = "trin-utils"
-version = "0.1.1-alpha.1"
+version = "0.1.0"
 dependencies = [
  "ansi_term",
  "atty",
