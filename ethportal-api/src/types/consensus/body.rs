@@ -171,6 +171,7 @@ pub struct Deposit {
 pub struct DepositData {
     pub pubkey: PubKey,
     pub withdrawal_credentials: B256,
+    #[serde(deserialize_with = "as_u64")]
     pub amount: u64,
     pub signature: BlsSignature,
 }
@@ -184,7 +185,9 @@ pub struct IndexedAttestation {
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Decode, Encode, TreeHash)]
 pub struct AttestationData {
+    #[serde(deserialize_with = "as_u64")]
     pub slot: u64,
+    #[serde(deserialize_with = "as_u64")]
     pub index: u64,
     pub beacon_block_root: B256,
     pub source: Checkpoint,
