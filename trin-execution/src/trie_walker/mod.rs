@@ -41,7 +41,7 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
 
     pub fn new_partial_trie(root_hash: B256, trie: DB) -> anyhow::Result<Self> {
         let root_value = match trie.get(root_hash.as_slice())? {
-            Some(root_value) => root_value.into(),
+            Some(root_value) => root_value,
             None => {
                 // We are handling 2 potential cases here
                 // - If the storage root is empty then there is no storage to gossip
@@ -72,7 +72,8 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
         partial_proof: Vec<Bytes>,
         path: Vec<u8>,
     ) -> anyhow::Result<()> {
-        // We only need to process hash nodes, because if the node isn't a hash node then none of its children is
+        // We only need to process hash nodes, because if the node isn't a hash node then none of
+        // its children is
         if let Node::Hash(hash) = node {
             let value_result = self.trie.get(hash.hash.as_slice())?;
 
@@ -98,7 +99,7 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
 
             self.stack.push(TrieProof {
                 path,
-                proof: [partial_proof, vec![value.into()]].concat(),
+                proof: [partial_proof, vec![value]].concat(),
             });
         }
         Ok(())
