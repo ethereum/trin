@@ -12,10 +12,10 @@ Extract the compressed file to get the `trin` executable.
 
 The binary is compressed in a tarball, so first we need to extract it.
 
-For example, to extract version 0.1.0-alpha.51:
+For example, to extract version 0.1.0:
 
 ```sh
-tar -xzvf trin-v0.1.0-alpha.51-x86_64-unknown-linux-gnu.tar.gz
+tar -xzvf trin-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
 ```
 
 You now have a `trin` executable in the current directory.
