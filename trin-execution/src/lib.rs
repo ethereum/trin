@@ -10,4 +10,4 @@ pub mod storage;
 pub mod subcommands;
 pub mod types;
 pub mod utils;
-pub mod walkers;
+pub mod trie_walker;

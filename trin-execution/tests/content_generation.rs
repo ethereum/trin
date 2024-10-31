@@ -18,9 +18,9 @@ use trin_execution::{
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
     execution::TrinExecution,
+    trie_walker::TrieWalker,
     types::block_to_trace::BlockToTrace,
     utils::full_nibble_path_to_address_hash,
-    walkers::{memory_db::ReadOnlyMemoryDB, trie_walker::TrieWalker},
 };
 use trin_utils::dir::create_temp_test_dir;
 
@@ -126,8 +126,7 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
             "State root doesn't match"
         );
 
-        let walk_diff =
-            TrieWalker::new_partial_trie(root_hash, ReadOnlyMemoryDB::new(changed_nodes))?;
+        let walk_diff = TrieWalker::new_partial_trie(root_hash, changed_nodes)?;
         for account_proof in walk_diff {
             let block_hash = block.header.hash();
 
@@ -173,10 +172,8 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
             // check contract storage content key/value
             let storage_changed_nodes = trin_execution.database.get_storage_trie_diff(address_hash);
-            let storage_walk_diff = TrieWalker::new_partial_trie(
-                account.storage_root,
-                ReadOnlyMemoryDB::new(storage_changed_nodes),
-            )?;
+            let storage_walk_diff =
+                TrieWalker::new_partial_trie(account.storage_root, storage_changed_nodes)?;
             for storage_proof in storage_walk_diff {
                 let content_key = create_storage_content_key(&storage_proof, address_hash)
                     .expect("Content key should be present");
