@@ -32,17 +32,24 @@ pub struct Peer {
     ///
     /// Contains at most [Self::MAX_LIVENESS_CHECKS] entries.
     liveness_checks: VecDeque<LivenessCheck>,
+    /// Offer events, ordered from most recent (index `0`), to the earliest.
+    ///
+    /// Contains at most [Self::MAX_OFFER_EVENTS] entries.
+    offer_events: VecDeque<OfferEvent>,
 }
 
 impl Peer {
     /// The maximum number of liveness checks that we store. Value chosen arbitrarily.
     const MAX_LIVENESS_CHECKS: usize = 10;
+    /// The maximum number of events that we store. Value chosen arbitrarily.
+    const MAX_OFFER_EVENTS: usize = 255;
 
     pub fn new(enr: Enr) -> Self {
         Self {
             enr,
             radius: Distance::ZERO,
             liveness_checks: VecDeque::with_capacity(Self::MAX_LIVENESS_CHECKS + 1),
+            offer_events: VecDeque::with_capacity(Self::MAX_OFFER_EVENTS + 1),
         }
     }
 
@@ -107,10 +114,28 @@ impl Peer {
         self.purge();
     }
 
+    pub fn record_offer_result(
+        &mut self,
+        success: bool,
+        content_value_size: usize,
+        duration: Duration,
+    ) {
+        self.offer_events.push_front(OfferEvent {
+            success,
+            timestamp: Instant::now(),
+            content_value_size,
+            duration,
+        });
+        self.purge();
+    }
+
     /// Removes oldest liveness checks and offer events, if we exceeded capacity.
     fn purge(&mut self) {
         if self.liveness_checks.len() > Self::MAX_LIVENESS_CHECKS {
             self.liveness_checks.drain(Self::MAX_LIVENESS_CHECKS..);
+        }
+        if self.offer_events.len() > Self::MAX_OFFER_EVENTS {
+            self.offer_events.drain(Self::MAX_OFFER_EVENTS..);
         }
     }
 }

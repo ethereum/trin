@@ -8,7 +8,10 @@ use std::{
 
 use delay_map::HashSetDelay;
 use discv5::enr::NodeId;
-use ethportal_api::{types::distance::Distance, Enr};
+use ethportal_api::{
+    types::{distance::Distance, portal_wire::OfferTrace},
+    Enr,
+};
 use futures::Stream;
 use rand::seq::IteratorRandom;
 use tokio::time::Instant;
@@ -98,6 +101,23 @@ impl Peers {
             guard.liveness_checks.remove(&node_id);
         } else {
             guard.liveness_checks.insert(node_id);
+        }
+    }
+
+    pub fn record_offer_result(
+        &self,
+        node_id: NodeId,
+        content_value_size: usize,
+        duration: Duration,
+        offer_trace: &OfferTrace,
+    ) {
+        let success = match offer_trace {
+            OfferTrace::Success(_) | OfferTrace::Declined => true,
+            OfferTrace::Failed => false,
+        };
+        match self.write().peers.get_mut(&node_id) {
+            Some(peer) => peer.record_offer_result(success, content_value_size, duration),
+            None => error!("record_offer_result: unknown peer: {node_id}"),
         }
     }
 

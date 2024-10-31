@@ -5,7 +5,7 @@ use discv5::enr::NodeId;
 use ethportal_api::{
     generate_random_node_ids,
     jsonrpsee::http_client::HttpClient,
-    types::{distance::Distance, network::Subnetwork, portal::PongInfo},
+    types::{distance::Distance, network::Subnetwork, portal::PongInfo, portal_wire::OfferTrace},
     BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, StateNetworkApiClient,
 };
 use futures::{future::JoinAll, StreamExt};
@@ -110,6 +110,18 @@ impl Network {
         Ok(self
             .peers
             .get_interested_enrs(content_id, self.enr_offer_limit))
+    }
+
+    /// Records the status of the most recent `Offer` request to one of the peers.
+    pub fn record_offer_result(
+        &self,
+        node_id: NodeId,
+        content_value_size: usize,
+        duration: Duration,
+        offer_trace: &OfferTrace,
+    ) {
+        self.peers
+            .record_offer_result(node_id, content_value_size, duration, offer_trace);
     }
 
     /// Returns whether `enr` represents eligible peer.

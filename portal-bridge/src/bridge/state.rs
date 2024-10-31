@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 use alloy::rlp::Decodable;
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
@@ -309,16 +312,21 @@ impl StateBridge {
             content_key.clone(),
             enrs.len(),
         )));
+        let encoded_content_value = content_value.encode();
         for enr in enrs.clone() {
             let permit = self.acquire_offer_permit().await;
+            let census = self.census.clone();
             let portal_client = self.portal_client.clone();
             let content_key = content_key.clone();
-            let content_value = content_value.clone();
+            let encoded_content_value = encoded_content_value.clone();
             let offer_report = offer_report.clone();
             let metrics = self.metrics.clone();
             let global_offer_report = self.global_offer_report.clone();
             tokio::spawn(async move {
                 let timer = metrics.start_process_timer("spawn_offer_state_proof");
+
+                let start_time = Instant::now();
+                let content_value_size = encoded_content_value.len();
 
                 let result = timeout(
                     SERVE_BLOCK_TIMEOUT,
@@ -326,7 +334,7 @@ impl StateBridge {
                         &portal_client,
                         enr.clone(),
                         content_key.clone(),
-                        content_value.encode(),
+                        encoded_content_value,
                     ),
                 )
                 .await;
@@ -347,6 +355,14 @@ impl StateBridge {
                         &OfferTrace::Failed
                     }
                 };
+
+                census.record_offer_result(
+                    Subnetwork::State,
+                    enr.node_id(),
+                    content_value_size,
+                    start_time.elapsed(),
+                    offer_trace,
+                );
 
                 // Update report and metrics
                 global_offer_report
