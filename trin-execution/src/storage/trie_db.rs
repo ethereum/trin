@@ -7,7 +7,7 @@ use rocksdb::DB as RocksDB;
 pub struct TrieRocksDB {
     // If "light" is true, the data is deleted from the database at the time of submission.
     light: bool,
-    pub storage: Arc<RocksDB>,
+    storage: Arc<RocksDB>,
 }
 
 impl TrieRocksDB {

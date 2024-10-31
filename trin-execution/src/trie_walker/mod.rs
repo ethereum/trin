@@ -9,12 +9,14 @@ use eth_trie::{decode_node, node::Node};
 
 use crate::types::trie_proof::TrieProof;
 
-/// This is used for walking the whole state trie and partial tries (forward state diffs)
-/// use cases are
+/// Iterates over trie nodes from the whole or partial state trie
 ///
+/// Use cases are:
 /// 1. Gossiping the whole state trie
-/// 2. Gossiping the forward state diffs
+/// 2. Gossiping the forward state diffs (partial state trie)
 /// 3. Getting stats about the state trie
+///
+/// Panics if the trie is corrupted
 pub struct TrieWalker<DB: TrieWalkerDb> {
     is_partial_trie: bool,
     trie: Arc<DB>,
@@ -23,13 +25,13 @@ pub struct TrieWalker<DB: TrieWalkerDb> {
 
 impl<DB: TrieWalkerDb> TrieWalker<DB> {
     pub fn new(root_hash: B256, trie: Arc<DB>) -> anyhow::Result<Self> {
-        let root_value = match trie.get(root_hash.as_slice())? {
-            Some(root_value) => root_value,
+        let root_node_trie = match trie.get(root_hash.as_slice())? {
+            Some(root_node_trie) => root_node_trie,
             None => return Err(anyhow!("Root node not found in the database")),
         };
         let root_proof = TrieProof {
             path: vec![],
-            proof: vec![root_value],
+            proof: vec![root_node_trie],
         };
 
         Ok(Self {
@@ -40,8 +42,8 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
     }
 
     pub fn new_partial_trie(root_hash: B256, trie: DB) -> anyhow::Result<Self> {
-        let root_value = match trie.get(root_hash.as_slice())? {
-            Some(root_value) => root_value,
+        let root_node_trie = match trie.get(root_hash.as_slice())? {
+            Some(root_node_trie) => root_node_trie,
             None => {
                 // We are handling 2 potential cases here
                 // - If the storage root is empty then there is no storage to gossip
@@ -56,7 +58,7 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
 
         let root_proof = TrieProof {
             path: vec![],
-            proof: vec![root_value],
+            proof: vec![root_node_trie],
         };
 
         Ok(Self {
@@ -75,10 +77,8 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
         // We only need to process hash nodes, because if the node isn't a hash node then none of
         // its children is
         if let Node::Hash(hash) = node {
-            let value_result = self.trie.get(hash.hash.as_slice())?;
-
-            let value = match value_result {
-                Some(value) => value,
+            let encoded_trie_node = match self.trie.get(hash.hash.as_slice())? {
+                Some(encoded_trie_node) => encoded_trie_node,
                 None => {
                     // If we are walking a partial trie, some nodes won't be available in the
                     // database
@@ -91,22 +91,22 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
 
             // check that node decodes correctly and to correct variant
             if matches!(
-                decode_node(&mut value.as_ref())?,
+                decode_node(&mut encoded_trie_node.as_ref())?,
                 Node::Empty | Node::Hash(_)
             ) {
-                return Ok(());
+                return Err(anyhow::anyhow!(
+                    "A node hash should never lead to an empty node or a hash node"
+                ));
             }
 
-            self.stack.push(TrieProof {
-                path,
-                proof: [partial_proof, vec![value]].concat(),
-            });
+            let mut proof = partial_proof;
+            proof.push(encoded_trie_node);
+            self.stack.push(TrieProof { path, proof });
         }
         Ok(())
     }
 }
 
-/// Panics if the trie is corrupted
 impl<DB: TrieWalkerDb> Iterator for TrieWalker<DB> {
     type Item = TrieProof;
 
@@ -162,8 +162,8 @@ impl<DB: TrieWalkerDb> Iterator for TrieWalker<DB> {
 mod tests {
     use super::*;
 
+    use alloy::primitives::{keccak256, Address, B256, U256};
     use eth_trie::{EthTrie, RootWithTrieDiff, Trie};
-    use revm_primitives::{keccak256, Address, B256, U256};
     use std::{str::FromStr, sync::Arc};
     use tracing_test::traced_test;
     use trin_utils::dir::create_temp_test_dir;
@@ -208,8 +208,7 @@ mod tests {
             };
             leaf_count += 1;
 
-            // reconstruct the address hash from the path so that we can fetch the
-            // address from the database
+            // reconstruct the address hash from the path so we can call `get_proof` on the trie
             let mut partial_key_path = leaf.key.get_data().to_vec();
             partial_key_path.pop();
             let full_key_path = [&proof.path.clone(), partial_key_path.as_slice()].concat();
@@ -257,8 +256,7 @@ mod tests {
                 continue;
             };
 
-            // reconstruct the address hash from the path so that we can fetch the
-            // address from the database
+            // reconstruct the address hash from the path so we can call `get_proof` on the trie
             let mut partial_key_path = leaf.key.get_data().to_vec();
             partial_key_path.pop();
             let full_key_path = [&proof.path.clone(), partial_key_path.as_slice()].concat();
