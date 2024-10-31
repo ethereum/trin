@@ -83,7 +83,7 @@ impl Stats {
 /// Following command should be used for running:
 ///
 /// ```
-/// BLOCKS=1000000 cargo test -p trin-execution --test content_generation -- --include-ignored --nocapture
+/// BLOCKS=1000000 cargo test --release -p trin-execution --test content_generation -- --include-ignored --nocapture
 /// ```
 #[tokio::test]
 #[traced_test]
@@ -126,10 +126,9 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
             "State root doesn't match"
         );
 
-        let walk_diff = TrieWalker::new(root_hash, changed_nodes);
-        for node in walk_diff.nodes.keys() {
+        let walk_diff = TrieWalker::new_partial_trie(root_hash, changed_nodes)?;
+        for account_proof in walk_diff {
             let block_hash = block.header.hash();
-            let account_proof = walk_diff.get_proof(*node);
 
             // check account content key/value
             let content_key =
@@ -173,10 +172,9 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
             // check contract storage content key/value
             let storage_changed_nodes = trin_execution.database.get_storage_trie_diff(address_hash);
-            let storage_walk_diff = TrieWalker::new(account.storage_root, storage_changed_nodes);
-            for storage_node in storage_walk_diff.nodes.keys() {
-                let storage_proof = storage_walk_diff.get_proof(*storage_node);
-
+            let storage_walk_diff =
+                TrieWalker::new_partial_trie(account.storage_root, storage_changed_nodes)?;
+            for storage_proof in storage_walk_diff {
                 let content_key = create_storage_content_key(&storage_proof, address_hash)
                     .expect("Content key should be present");
                 let content_value =
