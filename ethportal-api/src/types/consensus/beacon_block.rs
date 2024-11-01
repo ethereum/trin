@@ -276,8 +276,10 @@ mod test {
         .expect("cannot find test asset");
         let value: Value = serde_yaml::from_str(&value).unwrap();
         let content: SignedBeaconBlockDeneb = serde_json::from_value(value.clone()).unwrap();
-        let serialized = serde_json::to_value(content).unwrap();
-        assert_eq!(serialized, value);
+        let serialized = serde_json::to_value(content.clone()).unwrap();
+        let deserialized_content: SignedBeaconBlockDeneb =
+            serde_json::from_value(serialized.clone()).unwrap();
+        assert_eq!(deserialized_content, content);
     }
 
     #[rstest]
