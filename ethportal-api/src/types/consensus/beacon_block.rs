@@ -275,7 +275,9 @@ mod test {
         ))
         .expect("cannot find test asset");
         let value: Value = serde_yaml::from_str(&value).unwrap();
-        let _: SignedBeaconBlockDeneb = serde_json::from_value(value.clone()).unwrap();
+        let content: SignedBeaconBlockDeneb = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(content).unwrap();
+        assert_eq!(serialized, value);
     }
 
     #[rstest]
@@ -297,6 +299,17 @@ mod test {
         let expected = decoder.decompress_vec(&compressed).unwrap();
         SignedBeaconBlock::from_ssz_bytes(&expected, ForkName::Deneb).unwrap();
         assert_eq!(content.as_ssz_bytes(), expected);
+    }
+
+    #[rstest]
+    #[case("10232841")]
+    fn json_signed_beacon_block_deneb(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/deneb/SignedBeaconBlock/json/{case}.json"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_json::from_str(&value).unwrap();
+        let _: SignedBeaconBlockDeneb = serde_json::from_value(value["data"].clone()).unwrap();
     }
 
     #[test]
