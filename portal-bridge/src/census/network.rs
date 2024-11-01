@@ -23,15 +23,15 @@ use crate::{
 
 use super::peers::Peers;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// The result of the liveness check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LivenessResult {
     /// We pinged the peer successfully
     Pass,
     /// We failed to ping peer
     Fail,
-    /// Peer is already registered and not expired (we didn't try to ping the peer)
-    AlreadyRegistered,
+    /// Peer is already known and doesn't need liveness check
+    Fresh,
 }
 
 #[derive(Debug, Clone)]
@@ -98,7 +98,7 @@ impl Network {
         NetworkManager::new(self.clone())
     }
 
-    // Look up all known interested enrs for a given content id
+    /// Look up interested enrs for a given content id
     pub fn get_interested_enrs(&self, content_id: &[u8; 32]) -> Result<Vec<Enr>, CensusError> {
         if self.peers.is_empty() {
             error!(
@@ -174,8 +174,8 @@ impl Network {
                 .collect_vec();
 
             // Concurrent execution of liveness check
-            let new_peers = enrs
-                .iter()
+            let starting_peers = self.peers.len() as f64;
+            enrs.iter()
                 .map(|enr| async {
                     if let Ok(_permit) = semaphore.acquire().await {
                         self.liveness_check(enr.clone()).await
@@ -188,20 +188,17 @@ impl Network {
                     }
                 })
                 .collect::<JoinAll<_>>()
-                .await
-                .into_iter()
-                .filter(|liveness_result| liveness_result == &LivenessResult::Pass)
-                .count();
-
-            let total_peers = self.peers.len();
+                .await;
+            let ending_peers = self.peers.len() as f64;
+            let new_peers = ending_peers - starting_peers;
 
             debug!(
                 subnetwork = %self.subnetwork,
-                "init: added {new_peers} / {total_peers} peers",
+                "init: added {new_peers} / {ending_peers} peers",
             );
 
             // Stop if number of new peers is less than a threshold fraction of all peers
-            if (new_peers as f64) < (total_peers as f64) * config.stop_fraction_threshold {
+            if new_peers < ending_peers * config.stop_fraction_threshold {
                 break;
             }
         }
@@ -225,17 +222,19 @@ impl Network {
     /// Performs liveness check.
     ///
     /// Liveness check will pass if peer respond to a Ping request. It returns
-    /// `LivenessResult::AlreadyRegistered` if peer is already registered and not expired.
+    /// `LivenessResult::Fresh` if peer is already known and doesn't need liveness check.
     async fn liveness_check(&self, enr: Enr) -> LivenessResult {
-        // if enr is already registered, check if delay map deadline has expired
-        if let Some(deadline) = self.peers.deadline(&enr) {
-            if Instant::now() < deadline {
-                return LivenessResult::AlreadyRegistered;
-            }
+        // check if peer needs liveness check
+        if self
+            .peers
+            .next_liveness_check(&enr.node_id())
+            .is_some_and(|next_liveness_check| Instant::now() < next_liveness_check)
+        {
+            return LivenessResult::Fresh;
         }
 
         let Ok(pong_info) = self.ping(&enr).await else {
-            self.peers.record_failed_liveness_check(&enr);
+            self.peers.record_failed_liveness_check(enr);
             return LivenessResult::Fail;
         };
 
@@ -244,7 +243,7 @@ impl Network {
         // If ENR seq is not the latest one, fetch fresh ENR
         let enr = if enr.seq() < pong_info.enr_seq {
             let Ok(enr) = self.fetch_enr(&enr).await else {
-                self.peers.record_failed_liveness_check(&enr);
+                self.peers.record_failed_liveness_check(enr);
                 return LivenessResult::Fail;
             };
             enr
@@ -367,29 +366,21 @@ impl NetworkManager {
 
     /// Returns next action that should be executed.
     pub async fn next_action(&mut self) -> NetworkAction {
-        loop {
-            tokio::select! {
-                _ = self.peer_discovery_interval.tick() => {
-                    return NetworkAction::PeerDiscovery;
-                }
-                peer = self.network.peers.next() => {
-                    match peer {
-                        Some(Ok(enr)) => {
-                            return NetworkAction::LivenessCheck(enr);
-                        }
-                        Some(Err(err)) => {
-                            error!(
-                                subnetwork = %self.network.subnetwork,
-                                "next-action: error getting peer - err: {err}",
-                            );
-                        }
-                        None => {
-                            warn!(
-                                subnetwork = %self.network.subnetwork,
-                                "next-action: no pending peers - re-initializing",
-                            );
-                            return NetworkAction::ReInitialization;
-                        }
+        tokio::select! {
+            _ = self.peer_discovery_interval.tick() => {
+                NetworkAction::PeerDiscovery
+            }
+            peer = self.network.peers.next() => {
+                match peer {
+                    Some(enr) => {
+                        NetworkAction::LivenessCheck(enr)
+                    }
+                    None => {
+                        warn!(
+                            subnetwork = %self.network.subnetwork,
+                            "next-action: no pending peers - re-initializing",
+                        );
+                        NetworkAction::ReInitialization
                     }
                 }
             }
@@ -415,7 +406,7 @@ impl NetworkManager {
             }
             NetworkAction::PeerDiscovery => self.peer_discovery().await,
             NetworkAction::LivenessCheck(enr) => {
-                if self.network.liveness_check(enr).await == LivenessResult::AlreadyRegistered {
+                if self.network.liveness_check(enr).await == LivenessResult::Fresh {
                     warn!(
                         subnetwork = %self.network.subnetwork,
                         "execute-action: liveness check on already registered peer",
@@ -438,17 +429,14 @@ impl NetworkManager {
             }
         };
 
-        let mut new_peers = 0;
+        let starting_peers = self.network.peers.len();
         for enr in enrs {
-            if self.network.liveness_check(enr).await == LivenessResult::Pass {
-                new_peers += 1;
-            }
+            self.network.liveness_check(enr).await;
         }
-
-        let total_peers = self.network.peers.len();
+        let ending_peers = self.network.peers.len();
         info!(
             subnetwork = %self.network.subnetwork,
-            "peer-discovery: finished - discovered {new_peers} / {total_peers} peers",
+            "peer-discovery: finished - peers: {starting_peers} -> {ending_peers}",
         );
     }
 }
