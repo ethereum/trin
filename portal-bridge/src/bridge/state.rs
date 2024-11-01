@@ -291,20 +291,16 @@ impl StateBridge {
         Ok(())
     }
 
-    // request enrs interested in the content key from Census
-    fn request_enrs(&self, content_key: &StateContentKey) -> anyhow::Result<Vec<Enr>> {
-        Ok(self
-            .census
-            .get_interested_enrs(Subnetwork::State, &content_key.content_id())?)
-    }
-
     // spawn individual offer tasks of the content key for each interested enr found in Census
     async fn spawn_offer_tasks(
         &self,
         content_key: StateContentKey,
         content_value: StateContentValue,
     ) {
-        let Ok(enrs) = self.request_enrs(&content_key) else {
+        let Ok(enrs) = self
+            .census
+            .select_peers(Subnetwork::State, &content_key.content_id())
+        else {
             error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
             return;
         };

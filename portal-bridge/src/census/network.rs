@@ -21,7 +21,10 @@ use crate::{
     cli::{BridgeConfig, ClientType},
 };
 
-use super::peers::Peers;
+use super::{
+    peers::Peers,
+    scoring::{AdditiveWeight, PeerSelector},
+};
 
 /// The result of the liveness check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,11 +72,10 @@ impl Default for NetworkInitializationConfig {
 /// should be used in a background task to keep it up-to-date.
 #[derive(Clone)]
 pub(super) struct Network {
-    peers: Peers,
+    peers: Peers<AdditiveWeight>,
     client: HttpClient,
     subnetwork: Subnetwork,
     filter_clients: Vec<ClientType>,
-    enr_offer_limit: usize,
 }
 
 impl Network {
@@ -86,11 +88,13 @@ impl Network {
         }
 
         Self {
-            peers: Peers::new(),
+            peers: Peers::new(PeerSelector::new(
+                AdditiveWeight::default(),
+                bridge_config.enr_offer_limit,
+            )),
             client,
             subnetwork,
             filter_clients: bridge_config.filter_clients.to_vec(),
-            enr_offer_limit: bridge_config.enr_offer_limit,
         }
     }
 
@@ -98,8 +102,8 @@ impl Network {
         NetworkManager::new(self.clone())
     }
 
-    /// Look up interested enrs for a given content id
-    pub fn get_interested_enrs(&self, content_id: &[u8; 32]) -> Result<Vec<Enr>, CensusError> {
+    /// Selects peers to receive content.
+    pub fn select_peers(&self, content_id: &[u8; 32]) -> Result<Vec<Enr>, CensusError> {
         if self.peers.is_empty() {
             error!(
                 subnetwork = %self.subnetwork,
@@ -107,9 +111,7 @@ impl Network {
             );
             return Err(CensusError::NoPeers);
         }
-        Ok(self
-            .peers
-            .get_interested_enrs(content_id, self.enr_offer_limit))
+        Ok(self.peers.select_peers(content_id))
     }
 
     /// Records the status of the most recent `Offer` request to one of the peers.

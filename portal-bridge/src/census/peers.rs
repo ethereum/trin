@@ -13,11 +13,13 @@ use ethportal_api::{
     Enr,
 };
 use futures::Stream;
-use rand::seq::IteratorRandom;
 use tokio::time::Instant;
 use tracing::error;
 
-use super::peer::Peer;
+use super::{
+    peer::Peer,
+    scoring::{PeerSelector, Weight},
+};
 
 /// How frequently liveness check should be done.
 ///
@@ -40,23 +42,19 @@ struct PeersWithLivenessChecks {
 /// It provides thread safe access to peers and is responsible for deciding when they should be
 /// pinged for liveness.
 #[derive(Clone, Debug)]
-pub(super) struct Peers {
+pub(super) struct Peers<W: Weight> {
     peers: Arc<RwLock<PeersWithLivenessChecks>>,
+    selector: PeerSelector<W>,
 }
 
-impl Default for Peers {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Peers {
-    pub fn new() -> Self {
+impl<W: Weight> Peers<W> {
+    pub fn new(selector: PeerSelector<W>) -> Self {
         Self {
             peers: Arc::new(RwLock::new(PeersWithLivenessChecks {
                 peers: HashMap::new(),
                 liveness_checks: HashSetDelay::new(LIVENESS_CHECK_DELAY),
             })),
+            selector,
         }
     }
 
@@ -121,14 +119,10 @@ impl Peers {
         }
     }
 
-    /// Selects random `limit` peers that should be interested in content.
-    pub fn get_interested_enrs(&self, content_id: &[u8; 32], limit: usize) -> Vec<Enr> {
-        self.read()
-            .peers
-            .values()
-            .filter(|peer| peer.is_interested_in_content(content_id))
-            .map(Peer::enr)
-            .choose_multiple(&mut rand::thread_rng(), limit)
+    /// Selects peers to receive content.
+    pub fn select_peers(&self, content_id: &[u8; 32]) -> Vec<Enr> {
+        self.selector
+            .select_peers(content_id, self.read().peers.values())
     }
 
     fn read(&self) -> RwLockReadGuard<'_, PeersWithLivenessChecks> {
@@ -140,7 +134,7 @@ impl Peers {
     }
 }
 
-impl Stream for Peers {
+impl<W: Weight> Stream for Peers<W> {
     type Item = Enr;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

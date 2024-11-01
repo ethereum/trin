@@ -9,18 +9,18 @@ use tracing::error;
 
 #[derive(Debug, Clone)]
 pub struct LivenessCheck {
-    success: bool,
-    #[allow(dead_code)]
-    timestamp: Instant,
+    pub success: bool,
+    pub timestamp: Instant,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct OfferEvent {
-    success: bool,
-    timestamp: Instant,
-    content_value_size: usize,
-    duration: Duration,
+    pub success: bool,
+    pub timestamp: Instant,
+    #[allow(dead_code)]
+    pub content_value_size: usize,
+    #[allow(dead_code)]
+    pub duration: Duration,
 }
 
 #[derive(Debug)]
@@ -57,17 +57,8 @@ impl Peer {
         self.enr.clone()
     }
 
-    /// Returns true if latest liveness check was successful and content is within radius.
+    /// Returns true if content is within radius.
     pub fn is_interested_in_content(&self, content_id: &[u8; 32]) -> bool {
-        // check that most recent liveness check was successful
-        if !self
-            .liveness_checks
-            .front()
-            .is_some_and(|liveness_check| liveness_check.success)
-        {
-            return false;
-        }
-
         let distance = XorMetric::distance(&self.enr.node_id().raw(), content_id);
         distance <= self.radius
     }
@@ -137,5 +128,13 @@ impl Peer {
         if self.offer_events.len() > Self::MAX_OFFER_EVENTS {
             self.offer_events.drain(Self::MAX_OFFER_EVENTS..);
         }
+    }
+
+    pub fn iter_liveness_checks(&self) -> impl Iterator<Item = &LivenessCheck> {
+        self.liveness_checks.iter()
+    }
+
+    pub fn iter_offer_events(&self) -> impl Iterator<Item = &OfferEvent> {
+        self.offer_events.iter()
     }
 }

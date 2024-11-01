@@ -16,6 +16,7 @@ use network::{Network, NetworkAction, NetworkInitializationConfig, NetworkManage
 mod network;
 mod peer;
 mod peers;
+mod scoring;
 
 /// The error that occured in [Census].
 #[derive(Error, Debug)]
@@ -59,16 +60,16 @@ impl Census {
         }
     }
 
-    /// Returns ENRs interested in provided content id.
-    pub fn get_interested_enrs(
+    /// Selects peers to receive content.
+    pub fn select_peers(
         &self,
         subnetwork: Subnetwork,
         content_id: &[u8; 32],
     ) -> Result<Vec<Enr>, CensusError> {
         match subnetwork {
-            Subnetwork::History => self.history.get_interested_enrs(content_id),
-            Subnetwork::State => self.state.get_interested_enrs(content_id),
-            Subnetwork::Beacon => self.beacon.get_interested_enrs(content_id),
+            Subnetwork::History => self.history.select_peers(content_id),
+            Subnetwork::State => self.state.select_peers(content_id),
+            Subnetwork::Beacon => self.beacon.select_peers(content_id),
             _ => Err(CensusError::UnsupportedSubnetwork(subnetwork)),
         }
     }
