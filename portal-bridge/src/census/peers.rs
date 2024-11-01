@@ -65,11 +65,11 @@ impl Peers {
         self.read().peers.len()
     }
 
-    pub fn next_liveness_check(&self, enr: &Enr) -> Option<Instant> {
-        self.read().liveness_checks.deadline(&enr.node_id())
+    pub fn next_liveness_check(&self, node_id: &NodeId) -> Option<Instant> {
+        self.read().liveness_checks.deadline(node_id)
     }
 
-    pub fn record_successful_liveness_check(&self, enr: &Enr, radius: Distance) {
+    pub fn record_successful_liveness_check(&self, enr: Enr, radius: Distance) {
         let node_id = enr.node_id();
         let mut guard = self.write();
         guard
@@ -80,7 +80,7 @@ impl Peers {
         guard.liveness_checks.insert(node_id);
     }
 
-    pub fn record_failed_liveness_check(&self, enr: &Enr) {
+    pub fn record_failed_liveness_check(&self, enr: Enr) {
         let node_id = enr.node_id();
 
         let mut guard = self.write();

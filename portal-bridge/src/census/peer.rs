@@ -75,14 +75,21 @@ impl Peer {
             .all(|liveness_check| !liveness_check.success)
     }
 
-    pub fn record_successful_liveness_check(&mut self, enr: &Enr, radius: Distance) {
+    pub fn record_successful_liveness_check(&mut self, enr: Enr, radius: Distance) {
+        assert_eq!(
+            self.enr.node_id(),
+            enr.node_id(),
+            "Received enr for different peer. Expected node-id: {}, received enr: {enr}",
+            self.enr.node_id(),
+        );
+
         if self.enr.seq() > enr.seq() {
             error!(
                 "successful_liveness_check: received outdated enr: {enr} (existing enr: {})",
                 self.enr.seq()
             );
         } else {
-            self.enr = enr.clone();
+            self.enr = enr;
         }
         self.radius = radius;
         self.liveness_checks.push_front(LivenessCheck {

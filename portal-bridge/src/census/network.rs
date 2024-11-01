@@ -174,7 +174,7 @@ impl Network {
                 .collect_vec();
 
             // Concurrent execution of liveness check
-            let starting_peers_count = self.peers.len();
+            let starting_peers = self.peers.len() as f64;
             enrs.iter()
                 .map(|enr| async {
                     if let Ok(_permit) = semaphore.acquire().await {
@@ -189,17 +189,16 @@ impl Network {
                 })
                 .collect::<JoinAll<_>>()
                 .await;
-
-            let total_peers = self.peers.len();
-            let new_peers = total_peers - starting_peers_count;
+            let ending_peers = self.peers.len() as f64;
+            let new_peers = ending_peers - starting_peers;
 
             debug!(
                 subnetwork = %self.subnetwork,
-                "init: added {new_peers} / {total_peers} peers",
+                "init: added {new_peers} / {ending_peers} peers",
             );
 
             // Stop if number of new peers is less than a threshold fraction of all peers
-            if (new_peers as f64) < (total_peers as f64) * config.stop_fraction_threshold {
+            if new_peers < ending_peers * config.stop_fraction_threshold {
                 break;
             }
         }
@@ -228,14 +227,14 @@ impl Network {
         // check if peer needs liveness check
         if self
             .peers
-            .next_liveness_check(&enr)
+            .next_liveness_check(&enr.node_id())
             .is_some_and(|next_liveness_check| Instant::now() < next_liveness_check)
         {
             return LivenessResult::Fresh;
         }
 
         let Ok(pong_info) = self.ping(&enr).await else {
-            self.peers.record_failed_liveness_check(&enr);
+            self.peers.record_failed_liveness_check(enr);
             return LivenessResult::Fail;
         };
 
@@ -244,7 +243,7 @@ impl Network {
         // If ENR seq is not the latest one, fetch fresh ENR
         let enr = if enr.seq() < pong_info.enr_seq {
             let Ok(enr) = self.fetch_enr(&enr).await else {
-                self.peers.record_failed_liveness_check(&enr);
+                self.peers.record_failed_liveness_check(enr);
                 return LivenessResult::Fail;
             };
             enr
@@ -259,7 +258,7 @@ impl Network {
             enr
         };
 
-        self.peers.record_successful_liveness_check(&enr, radius);
+        self.peers.record_successful_liveness_check(enr, radius);
         LivenessResult::Pass
     }
 
@@ -435,10 +434,9 @@ impl NetworkManager {
             self.network.liveness_check(enr).await;
         }
         let ending_peers = self.network.peers.len();
-        let new_peers = ending_peers - starting_peers;
         info!(
             subnetwork = %self.network.subnetwork,
-            "peer-discovery: finished - discovered {new_peers} / {ending_peers} peers",
+            "peer-discovery: finished - peers: {starting_peers} -> {ending_peers}",
         );
     }
 }
