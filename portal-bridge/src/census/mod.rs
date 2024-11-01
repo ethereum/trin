@@ -1,6 +1,11 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
-use ethportal_api::{jsonrpsee::http_client::HttpClient, types::network::Subnetwork, Enr};
+use discv5::enr::NodeId;
+use ethportal_api::{
+    jsonrpsee::http_client::HttpClient,
+    types::{network::Subnetwork, portal_wire::OfferTrace},
+    Enr,
+};
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use tracing::{error, info, Instrument};
@@ -66,6 +71,26 @@ impl Census {
             Subnetwork::Beacon => self.beacon.get_interested_enrs(content_id),
             _ => Err(CensusError::UnsupportedSubnetwork(subnetwork)),
         }
+    }
+
+    pub fn record_offer_result(
+        &self,
+        subnetwork: Subnetwork,
+        node_id: NodeId,
+        content_value_size: usize,
+        duration: Duration,
+        offer_trace: &OfferTrace,
+    ) {
+        let network = match subnetwork {
+            Subnetwork::History => &self.history,
+            Subnetwork::State => &self.state,
+            Subnetwork::Beacon => &self.beacon,
+            _ => {
+                error!("record_offer_result: subnetwork {subnetwork} is not supported");
+                return;
+            }
+        };
+        network.record_offer_result(node_id, content_value_size, duration, offer_trace);
     }
 
     /// Initialize subnetworks and starts background service that will keep our view of the network
