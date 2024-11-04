@@ -2,6 +2,7 @@
 name = "ethportal-api"
 version = "0.2.2"
 description = "Definitions for various Ethereum Portal Network JSONRPC APIs"
+build = "build.rs"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
@@ -44,13 +45,13 @@ serde-this-or-that.workspace = true
 serde_json.workspace = true
 sha2 = "0.10.1"
 sha3.workspace = true
+shadow-rs = "0.27"
 ssz_types.workspace = true
 superstruct = "0.7.0"
 thiserror.workspace = true
 tokio.workspace = true
 tree_hash.workspace = true
 tree_hash_derive.workspace = true
-trin-utils.workspace = true
 ureq.workspace = true
 url.workspace = true
 validator = { version = "0.13.0", features = ["derive"] }
@@ -64,3 +65,6 @@ snap.workspace = true
 test-log.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[build-dependencies]
+shadow-rs = "0.27"

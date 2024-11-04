@@ -6,10 +6,12 @@ use clap::{
     Args, Parser, Subcommand,
 };
 use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
-use trin_utils::build_info;
 use url::Url;
 
-use crate::types::{bootnodes::Bootnodes, network::Subnetwork};
+use crate::{
+    build_info,
+    types::{bootnodes::Bootnodes, network::Subnetwork},
+};
 
 pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "http://127.0.0.1:8545/";

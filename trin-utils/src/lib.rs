@@ -4,6 +4,3 @@
 pub mod dir;
 pub mod log;
 pub mod submodules;
-pub mod version;
-
-shadow_rs::shadow!(build_info);
