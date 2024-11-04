@@ -26,9 +26,9 @@ use crate::socket;
 use ethportal_api::{
     types::{discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec},
     utils::bytes::hex_decode,
+    version::get_trin_version,
     NodeInfo,
 };
-use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
 const TALKREQ_CHANNEL_BUFFER: usize = 100;

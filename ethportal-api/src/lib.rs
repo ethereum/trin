@@ -17,6 +17,7 @@ mod state;
 mod test_utils;
 pub mod types;
 pub mod utils;
+pub mod version;
 mod web3;
 
 pub use beacon::{BeaconNetworkApiClient, BeaconNetworkApiServer};
@@ -49,3 +50,5 @@ pub use types::{
 
 // Re-exports jsonrpsee crate
 pub use jsonrpsee;
+
+shadow_rs::shadow!(build_info);
