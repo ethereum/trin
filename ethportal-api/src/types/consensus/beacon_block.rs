@@ -301,6 +301,17 @@ mod test {
         assert_eq!(content.as_ssz_bytes(), expected);
     }
 
+    #[rstest]
+    #[case("10232841")]
+    fn json_signed_beacon_block_deneb(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/deneb/SignedBeaconBlock/json/{case}.json"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_json::from_str(&value).unwrap();
+        let _: SignedBeaconBlockDeneb = serde_json::from_value(value["data"].clone()).unwrap();
+    }
+
     #[test]
     fn serde_beacon_block_bellatrix() {
         let value = std::fs::read_to_string(
