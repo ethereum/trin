@@ -81,14 +81,19 @@ lazy_static! {
             enr:
         Enr::from_str("enr:-IS4QA5hpJikeDFf1DD1_Le6_ylgrLGpdwn3SRaneGu9hY2HUI7peHep0f28UUMzbC0PvlWjN8zSfnqMG07WVcCyBhADgmlkgnY0gmlwhKRc9-KJc2VjcDI1NmsxoQJMpHmGj1xSP1O-Mffk_jYIHVcg6tY5_CjmWVg1gJEsPIN1ZHCCE4o").expect("Parsing static bootnode enr to work"),
             alias: "ultralight-4".to_string()
-        }];
+        }
+    ];
 
     // AngelFood bootstrap nodes
     pub static ref ANGELFOOD_BOOTNODES: Vec<Bootnode> = vec![
-        Bootnode{
+        Bootnode {
             enr: Enr::from_str("enr:-LC4QMnoW2m4YYQRPjZhJ5hEpcA6a3V7iQs3slQ1TepzKBIVWQtjpcHsPINc0TcheMCbx6I2n5aax8M3AtUObt74ySUCY6p0IDVhYzI2NzViNGRmMjNhNmEwOWVjNDFkZTRlYTQ2ODQxNjk2ZTQ1YzSCaWSCdjSCaXCEQONKaYlzZWNwMjU2azGhAvZgYbpA9G8NQ6X4agu-R7Ymtu0hcX6xBQ--UEel_b6Pg3VkcIIjKA").expect("Parsing static bootnode enr to work"),
             alias: "angelfood-trin-1".to_string()
-        }];
+        }
+    ];
+
+    // Holesky bootstrap nodes
+    pub static ref HOLESKY_BOOTNODES: Vec<Bootnode> = vec![];
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -111,6 +116,9 @@ impl Bootnodes {
                 .iter()
                 .map(|bn| bn.enr.clone())
                 .collect(),
+            (Bootnodes::Default, Network::Holesky) => {
+                HOLESKY_BOOTNODES.iter().map(|bn| bn.enr.clone()).collect()
+            }
             (Bootnodes::None, _) => vec![],
             (Bootnodes::Custom(bootnodes), _) => {
                 bootnodes.iter().map(|bn| bn.enr.clone()).collect()

@@ -26,7 +26,7 @@ pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
 use crate::dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
 
-use super::portal_wire::{NetworkSpec, ANGELFOOD, MAINNET};
+use super::portal_wire::{NetworkSpec, ANGELFOOD, HOLESKY, MAINNET};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Web3TransportType {
@@ -446,8 +446,9 @@ pub fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> 
     match network_string {
         "mainnet" => Ok(MAINNET.clone()),
         "angelfood" => Ok(ANGELFOOD.clone()),
+        "holesky" => Ok(HOLESKY.clone()),
         _ => Err(format!(
-            "Not a valid network: {network_string}, must be 'angelfood' or 'mainnet'"
+            "Not a valid network: {network_string}, must be 'angelfood', 'holesky' or 'mainnet'"
         )),
     }
 }
