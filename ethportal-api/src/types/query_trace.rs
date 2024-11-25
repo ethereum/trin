@@ -9,7 +9,7 @@ use super::{
     enr::Enr,
 };
 
-type ContentId = [u8; 32];
+type ContentId = B256;
 
 /// Keeps track of query details.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -202,6 +202,10 @@ pub struct NodeInfo {
 
 #[cfg(test)]
 mod tests {
+    use alloy::primitives::U256;
+    use serde_json::Value;
+    use ureq::json;
+
     use super::*;
 
     use crate::types::enr::generate_random_remote_enr;
@@ -215,7 +219,7 @@ mod tests {
     #[test]
     fn test_query_trace() {
         let (local_node_id, local_enr) = new_node();
-        let mut tracer = QueryTrace::new(&local_enr, local_enr.node_id().raw());
+        let mut tracer = QueryTrace::new(&local_enr, B256::from(local_enr.node_id().raw()));
         let (node_id_a, enr_a) = new_node();
         let (node_id_b, enr_b) = new_node();
         let (node_id_c, enr_c) = new_node();
@@ -265,7 +269,7 @@ mod tests {
     #[test]
     fn test_query_trace_multiple_peers() {
         let (local_node_id, local_enr) = new_node();
-        let mut tracer = QueryTrace::new(&local_enr, local_enr.node_id().raw());
+        let mut tracer = QueryTrace::new(&local_enr, B256::from(local_enr.node_id().raw()));
         let (node_id_a, enr_a) = new_node();
         let (node_id_b, enr_b) = new_node();
         let (node_id_c, enr_c) = new_node();
@@ -283,7 +287,7 @@ mod tests {
     #[test]
     fn test_query_trace_failures() {
         let (_, local_enr) = generate_random_remote_enr();
-        let mut tracer = QueryTrace::new(&local_enr, local_enr.node_id().raw());
+        let mut tracer = QueryTrace::new(&local_enr, B256::from(local_enr.node_id().raw()));
         let (node_id_a, enr_a) = new_node();
         let (node_id_b, enr_b) = new_node();
         let (node_id_c, enr_c) = new_node();
@@ -335,6 +339,32 @@ mod tests {
         assert_eq!(
             tracer.failures.get(&node_id_d).unwrap().failure,
             QueryFailureKind::InvalidContent
+        );
+    }
+
+    #[test]
+    fn test_target_id_encodes_correctly() {
+        let (_, local_enr) = generate_random_remote_enr();
+        let target_id = B256::from([0; 32]);
+        let tracer = QueryTrace::new(&local_enr, target_id);
+        let json_tracer: Value = json!(&tracer);
+        assert_eq!(
+            json_tracer["targetId"],
+            "0x0000000000000000000000000000000000000000000000000000000000000000"
+        );
+        let target_id = B256::from([1; 32]);
+        let tracer = QueryTrace::new(&local_enr, target_id);
+        let json_tracer: Value = json!(&tracer);
+        assert_eq!(
+            json_tracer["targetId"],
+            "0x0101010101010101010101010101010101010101010101010101010101010101"
+        );
+        let target_id = B256::from(U256::from(2242405));
+        let tracer = QueryTrace::new(&local_enr, target_id);
+        let json_tracer: Value = json!(&tracer);
+        assert_eq!(
+            json_tracer["targetId"],
+            "0x0000000000000000000000000000000000000000000000000000000000223765"
         );
     }
 }

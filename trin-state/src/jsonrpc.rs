@@ -231,7 +231,7 @@ async fn get_content(
         Some(value) => {
             let trace = if is_trace {
                 let local_enr = network.overlay.local_enr();
-                let mut trace = QueryTrace::new(&local_enr, content_key.content_id());
+                let mut trace = QueryTrace::new(&local_enr, content_key.content_id().into());
                 trace.node_responded_with_content(&local_enr);
                 trace.content_validated(local_enr.into());
                 Some(trace)
