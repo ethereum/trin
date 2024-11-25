@@ -4,7 +4,8 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Network {
     Mainnet,
-    Angelfood, // aka testnet
+    Angelfood, // aka Portal testnet with mainnet data
+    Holesky,   // aka https://github.com/eth-clients/holesky Ethereum testnet
 }
 
 impl fmt::Display for Network {
@@ -12,6 +13,7 @@ impl fmt::Display for Network {
         match self {
             Network::Mainnet => write!(f, "mainnet"),
             Network::Angelfood => write!(f, "angelfood"),
+            Network::Holesky => write!(f, "holesky"),
         }
     }
 }
@@ -23,6 +25,7 @@ impl std::str::FromStr for Network {
         match s {
             "mainnet" => Ok(Network::Mainnet),
             "angelfood" => Ok(Network::Angelfood),
+            "holesky" => Ok(Network::Holesky),
             _ => Err(format!("Unknown network: {s}")),
         }
     }

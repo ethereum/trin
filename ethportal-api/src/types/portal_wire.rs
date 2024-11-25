@@ -222,6 +222,22 @@ pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     .into()
 });
 
+pub static HOLESKY: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
+    let mut portal_subnetworks = BiHashMap::new();
+    portal_subnetworks.insert(Subnetwork::State, "0x514A".to_string());
+    portal_subnetworks.insert(Subnetwork::History, "0x514B".to_string());
+    portal_subnetworks.insert(Subnetwork::Beacon, "0x514C".to_string());
+    portal_subnetworks.insert(Subnetwork::CanonicalIndices, "0x514D".to_string());
+    portal_subnetworks.insert(Subnetwork::VerkleState, "0x514E".to_string());
+    portal_subnetworks.insert(Subnetwork::TransactionGossip, "0x514F".to_string());
+    portal_subnetworks.insert(Subnetwork::Utp, "0x757470".to_string());
+    NetworkSpec {
+        portal_subnetworks,
+        network: Network::Holesky,
+    }
+    .into()
+});
+
 /// A Portal protocol message.
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 #[ssz(enum_behaviour = "union")]
