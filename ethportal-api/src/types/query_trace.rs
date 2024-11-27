@@ -383,18 +383,17 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_started_at_ms_time_is_serialized_to_json_properly() {
+    #[rstest::rstest]
+    #[case(5)]
+    #[case(534543)]
+    #[case(64574556345)]
+    #[case(5435345345)]
+    fn test_started_at_ms_time_is_serialized_to_json_properly(#[case] number: u64) {
         let (_, local_enr) = generate_random_remote_enr();
-        let target_id = B256::from([0; 32]);
-        let tracer = QueryTrace::new(&local_enr, target_id);
-        let json_tracer: Value = json!(&tracer);
-        assert_eq!(json_tracer["startedAtMs"], tracer.started_at_ms);
-
-        // Manually set the started_at_ms to 5 so we can test it.
+        let target_id = B256::ZERO;
         let mut tracer = QueryTrace::new(&local_enr, target_id);
-        tracer.started_at_ms = 5;
+        tracer.started_at_ms = number;
         let json_tracer: Value = json!(&tracer);
-        assert_eq!(json_tracer["startedAtMs"], 5);
+        assert_eq!(json_tracer["startedAtMs"], number);
     }
 }
