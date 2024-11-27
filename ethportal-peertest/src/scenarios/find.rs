@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use discv5::enr::NodeId;
 use jsonrpsee::async_client::Client;
@@ -94,7 +94,11 @@ pub async fn test_trace_get_content(peertest: &Peertest) {
 
     assert!(store_result);
 
-    let query_start_time = SystemTime::now();
+    let query_start_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
     let trace_content_info = HistoryNetworkApiClient::trace_get_content(
         &peertest.nodes[0].ipc_client,
         content_key.clone(),
