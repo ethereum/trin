@@ -22,6 +22,7 @@ use crate::{
         account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
         utils::setup_rocksdb,
     },
+    subcommands::era2::utils::percentage_from_address_hash,
 };
 
 pub struct StateExporter {
@@ -123,7 +124,7 @@ impl StateExporter {
 
             accounts_exported += 1;
             if accounts_exported % 10000 == 0 {
-                info!("Processed {} accounts", accounts_exported);
+                info!("Processed {accounts_exported} leaves, {:.2}% done, last address_hash processed: {account_hash}", percentage_from_address_hash(account_hash));
             }
         }
 

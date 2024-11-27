@@ -188,6 +188,12 @@ pub struct BridgeConfig {
         default_value = "1/1"
     )]
     pub bridge_id: BridgeId,
+
+    #[arg(
+        long,
+        help = "The directory for storing trin-execution data, useful for storing state in non standard locations."
+    )]
+    pub data_dir: Option<PathBuf>,
 }
 
 /// Used to identify the bridge amongst a set of bridges,

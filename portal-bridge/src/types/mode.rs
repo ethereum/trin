@@ -21,6 +21,7 @@ pub enum BridgeMode {
     FourFours(FourFoursMode),
     Backfill(ModeType),
     Single(ModeType),
+    Snapshot(u64),
     Test(PathBuf),
 }
 
@@ -41,6 +42,9 @@ impl BridgeMode {
             }
             BridgeMode::Test(_) => {
                 return Err(anyhow!("BridgeMode `test` does not have a block range"))
+            }
+            BridgeMode::Snapshot(_) => {
+                return Err(anyhow!("BridgeMode `snapshot` does not have a block range"))
             }
         };
         let (start, end) = match mode_type.clone() {
@@ -95,6 +99,12 @@ impl FromStr for BridgeMode {
                     "single" => {
                         let mode_type = ModeType::from_str(&val[1..])?;
                         Ok(BridgeMode::Single(mode_type))
+                    }
+                    "snapshot" => {
+                        let snapshot = val[1..]
+                            .parse()
+                            .map_err(|_| "Invalid snapshot arg: snapshot number")?;
+                        Ok(BridgeMode::Snapshot(snapshot))
                     }
                     "test" => {
                         let path =

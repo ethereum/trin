@@ -20,13 +20,14 @@ clap.workspace = true
 ethportal-api.workspace = true
 e2store.workspace = true
 eth_trie.workspace = true
+futures-util.workspace = true
 hashbrown = "0.14.0"
 jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"]}
 lazy_static.workspace = true
 parking_lot.workspace = true
 prometheus_exporter.workspace = true
 rayon = "1.10.0"
-reqwest.workspace = true
+reqwest =  { workspace = true, features = ["stream"] }
 revm.workspace = true
 revm-inspectors = "0.8.1"
 revm-primitives.workspace = true
