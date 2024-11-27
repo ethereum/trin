@@ -1,4 +1,7 @@
-use std::{collections::HashMap, time::SystemTime};
+use std::{
+    collections::HashMap,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use alloy::primitives::B256;
 use discv5::enr::NodeId;
@@ -26,7 +29,7 @@ pub struct QueryTrace {
     /// Contains a map from node ID to the metadata object for that node.
     pub metadata: HashMap<NodeId, NodeInfo>,
     /// Timestamp when the query was started.
-    pub started_at_ms: SystemTime,
+    pub started_at_ms: u64,
     /// Target content ID
     pub target_id: ContentId,
     /// List of pending requests that were unresolved when the content was found.
@@ -35,13 +38,21 @@ pub struct QueryTrace {
 
 impl QueryTrace {
     pub fn new(local_enr: &Enr, target_id: ContentId) -> Self {
+        let started_at_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+
+        // Convert to u64, as JSON serialization does not support u128.
+        let started_at_ms = u64::try_from(started_at_ms).unwrap_or(u64::MAX);
+
         QueryTrace {
             received_from: None,
             origin: local_enr.into(),
             responses: HashMap::new(),
             failures: HashMap::new(),
             metadata: HashMap::new(),
-            started_at_ms: SystemTime::now(),
+            started_at_ms,
             cancelled: Vec::new(),
             target_id,
         }
@@ -112,11 +123,15 @@ impl QueryTrace {
     }
 
     /// Returns milliseconds since the time provided.
-    fn timestamp_millis_u64(since: SystemTime) -> u64 {
+    fn timestamp_millis_u64(since: u64) -> u64 {
+        // Convert `since` (milliseconds) to a `SystemTime`
+        let since_time = UNIX_EPOCH + Duration::from_millis(since);
+
         let timestamp_millis_u128 = SystemTime::now()
-            .duration_since(since)
+            .duration_since(since_time)
             .unwrap_or_default()
             .as_millis();
+
         // JSON serialization does not support u128. u64 can hold a few million years worth of
         // milliseconds.
         u64::try_from(timestamp_millis_u128).unwrap_or(u64::MAX)
@@ -366,5 +381,20 @@ mod tests {
             json_tracer["targetId"],
             "0x0000000000000000000000000000000000000000000000000000000000223765"
         );
+    }
+
+    #[test]
+    fn test_started_at_ms_time_is_serialized_to_json_properly() {
+        let (_, local_enr) = generate_random_remote_enr();
+        let target_id = B256::from([0; 32]);
+        let tracer = QueryTrace::new(&local_enr, target_id);
+        let json_tracer: Value = json!(&tracer);
+        assert_eq!(json_tracer["startedAtMs"], tracer.started_at_ms);
+
+        // Manually set the started_at_ms to 5 so we can test it.
+        let mut tracer = QueryTrace::new(&local_enr, target_id);
+        tracer.started_at_ms = 5;
+        let json_tracer: Value = json!(&tracer);
+        assert_eq!(json_tracer["startedAtMs"], 5);
     }
 }
