@@ -98,12 +98,12 @@ impl UtpController {
         self.inbound_stream(cid, UtpConnectionSide::Accept).await
     }
 
-    pub async fn connect_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: Bytes) -> bool {
+    pub async fn connect_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: &[u8]) -> bool {
         self.outbound_stream(cid, data, UtpConnectionSide::Connect)
             .await
     }
 
-    pub async fn accept_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: Bytes) -> bool {
+    pub async fn accept_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: &[u8]) -> bool {
         self.outbound_stream(cid, data, UtpConnectionSide::Accept)
             .await
     }
@@ -160,7 +160,7 @@ impl UtpController {
     async fn outbound_stream(
         &self,
         cid: ConnectionId<UtpEnr>,
-        data: Bytes,
+        data: &[u8],
         side: UtpConnectionSide,
     ) -> bool {
         self.metrics
@@ -197,7 +197,7 @@ impl UtpController {
             }
         };
 
-        match stream.write(&data).await {
+        match stream.write(data).await {
             Ok(write_size) => {
                 if write_size != data.len() {
                     self.metrics.report_utp_outcome(

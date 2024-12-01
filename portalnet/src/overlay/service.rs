@@ -703,7 +703,7 @@ impl<
                                 .connect_inbound_stream(cid)
                                 .await
                             {
-                                Ok(data) => data.into(),
+                                Ok(data) => RawContentValue::from(data),
                                 Err(e) => {
                                     debug!(
                                         %e,
@@ -825,6 +825,8 @@ impl<
     ) {
         let content_id = content_key.content_id();
 
+        let raw_content_key = content_key.to_bytes();
+
         // Offer content to closest nodes with sufficient radius.
         for node_id in nodes_to_poke.iter() {
             // Look up node in the routing table. We need the ENR and the radius. If we can't find
@@ -838,7 +840,7 @@ impl<
                 TMetric::distance(&node_id.raw(), &content_id) <= node.data_radius;
             if is_within_radius {
                 let content_items: Vec<(RawContentKey, RawContentValue)> =
-                    vec![(content_key.to_bytes(), content.clone())];
+                    vec![(raw_content_key.clone(), content.clone())];
                 let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
 
                 // if we have met the max outbound utp transfer limit continue the loop as we aren't
@@ -1046,7 +1048,7 @@ impl<
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_controller);
                     tokio::spawn(async move {
-                        utp.accept_outbound_stream(cid, content.into()).await;
+                        utp.accept_outbound_stream(cid, content.as_ref()).await;
                         drop(permit);
                     });
 
@@ -1241,28 +1243,27 @@ impl<
 
             // Spawn fallback FINDCONTENT tasks for each content key
             // in payloads that failed to be accepted.
-            let content_values =
-                match decode_and_validate_content_payload(&accepted_keys, data.clone().into()) {
-                    Ok(content_values) => content_values,
-                    Err(_) => {
-                        let handles: Vec<JoinHandle<_>> = content_keys
-                            .into_iter()
-                            .map(|content_key| {
-                                let utp_processing = utp_processing.clone();
-                                tokio::spawn(async move {
-                                    let _ = Self::fallback_find_content(
-                                        content_key.clone(),
-                                        utp_processing,
-                                    )
-                                    .await;
-                                })
+            let content_values = match decode_and_validate_content_payload(&accepted_keys, data) {
+                Ok(content_values) => content_values,
+                Err(_) => {
+                    let handles: Vec<JoinHandle<_>> = content_keys
+                        .into_iter()
+                        .map(|content_key| {
+                            let utp_processing = utp_processing.clone();
+                            tokio::spawn(async move {
+                                let _ = Self::fallback_find_content(
+                                    content_key.clone(),
+                                    utp_processing,
+                                )
+                                .await;
                             })
-                            .collect();
-                        let _ = join_all(handles).await;
-                        drop(permit);
-                        return;
-                    }
-                };
+                        })
+                        .collect();
+                    let _ = join_all(handles).await;
+                    drop(permit);
+                    return;
+                }
+            };
 
             let handles = accepted_keys
                 .into_iter()
@@ -1344,7 +1345,7 @@ impl<
                 .send_talk_req(
                     destination,
                     protocol,
-                    Bytes::from(Message::from(request).as_ssz_bytes()),
+                    Message::from(request).as_ssz_bytes().to_vec(),
                 )
                 .await
             {
@@ -1603,7 +1604,7 @@ impl<
                 }
             };
             let result = utp_controller
-                .connect_outbound_stream(cid, content_payload.into())
+                .connect_outbound_stream(cid, content_payload.as_ref())
                 .await;
             if let Some(tx) = gossip_result_tx {
                 if result {
@@ -1755,10 +1756,10 @@ impl<
                 None,
                 None,
             )))?;
-        let data: Vec<u8> = match rx.await? {
+        let data: RawContentValue = match rx.await? {
             Ok(Response::Content(found_content)) => {
                 match found_content {
-                    Content::Content(content) => content.to_vec(),
+                    Content::Content(content) => content,
                     Content::Enrs(_) => return Err(anyhow!("expected content, got ENRs")),
                     // Init uTP stream if `connection_id` is received
                     Content::ConnectionId(conn_id) => {
@@ -1772,7 +1773,7 @@ impl<
                             .utp_controller
                             .connect_inbound_stream(cid)
                             .await?
-                            .to_vec()
+                            .into()
                     }
                 }
             }
@@ -1780,7 +1781,7 @@ impl<
         };
         let validated_content = match Self::validate_and_store_content(
             content_key,
-            data.into(),
+            data,
             utp_processing.clone(),
         )
         .await
@@ -1793,7 +1794,7 @@ impl<
         };
 
         propagate_gossip_cross_thread::<_, TMetric>(
-            validated_content.into_iter().collect(),
+            validated_content,
             &utp_processing.kbuckets,
             utp_processing.command_tx.clone(),
             Some(utp_processing.utp_controller),
@@ -1978,7 +1979,7 @@ impl<
                             content_to_propagate.extend(dropped_content.clone());
                         }
                         propagate_gossip_cross_thread::<_, TMetric>(
-                            content_to_propagate.into_iter().collect(),
+                            content_to_propagate,
                             &utp_processing.kbuckets,
                             utp_processing.command_tx.clone(),
                             Some(utp_processing.utp_controller.clone()),
@@ -2582,9 +2583,9 @@ where
 
 fn decode_and_validate_content_payload<TContentKey>(
     accepted_keys: &[TContentKey],
-    payload: RawContentValue,
+    payload: Bytes,
 ) -> anyhow::Result<Vec<RawContentValue>> {
-    let content_values = portal_wire::decode_content_payload(payload.into())?;
+    let content_values = portal_wire::decode_content_payload(payload)?;
     // Accepted content keys len should match content value len
     let keys_len = accepted_keys.len();
     let vals_len = content_values.len();
@@ -2595,7 +2596,10 @@ fn decode_and_validate_content_payload<TContentKey>(
             vals_len
         ));
     }
-    Ok(content_values.iter().map(|v| v.clone().into()).collect())
+    Ok(content_values
+        .into_iter()
+        .map(RawContentValue::from)
+        .collect())
 }
 
 #[cfg(test)]
@@ -2605,7 +2609,7 @@ mod tests {
 
     use std::{net::SocketAddr, time::Instant};
 
-    use alloy::primitives::{Bytes, U256};
+    use alloy::primitives::U256;
     use discv5::kbucket;
     use kbucket::KBucketsTable;
     use rstest::*;
@@ -2628,6 +2632,7 @@ mod tests {
         enr::generate_random_remote_enr,
         portal_wire::MAINNET,
     };
+    use std::str::FromStr;
     use trin_metrics::portalnet::PORTALNET_METRICS;
     use trin_storage::{DistanceFunction, MemoryContentStore};
     use trin_validation::{oracle::HeaderOracle, validator::MockValidator};
@@ -3016,7 +3021,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
-        let content = Bytes::from("0xef");
+        let content = RawContentValue::from_str("0xef").unwrap();
 
         let status = NodeStatus {
             state: ConnectionState::Connected,
@@ -3060,7 +3065,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
-        let content = Bytes::from("0xef");
+        let content = RawContentValue::from_str("0xef").unwrap();
 
         let (_, enr1) = generate_random_remote_enr();
         let (_, enr2) = generate_random_remote_enr();
@@ -3085,7 +3090,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
-        let content = Bytes::from("0xef");
+        let content = RawContentValue::from_str("0xef").unwrap();
 
         let status = NodeStatus {
             state: ConnectionState::Connected,
@@ -3709,7 +3714,7 @@ mod tests {
         }
 
         // Simulate a response from the bootnode.
-        let content = Bytes::from("0x00010203");
+        let content = RawContentValue::from_str("0x00010203").unwrap();
         service.advance_find_content_query_with_content(&query_id, bootnode_enr, content.clone());
 
         let pool = &mut service.find_content_query_pool;
@@ -3860,7 +3865,7 @@ mod tests {
         assert_eq!(request.query_id, Some(query_id));
 
         // Simulate a response from the bootnode.
-        let content = Bytes::from("0x00010203");
+        let content = RawContentValue::from_str("0x00010203").unwrap();
         service.advance_find_content_query_with_content(
             &query_id,
             bootnode_enr.clone(),

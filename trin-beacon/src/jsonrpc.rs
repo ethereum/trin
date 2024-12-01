@@ -11,7 +11,7 @@ use ethportal_api::{
         query_trace::QueryTrace,
     },
     utils::bytes::hex_encode,
-    BeaconContentKey, BeaconContentValue, OverlayContentKey,
+    BeaconContentKey, BeaconContentValue, OverlayContentKey, RawContentValue,
 };
 use portalnet::overlay::{config::FindContentConfig, errors::OverlayRequestError};
 use serde_json::{json, Value};
@@ -130,18 +130,19 @@ async fn get_content(
     is_trace: bool,
 ) -> Result<Value, String> {
     // Check whether we have the data locally.
-    let local_content: Option<Vec<u8>> = match network.overlay.store.read().get(&content_key) {
-        Ok(Some(data)) => Some(data.into()),
-        Ok(None) => None,
-        Err(err) => {
-            error!(
-                error = %err,
-                content.key = %content_key,
-                "Error checking data store for content",
-            );
-            None
-        }
-    };
+    let local_content: Option<RawContentValue> =
+        match network.overlay.store.read().get(&content_key) {
+            Ok(Some(data)) => Some(data),
+            Ok(None) => None,
+            Err(err) => {
+                error!(
+                    error = %err,
+                    content.key = %content_key,
+                    "Error checking data store for content",
+                );
+                None
+            }
+        };
     let (content_bytes, utp_transfer, trace) = match local_content {
         Some(val) => {
             let local_enr = network.overlay.local_enr();
@@ -166,9 +167,7 @@ async fn get_content(
             .await
             .map_err(|err| err.to_string())?
         {
-            Ok((content_bytes, utp_transfer, trace)) => {
-                (content_bytes.to_vec(), utp_transfer, trace)
-            }
+            Ok((content_bytes, utp_transfer, trace)) => (content_bytes, utp_transfer, trace),
             Err(err) => match err.clone() {
                 OverlayRequestError::ContentNotFound {
                     message,

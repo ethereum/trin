@@ -265,7 +265,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             named_params! {
                 ":content_id": content_id,
                 ":content_key": content_key,
-                ":content_value": content_value.to_vec(),
+                ":content_value": content_value.as_ref(),
                 ":distance_short": distance.big_endian_u32(),
                 ":content_size": content_size,
             },
@@ -479,14 +479,15 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 .query_map(named_params! { ":limit": to_delete }, |row| {
                     let key_bytes: Vec<u8> = row.get("content_key")?;
                     let value_bytes: Vec<u8> = row.get("content_value")?;
+                    let value = RawContentValue::from(value_bytes);
                     let size: u64 = row.get("content_size")?;
                     TContentKey::try_from_bytes(key_bytes)
-                        .map(|key| (key, value_bytes, size))
+                        .map(|key| (key, value, size))
                         .map_err(|e| {
                             rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
                         })
                 })?
-                .collect::<Result<Vec<(TContentKey, Vec<u8>, u64)>, rusqlite::Error>>()?;
+                .collect::<Result<Vec<(TContentKey, RawContentValue, u64)>, rusqlite::Error>>()?;
             let pruning_duration = self.metrics.stop_process_timer(delete_timer);
             self.pruning_strategy
                 .observe_pruning_duration(pruning_duration);
@@ -502,7 +503,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             let deleted_content_values = deleted_content_result
                 .iter()
                 .map(|(key, value, _)| (key.clone(), value.clone()))
-                .collect::<Vec<(TContentKey, Vec<u8>)>>();
+                .collect::<Vec<(TContentKey, RawContentValue)>>();
             let deleted_content_size = deleted_content_result
                 .iter()
                 .map(|(_, _, size)| size)
@@ -510,11 +511,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             self.usage_stats.entry_count -= to_delete;
             self.usage_stats.total_entry_size_bytes -= deleted_content_size;
             self.usage_stats.report_metrics(&self.metrics);
-            deleted_content.extend(
-                deleted_content_values
-                    .into_iter()
-                    .map(|(k, v)| (k, RawContentValue::from(v))),
-            );
+            deleted_content.extend(deleted_content_values);
         }
         // Free connection.
         drop(delete_query);
@@ -583,8 +580,10 @@ mod tests {
     fn generate_key_value(
         config: &IdIndexedV1StoreConfig,
         distance: u8,
-    ) -> (IdentityContentKey, Vec<u8>) {
-        generate_key_value_with_content_size(config, distance, CONTENT_DEFAULT_SIZE_BYTES)
+    ) -> (IdentityContentKey, RawContentValue) {
+        let (key, value) =
+            generate_key_value_with_content_size(config, distance, CONTENT_DEFAULT_SIZE_BYTES);
+        (key, RawContentValue::copy_from_slice(value.as_ref()))
     }
 
     fn generate_key_value_with_content_size(
@@ -616,7 +615,7 @@ mod tests {
                 .execute(&sql::insert(&config.content_type), named_params! {
                     ":content_id": id.as_slice(),
                     ":content_key": key.to_bytes().to_vec(),
-                    ":content_value": value,
+                    ":content_value": value.to_vec(),
                     ":distance_short": config.distance_fn.distance(&config.node_id, &id).big_endian_u32(),
                     ":content_size": content_size,
                 })?;
@@ -815,7 +814,7 @@ mod tests {
         assert!(!store.has_content(&id)?);
         let usage_stats = store.usage_stats();
 
-        store.insert(&key, value.clone().into())?;
+        store.insert(&key, value.clone())?;
 
         // Check that lookup works
         assert!(store.has_content(&id)?);
@@ -849,7 +848,7 @@ mod tests {
         assert!(!store.has_content(&id)?);
         let usage_stats = store.usage_stats();
 
-        store.insert(&key, value.into())?;
+        store.insert(&key, value)?;
         // Check that content is stored and usage stats are updated.
         assert!(store.has_content(&id)?);
         assert_eq!(store.usage_stats.entry_count, usage_stats.entry_count + 1);
@@ -876,14 +875,14 @@ mod tests {
         let mut important_keys = vec![];
         for _ in 0..80 {
             let (key, value) = generate_key_value(&config, 0);
-            store.insert(&key, value.into())?;
+            store.insert(&key, value)?;
             important_keys.push(key);
         }
 
         // Insert 20 keys and check that nothing is pruned
         for _ in 0..20 {
             let (key, value) = generate_key_value(&config, 0xFF);
-            store.insert(&key, value.into())?;
+            store.insert(&key, value)?;
         }
         assert_eq!(store.usage_stats.entry_count, 100);
 
@@ -891,7 +890,7 @@ mod tests {
         // - we pruned down to 95 elements (target capacity)
         // - radius is no longer MAX
         let (key, value) = generate_key_value(&config, 0xFF);
-        store.insert(&key, value.into())?;
+        store.insert(&key, value)?;
         assert_eq!(store.usage_stats.entry_count, 95);
         assert_eq!(
             store.usage_stats.total_entry_size_bytes,
@@ -908,7 +907,7 @@ mod tests {
             // Use `0xFF-i` for distance so we are sure they will be accepted
             // (radius will decrease over time)
             let (key, value) = generate_key_value(&config, 0xFF - i);
-            store.insert(&key, value.into())?;
+            store.insert(&key, value)?;
             assert!(store.usage_stats.total_entry_size_bytes <= config.storage_capacity_bytes);
 
             assert!(store.radius() <= last_radius);
@@ -1009,7 +1008,7 @@ mod tests {
         // Insert one more key/value that is 1%.
         // We should be have 52 elements and be at 101% capacity and trigger pruning.
         let (key, value) = generate_key_value(&config, 0x80);
-        store.insert(&key, value.into())?;
+        store.insert(&key, value)?;
 
         // Prune should deleted 6% (rounded to 4 elements),
         // leaving us with 48 elements and between target and full capacity.
@@ -1037,7 +1036,7 @@ mod tests {
         // insert 10_000 entries, each 0x01% of storage size -> storage fully used
         for _ in 0..10_000 {
             let (key, value) = generate_key_value(&config, 0x80);
-            store.insert(&key, value.into())?;
+            store.insert(&key, value)?;
         }
         assert_eq!(store.radius(), Distance::MAX);
         assert_eq!(store.usage_stats.entry_count, 10_000);
@@ -1048,7 +1047,7 @@ mod tests {
 
         // insert one more entry
         let (key, value) = generate_key_value(&config, 0x80);
-        store.insert(&key, value.into())?;
+        store.insert(&key, value)?;
 
         // radius should be smaller than MAX
         assert!(store.radius() < Distance::MAX);
@@ -1077,7 +1076,7 @@ mod tests {
         // insert 10_000 entries, each 0x01% of storage size -> storage fully used
         for _ in 0..10_000 {
             let (key, value) = generate_key_value(&config, 0x80);
-            store.insert(&key, value.into())?;
+            store.insert(&key, value)?;
         }
         assert_eq!(store.radius(), Distance::MAX);
         assert_eq!(store.usage_stats.entry_count, 10_000);
@@ -1142,7 +1141,7 @@ mod tests {
         let mut content_keys = vec![];
         for _ in 0..entry_count {
             let (key, value) = generate_key_value(&config, 0);
-            store.insert(&key, value.into()).unwrap();
+            store.insert(&key, value).unwrap();
             content_keys.push(key);
         }
         content_keys.sort_by_key(|key| key.to_vec());

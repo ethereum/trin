@@ -585,7 +585,7 @@ mod tests {
             // but validation status is unknown
             let mut validating: Vec<_> = vec![];
 
-            let found_content: Vec<u8> = vec![0xef];
+            let found_content = RawContentValue::from([0xef]);
             let mut content_peer = None;
 
             'finished: loop {
@@ -663,9 +663,7 @@ mod tests {
                                     let peer_node_id = k.preimage();
                                     query.on_success(
                                         peer_node_id,
-                                        FindContentQueryResponse::Content(
-                                            found_content.clone().into(),
-                                        ),
+                                        FindContentQueryResponse::Content(found_content.clone()),
                                     );
                                     // The peer that returned content is now validating.
                                     new_validations.push_back(k);

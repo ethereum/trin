@@ -37,7 +37,7 @@ const TALKREQ_CHANNEL_BUFFER: usize = 100;
 /// ENR key for portal network client version.
 pub const ENR_PORTAL_CLIENT_KEY: &str = "c";
 
-pub type ProtocolRequest = Bytes;
+pub type ProtocolRequest = Vec<u8>;
 
 /// The contact info for a remote node.
 #[derive(Clone, Debug)]
@@ -464,7 +464,7 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
     async fn send_to(&mut self, buf: &[u8], target: &UtpEnr) -> io::Result<usize> {
         let discv5 = Arc::clone(&self.discv5);
         let target = target.0.clone();
-        let data = Bytes::from(buf.to_vec());
+        let data = buf.to_vec();
         tokio::spawn(async move {
             match discv5.send_talk_req(target, Subnetwork::Utp, data).await {
                 // We drop the talk response because it is ignored in the uTP protocol.

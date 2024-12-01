@@ -27,7 +27,7 @@ impl ContentStore for HistoryStorage {
         value: V,
     ) -> Result<Vec<(HistoryContentKey, RawContentValue)>, ContentStoreError> {
         self.store
-            .insert(&key, RawContentValue::from(value.as_ref().to_vec()))
+            .insert(&key, RawContentValue::copy_from_slice(value.as_ref()))
     }
 
     fn is_key_within_radius_and_unavailable(

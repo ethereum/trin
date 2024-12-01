@@ -132,7 +132,7 @@ impl ContentStore for MemoryContentStore {
         let content_id = key.content_id();
         let value: &[u8] = value.as_ref();
         self.store
-            .insert(content_id.to_vec(), Bytes::from(value.to_vec()));
+            .insert(content_id.to_vec(), Bytes::copy_from_slice(value));
 
         Ok(vec![])
     }

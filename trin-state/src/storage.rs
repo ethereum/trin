@@ -206,8 +206,9 @@ impl StateStorage {
 pub mod test {
     use std::path::PathBuf;
 
+    use alloy::hex::FromHex;
     use anyhow::Result;
-    use ethportal_api::utils::bytes::hex_decode;
+    use ethportal_api::RawContentValue;
     use rstest::rstest;
     use serde::Deserialize;
     use tracing::info;
@@ -220,8 +221,8 @@ pub mod test {
 
     struct ContentData {
         key: StateContentKey,
-        store_value: Vec<u8>,
-        lookup_value: Vec<u8>,
+        store_value: RawContentValue,
+        lookup_value: RawContentValue,
     }
 
     #[rstest]
@@ -238,10 +239,7 @@ pub mod test {
 
             storage.put(test_case.key.clone(), test_case.store_value)?;
 
-            assert_eq!(
-                storage.get(&test_case.key)?,
-                Some(test_case.lookup_value.into())
-            );
+            assert_eq!(storage.get(&test_case.key)?, Some(test_case.lookup_value));
         }
 
         Ok(())
@@ -280,10 +278,10 @@ pub mod test {
         for value in value.as_sequence().unwrap() {
             result.push(ContentData {
                 key: StateContentKey::deserialize(value.get("content_key").unwrap())?,
-                store_value: hex_decode(
+                store_value: RawContentValue::from_hex(
                     value.get("content_value_offer").unwrap().as_str().unwrap(),
                 )?,
-                lookup_value: hex_decode(
+                lookup_value: RawContentValue::from_hex(
                     value
                         .get("content_value_retrieval")
                         .unwrap()
