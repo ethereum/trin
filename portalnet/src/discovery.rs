@@ -10,6 +10,7 @@ use std::{
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use bytes::Bytes;
 use discv5::{
     enr::{CombinedKey, Enr as Discv5Enr, NodeId},
     ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
@@ -314,7 +315,7 @@ impl Discovery {
         enr: Enr,
         subnetwork: Subnetwork,
         request: ProtocolRequest,
-    ) -> Result<Vec<u8>, RequestError> {
+    ) -> Result<Bytes, RequestError> {
         // Send empty protocol id if unable to convert it to bytes
         let protocol = match self
             .network_spec
@@ -329,7 +330,7 @@ impl Discovery {
         };
 
         let response = self.discv5.talk_req(enr, protocol, request).await?;
-        Ok(response)
+        Ok(Bytes::from(response))
     }
 }
 

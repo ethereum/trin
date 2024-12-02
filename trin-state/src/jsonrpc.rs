@@ -160,7 +160,7 @@ async fn recursive_find_nodes(
 fn local_storage_lookup(
     network: &Arc<StateNetwork>,
     content_key: &StateContentKey,
-) -> Result<Option<Vec<u8>>, String> {
+) -> Result<Option<RawContentValue>, String> {
     network
         .overlay
         .store
@@ -194,7 +194,7 @@ async fn find_content(
 ) -> Result<Value, String> {
     let result = network
     .overlay
-    .send_find_content(enr, content_key.to_bytes().to_vec())
+    .send_find_content(enr, content_key.to_bytes())
     .await
     .and_then(|(content, utp_transfer)| match content {
         Content::ConnectionId(id) => Err(OverlayRequestError::Failure(format!(
@@ -311,7 +311,7 @@ async fn offer(
 ) -> Result<Value, String> {
     let content_items = content_items
         .into_iter()
-        .map(|(key, value)| (key.to_bytes(), value.encode().to_vec()))
+        .map(|(key, value)| (key.to_bytes(), value.encode()))
         .collect();
 
     to_json_result(
@@ -336,7 +336,7 @@ async fn trace_offer(
         "TraceOffer",
         network
             .overlay
-            .send_offer_trace(enr, content_key.to_bytes(), content_value.encode().to_vec())
+            .send_offer_trace(enr, content_key.to_bytes(), content_value.encode())
             .await,
     )
 }
@@ -351,13 +351,13 @@ async fn gossip(
         Ok(json!(
             network
                 .overlay
-                .propagate_gossip_trace(content_key, content_value.encode().to_vec())
+                .propagate_gossip_trace(content_key, content_value.encode())
                 .await
         ))
     } else {
         Ok(network
             .overlay
-            .propagate_gossip(vec![(content_key, content_value.encode().to_vec())])
+            .propagate_gossip(vec![(content_key, content_value.encode())])
             .into())
     }
 }

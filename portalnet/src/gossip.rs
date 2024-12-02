@@ -22,7 +22,7 @@ use ethportal_api::{
         portal_wire::{OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response},
     },
     utils::bytes::{hex_encode, hex_encode_compact},
-    OverlayContentKey,
+    OverlayContentKey, RawContentValue,
 };
 
 /// Datatype to store the result of a gossip request.
@@ -39,7 +39,7 @@ pub struct GossipResult {
 /// Propagate gossip in a way that can be used across threads, without &self.
 /// Doesn't trace gossip results
 pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Metric>(
-    content: Vec<(TContentKey, Vec<u8>)>,
+    content: Vec<(TContentKey, RawContentValue)>,
     kbuckets: &SharedKBucketsTable,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
     utp_controller: Option<Arc<UtpController>>,
@@ -62,7 +62,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Me
     let mut content_id_to_interested_enrs = kbuckets.batch_interested_enrs::<TMetric>(&content_ids);
 
     // Map from ENRs to content they will gossip
-    let mut enrs_and_content: HashMap<Enr, Vec<&(TContentKey, Vec<u8>)>> = HashMap::new();
+    let mut enrs_and_content: HashMap<Enr, Vec<&(TContentKey, RawContentValue)>> = HashMap::new();
     for (content_id, content_key_value) in &content {
         let interested_enrs = content_id_to_interested_enrs.remove(content_id).unwrap_or_else(|| {
             error!("interested_enrs should contain all content ids, even if there are no interested ENRs");
@@ -149,7 +149,7 @@ pub async fn trace_propagate_gossip_cross_thread<
     TMetric: Metric,
 >(
     content_key: TContentKey,
-    data: Vec<u8>,
+    data: RawContentValue,
     kbuckets: &SharedKBucketsTable,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
 ) -> GossipResult {

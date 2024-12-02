@@ -11,7 +11,7 @@ use ethportal_api::{
         query_trace::QueryTrace,
     },
     utils::bytes::hex_encode,
-    BeaconContentKey, BeaconContentValue, OverlayContentKey,
+    BeaconContentKey, BeaconContentValue, OverlayContentKey, RawContentValue,
 };
 use portalnet::overlay::{config::FindContentConfig, errors::OverlayRequestError};
 use serde_json::{json, Value};
@@ -130,18 +130,19 @@ async fn get_content(
     is_trace: bool,
 ) -> Result<Value, String> {
     // Check whether we have the data locally.
-    let local_content: Option<Vec<u8>> = match network.overlay.store.read().get(&content_key) {
-        Ok(Some(data)) => Some(data),
-        Ok(None) => None,
-        Err(err) => {
-            error!(
-                error = %err,
-                content.key = %content_key,
-                "Error checking data store for content",
-            );
-            None
-        }
-    };
+    let local_content: Option<RawContentValue> =
+        match network.overlay.store.read().get(&content_key) {
+            Ok(Some(data)) => Some(data),
+            Ok(None) => None,
+            Err(err) => {
+                error!(
+                    error = %err,
+                    content.key = %content_key,
+                    "Error checking data store for content",
+                );
+                None
+            }
+        };
     let (content_bytes, utp_transfer, trace) = match local_content {
         Some(val) => {
             let local_enr = network.overlay.local_enr();
@@ -306,7 +307,7 @@ async fn find_content(
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
     content_key: BeaconContentKey,
 ) -> Result<Value, String> {
-    match network.overlay.send_find_content(enr, content_key.to_bytes().to_vec()).await {
+    match network.overlay.send_find_content(enr, content_key.to_bytes()).await {
         Ok((content, utp_transfer)) => match content{
             Content::ConnectionId(id) => Err(format!(
                 "FindContent request returned a connection id ({id:?}) instead of conducting utp transfer."
@@ -346,7 +347,7 @@ async fn gossip(
     content_value: BeaconContentValue,
     is_trace: bool,
 ) -> Result<Value, String> {
-    let data = content_value.encode().to_vec();
+    let data = content_value.encode();
     match is_trace {
         true => Ok(json!(
             network
@@ -369,7 +370,7 @@ async fn offer(
 ) -> Result<Value, String> {
     let content_items = content_items
         .into_iter()
-        .map(|(key, value)| (key.to_bytes(), value.encode().to_vec()))
+        .map(|(key, value)| (key.to_bytes(), value.encode()))
         .collect();
     match network.overlay.send_offer(enr, content_items).await {
         Ok(accept) => Ok(json!(AcceptInfo {
@@ -388,7 +389,7 @@ async fn trace_offer(
 ) -> Result<Value, String> {
     match network
         .overlay
-        .send_offer_trace(enr, content_key.to_bytes(), content_value.encode().to_vec())
+        .send_offer_trace(enr, content_key.to_bytes(), content_value.encode())
         .await
     {
         Ok(accept) => Ok(json!(accept)),

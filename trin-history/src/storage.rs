@@ -1,6 +1,6 @@
 use ethportal_api::{
     types::{distance::Distance, network::Subnetwork, portal::PaginateLocalContentInfo},
-    HistoryContentKey, OverlayContentKey,
+    HistoryContentKey, OverlayContentKey, RawContentValue,
 };
 use trin_storage::{
     error::ContentStoreError,
@@ -17,7 +17,7 @@ pub struct HistoryStorage {
 impl ContentStore for HistoryStorage {
     type Key = HistoryContentKey;
 
-    fn get(&self, key: &HistoryContentKey) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    fn get(&self, key: &HistoryContentKey) -> Result<Option<RawContentValue>, ContentStoreError> {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
@@ -25,8 +25,9 @@ impl ContentStore for HistoryStorage {
         &mut self,
         key: HistoryContentKey,
         value: V,
-    ) -> Result<Vec<(HistoryContentKey, Vec<u8>)>, ContentStoreError> {
-        self.store.insert(&key, value.as_ref().to_vec())
+    ) -> Result<Vec<(HistoryContentKey, RawContentValue)>, ContentStoreError> {
+        self.store
+            .insert(&key, RawContentValue::copy_from_slice(value.as_ref()))
     }
 
     fn is_key_within_radius_and_unavailable(

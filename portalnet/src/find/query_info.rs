@@ -8,7 +8,7 @@ use ethportal_api::{
         portal_wire::{Content, FindContent, FindNodes, Request},
         query_trace::QueryTrace,
     },
-    OverlayContentKey,
+    OverlayContentKey, RawContentValue,
 };
 
 /// Information about a query.
@@ -26,7 +26,7 @@ pub struct QueryInfo<TContentKey> {
 // (content_value, utp_transfer, trace)
 // Returns an OverlayRequestError if the content wasn't found on the network
 pub type RecursiveFindContentResult =
-    Result<(Vec<u8>, bool, Option<QueryTrace>), OverlayRequestError>;
+    Result<(RawContentValue, bool, Option<QueryTrace>), OverlayRequestError>;
 
 // Content, utp_transfer
 // Content is Content type because the response to a simple find content query
@@ -73,7 +73,7 @@ impl<TContentKey: OverlayContentKey> QueryInfo<TContentKey> {
                 Request::FindNodes(FindNodes { distances })
             }
             QueryType::FindContent { ref target, .. } => Request::FindContent(FindContent {
-                content_key: target.to_bytes().to_vec(),
+                content_key: target.to_bytes(),
             }),
         };
 

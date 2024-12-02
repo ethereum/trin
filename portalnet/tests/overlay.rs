@@ -4,13 +4,6 @@ use std::{
 };
 
 use discv5::TalkRequest;
-use parking_lot::RwLock;
-use tokio::{
-    sync::{mpsc, mpsc::unbounded_channel, RwLock as TokioRwLock},
-    time::{self, Duration},
-};
-use utp_rs::socket::UtpSocket;
-
 use ethportal_api::{
     types::{
         content_key::overlay::IdentityContentKey,
@@ -20,7 +13,9 @@ use ethportal_api::{
         portal_wire::{Content, Message, MAINNET},
     },
     utils::bytes::hex_encode_upper,
+    OverlayContentKey,
 };
+use parking_lot::RwLock;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
@@ -29,8 +24,13 @@ use portalnet::{
         protocol::OverlayProtocol,
     },
 };
+use tokio::{
+    sync::{mpsc, mpsc::unbounded_channel, RwLock as TokioRwLock},
+    time::{self, Duration},
+};
 use trin_storage::{ContentStore, DistanceFunction, MemoryContentStore};
 use trin_validation::{oracle::HeaderOracle, validator::MockValidator};
+use utp_rs::socket::UtpSocket;
 
 async fn init_overlay(
     discovery: Arc<Discovery>,
@@ -212,7 +212,7 @@ async fn overlay() {
     // because node two is the local node.
     let content_key = IdentityContentKey::new([0u8; 32]);
     let content_enrs = match overlay_two
-        .send_find_content(overlay_one.local_enr(), content_key.into())
+        .send_find_content(overlay_one.local_enr(), content_key.to_bytes())
         .await
     {
         Ok((content, utp_transfer)) => match content {

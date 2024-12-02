@@ -5,12 +5,15 @@ pub mod test_utils;
 pub mod utils;
 pub mod versioned;
 
-use alloy::primitives::B256;
+use alloy::primitives::{Bytes, B256};
 use discv5::enr::NodeId;
 use error::ContentStoreError;
-use ethportal_api::types::{
-    content_key::overlay::{IdentityContentKey, OverlayContentKey},
-    distance::{Distance, Metric, XorMetric},
+use ethportal_api::{
+    types::{
+        content_key::overlay::{IdentityContentKey, OverlayContentKey},
+        distance::{Distance, Metric, XorMetric},
+    },
+    RawContentValue,
 };
 use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 use std::{ops::Deref, str::FromStr};
@@ -48,7 +51,7 @@ pub trait ContentStore {
     type Key;
 
     /// Looks up a piece of content by `key`.
-    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError>;
+    fn get(&self, key: &Self::Key) -> Result<Option<RawContentValue>, ContentStoreError>;
 
     /// Puts a piece of content into the store.
     /// Returns a list of keys that were evicted from the store, which should be gossiped into the
@@ -59,7 +62,7 @@ pub trait ContentStore {
         &mut self,
         key: Self::Key,
         value: V,
-    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError>;
+    ) -> Result<Vec<(Self::Key, RawContentValue)>, ContentStoreError>;
 
     /// Returns whether the content denoted by `key` is within the radius of the data store and not
     /// already stored within the data store.
@@ -75,7 +78,7 @@ pub trait ContentStore {
 /// An in-memory `ContentStore`.
 pub struct MemoryContentStore {
     /// The content store.
-    store: std::collections::HashMap<Vec<u8>, Vec<u8>>,
+    store: std::collections::HashMap<Vec<u8>, RawContentValue>,
     /// The `NodeId` of the local node.
     node_id: NodeId,
     /// The distance function used by the store to compute distances.
@@ -115,7 +118,7 @@ impl MemoryContentStore {
 impl ContentStore for MemoryContentStore {
     type Key = IdentityContentKey;
 
-    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    fn get(&self, key: &Self::Key) -> Result<Option<RawContentValue>, ContentStoreError> {
         let key = key.content_id();
         let val = self.store.get(key.as_slice()).cloned();
         Ok(val)
@@ -125,10 +128,11 @@ impl ContentStore for MemoryContentStore {
         &mut self,
         key: Self::Key,
         value: V,
-    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
+    ) -> Result<Vec<(Self::Key, RawContentValue)>, ContentStoreError> {
         let content_id = key.content_id();
         let value: &[u8] = value.as_ref();
-        self.store.insert(content_id.to_vec(), value.to_vec());
+        self.store
+            .insert(content_id.to_vec(), Bytes::copy_from_slice(value));
 
         Ok(vec![])
     }
@@ -204,7 +208,7 @@ pub struct DataSize {
 #[allow(clippy::unwrap_used)]
 pub mod test {
     use super::*;
-    use alloy::primitives::B512;
+    use alloy::primitives::{bytes, B512};
     use ethportal_api::IdentityContentKey;
 
     #[test]
@@ -228,7 +232,7 @@ pub mod test {
         let node_id = NodeId::random();
         let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
 
-        let val = vec![0xef];
+        let val = bytes!("ef");
 
         // Arbitrary key not available.
         let arb_key = IdentityContentKey::new(node_id.raw());
@@ -244,7 +248,7 @@ pub mod test {
         let node_id = NodeId::random();
         let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
 
-        let val = vec![0xef];
+        let val = bytes!("ef");
 
         // Store content
         let arb_key = IdentityContentKey::new(node_id.raw());
@@ -257,7 +261,7 @@ pub mod test {
         let node_id = NodeId::random();
         let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
 
-        let val = vec![0xef];
+        let val = bytes!("ef");
 
         // Arbitrary key within radius and unavailable.
         let arb_key = IdentityContentKey::new(node_id.raw());
