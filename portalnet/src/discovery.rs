@@ -329,10 +329,7 @@ impl Discovery {
             }
         };
 
-        let response = self
-            .discv5
-            .talk_req(enr, protocol, request.to_vec())
-            .await?;
+        let response = self.discv5.talk_req(enr, protocol, request).await?;
         Ok(Bytes::from(response))
     }
 }

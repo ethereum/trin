@@ -1048,7 +1048,7 @@ impl<
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_controller);
                     tokio::spawn(async move {
-                        utp.accept_outbound_stream(cid, content.as_ref()).await;
+                        utp.accept_outbound_stream(cid, &content).await;
                         drop(permit);
                     });
 
@@ -1342,11 +1342,7 @@ impl<
         // which will be received in the main loop.
         tokio::spawn(async move {
             let response = match discovery
-                .send_talk_req(
-                    destination,
-                    protocol,
-                    Message::from(request).as_ssz_bytes().to_vec(),
-                )
+                .send_talk_req(destination, protocol, Message::from(request).as_ssz_bytes())
                 .await
             {
                 Ok(talk_resp) => match Message::try_from(talk_resp.to_vec()) {
@@ -1604,7 +1600,7 @@ impl<
                 }
             };
             let result = utp_controller
-                .connect_outbound_stream(cid, content_payload.as_ref())
+                .connect_outbound_stream(cid, &content_payload)
                 .await;
             if let Some(tx) = gossip_result_tx {
                 if result {

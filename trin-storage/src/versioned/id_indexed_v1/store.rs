@@ -581,16 +581,14 @@ mod tests {
         config: &IdIndexedV1StoreConfig,
         distance: u8,
     ) -> (IdentityContentKey, RawContentValue) {
-        let (key, value) =
-            generate_key_value_with_content_size(config, distance, CONTENT_DEFAULT_SIZE_BYTES);
-        (key, RawContentValue::copy_from_slice(value.as_ref()))
+        generate_key_value_with_content_size(config, distance, CONTENT_DEFAULT_SIZE_BYTES)
     }
 
     fn generate_key_value_with_content_size(
         config: &IdIndexedV1StoreConfig,
         distance: u8,
         content_size: u64,
-    ) -> (IdentityContentKey, Vec<u8>) {
+    ) -> (IdentityContentKey, RawContentValue) {
         let mut key = rand::random::<[u8; 32]>();
         key[0] = config.node_id.raw()[0] ^ distance;
         let key = IdentityContentKey::new(key);
@@ -599,7 +597,7 @@ mod tests {
             panic!("Content size of at least 64 bytes is required (32 for id + 32 for key)")
         }
         let value = generate_random_bytes((content_size - 2 * 32) as usize);
-        (key, value)
+        (key, RawContentValue::copy_from_slice(value.as_ref()))
     }
 
     // Creates table and content at approximate middle distance (first byte distance is 0.80).
@@ -946,7 +944,7 @@ mod tests {
                 0,
                 rng.gen_range((CONTENT_DEFAULT_SIZE_BYTES)..(4 * CONTENT_DEFAULT_SIZE_BYTES)),
             );
-            store.insert(&key, value.into())?;
+            store.insert(&key, value)?;
             important_keys.push(key);
         }
 
@@ -962,7 +960,7 @@ mod tests {
                 0xFF - i,
                 rng.gen_range((CONTENT_DEFAULT_SIZE_BYTES)..(3 * CONTENT_DEFAULT_SIZE_BYTES)),
             );
-            store.insert(&key, value.into())?;
+            store.insert(&key, value)?;
             assert!(store.usage_stats.total_entry_size_bytes <= config.storage_capacity_bytes);
 
             assert!(store.radius() <= last_radius);
@@ -998,7 +996,7 @@ mod tests {
             /* distance = */ 0,
             store.config.storage_capacity_bytes / 2,
         );
-        store.insert(&big_value_key, value.into())?;
+        store.insert(&big_value_key, value)?;
         assert_eq!(store.usage_stats.entry_count, 51);
         assert_eq!(
             store.usage_stats.total_entry_size_bytes,
@@ -1094,7 +1092,7 @@ mod tests {
             /* distance = */ 0,
             store.config.storage_capacity_bytes / 2,
         );
-        store.insert(&big_value_key, value.into())?;
+        store.insert(&big_value_key, value)?;
 
         // big_value_key should still be stored
         assert!(store.has_content(&big_value_key.content_id().into())?);

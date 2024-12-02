@@ -206,7 +206,6 @@ impl StateStorage {
 pub mod test {
     use std::path::PathBuf;
 
-    use alloy::hex::FromHex;
     use anyhow::Result;
     use ethportal_api::RawContentValue;
     use rstest::rstest;
@@ -277,17 +276,9 @@ pub mod test {
 
         for value in value.as_sequence().unwrap() {
             result.push(ContentData {
-                key: StateContentKey::deserialize(value.get("content_key").unwrap())?,
-                store_value: RawContentValue::from_hex(
-                    value.get("content_value_offer").unwrap().as_str().unwrap(),
-                )?,
-                lookup_value: RawContentValue::from_hex(
-                    value
-                        .get("content_value_retrieval")
-                        .unwrap()
-                        .as_str()
-                        .unwrap(),
-                )?,
+                key: StateContentKey::deserialize(&value["content_key"])?,
+                store_value: RawContentValue::deserialize(&value["content_value_offer"])?,
+                lookup_value: RawContentValue::deserialize(&value["content_value_retrieval"])?,
             });
         }
 
