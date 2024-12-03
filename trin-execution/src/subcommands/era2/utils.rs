@@ -7,6 +7,7 @@ use std::{
 
 use alloy::primitives::B256;
 use futures_util::StreamExt;
+use humanize_duration::{prelude::DurationExt, Truncate};
 use reqwest::Client;
 use tracing::{info, warn};
 
@@ -20,6 +21,8 @@ pub fn percentage_from_address_hash(address_hash: B256) -> f64 {
     let address_hash_bytes = u32::from_be_bytes(be_bytes);
     address_hash_bytes as f64 / u32::MAX as f64 * 100.0
 }
+
+const MEGABYTE: f64 = 1024.0 * 1024.0;
 
 pub async fn download_with_progress(
     http_client: &Client,
@@ -42,12 +45,9 @@ pub async fn download_with_progress(
 
     let mut file = File::create(output_path.clone())?;
 
-    // Track downloaded size
-    let mut downloaded: u64 = 0;
-
-    // Start a timer
-    let start_time = Instant::now();
     let mut last_report_time = Instant::now();
+    let mut amount_downloaded: u64 = 0;
+    let mut last_amount_downloaded: u64 = 0;
 
     // Stream the response body
     let mut stream = response.bytes_stream();
@@ -55,62 +55,39 @@ pub async fn download_with_progress(
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         file.write_all(&chunk)?;
-        downloaded += chunk.len() as u64;
+        amount_downloaded += chunk.len() as u64;
 
         // Check if enough time has passed since the last report
         if last_report_time.elapsed() >= Duration::from_secs(2) {
-            // Report every 2 seconds
-            // Calculate elapsed time
-            let elapsed = start_time.elapsed().as_secs_f64();
-            let speed = downloaded as f64 / elapsed; // Bytes per second
-            let remaining_time = if total_size > 0 {
-                let remaining_bytes = total_size.saturating_sub(downloaded) as f64;
-                Some(remaining_bytes / speed)
-            } else {
-                None
-            };
+            let interval_last_report_time = last_report_time.elapsed().as_secs_f64();
+            let interval_downloaded = amount_downloaded - last_amount_downloaded;
+            let current_speed = interval_downloaded as f64 / interval_last_report_time; // Bytes per second
 
             // Log progress with estimated time remaining
             if total_size > 0 {
-                let remaining = remaining_time.unwrap_or(0.0);
+                let remaining_bytes = total_size.saturating_sub(amount_downloaded) as f64;
+                let remaining_time = Duration::from_secs_f64(remaining_bytes / current_speed);
                 info!(
-                    "Downloaded {:.2}/{:.2} MB | Speed: {:.2} MB/s | ETA: {}",
-                    downloaded as f64 / 1_048_576.0,
-                    total_size as f64 / 1_048_576.0,
-                    speed / 1_048_576.0,
-                    format_eta(remaining)
+                    "amount_downloaded {:.2}/{:.2} MB | Speed: {:.2} MB/s | ETA: {}",
+                    amount_downloaded as f64 / MEGABYTE,
+                    total_size as f64 / MEGABYTE,
+                    current_speed / MEGABYTE,
+                    remaining_time.human(Truncate::Second)
                 );
             } else {
                 info!(
-                    "Downloaded {:.2} MB | Speed: {:.2} MB/s",
-                    downloaded as f64 / 1_048_576.0,
-                    speed / 1_048_576.0
+                    "amount_downloaded {:.2} MB | Speed: {:.2} MB/s",
+                    amount_downloaded as f64 / MEGABYTE,
+                    current_speed / MEGABYTE
                 );
             }
 
             // Update last report time
             last_report_time = Instant::now();
+            last_amount_downloaded = amount_downloaded;
         }
     }
 
     info!("Download complete: {:?}", output_path);
     Ok(())
-}
-
-pub fn format_eta(seconds: f64) -> String {
-    let total_seconds = seconds.round() as u64;
-    let days = total_seconds / 86_400;
-    let hours = (total_seconds % 86_400) / 3_600;
-    let minutes = (total_seconds % 3_600) / 60;
-    let secs = total_seconds % 60;
-
-    if days > 0 {
-        format!("{days}d {hours}h {minutes}m {secs}s")
-    } else if hours > 0 {
-        format!("{hours}h {minutes}m {secs}s")
-    } else if minutes > 0 {
-        format!("{minutes}m {secs}s")
-    } else {
-        format!("{secs}s")
-    }
 }

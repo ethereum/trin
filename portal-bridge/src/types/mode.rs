@@ -14,6 +14,8 @@ use trin_validation::constants::EPOCH_SIZE;
 ///   - ex: "r10-12" backfills a block range from #10 to #12 (inclusive)
 /// - FourFours: gossips randomly sequenced era1 files
 ///   - ex: "fourfours"
+/// - Snapshot: gossips a State snapshot, this mode is only used for the state network
+///  - ex: "snapshot:1000000" gossips the state snapshot at block 1000000
 #[derive(Clone, Debug, PartialEq, Default, Eq)]
 pub enum BridgeMode {
     #[default]

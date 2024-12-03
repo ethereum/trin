@@ -4,6 +4,7 @@ use anyhow::{ensure, Error};
 use rand::{seq::SliceRandom, thread_rng};
 use reqwest::Client;
 use scraper::{Html, Selector};
+use url::Url;
 
 const ERA_DIR_URL: &str = "https://mainnet.era.nimbus.team/";
 const ERA1_DIR_URL: &str = "https://era1.ethportal.net/";
@@ -19,10 +20,9 @@ pub fn underlying_io_error_kind(error: &Error) -> Option<io::ErrorKind> {
     None
 }
 
-pub async fn download_era_links(
+async fn download_era_links(
     http_client: &Client,
     url: &str,
-    append_base_url: bool,
 ) -> anyhow::Result<HashMap<u64, String>> {
     let index_html = http_client.get(url).send().await?.text().await?;
     let index_html = Html::parse_document(&index_html);
@@ -40,21 +40,19 @@ pub async fn download_era_links(
                 .expect("to be able to get epoch")
                 .parse::<u64>()
                 .expect("to be able to parse epoch");
-            (
-                epoch_index,
-                if append_base_url {
-                    format!("{}{}", url, href)
-                } else {
-                    href.to_string()
-                },
-            )
+            let url = Url::parse(url)
+                .and_then(|url| url.join(href))
+                .unwrap_or_else(|_| {
+                    panic!("to construct valid url from base ({url}) and href ({href}).")
+                });
+            (epoch_index, url.to_string())
         })
         .collect();
     Ok(era_files)
 }
 
 pub async fn get_era_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
-    let era_files = download_era_links(http_client, ERA_DIR_URL, true).await?;
+    let era_files = download_era_links(http_client, ERA_DIR_URL).await?;
     ensure!(!era_files.is_empty(), "No era files found at {ERA_DIR_URL}");
     let missing_epochs: Vec<String> = (0..era_files.len())
         .filter(|&epoch_num| !era_files.contains_key(&(epoch_num as u64)))
@@ -70,7 +68,7 @@ pub async fn get_era_files(http_client: &Client) -> anyhow::Result<HashMap<u64, 
 }
 
 pub async fn get_era1_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
-    let era1_files = download_era_links(http_client, ERA1_DIR_URL, true).await?;
+    let era1_files = download_era_links(http_client, ERA1_DIR_URL).await?;
     ensure!(
         era1_files.len() == ERA1_FILE_COUNT,
         format!(
@@ -87,7 +85,7 @@ pub async fn get_era1_files(http_client: &Client) -> anyhow::Result<HashMap<u64,
 }
 
 pub async fn get_era2_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
-    let era2_files = download_era_links(http_client, ERA2_DIR_URL, false).await?;
+    let era2_files = download_era_links(http_client, ERA2_DIR_URL).await?;
     Ok(era2_files)
 }
 

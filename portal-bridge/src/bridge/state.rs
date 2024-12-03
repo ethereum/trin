@@ -1,7 +1,7 @@
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use alloy::{consensus::EMPTY_ROOT_HASH, rlp::Decodable};
@@ -16,6 +16,7 @@ use ethportal_api::{
     ContentValue, Enr, OverlayContentKey, StateContentKey, StateContentValue,
     StateNetworkApiClient,
 };
+use humanize_duration::{prelude::DurationExt, Truncate};
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client,
@@ -29,7 +30,7 @@ use tokio::{
 use tracing::{debug, enabled, error, info, warn, Level};
 use trin_evm::spec_id::get_spec_block_number;
 use trin_execution::{
-    cli::ImportStateConfig,
+    cli::{ImportStateConfig, APP_NAME},
     config::StateConfig,
     content::{
         create_account_content_key, create_account_content_value, create_contract_content_key,
@@ -42,7 +43,7 @@ use trin_execution::{
     },
     subcommands::era2::{
         import::StateImporter,
-        utils::{download_with_progress, format_eta, percentage_from_address_hash},
+        utils::{download_with_progress, percentage_from_address_hash},
     },
     trie_walker::TrieWalker,
     types::{block_to_trace::BlockToTrace, trie_proof::TrieProof},
@@ -110,7 +111,7 @@ impl StateBridge {
                     .expect("State bridge failed");
                 return;
             },
-            _ => panic!("State bridge only supports 'single' mode, for single block (implies 0..=block range) or range of blocks."),
+            _ => panic!("State bridge only supports 'single' and `snapshot` mode, for single block (implies 0..=block range) or range of blocks, for snapshot mode provide the desired state snapshot to gossip"),
         };
 
         if end_block > get_spec_block_number(SpecId::MERGE) {
@@ -177,7 +178,7 @@ impl StateBridge {
         ensure!(snapshot_block > 0, "Snapshot block must be greater than 0");
 
         // 1. Download the era2 file and import the state snapshot
-        let data_dir = setup_data_dir("trin-execution", self.data_dir.clone(), false)?;
+        let data_dir = setup_data_dir(APP_NAME, self.data_dir.clone(), false)?;
         let next_block_number = {
             let rocks_db = Arc::new(setup_rocksdb(&data_dir)?);
             let execution_position = ExecutionPosition::initialize_from_db(rocks_db.clone())?;
@@ -390,13 +391,11 @@ impl StateBridge {
 
                 if percentage_done > 0.0 {
                     let estimated_total_time = elapsed_secs / (percentage_done / 100.0);
-                    let eta_secs = estimated_total_time - elapsed_secs;
-
-                    let eta_formatted = format_eta(eta_secs);
+                    let eta_secs = Duration::from_secs_f64(estimated_total_time - elapsed_secs);
 
                     info!(
                         "Processed {leaf_count} leaves, {:.2}% done, ETA: {}, last address_hash processed: {address_hash}",
-                        percentage_done, eta_formatted
+                        percentage_done, eta_secs.human(Truncate::Second)
                     );
                 } else {
                     info!(

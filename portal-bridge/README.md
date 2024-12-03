@@ -44,6 +44,7 @@ cargo run -p portal-bridge -- --executable-path ./target/debug/trin --epoch-accu
     - before gossiping a individual piece of content, the bridge will perform a lookup to see if the content is already in the portal network. If it is, the content will not be gossiped.
 - `"--mode fourfours:single_hunter:10:50`: sample size = 10, threshold = 50
     - same as the above hunter mode, but it will only gossip a single era1 file before exiting
+- `"--mode snapshot:1000000"`: gossips a state snapshot at the respective block, in this example the state snapshot at block 1,000,000 will be gossiped. This mode is only used for the State Network.
 
 #### Beacon Subnetwork
 

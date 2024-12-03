@@ -22,6 +22,7 @@ e2store.workspace = true
 eth_trie.workspace = true
 futures-util.workspace = true
 hashbrown = "0.14.0"
+humanize-duration.workspace = true
 jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"]}
 lazy_static.workspace = true
 parking_lot.workspace = true
