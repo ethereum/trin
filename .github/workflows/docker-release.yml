@@ -1,0 +1,38 @@
+name: Update Docker Image Tag from "latest" to 'testnet'
+
+on:
+  workflow_dispatch:    # Allows manual triggering of the workflow
+  push:
+    tags:
+      - v*
+
+jobs:
+  retag-and-push:
+    name: Retag and Push Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Log in to Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      # Step 2: Pull the latest images
+      - name: Pull Docker images
+        run: |
+          docker pull portalnetwork/trin:latest
+          docker pull portalnetwork/trin:latest-bridge
+
+      # Step 3: Retag the images
+      - name: Retag Docker images
+        run: |
+          docker image tag portalnetwork/trin:latest portalnetwork/trin:testnet
+          docker image tag portalnetwork/trin:latest-bridge portalnetwork/trin:bridge
+
+      # Step 4: Push the new tags to Docker Hub
+      - name: Push new tags to Docker Hub
+        run: |
+          docker push portalnetwork/trin:testnet
+          docker push portalnetwork/trin:bridge          
