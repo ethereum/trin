@@ -4,7 +4,7 @@ use alloy::primitives::B256;
 use anyhow::{anyhow, ensure, Result};
 use chrono::Duration;
 use milagro_bls::PublicKey;
-use ssz_rs::prelude::*;
+use ssz::TryFromIter;
 use tracing::{debug, info, warn};
 
 use super::{rpc::ConsensusRpc, types::*, utils::*};
@@ -568,10 +568,11 @@ fn compute_committee_sign_root(
     genesis_root: &[u8],
     header: Bytes32,
     fork_version: &[u8],
-) -> Result<Node> {
+) -> Result<B256> {
     let genesis_root = genesis_root.to_vec().try_into()?;
     let domain_type = &hex::decode("07000000")?[..];
-    let fork_version = Vector::from_iter(fork_version.to_vec());
+    let fork_version = FixedVector::try_from_iter(fork_version.to_vec())
+        .expect("should convert fork version to fixed vector");
     let domain = compute_domain(domain_type, fork_version, genesis_root)?;
     compute_signing_root(header, domain)
 }
@@ -617,7 +618,7 @@ fn verify_sync_committee_signature(
 
         Ok(is_aggregate_valid(
             signature,
-            signing_root.r#as_bytes(),
+            signing_root.as_slice(),
             &public_keys,
         ))
     })();
