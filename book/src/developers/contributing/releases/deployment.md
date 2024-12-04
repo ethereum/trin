@@ -38,19 +38,6 @@
 - Announce in Discord #trin that you're about to run the deployment
 - Make sure to schedule plenty of time to react to deployment issues
 
-### Update Docker images
-Docker images are how Ansible moves the binaries to the nodes. Update the Docker tags with:
-```shell
-docker pull portalnetwork/trin:latest
-docker pull portalnetwork/trin:latest-bridge
-docker image tag portalnetwork/trin:latest portalnetwork/trin:testnet
-docker image tag portalnetwork/trin:latest-bridge portalnetwork/trin:bridge
-docker push portalnetwork/trin:testnet
-docker push portalnetwork/trin:bridge
-```
-
-This step directs Ansible to use the current master version of trin. Read [about the tags](#what-do-the-docker-tags-mean) to understand more.
-
 ### Run ansible
 - Check monitoring tools to understand network health, and compare against post-deployment, eg~
     - [Glados](https://glados.ethdevops.io/)
