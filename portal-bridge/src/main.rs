@@ -59,6 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             bridge_config.offer_limit,
             census,
             bridge_config.bridge_id,
+            bridge_config.data_dir,
         )
         .await?;
 

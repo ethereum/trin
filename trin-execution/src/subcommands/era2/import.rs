@@ -16,6 +16,7 @@ use crate::{
         account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
         utils::setup_rocksdb,
     },
+    subcommands::era2::utils::percentage_from_address_hash,
 };
 
 pub struct StateImporter {
@@ -53,7 +54,7 @@ impl StateImporter {
         Ok(header)
     }
 
-    pub fn import_state(&self) -> anyhow::Result<Header> {
+    fn import_state(&self) -> anyhow::Result<Header> {
         info!("Importing state from .era2 file");
 
         let mut era2 = Era2Reader::open(&self.config.path_to_era2)?;
@@ -116,7 +117,8 @@ impl StateImporter {
 
             accounts_imported += 1;
             if accounts_imported % 1000 == 0 {
-                info!("Imported {} accounts", accounts_imported);
+                info!("Processed {accounts_imported} accounts, {:.2}% done, last address_hash processed: {address_hash}", percentage_from_address_hash(address_hash));
+
                 info!("Committing changes to database");
                 self.evm_db.trie.lock().root_hash()?;
                 info!("Finished committing changes to database");
@@ -135,10 +137,10 @@ impl StateImporter {
     }
 
     /// insert the last 256 block hashes into the database
-    pub async fn import_last_256_block_hashes(&self, block_number: u64) -> anyhow::Result<()> {
+    async fn import_last_256_block_hashes(&self, block_number: u64) -> anyhow::Result<()> {
         let first_block_hash_to_add = block_number.saturating_sub(BLOCKHASH_SERVE_WINDOW);
         let mut era_manager = EraManager::new(first_block_hash_to_add).await?;
-        while era_manager.next_block_number() < block_number {
+        while era_manager.next_block_number() <= block_number {
             let block = era_manager.get_next_block().await?;
             self.evm_db.db.put(
                 keccak256(B256::from(U256::from(block.header.number))),

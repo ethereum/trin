@@ -14,6 +14,8 @@ use trin_validation::constants::EPOCH_SIZE;
 ///   - ex: "r10-12" backfills a block range from #10 to #12 (inclusive)
 /// - FourFours: gossips randomly sequenced era1 files
 ///   - ex: "fourfours"
+/// - Snapshot: gossips a State snapshot, this mode is only used for the state network
+///  - ex: "snapshot:1000000" gossips the state snapshot at block 1000000
 #[derive(Clone, Debug, PartialEq, Default, Eq)]
 pub enum BridgeMode {
     #[default]
@@ -21,6 +23,7 @@ pub enum BridgeMode {
     FourFours(FourFoursMode),
     Backfill(ModeType),
     Single(ModeType),
+    Snapshot(u64),
     Test(PathBuf),
 }
 
@@ -41,6 +44,9 @@ impl BridgeMode {
             }
             BridgeMode::Test(_) => {
                 return Err(anyhow!("BridgeMode `test` does not have a block range"))
+            }
+            BridgeMode::Snapshot(_) => {
+                return Err(anyhow!("BridgeMode `snapshot` does not have a block range"))
             }
         };
         let (start, end) = match mode_type.clone() {
@@ -95,6 +101,12 @@ impl FromStr for BridgeMode {
                     "single" => {
                         let mode_type = ModeType::from_str(&val[1..])?;
                         Ok(BridgeMode::Single(mode_type))
+                    }
+                    "snapshot" => {
+                        let snapshot = val[1..]
+                            .parse()
+                            .map_err(|_| "Invalid snapshot arg: snapshot number")?;
+                        Ok(BridgeMode::Snapshot(snapshot))
                     }
                     "test" => {
                         let path =

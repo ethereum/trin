@@ -1,19 +1,27 @@
 use std::{
+    path::PathBuf,
     sync::{Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
-use alloy::rlp::Decodable;
-use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
+use alloy::{consensus::EMPTY_ROOT_HASH, rlp::Decodable};
+use anyhow::ensure;
+use e2store::utils::get_era2_files;
+use eth_trie::{decode_node, node::Node, EthTrie, RootWithTrieDiff, Trie};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
     types::{
-        network::Subnetwork, portal_wire::OfferTrace,
-        state_trie::account_state::AccountState as AccountStateInfo,
+        network::Subnetwork, portal_wire::OfferTrace, state_trie::account_state::AccountState,
     },
     ContentValue, Enr, OverlayContentKey, StateContentKey, StateContentValue,
     StateNetworkApiClient,
 };
+use humanize_duration::{prelude::DurationExt, Truncate};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, CONTENT_TYPE},
+    Client,
+};
+use revm::{Database, DatabaseRef};
 use revm_primitives::{keccak256, Bytecode, SpecId, B256};
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -22,18 +30,27 @@ use tokio::{
 use tracing::{debug, enabled, error, info, warn, Level};
 use trin_evm::spec_id::get_spec_block_number;
 use trin_execution::{
+    cli::{ImportStateConfig, APP_NAME},
     config::StateConfig,
     content::{
         create_account_content_key, create_account_content_value, create_contract_content_key,
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
     execution::TrinExecution,
+    storage::{
+        account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
+        utils::setup_rocksdb,
+    },
+    subcommands::era2::{
+        import::StateImporter,
+        utils::{download_with_progress, percentage_from_address_hash},
+    },
     trie_walker::TrieWalker,
     types::{block_to_trace::BlockToTrace, trie_proof::TrieProof},
     utils::full_nibble_path_to_address_hash,
 };
 use trin_metrics::bridge::BridgeMetricsReporter;
-use trin_utils::dir::create_temp_dir;
+use trin_utils::dir::{create_temp_dir, setup_data_dir};
 
 use crate::{
     bridge::history::SERVE_BLOCK_TIMEOUT,
@@ -55,6 +72,7 @@ pub struct StateBridge {
     global_offer_report: Arc<Mutex<GlobalOfferReport>>,
     // Bridge id used to determine which content keys to gossip
     bridge_id: BridgeId,
+    data_dir: Option<PathBuf>,
 }
 
 impl StateBridge {
@@ -64,6 +82,7 @@ impl StateBridge {
         offer_limit: usize,
         census: Census,
         bridge_id: BridgeId,
+        data_dir: Option<PathBuf>,
     ) -> anyhow::Result<Self> {
         let metrics = BridgeMetricsReporter::new("state".to_string(), &format!("{mode:?}"));
         let offer_semaphore = Arc::new(Semaphore::new(offer_limit));
@@ -76,6 +95,7 @@ impl StateBridge {
             census,
             global_offer_report: Arc::new(Mutex::new(global_offer_report)),
             bridge_id,
+            data_dir,
         })
     }
 
@@ -85,7 +105,13 @@ impl StateBridge {
             // TODO: This should only gossip state trie at this block
             BridgeMode::Single(ModeType::Block(block)) => (0, block),
             BridgeMode::Single(ModeType::BlockRange(start_block, end_block)) => (start_block, end_block),
-            _ => panic!("State bridge only supports 'single' mode, for single block (implies 0..=block range) or range of blocks."),
+            BridgeMode::Snapshot(snapshot_block) => {
+                self.launch_snapshot(snapshot_block)
+                    .await
+                    .expect("State bridge failed");
+                return;
+            },
+            _ => panic!("State bridge only supports 'single' and `snapshot` mode, for single block (implies 0..=block range) or range of blocks, for snapshot mode provide the desired state snapshot to gossip"),
         };
 
         if end_block > get_spec_block_number(SpecId::MERGE) {
@@ -148,6 +174,88 @@ impl StateBridge {
         Ok(())
     }
 
+    async fn launch_snapshot(&self, snapshot_block: u64) -> anyhow::Result<()> {
+        ensure!(snapshot_block > 0, "Snapshot block must be greater than 0");
+
+        // 1. Download the era2 file and import the state snapshot
+        let data_dir = setup_data_dir(APP_NAME, self.data_dir.clone(), false)?;
+        let next_block_number = {
+            let rocks_db = Arc::new(setup_rocksdb(&data_dir)?);
+            let execution_position = ExecutionPosition::initialize_from_db(rocks_db.clone())?;
+            execution_position.next_block_number()
+        };
+
+        if next_block_number == snapshot_block + 1 {
+            info!("State snapshot already imported. Skipping import.");
+        } else {
+            // Remove the existing database and create a new fresh folder
+            info!("Deleting existing database and importing state snapshot");
+            std::fs::remove_dir_all(&data_dir)
+                .and_then(|_| std::fs::create_dir(&data_dir))
+                .expect("Failed to delete existing database");
+
+            let http_client = Client::builder()
+                .default_headers(HeaderMap::from_iter([(
+                    CONTENT_TYPE,
+                    HeaderValue::from_static("application/xml"),
+                )]))
+                .build()?;
+
+            let era2_files = get_era2_files(&http_client).await?;
+            let era2_blocks = era2_files.keys().cloned().collect::<Vec<_>>();
+
+            ensure!(
+                era2_files.contains_key(&snapshot_block),
+                "Era2 file doesn't exist for requested snapshot block: try these {era2_blocks:?}"
+            );
+
+            info!(
+                "Downloading era2 file for snapshot block: {}",
+                snapshot_block
+            );
+
+            let path_to_era2 = data_dir.join(format!("era2-{snapshot_block}.bin"));
+            if let Err(e) = download_with_progress(
+                &http_client,
+                &era2_files[&snapshot_block],
+                path_to_era2.clone(),
+            )
+            .await
+            {
+                return Err(anyhow::anyhow!("Failed to download era2 file: {e}"));
+            };
+
+            let import_state_config = ImportStateConfig { path_to_era2 };
+
+            let state_importer = StateImporter::new(import_state_config, &data_dir).await?;
+            let header = state_importer.import().await?;
+            info!(
+                "Imported state from era2: {} {}",
+                header.number, header.state_root,
+            );
+        }
+
+        info!("State snapshot imported successfully, starting state bridge");
+
+        // 2. Start the state bridge
+
+        let rocks_db = Arc::new(setup_rocksdb(&data_dir)?);
+
+        let execution_position = ExecutionPosition::initialize_from_db(rocks_db.clone())?;
+        ensure!(
+            execution_position.next_block_number() > 0,
+            "Trin execution not initialized!"
+        );
+
+        let mut evm_db = EvmDB::new(StateConfig::default(), rocks_db, &execution_position)
+            .expect("Failed to create EVM database");
+
+        self.gossip_whole_state_snapshot(&mut evm_db, execution_position)
+            .await
+            .expect("State bridge failed");
+        Ok(())
+    }
+
     async fn gossip_trie_diff(
         &self,
         root_with_trie_diff: RootWithTrieDiff,
@@ -183,7 +291,7 @@ impl StateBridge {
             let Node::Leaf(leaf) = decoded_node else {
                 continue;
             };
-            let account: AccountStateInfo = Decodable::decode(&mut leaf.value.as_slice())?;
+            let account: AccountState = Decodable::decode(&mut leaf.value.as_slice())?;
 
             // reconstruct the address hash from the path so that we can fetch the
             // address from the database
@@ -234,6 +342,106 @@ impl StateBridge {
         // flush the database cache
         // This is used for gossiping storage trie diffs and newly created contracts
         trin_execution.database.clear_contract_cache();
+
+        Ok(())
+    }
+
+    async fn gossip_whole_state_snapshot(
+        &self,
+        evm_db: &mut EvmDB,
+        execution_position: ExecutionPosition,
+    ) -> anyhow::Result<()> {
+        let start = Instant::now();
+
+        let number = execution_position.next_block_number() - 1;
+        let block_hash = evm_db.block_hash(number)?;
+
+        let mut leaf_count = 0;
+
+        let root_hash = evm_db.trie.lock().root_hash()?;
+        let mut content_idx = 0;
+        let state_walker = TrieWalker::new(root_hash, evm_db.trie.lock().db.clone())?;
+        for account_proof in state_walker {
+            // gossip the account
+            self.gossip_account(&account_proof, block_hash, content_idx)
+                .await?;
+            content_idx += 1;
+
+            let Some(encoded_last_node) = account_proof.proof.last() else {
+                panic!("Account proof is empty");
+            };
+
+            let Node::Leaf(leaf) = decode_node(&mut encoded_last_node.as_ref())? else {
+                continue;
+            };
+
+            let account: AccountState = Decodable::decode(&mut leaf.value.as_slice())?;
+
+            // reconstruct the address hash from the path so that we can fetch the
+            // address from the database
+            let mut partial_key_path = leaf.key.get_data().to_vec();
+            partial_key_path.pop();
+            let full_key_path = [&account_proof.path.clone(), partial_key_path.as_slice()].concat();
+            let address_hash = full_nibble_path_to_address_hash(&full_key_path);
+
+            leaf_count += 1;
+            if leaf_count % 100 == 0 {
+                let elapsed_secs = start.elapsed().as_secs_f64();
+                let percentage_done = percentage_from_address_hash(address_hash);
+
+                if percentage_done > 0.0 {
+                    let estimated_total_time = elapsed_secs / (percentage_done / 100.0);
+                    let eta_secs = Duration::from_secs_f64(estimated_total_time - elapsed_secs);
+
+                    info!(
+                        "Processed {leaf_count} leaves, {:.2}% done, ETA: {}, last address_hash processed: {address_hash}",
+                        percentage_done, eta_secs.human(Truncate::Second)
+                    );
+                } else {
+                    info!(
+                        "Processed {leaf_count} leaves, {:.2}% done, ETA: calculating..., last address_hash processed: {address_hash}",
+                        percentage_done
+                    );
+                }
+            }
+
+            // check contract code content key/value
+            if account.code_hash != keccak256([]) {
+                let code: Bytecode = evm_db.code_by_hash_ref(account.code_hash)?;
+
+                self.gossip_contract_bytecode(
+                    address_hash,
+                    &account_proof,
+                    block_hash,
+                    account.code_hash,
+                    code,
+                    content_idx,
+                )
+                .await?;
+                content_idx += 1;
+            }
+
+            // check contract storage content key/value
+            if account.storage_root != EMPTY_ROOT_HASH {
+                let account_db = AccountDB::new(address_hash, evm_db.db.clone());
+                let trie = EthTrie::from(Arc::new(account_db), account.storage_root)?.db;
+
+                let storage_walker = TrieWalker::new(account.storage_root, trie)?;
+                for storage_proof in storage_walker {
+                    self.gossip_storage(
+                        &account_proof,
+                        &storage_proof,
+                        address_hash,
+                        block_hash,
+                        content_idx,
+                    )
+                    .await?;
+                    content_idx += 1;
+                }
+            }
+        }
+
+        info!("Took {} seconds to complete", start.elapsed().as_secs());
 
         Ok(())
     }

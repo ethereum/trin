@@ -4,9 +4,11 @@ use anyhow::{ensure, Error};
 use rand::{seq::SliceRandom, thread_rng};
 use reqwest::Client;
 use scraper::{Html, Selector};
+use url::Url;
 
 const ERA_DIR_URL: &str = "https://mainnet.era.nimbus.team/";
 const ERA1_DIR_URL: &str = "https://era1.ethportal.net/";
+const ERA2_DIR_URL: &str = "https://era2.ethportal.net/index.html";
 pub const ERA1_FILE_COUNT: usize = 1897;
 
 pub fn underlying_io_error_kind(error: &Error) -> Option<io::ErrorKind> {
@@ -18,7 +20,7 @@ pub fn underlying_io_error_kind(error: &Error) -> Option<io::ErrorKind> {
     None
 }
 
-pub async fn download_era_links(
+async fn download_era_links(
     http_client: &Client,
     url: &str,
 ) -> anyhow::Result<HashMap<u64, String>> {
@@ -38,7 +40,12 @@ pub async fn download_era_links(
                 .expect("to be able to get epoch")
                 .parse::<u64>()
                 .expect("to be able to parse epoch");
-            (epoch_index, format!("{url}{href}"))
+            let url = Url::parse(url)
+                .and_then(|url| url.join(href))
+                .unwrap_or_else(|_| {
+                    panic!("to construct valid url from base ({url}) and href ({href}).")
+                });
+            (epoch_index, url.to_string())
         })
         .collect();
     Ok(era_files)
@@ -75,6 +82,11 @@ pub async fn get_era1_files(http_client: &Client) -> anyhow::Result<HashMap<u64,
         "Epoch indices are not starting from zero or not consecutive",
     );
     Ok(era1_files)
+}
+
+pub async fn get_era2_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
+    let era2_files = download_era_links(http_client, ERA2_DIR_URL).await?;
+    Ok(era2_files)
 }
 
 /// Fetches era1 files hosted on era1.ethportal.net and shuffles them

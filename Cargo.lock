@@ -1952,6 +1952,7 @@ dependencies = [
  "tokio",
  "tracing",
  "trin-utils",
+ "url",
 ]
 
 [[package]]
@@ -2854,6 +2855,15 @@ name = "httpdate"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
+
+[[package]]
+name = "humanize-duration"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "082247a9fa508369fe52b235aef8a8dbf931b08d223a1a9b70cd400a8a77ae9c"
+dependencies = [
+ "time",
+]
 
 [[package]]
 name = "humantime"
@@ -4420,6 +4430,7 @@ dependencies = [
  "ethereum_ssz",
  "ethportal-api",
  "futures",
+ "humanize-duration",
  "itertools 0.13.0",
  "jsonrpsee",
  "portalnet",
@@ -4899,10 +4910,12 @@ dependencies = [
  "system-configuration",
  "tokio",
  "tokio-native-tls",
+ "tokio-util",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
  "windows-registry",
 ]
@@ -6854,7 +6867,9 @@ dependencies = [
  "e2store",
  "eth_trie",
  "ethportal-api",
+ "futures-util",
  "hashbrown 0.14.5",
+ "humanize-duration",
  "jsonrpsee",
  "lazy_static",
  "parking_lot 0.11.2",
@@ -7423,6 +7438,19 @@ name = "wasm-bindgen-shared"
 version = "0.2.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ee99da9c5ba11bd675621338ef6fa52296b76b83305e9b6e5c77d4c286d6d49"
+
+[[package]]
+name = "wasm-streams"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
 
 [[package]]
 name = "wasm-timer"
