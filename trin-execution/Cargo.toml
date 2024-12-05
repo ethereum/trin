@@ -27,6 +27,7 @@ jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", 
 lazy_static.workspace = true
 parking_lot.workspace = true
 prometheus_exporter.workspace = true
+rand.workspace = true
 rayon = "1.10.0"
 reqwest =  { workspace = true, features = ["stream"] }
 revm.workspace = true

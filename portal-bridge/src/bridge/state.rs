@@ -360,7 +360,7 @@ impl StateBridge {
 
         let root_hash = evm_db.trie.lock().root_hash()?;
         let mut content_idx = 0;
-        let state_walker = TrieWalker::new(root_hash, evm_db.trie.lock().db.clone())?;
+        let state_walker = TrieWalker::new(root_hash, evm_db.trie.lock().db.clone(), None)?;
         for account_proof in state_walker {
             // gossip the account
             self.gossip_account(&account_proof, block_hash, content_idx)
@@ -426,7 +426,7 @@ impl StateBridge {
                 let account_db = AccountDB::new(address_hash, evm_db.db.clone());
                 let trie = EthTrie::from(Arc::new(account_db), account.storage_root)?.db;
 
-                let storage_walker = TrieWalker::new(account.storage_root, trie)?;
+                let storage_walker = TrieWalker::new(account.storage_root, trie, None)?;
                 for storage_proof in storage_walker {
                     self.gossip_storage(
                         &account_proof,
