@@ -35,16 +35,11 @@ where
         Ok(result) => from_value(result),
         Err(msg) => {
             if msg.contains("Unable to locate content on the network") {
-                let error: ContentNotFoundJsonError = serde_json::from_str(&msg).map_err(|e| {
-                    RpcServeError::Message(format!(
-                        "Failed to parse error message from {} subnetwork: {e:?}",
-                        TEndpoint::subnetwork(),
-                    ))
-                })?;
-                Err(error.into())
-            } else {
-                Err(RpcServeError::Message(msg))
+                if let Ok(err) = serde_json::from_str::<ContentNotFoundJsonError>(&msg) {
+                    return Err(err.into());
+                }
             }
+            Err(RpcServeError::Message(msg))
         }
     }
 }
