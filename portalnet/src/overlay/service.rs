@@ -2436,11 +2436,13 @@ impl<
 
         // Check whether this node id is in our discv5 routing table
         if let Some(enr) = self.discovery.find_enr(node_id) {
+            debug!(node_id=%node_id, enr=%enr, "#1596: discv5 routing table");
             return Some(enr);
         }
 
         // Check whether this node id is in our discovery ENR cache
         if let Some(node_addr) = self.discovery.cached_node_addr(node_id) {
+            debug!(node_id=%node_id, enr=?node_addr, "#1596: cached node addr");
             return Some(node_addr.enr);
         }
 
@@ -2451,6 +2453,7 @@ impl<
                 .iter()
                 .find(|v| v.node_id() == *node_id)
             {
+                debug!(node_id=%node_id, enr=%enr, "#1596: node query_pool");
                 return Some(enr.clone());
             }
         }
@@ -2462,10 +2465,12 @@ impl<
                 .iter()
                 .find(|v| v.node_id() == *node_id)
             {
+                debug!(node_id=%node_id, enr=%enr, "#1596: content query_pool");
                 return Some(enr.clone());
             }
         }
 
+        debug!(node_id=%node_id, "#1596: none");
         None
     }
 
