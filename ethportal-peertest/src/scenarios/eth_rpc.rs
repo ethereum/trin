@@ -1,7 +1,6 @@
 use alloy::primitives::U256;
-use tracing::info;
-
 use ethportal_api::EthApiClient;
+use tracing::info;
 use trin_validation::constants::CHAIN_ID;
 
 use crate::Peertest;

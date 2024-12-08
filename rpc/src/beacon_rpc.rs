@@ -1,12 +1,5 @@
 use alloy::primitives::B256;
 use discv5::enr::NodeId;
-use tokio::sync::mpsc;
-
-use crate::{
-    errors::RpcServeError,
-    fetch::proxy_to_subnet,
-    jsonrpsee::core::{async_trait, RpcResult},
-};
 use ethportal_api::{
     consensus::header::BeaconBlockHeader,
     light_client::store::LightClientStore,
@@ -22,6 +15,13 @@ use ethportal_api::{
     },
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiServer, ContentValue, RawContentValue,
     RoutingTableInfo,
+};
+use tokio::sync::mpsc;
+
+use crate::{
+    errors::RpcServeError,
+    fetch::proxy_to_subnet,
+    jsonrpsee::core::{async_trait, RpcResult},
 };
 
 pub struct BeaconNetworkApi {

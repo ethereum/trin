@@ -152,9 +152,10 @@ impl TxEnvModifier for TransactionRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alloy::primitives::{bytes::Bytes, U64};
     use revm_primitives::TxEnv;
+
+    use super::*;
 
     #[test]
     fn test_legacy_tx_env_modifier() {

@@ -1,12 +1,5 @@
 use std::sync::Arc;
 
-use crate::{
-    config::StateConfig,
-    metrics::{
-        start_timer_vec, stop_timer, BUNDLE_COMMIT_PROCESSING_TIMES, TRANSACTION_PROCESSING_TIMES,
-    },
-    storage::error::EVMError,
-};
 use alloy::{
     consensus::EMPTY_ROOT_HASH,
     primitives::{keccak256, map::FbHashMap, Address, B256, U256},
@@ -26,6 +19,13 @@ use rocksdb::DB as RocksDB;
 use tracing::info;
 
 use super::{account_db::AccountDB, execution_position::ExecutionPosition, trie_db::TrieRocksDB};
+use crate::{
+    config::StateConfig,
+    metrics::{
+        start_timer_vec, stop_timer, BUNDLE_COMMIT_PROCESSING_TIMES, TRANSACTION_PROCESSING_TIMES,
+    },
+    storage::error::EVMError,
+};
 
 fn start_commit_timer(name: &str) -> HistogramTimer {
     start_timer_vec(&BUNDLE_COMMIT_PROCESSING_TIMES, &[name])

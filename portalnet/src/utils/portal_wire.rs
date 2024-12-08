@@ -1,6 +1,7 @@
+use std::io::{Read, Write};
+
 use anyhow::anyhow;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use std::io::{Read, Write};
 
 /// Decode content values from uTP payload. All content values are encoded with a LEB128 varint
 /// prefix which indicates the length in bytes of the consecutive content item.
@@ -72,9 +73,10 @@ pub fn read_varint(buf: &[u8]) -> anyhow::Result<(usize, u32)> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use ethportal_api::utils::bytes::hex_decode;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case(u8::MIN as u32)]

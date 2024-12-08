@@ -11,23 +11,24 @@ mod test_utils;
 pub mod validation;
 
 use std::sync::Arc;
-use tokio::{
-    sync::{broadcast, mpsc, RwLock},
-    task::JoinHandle,
-    time::{interval, Duration},
-};
-use tracing::info;
-use utp_rs::socket::UtpSocket;
 
-use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler, network::BeaconNetwork};
 use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     events::{EventEnvelope, OverlayRequest},
 };
+use tokio::{
+    sync::{broadcast, mpsc, RwLock},
+    task::JoinHandle,
+    time::{interval, Duration},
+};
+use tracing::info;
 use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
+use utp_rs::socket::UtpSocket;
+
+use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler, network::BeaconNetwork};
 
 type BeaconHandler = Option<BeaconRequestHandler>;
 type BeaconNetworkTask = Option<JoinHandle<()>>;

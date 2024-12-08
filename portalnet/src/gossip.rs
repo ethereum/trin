@@ -1,5 +1,15 @@
 use std::{collections::HashMap, sync::Arc};
 
+use ethportal_api::{
+    types::{
+        distance::Metric,
+        enr::Enr,
+        portal::MAX_CONTENT_KEYS_PER_OFFER,
+        portal_wire::{OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response},
+    },
+    utils::bytes::{hex_encode, hex_encode_compact},
+    OverlayContentKey, RawContentValue,
+};
 use futures::channel::oneshot;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -13,16 +23,6 @@ use crate::{
     },
     types::kbucket::SharedKBucketsTable,
     utp_controller::UtpController,
-};
-use ethportal_api::{
-    types::{
-        distance::Metric,
-        enr::Enr,
-        portal::MAX_CONTENT_KEYS_PER_OFFER,
-        portal_wire::{OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response},
-    },
-    utils::bytes::{hex_encode, hex_encode_compact},
-    OverlayContentKey, RawContentValue,
 };
 
 /// Datatype to store the result of a gossip request.
@@ -249,12 +249,11 @@ fn select_gossip_recipients<TMetric: Metric>(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
-
+    use ethportal_api::types::{distance::XorMetric, enr::generate_random_remote_enr};
     use rand::random;
     use rstest::rstest;
 
-    use ethportal_api::types::{distance::XorMetric, enr::generate_random_remote_enr};
+    use super::*;
 
     #[allow(clippy::zero_repeat_side_effects)]
     #[rstest]

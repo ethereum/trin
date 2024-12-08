@@ -1,3 +1,9 @@
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
+
 use alloy::{
     primitives::B256,
     providers::{Provider, ProviderBuilder, WsConnect},
@@ -10,16 +16,10 @@ use ethportal_api::{
     HistoryContentKey, HistoryNetworkApiClient,
 };
 use futures::StreamExt;
-use std::{
-    str::FromStr,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
-use url::Url;
-
 use trin_utils::log::init_tracing_logger;
+use url::Url;
 
 // tldr;
 // to poll latest blocks

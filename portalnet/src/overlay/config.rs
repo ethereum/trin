@@ -3,9 +3,9 @@
 use std::time::Duration;
 
 use discv5::kbucket::{Filter, MAX_NODES_PER_BUCKET};
+use ethportal_api::types::{cli::DEFAULT_UTP_TRANSFER_LIMIT, enr::Enr};
 
 use crate::{constants::DEFAULT_QUERY_TIMEOUT, types::node::Node};
-use ethportal_api::types::{cli::DEFAULT_UTP_TRANSFER_LIMIT, enr::Enr};
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]

@@ -319,9 +319,8 @@ mod tests {
     use alloy::primitives::{Address, Bloom, B64};
     use trin_utils::dir::create_temp_test_dir;
 
-    use crate::e2store::types::VersionEntry;
-
     use super::*;
+    use crate::e2store::types::VersionEntry;
 
     #[test]
     fn test_era2_stream_write_and_read() -> anyhow::Result<()> {

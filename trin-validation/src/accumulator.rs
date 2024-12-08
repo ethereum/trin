@@ -1,7 +1,8 @@
-use alloy::primitives::{B256, U256};
 use std::path::PathBuf;
 
+use alloy::primitives::{B256, U256};
 use anyhow::anyhow;
+use ethportal_api::types::execution::{accumulator::EpochAccumulator, header::Header};
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
@@ -13,7 +14,6 @@ use crate::{
     merkle::proof::MerkleTree,
     TrinValidationAssets,
 };
-use ethportal_api::types::execution::{accumulator::EpochAccumulator, header::Header};
 
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.

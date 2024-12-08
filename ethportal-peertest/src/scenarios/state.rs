@@ -1,10 +1,3 @@
-use crate::{
-    utils::{
-        fixtures_state_account_trie_node, fixtures_state_contract_bytecode,
-        fixtures_state_contract_storage_trie_node, wait_for_state_content, StateFixture,
-    },
-    Peertest, PeertestNode,
-};
 use ethportal_api::{
     jsonrpsee::async_client::Client,
     types::execution::header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
@@ -12,6 +5,14 @@ use ethportal_api::{
     StateNetworkApiClient,
 };
 use tracing::info;
+
+use crate::{
+    utils::{
+        fixtures_state_account_trie_node, fixtures_state_contract_bytecode,
+        fixtures_state_contract_storage_trie_node, wait_for_state_content, StateFixture,
+    },
+    Peertest, PeertestNode,
+};
 
 pub async fn test_state_offer_account_trie_node(peertest: &Peertest, target: &Client) {
     for fixture in fixtures_state_account_trie_node() {

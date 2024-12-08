@@ -1,5 +1,6 @@
-use crate::errors::RpcServeError;
 use serde_json::{from_value as serde_json_from_value, Value};
+
+use crate::errors::RpcServeError;
 
 // Required for the ContentNotFound error type
 #[allow(clippy::result_large_err)]

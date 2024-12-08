@@ -1,9 +1,10 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use light_client::{
     config::networks, consensus::rpc::nimbus_rpc::NimbusRpc, database::FileDB, Client,
     ClientBuilder,
 };
-use std::path::PathBuf;
 use tracing::info;
 
 const CONSENSUS_RPC_URL: &str = "http://testing.mainnet.beacon-api.nimbus.team";

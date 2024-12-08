@@ -143,9 +143,10 @@ impl FromStr for Bootnodes {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
+    use rstest::rstest;
+
     use super::*;
     use crate::types::cli::TrinConfig;
-    use rstest::rstest;
 
     #[test_log::test]
     fn test_bootnodes_default_with_default_bootnodes() {

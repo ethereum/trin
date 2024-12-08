@@ -10,6 +10,10 @@ use e2store::{
     era1::{BlockTuple, Era1},
     utils::get_shuffled_era1_files,
 };
+use ethportal_api::{
+    jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
+    HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
+};
 use futures::future::join_all;
 use rand::{seq::SliceRandom, thread_rng};
 use reqwest::{
@@ -23,6 +27,9 @@ use tokio::{
 };
 use tracing::{debug, error, info, warn};
 use trin_metrics::bridge::BridgeMetricsReporter;
+use trin_validation::{
+    constants::EPOCH_SIZE, header_validator::HeaderValidator, oracle::HeaderOracle,
+};
 
 use crate::{
     api::execution::{construct_proof, ExecutionApi},
@@ -33,13 +40,6 @@ use crate::{
     gossip::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
     types::mode::{BridgeMode, FourFoursMode},
-};
-use ethportal_api::{
-    jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
-    HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
-};
-use trin_validation::{
-    constants::EPOCH_SIZE, header_validator::HeaderValidator, oracle::HeaderOracle,
 };
 
 pub struct Era1Bridge {

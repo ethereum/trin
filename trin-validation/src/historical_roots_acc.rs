@@ -1,7 +1,8 @@
-use crate::TrinValidationAssets;
 use ethportal_api::consensus::beacon_state::HistoricalRoots;
 use ssz::{Decode, Encode};
 use tree_hash::{Hash256, PackedEncoding, TreeHash, TreeHashType};
+
+use crate::TrinValidationAssets;
 
 /// The frozen historical roots accumulator from beacon state. It is used to verify the
 /// canonicalness of the post-merge/pre-Capella execution headers.
@@ -73,10 +74,11 @@ impl TreeHash for HistoricalRootsAccumulator {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use ethportal_api::utils::bytes::hex_encode;
     use ssz::Encode;
     use tree_hash::TreeHash;
+
+    use super::*;
 
     #[test]
     fn test_default_historical_roots_acc() {

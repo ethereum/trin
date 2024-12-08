@@ -4,11 +4,10 @@ pub mod store;
 mod usage_stats;
 mod utils;
 
-use rusqlite::types::{FromSql, FromSqlError, ValueRef};
-use strum::{AsRefStr, Display, EnumString};
-
 pub use id_indexed_v1::{IdIndexedV1Store, IdIndexedV1StoreConfig};
+use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 pub use store::VersionedContentStore;
+use strum::{AsRefStr, Display, EnumString};
 pub use utils::create_store;
 
 /// The type of the content that is stored.

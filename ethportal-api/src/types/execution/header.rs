@@ -335,10 +335,11 @@ impl<'de> Deserialize<'de> for TxHashes {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
 
     use serde_json::{json, Value};
+
+    use super::*;
 
     #[test_log::test]
     fn decode_and_encode_header() {

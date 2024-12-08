@@ -1,5 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr};
 
+use ethportal_api::{
+    jsonrpsee::async_client::Client, types::cli::TrinConfig, ContentValue, Discv5ApiClient,
+    HistoryNetworkApiClient,
+};
 use tracing::info;
 
 use crate::{
@@ -9,10 +13,6 @@ use crate::{
         fixture_receipts_15040641, wait_for_history_content,
     },
     Peertest,
-};
-use ethportal_api::{
-    jsonrpsee::async_client::Client, types::cli::TrinConfig, ContentValue, Discv5ApiClient,
-    HistoryNetworkApiClient,
 };
 pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     info!("Testing Gossip with tracing");

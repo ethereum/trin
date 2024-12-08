@@ -1,11 +1,10 @@
 use tracing::{debug, info};
 
+use super::IdIndexedV1StoreConfig;
 use crate::{
     error::ContentStoreError,
     versioned::{id_indexed_v1::sql, ContentType},
 };
-
-use super::IdIndexedV1StoreConfig;
 
 pub fn migrate_legacy_history_store(
     config: &IdIndexedV1StoreConfig,
@@ -55,12 +54,11 @@ mod tests {
     };
     use rand::Rng;
 
+    use super::*;
     use crate::{
         test_utils::{create_test_portal_storage_config_with_capacity, generate_random_bytes},
         versioned::{usage_stats::UsageStats, IdIndexedV1Store, VersionedContentStore},
     };
-
-    use super::*;
 
     const STORAGE_CAPACITY_MB: u32 = 10;
 

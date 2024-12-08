@@ -1,14 +1,15 @@
+use std::{
+    fs::{File, OpenOptions},
+    io,
+    io::{BufRead, Write},
+};
+
 use anyhow::ensure;
 use e2store::era::Era;
 use ethportal_api::{consensus::beacon_state::HistoricalBatch, utils::bytes::hex_encode};
 use regex::Regex;
 use reqwest::get;
 use ssz::Encode;
-use std::{
-    fs::{File, OpenOptions},
-    io,
-    io::{BufRead, Write},
-};
 use tree_hash::TreeHash;
 
 const _BELLATRIX_SLOT: u64 = 4700013;

@@ -1,8 +1,9 @@
+use discv5::enr::NodeId;
+
 use crate::{
     types::enr::Enr, BeaconContentKey, BeaconContentValue, HistoryContentKey, HistoryContentValue,
     StateContentKey, StateContentValue,
 };
-use discv5::enr::NodeId;
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]

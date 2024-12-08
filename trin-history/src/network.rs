@@ -1,23 +1,21 @@
 use std::sync::Arc;
 
-use parking_lot::RwLock as PLRwLock;
-use tokio::sync::RwLock;
-use utp_rs::socket::UtpSocket;
-
-use crate::storage::HistoryStorage;
 use ethportal_api::{
     types::{distance::XorMetric, network::Subnetwork},
     HistoryContentKey,
 };
+use parking_lot::RwLock as PLRwLock;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{config::OverlayConfig, protocol::OverlayProtocol},
 };
-use trin_validation::oracle::HeaderOracle;
-
-use crate::validation::ChainHistoryValidator;
+use tokio::sync::RwLock;
 use trin_storage::PortalStorageConfig;
+use trin_validation::oracle::HeaderOracle;
+use utp_rs::socket::UtpSocket;
+
+use crate::{storage::HistoryStorage, validation::ChainHistoryValidator};
 
 /// Gossip content as it gets dropped from local storage,
 /// enabled by default for the history network.

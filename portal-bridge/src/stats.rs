@@ -1,9 +1,9 @@
 use std::{collections::HashSet, str::FromStr};
 
+use ethportal_api::{types::enr::Enr, BeaconContentKey, HistoryContentKey};
 use tracing::{debug, info};
 
 use crate::gossip::GossipReport;
-use ethportal_api::{types::enr::Enr, BeaconContentKey, HistoryContentKey};
 
 // Trait for tracking / reporting gossip stats
 pub trait StatsReporter<TContentKey> {

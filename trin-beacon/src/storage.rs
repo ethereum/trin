@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use alloy::primitives::B256;
 use ethportal_api::{
     consensus::fork::ForkName,
@@ -18,7 +20,6 @@ use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
 use rusqlite::params;
 use ssz::{Decode, Encode};
 use ssz_types::{typenum::U128, VariableList};
-use std::path::PathBuf;
 use tracing::debug;
 use tree_hash::TreeHash;
 use trin_metrics::storage::StorageMetricsReporter;
@@ -663,8 +664,6 @@ impl BeaconStorage {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
-    use crate::test_utils;
     use ethportal_api::{
         types::content_key::beacon::{
             HistoricalSummariesWithProofKey, LightClientFinalityUpdateKey,
@@ -674,6 +673,9 @@ mod test {
     };
     use tree_hash::TreeHash;
     use trin_storage::test_utils::create_test_portal_storage_config_with_capacity;
+
+    use super::*;
+    use crate::test_utils;
 
     #[test]
     fn test_beacon_storage_get_put_bootstrap() {

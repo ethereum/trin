@@ -1,3 +1,9 @@
+use std::io;
+
+use ethportal_api::{types::query_trace::QueryTrace, ContentValueError};
+use reth_ipc::server::IpcServerStartError;
+use serde::{Deserialize, Serialize};
+
 use crate::{
     jsonrpsee::{
         server::AlreadyStoppedError,
@@ -6,10 +12,6 @@ use crate::{
     rpc_server::ServerKind,
     PortalRpcModule,
 };
-use ethportal_api::{types::query_trace::QueryTrace, ContentValueError};
-use reth_ipc::server::IpcServerStartError;
-use serde::{Deserialize, Serialize};
-use std::io;
 
 /// Rpc Errors.
 #[derive(Debug, thiserror::Error)]

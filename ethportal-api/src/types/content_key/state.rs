@@ -1,9 +1,10 @@
+use std::{fmt, hash::Hash};
+
 use alloy::primitives::B256;
 use bytes::{BufMut, BytesMut};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
-use std::{fmt, hash::Hash};
 
 use crate::{
     types::{content_key::overlay::OverlayContentKey, state_trie::nibbles::Nibbles},
@@ -175,9 +176,8 @@ mod test {
     use rstest::rstest;
     use serde_yaml::Value;
 
-    use crate::{test_utils::read_file_from_tests_submodule, utils::bytes::hex_decode};
-
     use super::*;
+    use crate::{test_utils::read_file_from_tests_submodule, utils::bytes::hex_decode};
 
     const TEST_DATA_DIRECTORY: &str = "tests/mainnet/state/serialization";
 

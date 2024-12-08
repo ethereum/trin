@@ -1,3 +1,5 @@
+use ssz::{Decode, Encode};
+
 use crate::{
     types::{
         content_value::ContentValue, execution::header_with_proof::HeaderWithProof,
@@ -6,7 +8,6 @@ use crate::{
     utils::bytes::hex_encode,
     BlockBody, ContentValueError, HistoryContentKey, RawContentValue, Receipts,
 };
-use ssz::{Decode, Encode};
 
 /// A Portal History content value.
 #[derive(Clone, Debug, PartialEq)]
@@ -56,12 +57,12 @@ impl ContentValue for HistoryContentValue {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use std::fs;
 
     use serde_json::Value;
 
+    use super::*;
     use crate::{utils::bytes::hex_decode, HistoryContentValue};
-    use std::fs;
 
     #[test]
     fn header_with_proof_encode_decode_fluffy() {

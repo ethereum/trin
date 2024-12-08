@@ -1,3 +1,19 @@
+use std::sync::Arc;
+
+use alloy::primitives::B256;
+use discv5::enr::k256::elliptic_curve::consts::{U1099511627776, U2048, U4, U65536, U8192};
+use jsonrpsee::core::Serialize;
+use rs_merkle::{algorithms::Sha256, MerkleTree};
+use serde::Deserialize;
+use serde_this_or_that::as_u64;
+use serde_utils;
+use ssz::{Decode, DecodeError, Encode};
+use ssz_derive::{Decode, Encode};
+use ssz_types::{typenum::U16777216, BitVector, FixedVector, VariableList};
+use superstruct::superstruct;
+use tree_hash::{Hash256, TreeHash};
+use tree_hash_derive::TreeHash;
+
 use crate::consensus::{
     body::{Checkpoint, Eth1Data},
     execution_payload::{
@@ -10,20 +26,6 @@ use crate::consensus::{
     pubkey::PubKey,
     sync_committee::SyncCommittee,
 };
-use alloy::primitives::B256;
-use discv5::enr::k256::elliptic_curve::consts::{U1099511627776, U2048, U4, U65536, U8192};
-use jsonrpsee::core::Serialize;
-use rs_merkle::{algorithms::Sha256, MerkleTree};
-use serde::Deserialize;
-use serde_this_or_that::as_u64;
-use serde_utils;
-use ssz::{Decode, DecodeError, Encode};
-use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum::U16777216, BitVector, FixedVector, VariableList};
-use std::sync::Arc;
-use superstruct::superstruct;
-use tree_hash::{Hash256, TreeHash};
-use tree_hash_derive::TreeHash;
 
 type SlotsPerHistoricalRoot = U8192; // uint64(2**13) (= 8,192)
 type HistoricalRootsLimit = U16777216; // uint64(2**24) (= 16,777,216)
@@ -342,11 +344,13 @@ impl HistoricalBatch {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
+    use std::str::FromStr;
+
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
-    use std::str::FromStr;
+
+    use super::*;
 
     #[rstest]
     #[case("case_0")]

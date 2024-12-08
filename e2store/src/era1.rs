@@ -1,19 +1,21 @@
-use crate::{
-    e2store::{
-        memory::E2StoreMemory,
-        types::{Entry, VersionEntry},
-    },
-    types::HeaderEntry,
+use std::{
+    fs,
+    io::{Read, Write},
 };
+
 use alloy::{
     primitives::{B256, U256},
     rlp::Decodable,
 };
 use anyhow::ensure;
 use ethportal_api::types::execution::{block_body::BlockBody, receipts::Receipts};
-use std::{
-    fs,
-    io::{Read, Write},
+
+use crate::{
+    e2store::{
+        memory::E2StoreMemory,
+        types::{Entry, VersionEntry},
+    },
+    types::HeaderEntry,
 };
 
 // <config-name>-<era-number>-<era-count>-<short-historical-root>.era

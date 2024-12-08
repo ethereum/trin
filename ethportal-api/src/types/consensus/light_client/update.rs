@@ -1,12 +1,3 @@
-use crate::{
-    light_client::header::LightClientHeaderDeneb,
-    types::consensus::{
-        body::SyncAggregate,
-        fork::ForkName,
-        light_client::header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
-        sync_committee::SyncCommittee,
-    },
-};
 use alloy::primitives::B256;
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
@@ -17,6 +8,16 @@ use ssz_types::{
     FixedVector,
 };
 use superstruct::superstruct;
+
+use crate::{
+    light_client::header::LightClientHeaderDeneb,
+    types::consensus::{
+        body::SyncAggregate,
+        fork::ForkName,
+        light_client::header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
+        sync_committee::SyncCommittee,
+    },
+};
 
 type NextSyncCommitteeProofLen = U5;
 pub type FinalizedRootProofLen = U6;
@@ -73,10 +74,11 @@ impl LightClientUpdate {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
+
+    use super::*;
 
     #[rstest]
     #[case("case_0")]

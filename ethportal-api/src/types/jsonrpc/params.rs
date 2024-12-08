@@ -26,8 +26,9 @@ impl From<Params> for Value {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     fn expected_map() -> Map<String, Value> {
         let mut expected_map = serde_json::Map::new();

@@ -12,14 +12,13 @@ use reqwest::{
 use tokio::task::JoinHandle;
 use tracing::info;
 
-use crate::era::{
-    constants::FIRST_ERA_EPOCH_WITH_EXECUTION_PAYLOAD,
-    utils::{download_raw_era, process_era1_file, process_era_file},
-};
-
 use super::{
     binary_search::EraBinarySearch,
     types::{EraType, ProcessedBlock, ProcessedEra},
+};
+use crate::era::{
+    constants::FIRST_ERA_EPOCH_WITH_EXECUTION_PAYLOAD,
+    utils::{download_raw_era, process_era1_file, process_era_file},
 };
 
 pub struct EraManager {

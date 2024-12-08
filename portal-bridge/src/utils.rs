@@ -8,12 +8,11 @@ use alloy::primitives::B256;
 use anyhow::{anyhow, bail};
 use chrono::Duration;
 use discv5::enr::{CombinedKey, Enr, NodeId};
-use serde::{Deserialize, Serialize};
-
 use ethportal_api::{
     utils::bytes::hex_encode, BeaconContentKey, BeaconContentValue, ContentValue,
     HistoryContentKey, HistoryContentValue, RawContentValue,
 };
+use serde::{Deserialize, Serialize};
 
 /// Generates a set of N private keys, with node ids that are equally spaced
 /// around the 256-bit keys space.
@@ -187,10 +186,6 @@ fn slot_timestamp(slot: u64, genesis_time: u64) -> u64 {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
-    use crate::constants::{
-        BEACON_GENESIS_TIME, HEADER_WITH_PROOF_CONTENT_KEY, HEADER_WITH_PROOF_CONTENT_VALUE,
-    };
     use chrono::{DateTime, TimeZone, Utc};
     use ethportal_api::{
         types::distance::{Metric, XorMetric},
@@ -198,6 +193,11 @@ mod tests {
     };
     use rstest::rstest;
     use serde_json::json;
+
+    use super::*;
+    use crate::constants::{
+        BEACON_GENESIS_TIME, HEADER_WITH_PROOF_CONTENT_KEY, HEADER_WITH_PROOF_CONTENT_VALUE,
+    };
 
     #[rstest]
     #[case(2)]

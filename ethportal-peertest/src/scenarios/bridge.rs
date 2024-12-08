@@ -1,7 +1,3 @@
-use crate::{
-    utils::{fixture_header_by_hash_1000010, wait_for_beacon_content, wait_for_history_content},
-    Peertest,
-};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient, BeaconContentKey, BeaconContentValue, ContentValue,
     RawContentValue,
@@ -17,6 +13,11 @@ use serde_json::Value;
 use tokio::time::{sleep, Duration};
 use trin_validation::oracle::HeaderOracle;
 use url::Url;
+
+use crate::{
+    utils::{fixture_header_by_hash_1000010, wait_for_beacon_content, wait_for_history_content},
+    Peertest,
+};
 
 pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient) {
     let header_oracle = HeaderOracle::default();

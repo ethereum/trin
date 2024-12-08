@@ -4,15 +4,7 @@ use std::{
 };
 
 use alloy::{primitives::Bytes, rlp::Decodable};
-use futures::{Future, TryFutureExt};
-use serde::Deserializer;
-use ssz::Decode;
-use tracing::error;
-
 use anyhow::Result;
-use serde_yaml::Value;
-use ureq::serde::Deserialize;
-
 use ethportal_api::{
     types::{
         content_key::history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
@@ -22,6 +14,12 @@ use ethportal_api::{
     ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
     RawContentValue, StateContentKey, StateContentValue, StateNetworkApiClient,
 };
+use futures::{Future, TryFutureExt};
+use serde::Deserializer;
+use serde_yaml::Value;
+use ssz::Decode;
+use tracing::error;
+use ureq::serde::Deserialize;
 
 pub async fn wait_for_successful_result<Fut, O>(f: impl Fn() -> Fut) -> O
 where

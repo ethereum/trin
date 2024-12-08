@@ -125,9 +125,8 @@ mod test {
     use serde::Deserialize;
     use serde_yaml::Value;
 
-    use crate::test_utils::read_file_from_tests_submodule;
-
     use super::*;
+    use crate::test_utils::read_file_from_tests_submodule;
 
     const TEST_DATA_DIRECTORY: &str = "tests/mainnet/state/serialization";
 

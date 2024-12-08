@@ -10,17 +10,16 @@ use alloy::{
 };
 use anyhow::Result;
 use clap::Parser;
-use futures::StreamExt;
-use rand::seq::SliceRandom;
-use tracing::{debug, info, warn};
-use url::Url;
-
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
     HistoryContentKey, HistoryNetworkApiClient,
 };
+use futures::StreamExt;
+use rand::seq::SliceRandom;
+use tracing::{debug, info, warn};
 use trin_utils::log::init_tracing_logger;
 use trin_validation::constants::MERGE_BLOCK_NUMBER;
+use url::Url;
 
 // tldr
 // to sample 5 blocks from the shanghai fork:

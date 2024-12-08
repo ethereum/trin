@@ -1,7 +1,8 @@
+use std::{fs, path::Path};
+
 use anyhow::anyhow;
 use ethportal_api::{types::execution::accumulator::EpochAccumulator, utils::bytes::hex_encode};
 use ssz::Decode;
-use std::{fs, path::Path};
 use trin_validation::accumulator::PreMergeAccumulator;
 
 /// Lookup the epoch accumulator & epoch hash for the given epoch index.

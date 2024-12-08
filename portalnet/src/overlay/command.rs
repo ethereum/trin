@@ -1,10 +1,10 @@
 use discv5::enr::NodeId;
+use ethportal_api::types::enr::Enr;
 use futures::channel::oneshot;
 use tokio::sync::broadcast;
 
 use super::{config::FindContentConfig, request::OverlayRequest};
 use crate::{events::EventEnvelope, find::query_info::RecursiveFindContentResult};
-use ethportal_api::types::enr::Enr;
 
 /// A network-based action that the overlay may perform.
 ///

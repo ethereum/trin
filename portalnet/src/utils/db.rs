@@ -6,7 +6,6 @@ use std::{
 use alloy::primitives::B256;
 use anyhow::{anyhow, bail};
 use discv5::enr::{CombinedKey, Enr, NodeId};
-
 use ethportal_api::{
     types::network::Network,
     utils::bytes::{hex_decode, hex_encode},
@@ -80,10 +79,10 @@ fn get_application_private_key(trin_data_dir: &Path) -> anyhow::Result<CombinedK
 
 #[cfg(test)]
 pub mod test {
-    use super::*;
-
     use serial_test::serial;
     use trin_utils::dir::create_temp_test_dir;
+
+    use super::*;
 
     #[test]
     #[serial]

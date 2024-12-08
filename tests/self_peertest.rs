@@ -1,5 +1,4 @@
 #![cfg(unix)]
-use rpc::RpcServerHandle;
 use std::{
     env,
     net::{IpAddr, Ipv4Addr},
@@ -12,6 +11,7 @@ use ethportal_api::types::{
 use ethportal_peertest as peertest;
 use ethportal_peertest::Peertest;
 use jsonrpsee::{async_client::Client, http_client::HttpClient};
+use rpc::RpcServerHandle;
 use serial_test::serial;
 use tokio::time::{sleep, Duration};
 

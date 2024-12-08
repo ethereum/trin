@@ -1,5 +1,6 @@
-use crate::types::network::Subnetwork;
 use thiserror::Error;
+
+use crate::types::network::Subnetwork;
 
 /// An error decoding a portal network content value.
 #[derive(Clone, Debug, Error, PartialEq)]

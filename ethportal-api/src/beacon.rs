@@ -1,3 +1,7 @@
+use alloy::primitives::B256;
+use discv5::enr::NodeId;
+use jsonrpsee::{core::RpcResult, proc_macros::rpc};
+
 use crate::{
     consensus::header::BeaconBlockHeader,
     light_client::store::LightClientStore,
@@ -12,9 +16,6 @@ use crate::{
     },
     RawContentValue, RoutingTableInfo,
 };
-use alloy::primitives::B256;
-use discv5::enr::NodeId;
-use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Portal Beacon JSON-RPC endpoints
 #[rpc(client, server, namespace = "portal")]

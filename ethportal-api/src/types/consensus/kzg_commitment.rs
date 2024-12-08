@@ -1,4 +1,9 @@
-use crate::utils::bytes::{hex_decode, hex_encode};
+use std::{
+    fmt,
+    fmt::{Debug, Display, Formatter},
+    str::FromStr,
+};
+
 use c_kzg::BYTES_PER_COMMITMENT;
 use ethereum_hashing::hash_fixed;
 use serde::{
@@ -6,12 +11,9 @@ use serde::{
     ser::{Serialize, Serializer},
 };
 use ssz_derive::{Decode, Encode};
-use std::{
-    fmt,
-    fmt::{Debug, Display, Formatter},
-    str::FromStr,
-};
 use tree_hash::{Hash256, PackedEncoding, TreeHash};
+
+use crate::utils::bytes::{hex_decode, hex_encode};
 
 pub const VERSIONED_HASH_VERSION_KZG: u8 = 0x01;
 

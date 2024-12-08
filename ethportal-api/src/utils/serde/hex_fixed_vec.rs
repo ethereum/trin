@@ -1,7 +1,8 @@
-use crate::utils::bytes::hex_encode;
 use serde::{Deserializer, Serializer};
 use serde_utils::hex::PrefixedHexVisitor;
 use ssz_types::{typenum::Unsigned, FixedVector};
+
+use crate::utils::bytes::hex_encode;
 
 pub fn serialize<S, U>(bytes: &FixedVector<u8, U>, serializer: S) -> Result<S::Ok, S::Error>
 where

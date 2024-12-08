@@ -1,12 +1,13 @@
 use std::{fs::read_to_string, path::PathBuf};
 
+use anyhow::Result;
+use async_trait::async_trait;
+
 use super::ConsensusRpc;
 use crate::consensus::types::{
     LightClientBootstrapDeneb, LightClientFinalityUpdateDeneb, LightClientOptimisticUpdateDeneb,
     LightClientUpdateDeneb,
 };
-use anyhow::Result;
-use async_trait::async_trait;
 
 #[derive(Clone, Debug)]
 pub struct MockRpc {

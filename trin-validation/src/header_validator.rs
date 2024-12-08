@@ -1,11 +1,3 @@
-use crate::{
-    accumulator::PreMergeAccumulator,
-    constants::{
-        CAPELLA_FORK_EPOCH, EPOCH_SIZE, MERGE_BLOCK_NUMBER, SHANGHAI_BLOCK_NUMBER, SLOTS_PER_EPOCH,
-    },
-    historical_roots_acc::HistoricalRootsAccumulator,
-    merkle::proof::verify_merkle_proof,
-};
 use alloy::primitives::B256;
 use anyhow::anyhow;
 use ethportal_api::{
@@ -15,6 +7,15 @@ use ethportal_api::{
         HistoricalSummariesBlockProof,
     },
     Header,
+};
+
+use crate::{
+    accumulator::PreMergeAccumulator,
+    constants::{
+        CAPELLA_FORK_EPOCH, EPOCH_SIZE, MERGE_BLOCK_NUMBER, SHANGHAI_BLOCK_NUMBER, SLOTS_PER_EPOCH,
+    },
+    historical_roots_acc::HistoricalRootsAccumulator,
+    merkle::proof::verify_merkle_proof,
 };
 
 /// HeaderValidator is responsible for validating pre-merge and post-merge headers with their
@@ -220,19 +221,12 @@ fn calculate_generalized_index(header: &Header) -> u64 {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use std::{fs, str::FromStr};
 
     use alloy::{
         primitives::{Address, Bloom, B256, U256},
         rlp::Decodable,
     };
-    use rstest::*;
-    use serde_json::Value;
-    use ssz::{Decode, Encode};
-    use tree_hash::TreeHash;
-
-    use crate::constants::DEFAULT_PRE_MERGE_ACC_HASH;
     use ethportal_api::{
         types::execution::{
             accumulator::EpochAccumulator,
@@ -243,6 +237,13 @@ mod test {
         utils::bytes::{hex_decode, hex_encode},
         HistoryContentKey, OverlayContentKey,
     };
+    use rstest::*;
+    use serde_json::Value;
+    use ssz::{Decode, Encode};
+    use tree_hash::TreeHash;
+
+    use super::*;
+    use crate::constants::DEFAULT_PRE_MERGE_ACC_HASH;
 
     #[rstest]
     #[case(1_000_001)]

@@ -81,10 +81,10 @@ impl Metric for XorMetric {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use quickcheck::{quickcheck, Arbitrary, Gen, TestResult};
     use test_log::test;
+
+    use super::*;
 
     /// Wrapper type around a 256-bit identifier in the DHT key space.
     ///

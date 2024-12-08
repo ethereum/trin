@@ -1,7 +1,8 @@
+use std::fs;
+
 use base64;
 use nanotemplate::template;
 use serde::Deserialize;
-use std::fs;
 use ureq;
 
 pub const DASHBOARD_TEMPLATES: &[&str] =

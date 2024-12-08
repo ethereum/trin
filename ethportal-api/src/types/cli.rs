@@ -1,3 +1,5 @@
+use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
+
 use alloy::primitives::B256;
 use clap::{
     arg,
@@ -5,7 +7,6 @@ use clap::{
     error::{Error, ErrorKind},
     Args, Parser, Subcommand,
 };
-use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 use url::Url;
 
 use crate::{
@@ -24,9 +25,8 @@ pub const DEFAULT_NETWORK: &str = "mainnet";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
-use crate::dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
-
 use super::portal_wire::{NetworkSpec, ANGELFOOD, MAINNET};
+use crate::dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Web3TransportType {
@@ -555,6 +555,7 @@ pub fn create_dashboard(
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
+
     use test_log::test;
 
     use super::*;

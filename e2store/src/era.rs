@@ -1,15 +1,17 @@
-use crate::e2store::{
-    memory::E2StoreMemory,
-    types::{Entry, Header, VersionEntry},
+use std::{
+    fs,
+    io::{Read, Write},
 };
+
 use anyhow::{anyhow, ensure};
 use ethportal_api::consensus::{
     beacon_block::SignedBeaconBlock, beacon_state::BeaconState, fork::ForkName,
 };
 use ssz::Encode;
-use std::{
-    fs,
-    io::{Read, Write},
+
+use crate::e2store::{
+    memory::E2StoreMemory,
+    types::{Entry, Header, VersionEntry},
 };
 
 pub const SLOTS_PER_HISTORICAL_ROOT: usize = 8192;

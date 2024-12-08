@@ -1,6 +1,4 @@
 use discv5::enr::NodeId;
-use tokio::sync::mpsc;
-
 use ethportal_api::{
     types::{
         enr::Enr,
@@ -15,6 +13,7 @@ use ethportal_api::{
     ContentValue, RawContentValue, RoutingTableInfo, StateContentKey, StateContentValue,
     StateNetworkApiServer,
 };
+use tokio::sync::mpsc;
 
 use crate::{
     errors::RpcServeError,

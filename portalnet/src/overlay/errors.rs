@@ -1,6 +1,5 @@
-use thiserror::Error;
-
 use ethportal_api::types::query_trace::QueryTrace;
+use thiserror::Error;
 
 /// An overlay request error.
 #[derive(Clone, Error, Debug)]

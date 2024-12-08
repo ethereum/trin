@@ -1,3 +1,10 @@
+use alloy::primitives::B256;
+use serde::{Deserialize, Serialize};
+use ssz::Decode;
+use ssz_derive::{Decode, Encode};
+use ssz_types::{typenum::U5, FixedVector};
+use superstruct::superstruct;
+
 use crate::{
     consensus::header::BeaconBlockHeader,
     light_client::header::LightClientHeaderDeneb,
@@ -7,12 +14,6 @@ use crate::{
         sync_committee::SyncCommittee,
     },
 };
-use alloy::primitives::B256;
-use serde::{Deserialize, Serialize};
-use ssz::Decode;
-use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum::U5, FixedVector};
-use superstruct::superstruct;
 
 pub type CurrentSyncCommitteeProofLen = U5;
 
@@ -67,10 +68,11 @@ impl LightClientBootstrap {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
+
+    use super::*;
 
     #[rstest]
     #[case("case_0")]

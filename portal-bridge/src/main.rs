@@ -1,7 +1,4 @@
 use clap::Parser;
-use tokio::time::{sleep, Duration};
-use tracing::Instrument;
-
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
     types::network::Subnetwork,
@@ -14,6 +11,8 @@ use portal_bridge::{
     handle::build_trin,
     types::mode::BridgeMode,
 };
+use tokio::time::{sleep, Duration};
+use tracing::Instrument;
 use trin_utils::log::init_tracing_logger;
 use trin_validation::oracle::HeaderOracle;
 

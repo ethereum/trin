@@ -1,9 +1,9 @@
-use crate::{
-    errors::{RpcError, WsHttpSamePortError},
-    jsonrpsee::{Methods, RpcModule},
-    rpc_server::{RpcServerConfig, RpcServerHandle},
-    BeaconNetworkApi, Discv5Api, EthApi, HistoryNetworkApi, StateNetworkApi, Web3Api,
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    sync::Arc,
 };
+
 use ethportal_api::{
     types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
     BeaconNetworkApiServer, Discv5ApiServer, EthApiServer, HistoryNetworkApiServer,
@@ -11,13 +11,15 @@ use ethportal_api::{
 };
 use portalnet::discovery::Discovery;
 use serde::Deserialize;
-use std::{
-    collections::{HashMap, HashSet},
-    fmt,
-    sync::Arc,
-};
 use strum::{AsRefStr, EnumString, VariantNames};
 use tokio::sync::mpsc;
+
+use crate::{
+    errors::{RpcError, WsHttpSamePortError},
+    jsonrpsee::{Methods, RpcModule},
+    rpc_server::{RpcServerConfig, RpcServerHandle},
+    BeaconNetworkApi, Discv5Api, EthApi, HistoryNetworkApi, StateNetworkApi, Web3Api,
+};
 
 /// Represents RPC modules that are supported by Trin
 #[derive(

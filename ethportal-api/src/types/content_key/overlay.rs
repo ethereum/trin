@@ -1,4 +1,4 @@
-use std::{fmt, hash::Hash, ops::Deref};
+use std::{fmt, hash::Hash, ops::Deref, str::FromStr};
 
 use quickcheck::{Arbitrary, Gen};
 use sha2::{Digest, Sha256};
@@ -8,7 +8,6 @@ use crate::{
     utils::bytes::{hex_encode, hex_encode_compact},
     RawContentKey,
 };
-use std::str::FromStr;
 
 /// Types whose values represent keys to lookup content items in an overlay network.
 ///

@@ -1,9 +1,10 @@
+use discv5::enr::NodeId;
+use jsonrpsee::{core::RpcResult, proc_macros::rpc};
+
 use crate::types::{
     discv5::{NodeInfo, RoutingTableInfo},
     enr::Enr,
 };
-use discv5::enr::NodeId;
-use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Discv5 JSON-RPC endpoints
 #[rpc(client, server, namespace = "discv5")]

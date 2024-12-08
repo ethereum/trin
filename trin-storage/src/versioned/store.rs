@@ -1,6 +1,5 @@
-use crate::error::ContentStoreError;
-
 use super::{ContentType, StoreVersion};
+use crate::error::ContentStoreError;
 
 /// A trait for the versioned content store. Instance of it should be created using
 /// `create_store` function.

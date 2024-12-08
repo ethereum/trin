@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use alloy::primitives::B256;
 use anyhow::anyhow;
 use chrono::Duration;
@@ -24,7 +26,6 @@ use light_client::{
     },
 };
 use ssz::Decode;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
 use tree_hash::TreeHash;
@@ -342,8 +343,6 @@ impl BeaconValidator {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
-    use crate::test_utils;
     use ethportal_api::{
         types::{
             content_key::beacon::{
@@ -356,6 +355,9 @@ mod tests {
     };
     use ssz::Encode;
     use ssz_types::VariableList;
+
+    use super::*;
+    use crate::test_utils;
 
     #[tokio::test]
     async fn test_validate_light_client_bootstrap() {

@@ -5,9 +5,8 @@ use ethportal_api::types::network::Subnetwork;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 
-use crate::{versioned::ContentType, DistanceFunction, PortalStorageConfig};
-
 use super::pruning_strategy::PruningConfig;
+use crate::{versioned::ContentType, DistanceFunction, PortalStorageConfig};
 
 /// The config for the IdIndexedV1Store
 #[derive(Clone, Debug)]

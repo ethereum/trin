@@ -1,5 +1,6 @@
-use crate::consensus::{header::BeaconBlockHeader, sync_committee::SyncCommittee};
 use serde::{Deserialize, Serialize};
+
+use crate::consensus::{header::BeaconBlockHeader, sync_committee::SyncCommittee};
 
 /// `LightClientStore` object for the light client sync protocol.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]

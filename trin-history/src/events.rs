@@ -1,9 +1,11 @@
-use crate::network::HistoryNetwork;
+use std::sync::Arc;
+
 use ethportal_api::types::portal_wire::Message;
 use portalnet::events::OverlayRequest;
-use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{error, warn, Instrument};
+
+use crate::network::HistoryNetwork;
 
 pub struct HistoryEvents {
     pub network: Arc<HistoryNetwork>,

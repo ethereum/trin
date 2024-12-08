@@ -1,6 +1,17 @@
 use std::{fs, str::FromStr};
 
 use alloy::primitives::Bytes;
+use e2store::era1::Era1;
+use ethportal_api::{
+    jsonrpsee::{async_client::Client, http_client::HttpClient},
+    types::{
+        cli::DEFAULT_UTP_TRANSFER_LIMIT, enr::Enr, execution::accumulator::EpochAccumulator,
+        portal_wire::OfferTrace,
+    },
+    utils::bytes::hex_encode,
+    ContentValue, Discv5ApiClient, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
+};
+use portal_bridge::api::execution::construct_proof;
 use ssz::Decode;
 use tracing::info;
 
@@ -13,17 +24,6 @@ use crate::{
     },
     Peertest,
 };
-use e2store::era1::Era1;
-use ethportal_api::{
-    jsonrpsee::{async_client::Client, http_client::HttpClient},
-    types::{
-        cli::DEFAULT_UTP_TRANSFER_LIMIT, enr::Enr, execution::accumulator::EpochAccumulator,
-        portal_wire::OfferTrace,
-    },
-    utils::bytes::hex_encode,
-    ContentValue, Discv5ApiClient, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
-};
-use portal_bridge::api::execution::construct_proof;
 
 pub async fn test_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Offer/ACCEPT flow");

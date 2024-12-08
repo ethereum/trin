@@ -1,4 +1,5 @@
 use std::env;
+
 use tracing_subscriber::EnvFilter;
 
 pub fn init_tracing_logger() {

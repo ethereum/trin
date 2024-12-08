@@ -2,15 +2,14 @@ use std::sync::Arc;
 
 use alloy::primitives::B256;
 use anyhow::{anyhow, ensure};
-use serde::{Deserialize, Deserializer};
-use serde_json::Value;
-
 use ethportal_api::types::execution::{
     accumulator::EpochAccumulator,
     header::{Header, TxHashes},
     transaction::Transaction,
     withdrawal::Withdrawal,
 };
+use serde::{Deserialize, Deserializer};
+use serde_json::Value;
 use trin_validation::constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER};
 
 /// Helper type to deserialize a response from a batched Header request.
@@ -112,12 +111,13 @@ impl FullHeader {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ethportal_api::types::execution::block_body::{
         BlockBody, BlockBodyLegacy, BlockBodyShanghai,
     };
     use serde_json::Value;
     use ssz::{Decode, Encode};
+
+    use super::*;
 
     #[test]
     fn full_header_from_get_block_response() {

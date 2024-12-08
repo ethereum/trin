@@ -1,10 +1,9 @@
-use jsonrpsee::{core::client::ClientT, http_client::HttpClientBuilder, rpc_params};
-use rand::{thread_rng, Rng};
-use trin_utils::log::init_tracing_logger;
-
 use std::time::Duration;
 
 use ethportal_api::utils::bytes::hex_encode;
+use jsonrpsee::{core::client::ClientT, http_client::HttpClientBuilder, rpc_params};
+use rand::{thread_rng, Rng};
+use trin_utils::log::init_tracing_logger;
 
 const SERVER_ADDR: &str = "193.167.100.100:9041";
 const CLIENT_ADDR: &str = "193.167.0.100:9042";

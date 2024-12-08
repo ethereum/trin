@@ -552,13 +552,13 @@ impl DerefMut for Receipt {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
     use std::{str::FromStr, vec};
 
     use alloy::primitives::U256;
     use serde_json::json;
     use ssz::{Decode, Encode};
 
+    use super::*;
     use crate::utils::bytes::hex_encode;
 
     //
