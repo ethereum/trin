@@ -1,5 +1,17 @@
 use alloy::primitives::{keccak256, Address, B256};
 
+fn compress_nibbles(nibbles: &[u8]) -> Vec<u8> {
+    let mut compressed_nibbles = vec![];
+    for i in 0..nibbles.len() {
+        if i % 2 == 0 {
+            compressed_nibbles.push(nibbles[i] << 4);
+        } else {
+            compressed_nibbles[i / 2] |= nibbles[i];
+        }
+    }
+    compressed_nibbles
+}
+
 pub fn full_nibble_path_to_address_hash(key_path: &[u8]) -> B256 {
     if key_path.len() != 64 {
         panic!(
@@ -8,15 +20,11 @@ pub fn full_nibble_path_to_address_hash(key_path: &[u8]) -> B256 {
         );
     }
 
-    let mut raw_address_hash = vec![];
-    for i in 0..key_path.len() {
-        if i % 2 == 0 {
-            raw_address_hash.push(key_path[i] << 4);
-        } else {
-            raw_address_hash[i / 2] |= key_path[i];
-        }
-    }
-    B256::from_slice(&raw_address_hash)
+    B256::from_slice(&compress_nibbles(key_path))
+}
+
+pub fn partial_nibble_path_to_right_padded_b256(partial_nibble_path: &[u8]) -> B256 {
+    B256::right_padding_from(&compress_nibbles(partial_nibble_path))
 }
 
 pub fn address_to_nibble_path(address: Address) -> Vec<u8> {
@@ -28,10 +36,14 @@ pub fn address_to_nibble_path(address: Address) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    use alloy::hex::FromHex;
     use eth_trie::nibbles::Nibbles as EthNibbles;
-    use revm_primitives::{keccak256, Address};
+    use revm_primitives::{keccak256, Address, B256};
 
-    use crate::utils::{address_to_nibble_path, full_nibble_path_to_address_hash};
+    use crate::utils::{
+        address_to_nibble_path, full_nibble_path_to_address_hash,
+        partial_nibble_path_to_right_padded_b256,
+    };
 
     #[test]
     fn test_eth_trie_and_ethportalapi_nibbles() {
@@ -51,5 +63,16 @@ mod tests {
         let path: Vec<u8> = address_to_nibble_path(address);
         let generated_address_hash = full_nibble_path_to_address_hash(&path);
         assert_eq!(address_hash, generated_address_hash);
+    }
+
+    #[test]
+    fn test_partial_nibble_path_to_right_padded_b256() {
+        let partial_nibble_path = vec![0xf, 0xf, 0x0, 0x1, 0x0, 0x2, 0x0, 0x3];
+        let partial_path = partial_nibble_path_to_right_padded_b256(&partial_nibble_path);
+        assert_eq!(
+            partial_path,
+            B256::from_hex("0xff01020300000000000000000000000000000000000000000000000000000000")
+                .unwrap()
+        );
     }
 }
