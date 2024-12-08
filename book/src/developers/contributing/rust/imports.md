@@ -6,7 +6,7 @@
   3. self, super and crate imports.
 - Alphabetize imports in `Cargo.toml`
 
-```rust
+```rust,ignore
 use alloc::alloc::Layout;
 use core::f32;
 use std::sync::Arc;
