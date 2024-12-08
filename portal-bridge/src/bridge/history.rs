@@ -3,6 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use ethportal_api::{
+    jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
+    HistoryContentKey,
+};
 use futures::future::join_all;
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -11,6 +15,10 @@ use tokio::{
 };
 use tracing::{debug, error, info, warn, Instrument};
 use trin_metrics::bridge::BridgeMetricsReporter;
+use trin_validation::{
+    constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
+    oracle::HeaderOracle,
+};
 
 use crate::{
     api::execution::ExecutionApi,
@@ -19,14 +27,6 @@ use crate::{
     stats::{HistoryBlockStats, StatsReporter},
     types::{full_header::FullHeader, mode::BridgeMode},
     utils::{read_test_assets_from_file, TestAssets},
-};
-use ethportal_api::{
-    jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
-    HistoryContentKey,
-};
-use trin_validation::{
-    constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
-    oracle::HeaderOracle,
 };
 
 // todo: calculate / test optimal saturation delay

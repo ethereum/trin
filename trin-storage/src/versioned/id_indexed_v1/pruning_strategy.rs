@@ -2,9 +2,8 @@ use std::{fmt::Debug, ops::Range, time::Duration};
 
 use tracing::debug;
 
-use crate::versioned::usage_stats::UsageStats;
-
 use super::IdIndexedV1StoreConfig;
+use crate::versioned::usage_stats::UsageStats;
 
 /// The configuration parameters used by [PruningStrategy].
 #[derive(Clone, Debug)]
@@ -202,9 +201,8 @@ mod tests {
     use r2d2_sqlite::SqliteConnectionManager;
     use rstest::rstest;
 
-    use crate::{versioned::ContentType, DistanceFunction};
-
     use super::*;
+    use crate::{versioned::ContentType, DistanceFunction};
 
     const DEFAULT_STORAGE_CAPACITY_BYTES: u64 = 1_000_000;
 

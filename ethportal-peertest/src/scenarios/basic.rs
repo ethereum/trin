@@ -1,4 +1,3 @@
-use crate::{utils::fixture_header_by_hash, Peertest, PeertestNode};
 use alloy::primitives::{B256, U256};
 use ethportal_api::{
     types::{distance::Distance, network::Subnetwork},
@@ -9,6 +8,8 @@ use ethportal_api::{
 use jsonrpsee::async_client::Client;
 use ssz::Encode;
 use tracing::info;
+
+use crate::{utils::fixture_header_by_hash, Peertest, PeertestNode};
 
 pub async fn test_web3_client_version(target: &Client) {
     info!("Testing web3_clientVersion");

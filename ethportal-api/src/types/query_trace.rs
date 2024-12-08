@@ -222,7 +222,6 @@ mod tests {
     use ureq::json;
 
     use super::*;
-
     use crate::types::enr::generate_random_remote_enr;
 
     fn new_node() -> (NodeId, Enr) {

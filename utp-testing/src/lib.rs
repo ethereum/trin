@@ -5,7 +5,8 @@ extern crate core;
 pub mod cli;
 pub mod rpc;
 
-use crate::rpc::RpcServer;
+use std::{io::ErrorKind, net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
+
 use discv5::TalkRequest;
 use ethportal_api::{
     types::{enr::Enr, network::Subnetwork, portal_wire::MAINNET},
@@ -20,13 +21,14 @@ use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
 };
-use std::{io::ErrorKind, net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::{
     mpsc::{self, Receiver},
     RwLock,
 };
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
+
+use crate::rpc::RpcServer;
 
 /// uTP test app
 pub struct TestApp {

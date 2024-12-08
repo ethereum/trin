@@ -2,6 +2,18 @@ use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy::primitives::B256;
 use clap::Parser;
+use ethportal_api::{
+    types::{
+        cli::{
+            check_private_key_length, network_parser, DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK,
+            DEFAULT_WEB3_HTTP_PORT,
+        },
+        network::Subnetwork,
+        portal_wire::NetworkSpec,
+    },
+    Enr,
+};
+use portalnet::discovery::ENR_PORTAL_CLIENT_KEY;
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client, IntoUrl, Request, Response,
@@ -19,18 +31,6 @@ use crate::{
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
     FALLBACK_BASE_EL_ENDPOINT,
 };
-use ethportal_api::{
-    types::{
-        cli::{
-            check_private_key_length, network_parser, DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK,
-            DEFAULT_WEB3_HTTP_PORT,
-        },
-        network::Subnetwork,
-        portal_wire::NetworkSpec,
-    },
-    Enr,
-};
-use portalnet::discovery::ENR_PORTAL_CLIENT_KEY;
 
 const DEFAULT_SUBNETWORK: &str = "history";
 const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";

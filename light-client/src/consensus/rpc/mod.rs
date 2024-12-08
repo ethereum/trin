@@ -2,12 +2,13 @@ pub mod mock_rpc;
 pub mod nimbus_rpc;
 pub mod portal_rpc;
 
+use anyhow::Result;
+use async_trait::async_trait;
+
 use super::types::{
     LightClientBootstrapDeneb, LightClientFinalityUpdateDeneb, LightClientOptimisticUpdateDeneb,
     LightClientUpdateDeneb,
 };
-use anyhow::Result;
-use async_trait::async_trait;
 
 // implements https://github.com/ethereum/beacon-APIs/tree/master/apis/beacon/light_client
 #[async_trait]

@@ -1,23 +1,23 @@
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
 use alloy::primitives::B256;
 use anyhow::ensure;
 use eth_trie::{RootWithTrieDiff, Trie};
 use ethportal_api::{types::execution::transaction::Transaction, Header};
 use revm::inspectors::TracerEip3155;
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
 use tokio::sync::{oneshot::Receiver, Mutex};
 use tracing::{info, warn};
 
+use super::config::StateConfig;
 use crate::{
     era::manager::EraManager,
     evm::block_executor::BlockExecutor,
     metrics::{start_timer_vec, stop_timer, BLOCK_PROCESSING_TIMES},
     storage::{evm_db::EvmDB, execution_position::ExecutionPosition, utils::setup_rocksdb},
 };
-
-use super::config::StateConfig;
 
 pub struct TrinExecution {
     pub database: EvmDB,
@@ -166,9 +166,8 @@ mod tests {
 
     use trin_utils::dir::create_temp_test_dir;
 
-    use crate::era::utils::process_era1_file;
-
     use super::*;
+    use crate::era::utils::process_era1_file;
 
     #[tokio::test]
     #[ignore = "This test downloads data from a remote server"]

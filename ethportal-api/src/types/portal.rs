@@ -2,9 +2,8 @@ use alloy::primitives::{Bytes, U256};
 use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, BitList};
 
-use crate::{types::enr::Enr, OverlayContentKey};
-
 use super::query_trace::QueryTrace;
+use crate::{types::enr::Enr, OverlayContentKey};
 
 /// The SSZ encoded representation of content key.
 ///

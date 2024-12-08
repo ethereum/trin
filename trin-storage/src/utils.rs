@@ -1,3 +1,9 @@
+use std::{fs, path::Path};
+
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+use tracing::info;
+
 use crate::{
     error::ContentStoreError,
     sql::{
@@ -7,10 +13,6 @@ use crate::{
     versioned::sql::STORE_INFO_CREATE_TABLE,
     DATABASE_NAME,
 };
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
-use std::{fs, path::Path};
-use tracing::info;
 
 /// Helper function for opening a SQLite connection.
 pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {

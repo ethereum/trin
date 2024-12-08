@@ -1,14 +1,14 @@
-use crate::consensus::types::u64_deserialize;
+use std::cmp;
+
 use anyhow::Result;
 use async_trait::async_trait;
-use std::cmp;
 
 use super::ConsensusRpc;
 use crate::{
     consensus::{
         constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES,
         types::{
-            LightClientBootstrapDeneb, LightClientFinalityUpdateDeneb,
+            u64_deserialize, LightClientBootstrapDeneb, LightClientFinalityUpdateDeneb,
             LightClientOptimisticUpdateDeneb, LightClientUpdateDeneb,
         },
     },

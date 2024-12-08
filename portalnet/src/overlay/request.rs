@@ -1,15 +1,15 @@
 use std::fmt::Debug;
 
 use discv5::{enr::NodeId, rpc::RequestId};
+use ethportal_api::types::{
+    enr::Enr,
+    portal_wire::{Request, Response},
+};
 use futures::channel::oneshot;
 use tokio::sync::OwnedSemaphorePermit;
 
 use super::errors::OverlayRequestError;
 use crate::find::query_pool::QueryId;
-use ethportal_api::types::{
-    enr::Enr,
-    portal_wire::{Request, Response},
-};
 
 /// An incoming or outgoing request.
 #[derive(Debug, PartialEq)]

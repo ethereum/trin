@@ -1,4 +1,5 @@
-use crate::consensus::rpc::ConsensusRpc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 use ethportal_api::{
@@ -19,9 +20,10 @@ use ethportal_api::{
 };
 use futures::channel::oneshot;
 use portalnet::overlay::command::OverlayCommand;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::warn;
+
+use crate::consensus::rpc::ConsensusRpc;
 
 pub const BEACON_GENESIS_TIME: u64 = 1606824023;
 

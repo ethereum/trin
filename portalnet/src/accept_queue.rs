@@ -108,8 +108,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ethportal_api::{types::enr::generate_random_remote_enr, IdentityContentKey};
+
+    use super::*;
 
     #[tokio::test]
     async fn test_remove_key() {

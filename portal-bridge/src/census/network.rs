@@ -16,14 +16,13 @@ use tokio::{
 };
 use tracing::{debug, error, info, warn};
 
-use crate::{
-    census::CensusError,
-    cli::{BridgeConfig, ClientType},
-};
-
 use super::{
     peers::Peers,
     scoring::{AdditiveWeight, PeerSelector},
+};
+use crate::{
+    census::CensusError,
+    cli::{BridgeConfig, ClientType},
 };
 
 /// The result of the liveness check.

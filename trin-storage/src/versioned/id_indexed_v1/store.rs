@@ -1,9 +1,11 @@
 use std::marker::PhantomData;
 
+use ethportal_api::{types::distance::Distance, OverlayContentKey, RawContentValue};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{named_params, types::Type, OptionalExtension};
 use tracing::{debug, error, warn};
+use trin_metrics::storage::StorageMetricsReporter;
 
 use super::{
     migration::migrate_legacy_history_store, pruning_strategy::PruningStrategy, sql,
@@ -15,8 +17,6 @@ use crate::{
     versioned::{usage_stats::UsageStats, ContentType, StoreVersion, VersionedContentStore},
     ContentId,
 };
-use ethportal_api::{types::distance::Distance, OverlayContentKey, RawContentValue};
-use trin_metrics::storage::StorageMetricsReporter;
 
 /// The result of looking for the farthest content.
 struct FarthestQueryResult {
@@ -548,12 +548,11 @@ mod tests {
     use rand::Rng;
     use tempfile::TempDir;
 
+    use super::*;
     use crate::{
         test_utils::generate_random_bytes, utils::setup_sql,
         versioned::id_indexed_v1::pruning_strategy::PruningConfig, DistanceFunction,
     };
-
-    use super::*;
 
     const CONTENT_DEFAULT_SIZE_BYTES: u64 = 100;
 

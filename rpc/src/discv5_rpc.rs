@@ -1,10 +1,13 @@
-use crate::errors::RpcServeError;
+use std::sync::Arc;
 
-use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
 use ethportal_api::{types::enr::Enr, Discv5ApiServer, NodeInfo, RoutingTableInfo};
 use portalnet::discovery::Discovery;
-use std::sync::Arc;
+
+use crate::{
+    errors::RpcServeError,
+    jsonrpsee::core::{async_trait, RpcResult},
+};
 
 pub struct Discv5Api {
     discv5: Arc<Discovery>,

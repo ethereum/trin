@@ -1,22 +1,18 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{anyhow, Result};
-
-use crate::consensus::ConsensusLightClient;
+use ethportal_api::{consensus::header::BeaconBlockHeader, light_client::store::LightClientStore};
 use log::{error, info, warn};
-use tokio::sync::RwLock;
+use tokio::{spawn, sync::RwLock, time::sleep};
 
 use crate::{
     config::{client_config::Config, CheckpointFallback, Network},
-    consensus::{errors::ConsensusError, rpc::ConsensusRpc},
+    consensus::{errors::ConsensusError, rpc::ConsensusRpc, ConsensusLightClient},
+    database::Database,
+    errors::NodeError,
+    node::Node,
+    rpc::Rpc,
 };
-use ethportal_api::{consensus::header::BeaconBlockHeader, light_client::store::LightClientStore};
-use std::path::PathBuf;
-use tokio::{spawn, time::sleep};
-
-use crate::{database::Database, errors::NodeError, node::Node};
-
-use crate::rpc::Rpc;
 
 #[derive(Default)]
 pub struct ClientBuilder {

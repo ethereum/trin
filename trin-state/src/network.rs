@@ -1,23 +1,22 @@
-use parking_lot::RwLock as PLRwLock;
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::debug;
-use utp_rs::socket::UtpSocket;
 
-use crate::storage::StateStorage;
 use ethportal_api::{
     types::{distance::XorMetric, network::Subnetwork},
     StateContentKey,
 };
+use parking_lot::RwLock as PLRwLock;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{config::OverlayConfig, protocol::OverlayProtocol},
 };
-use trin_validation::oracle::HeaderOracle;
-
-use crate::validation::StateValidator;
+use tokio::sync::RwLock;
+use tracing::debug;
 use trin_storage::PortalStorageConfig;
+use trin_validation::oracle::HeaderOracle;
+use utp_rs::socket::UtpSocket;
+
+use crate::{storage::StateStorage, validation::StateValidator};
 
 /// State network layer on top of the overlay protocol. Encapsulates state network specific data and
 /// logic.

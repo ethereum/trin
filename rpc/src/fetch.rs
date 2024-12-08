@@ -1,7 +1,6 @@
+use ethportal_api::types::jsonrpc::{endpoints::SubnetworkEndpoint, request::JsonRpcRequest};
 use serde_json::Value;
 use tokio::sync::mpsc;
-
-use ethportal_api::types::jsonrpc::{endpoints::SubnetworkEndpoint, request::JsonRpcRequest};
 
 use crate::{
     errors::{ContentNotFoundJsonError, RpcServeError},

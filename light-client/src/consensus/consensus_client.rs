@@ -1,23 +1,12 @@
-use std::{cmp, sync::Arc};
+use std::{
+    cmp,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use alloy::primitives::B256;
 use anyhow::{anyhow, ensure, Result};
 use chrono::Duration;
-use milagro_bls::PublicKey;
-use ssz_rs::prelude::*;
-use tracing::{debug, info, warn};
-
-use super::{rpc::ConsensusRpc, types::*, utils::*};
-
-use super::errors::ConsensusError;
-use crate::{
-    config::client_config::Config,
-    consensus::{
-        constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES, rpc::portal_rpc::expected_current_slot,
-    },
-    types::Bytes32,
-    utils::bytes_to_bytes32,
-};
 use ethportal_api::{
     consensus::{header::BeaconBlockHeader, signature::BlsSignature},
     light_client::{
@@ -29,9 +18,21 @@ use ethportal_api::{
     },
     utils::bytes::hex_encode,
 };
+use milagro_bls::PublicKey;
+use ssz_rs::prelude::*;
 use ssz_types::{typenum, BitVector, FixedVector};
-use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::{debug, info, warn};
 use tree_hash::TreeHash;
+
+use super::{errors::ConsensusError, rpc::ConsensusRpc, types::*, utils::*};
+use crate::{
+    config::client_config::Config,
+    consensus::{
+        constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES, rpc::portal_rpc::expected_current_slot,
+    },
+    types::Bytes32,
+    utils::bytes_to_bytes32,
+};
 
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md
 // does not implement force updates

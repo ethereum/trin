@@ -14,30 +14,6 @@ use discv5::{
     kbucket::{FailureReason, InsertResult, KBucketsTable, NodeStatus},
     ConnectionDirection, ConnectionState, TalkRequest,
 };
-use futures::channel::oneshot;
-use parking_lot::RwLock;
-use ssz::Encode;
-use tokio::sync::{broadcast, mpsc::UnboundedSender};
-use tracing::{debug, error, info, warn};
-use utp_rs::socket::UtpSocket;
-
-use crate::{
-    discovery::{Discovery, UtpEnr},
-    find::query_info::{FindContentResult, RecursiveFindContentResult},
-    gossip::{propagate_gossip_cross_thread, trace_propagate_gossip_cross_thread, GossipResult},
-    overlay::{
-        command::OverlayCommand,
-        config::{FindContentConfig, OverlayConfig},
-        errors::OverlayRequestError,
-        request::{OverlayRequest, RequestDirection},
-        service::OverlayService,
-    },
-    types::{
-        kbucket::{Entry, SharedKBucketsTable},
-        node::Node,
-    },
-    utp_controller::UtpController,
-};
 use ethportal_api::{
     types::{
         bootnodes::Bootnode,
@@ -53,11 +29,34 @@ use ethportal_api::{
     utils::bytes::hex_encode,
     OverlayContentKey, RawContentKey, RawContentValue,
 };
+use futures::channel::oneshot;
+use parking_lot::RwLock;
+use ssz::Encode;
+use tokio::sync::{broadcast, mpsc::UnboundedSender};
+use tracing::{debug, error, info, warn};
 use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
 use trin_storage::ContentStore;
 use trin_validation::validator::{ValidationResult, Validator};
+use utp_rs::socket::UtpSocket;
 
-use crate::events::EventEnvelope;
+use crate::{
+    discovery::{Discovery, UtpEnr},
+    events::EventEnvelope,
+    find::query_info::{FindContentResult, RecursiveFindContentResult},
+    gossip::{propagate_gossip_cross_thread, trace_propagate_gossip_cross_thread, GossipResult},
+    overlay::{
+        command::OverlayCommand,
+        config::{FindContentConfig, OverlayConfig},
+        errors::OverlayRequestError,
+        request::{OverlayRequest, RequestDirection},
+        service::OverlayService,
+    },
+    types::{
+        kbucket::{Entry, SharedKBucketsTable},
+        node::Node,
+    },
+    utp_controller::UtpController,
+};
 
 /// Overlay protocol is a layer on top of discv5 that handles all requests from the overlay networks
 /// (state, history etc.) and dispatch them to the discv5 protocol TalkReq. Each network should
@@ -737,8 +736,9 @@ fn validate_find_nodes_distances(distances: &[u16]) -> Result<(), OverlayRequest
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case(vec![0u16])]

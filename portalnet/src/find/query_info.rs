@@ -1,8 +1,4 @@
 use discv5::{enr::NodeId, kbucket::Key, Enr};
-use futures::channel::oneshot;
-use smallvec::SmallVec;
-
-use crate::{find::query_pool::TargetKey, overlay::errors::OverlayRequestError};
 use ethportal_api::{
     types::{
         portal_wire::{Content, FindContent, FindNodes, Request},
@@ -10,6 +6,10 @@ use ethportal_api::{
     },
     OverlayContentKey, RawContentValue,
 };
+use futures::channel::oneshot;
+use smallvec::SmallVec;
+
+use crate::{find::query_pool::TargetKey, overlay::errors::OverlayRequestError};
 
 /// Information about a query.
 #[derive(Debug)]
@@ -130,8 +130,9 @@ fn findnode_log2distance(target: NodeId, peer: NodeId, size: usize) -> Option<Ve
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
     use test_log::test;
+
+    use super::*;
 
     #[test]
     fn test_log2distance() {

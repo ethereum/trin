@@ -1,15 +1,15 @@
 use std::sync::{Arc, Mutex};
 
-use jsonrpsee::http_client::HttpClient;
-use tokio::time::{sleep, Duration};
-use tracing::{debug, warn, Instrument};
-
-use crate::stats::{BeaconSlotStats, HistoryBlockStats, StatsReporter};
 use ethportal_api::{
     types::portal::TraceGossipInfo, BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient,
     ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
     OverlayContentKey,
 };
+use jsonrpsee::http_client::HttpClient;
+use tokio::time::{sleep, Duration};
+use tracing::{debug, warn, Instrument};
+
+use crate::stats::{BeaconSlotStats, HistoryBlockStats, StatsReporter};
 
 const GOSSIP_RETRY_COUNT: u64 = 3;
 const RETRY_AFTER: Duration = Duration::from_secs(15);

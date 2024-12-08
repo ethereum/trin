@@ -1,27 +1,11 @@
-use std::sync::Mutex as StdMutex;
+use std::{
+    cmp::Ordering,
+    path::PathBuf,
+    sync::{Arc, Mutex as StdMutex},
+    time::SystemTime,
+};
 
 use anyhow::{bail, ensure};
-use jsonrpsee::http_client::HttpClient;
-use serde_json::Value;
-use ssz_types::VariableList;
-use std::{cmp::Ordering, path::PathBuf, sync::Arc, time::SystemTime};
-use tokio::{
-    sync::Mutex,
-    time::{interval, sleep, Duration, MissedTickBehavior},
-};
-use tracing::{info, warn, Instrument};
-use trin_metrics::bridge::BridgeMetricsReporter;
-
-use crate::{
-    api::consensus::ConsensusApi,
-    constants::BEACON_GENESIS_TIME,
-    gossip::gossip_beacon_content,
-    stats::{BeaconSlotStats, StatsReporter},
-    types::mode::BridgeMode,
-    utils::{
-        duration_until_next_update, expected_current_slot, read_test_assets_from_file, TestAssets,
-    },
-};
 use ethportal_api::{
     consensus::{
         beacon_state::BeaconStateDeneb,
@@ -46,6 +30,26 @@ use ethportal_api::{
     },
     utils::bytes::hex_decode,
     BeaconContentKey, BeaconContentValue, LightClientBootstrapKey, LightClientUpdatesByRangeKey,
+};
+use jsonrpsee::http_client::HttpClient;
+use serde_json::Value;
+use ssz_types::VariableList;
+use tokio::{
+    sync::Mutex,
+    time::{interval, sleep, Duration, MissedTickBehavior},
+};
+use tracing::{info, warn, Instrument};
+use trin_metrics::bridge::BridgeMetricsReporter;
+
+use crate::{
+    api::consensus::ConsensusApi,
+    constants::BEACON_GENESIS_TIME,
+    gossip::gossip_beacon_content,
+    stats::{BeaconSlotStats, StatsReporter},
+    types::mode::BridgeMode,
+    utils::{
+        duration_until_next_update, expected_current_slot, read_test_assets_from_file, TestAssets,
+    },
 };
 
 /// The number of slots in an epoch.

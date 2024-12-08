@@ -66,8 +66,9 @@ impl E2StoreMemory {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use ethportal_api::utils::bytes::{hex_decode, hex_encode};
+
+    use super::*;
 
     // test cases sourced from: https://github.com/ethereum/go-ethereum/pull/26621/
 

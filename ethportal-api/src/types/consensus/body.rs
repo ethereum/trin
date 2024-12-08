@@ -1,14 +1,3 @@
-use crate::{
-    consensus::{
-        beacon_state::Epoch,
-        execution_payload::{
-            ExecutionPayloadBellatrix, ExecutionPayloadCapella, ExecutionPayloadDeneb,
-        },
-        fork::ForkName,
-        kzg_commitment::KzgCommitment,
-    },
-    types::bytes::ByteList1G,
-};
 use alloy::primitives::{Address, B256};
 use discv5::enr::k256::elliptic_curve::consts::U16;
 use rs_merkle::{algorithms::Sha256, MerkleTree};
@@ -26,6 +15,17 @@ use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
 use super::{header::BeaconBlockHeader, pubkey::PubKey, signature::BlsSignature};
+use crate::{
+    consensus::{
+        beacon_state::Epoch,
+        execution_payload::{
+            ExecutionPayloadBellatrix, ExecutionPayloadCapella, ExecutionPayloadDeneb,
+        },
+        fork::ForkName,
+        kzg_commitment::KzgCommitment,
+    },
+    types::bytes::ByteList1G,
+};
 
 type MaxBlobCommitmentsPerBlock = U4096;
 type MaxBlsToExecutionChanges = U16;
@@ -238,11 +238,13 @@ pub struct BlsToExecutionChange {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
+    use std::str::FromStr;
+
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
-    use std::str::FromStr;
+
+    use super::*;
 
     /// Test vectors sourced from:
     /// https://github.com/ethereum/consensus-spec-tests/commit/c6e69469a75392b35169bc6234d4d3e6c4e288da

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use alloy::primitives::B256;
 use ethportal_api::BeaconContentKey;
 use light_client::{
@@ -5,7 +7,6 @@ use light_client::{
     ClientBuilder,
 };
 use portalnet::overlay::command::OverlayCommand;
-use std::path::PathBuf;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{error, info};
 

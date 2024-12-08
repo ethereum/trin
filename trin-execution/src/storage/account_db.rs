@@ -61,11 +61,11 @@ impl DB for AccountDB {
 #[cfg(test)]
 mod test_account_db {
 
-    use crate::storage::utils::setup_rocksdb;
-
-    use super::*;
     use eth_trie::DB;
     use trin_utils::dir::create_temp_test_dir;
+
+    use super::*;
+    use crate::storage::utils::setup_rocksdb;
 
     #[test]
     fn test_account_db_get() {

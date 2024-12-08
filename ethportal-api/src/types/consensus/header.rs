@@ -22,10 +22,11 @@ pub struct BeaconBlockHeader {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
+
+    use super::*;
 
     /// Test vectors sourced from:
     /// https://github.com/ethereum/consensus-spec-tests/commit/c6e69469a75392b35169bc6234d4d3e6c4e288da

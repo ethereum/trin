@@ -29,12 +29,13 @@ pub struct HistoricalSummariesWithProof {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
+    use serde_json::Value;
+    use ssz::{Decode, Encode};
+
     use crate::consensus::{
         beacon_state::BeaconStateDeneb,
         historical_summaries::{HistoricalSummariesStateProof, HistoricalSummariesWithProof},
     };
-    use serde_json::Value;
-    use ssz::{Decode, Encode};
 
     #[test]
     fn test_historical_summaries_with_proof_deneb() {

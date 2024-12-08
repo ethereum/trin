@@ -1,11 +1,3 @@
-use super::serde::{de_hex_to_txs, de_number_to_u256, se_hex_to_number, se_txs_to_hex};
-use crate::{
-    types::{
-        bytes::ByteList32,
-        consensus::{body::Transactions, fork::ForkName},
-    },
-    utils::serde::{hex_fixed_vec, hex_var_list},
-};
 use alloy::primitives::{Address, B256, U256};
 use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::{Deserialize, Serialize};
@@ -16,6 +8,15 @@ use ssz_types::{typenum, typenum::U16, FixedVector, VariableList};
 use superstruct::superstruct;
 use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
+
+use super::serde::{de_hex_to_txs, de_number_to_u256, se_hex_to_number, se_txs_to_hex};
+use crate::{
+    types::{
+        bytes::ByteList32,
+        consensus::{body::Transactions, fork::ForkName},
+    },
+    utils::serde::{hex_fixed_vec, hex_var_list},
+};
 
 pub type Bloom = FixedVector<u8, typenum::U256>;
 pub type ExtraData = ByteList32;
@@ -217,11 +218,13 @@ impl ExecutionPayloadHeader {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
+    use std::str::FromStr;
+
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
-    use std::str::FromStr;
+
+    use super::*;
 
     #[rstest]
     #[case("case_0")]

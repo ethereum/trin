@@ -1,8 +1,3 @@
-use crate::consensus::{
-    body::{BeaconBlockBodyBellatrix, BeaconBlockBodyCapella, BeaconBlockBodyDeneb},
-    fork::ForkName,
-    signature::BlsSignature,
-};
 use alloy::primitives::B256;
 use jsonrpsee::core::Serialize;
 use rs_merkle::{algorithms::Sha256, MerkleTree};
@@ -13,6 +8,12 @@ use ssz_derive::{Decode, Encode};
 use superstruct::superstruct;
 use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
+
+use crate::consensus::{
+    body::{BeaconBlockBodyBellatrix, BeaconBlockBodyCapella, BeaconBlockBodyDeneb},
+    fork::ForkName,
+    signature::BlsSignature,
+};
 
 /// A block of the `BeaconChain`.
 #[superstruct(
@@ -190,12 +191,14 @@ impl SignedBeaconBlock {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
-    use crate::consensus::fork::ForkName;
+    use std::str::FromStr;
+
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
-    use std::str::FromStr;
+
+    use super::*;
+    use crate::consensus::fork::ForkName;
 
     #[rstest]
     #[case("case_0")]

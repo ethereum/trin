@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
+use ethportal_api::{types::network::Subnetwork, utils::bytes::hex_encode};
 use tokio::process::{Child, Command};
 
 use crate::cli::BridgeConfig;
-use ethportal_api::{types::network::Subnetwork, utils::bytes::hex_encode};
 
 pub fn build_trin(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
     if !bridge_config.executable_path.is_file() {

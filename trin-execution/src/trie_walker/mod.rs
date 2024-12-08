@@ -160,14 +160,14 @@ impl<DB: TrieWalkerDb> Iterator for TrieWalker<DB> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{str::FromStr, sync::Arc};
 
     use alloy::primitives::{keccak256, Address, B256, U256};
     use eth_trie::{EthTrie, RootWithTrieDiff, Trie};
-    use std::{str::FromStr, sync::Arc};
     use tracing_test::traced_test;
     use trin_utils::dir::create_temp_test_dir;
 
+    use super::*;
     use crate::{
         config::StateConfig,
         execution::TrinExecution,

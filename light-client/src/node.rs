@@ -1,13 +1,13 @@
 use std::{sync::Arc, time::Duration};
 
-use crate::{
-    config::client_config::Config,
-    consensus::{rpc::ConsensusRpc, ConsensusLightClient},
-};
 use anyhow::{Error, Result};
 use ethportal_api::{consensus::header::BeaconBlockHeader, light_client::store::LightClientStore};
 
-use crate::errors::NodeError;
+use crate::{
+    config::client_config::Config,
+    consensus::{rpc::ConsensusRpc, ConsensusLightClient},
+    errors::NodeError,
+};
 
 pub struct Node<R: ConsensusRpc> {
     pub consensus: ConsensusLightClient<R>,

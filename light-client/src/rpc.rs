@@ -1,19 +1,16 @@
-use anyhow::Result;
-use log::info;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::sync::RwLock;
 
-use crate::consensus::rpc::ConsensusRpc;
+use anyhow::Result;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
     server::{Server, ServerHandle},
     Methods,
 };
+use log::info;
+use tokio::sync::RwLock;
 
-use crate::node::Node;
-
-use crate::utils::u64_to_hex_string;
+use crate::{consensus::rpc::ConsensusRpc, node::Node, utils::u64_to_hex_string};
 
 #[derive(Clone)]
 pub struct Rpc<R: ConsensusRpc> {

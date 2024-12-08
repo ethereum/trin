@@ -586,14 +586,16 @@ impl From<Accept> for Value {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
+    use std::str::FromStr;
+
     use alloy::{
         hex::FromHex,
         primitives::{bytes, Bytes},
     };
     use ssz_types::Error::OutOfBounds;
-    use std::str::FromStr;
     use test_log::test;
+
+    use super::*;
 
     #[test]
     fn subnetwork_invalid() {

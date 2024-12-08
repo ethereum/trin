@@ -1,13 +1,15 @@
+use std::{fmt, hash::Hash};
+
+use bytes::{BufMut, BytesMut};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use ssz::{Decode, DecodeError, Encode};
+use ssz_derive::{Decode, Encode};
+
 use crate::{
     types::content_key::{error::ContentKeyError, overlay::OverlayContentKey},
     utils::bytes::hex_encode_compact,
     RawContentKey,
 };
-use bytes::{BufMut, BytesMut};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use ssz::{Decode, DecodeError, Encode};
-use ssz_derive::{Decode, Encode};
-use std::{fmt, hash::Hash};
 
 // Prefixes for the different types of beacon content keys:
 // https://github.com/ethereum/portal-network-specs/blob/638aca50c913a749d0d762264d9a4ac72f1a9966/beacon-chain/beacon-network.md
@@ -207,9 +209,8 @@ impl<'de> Deserialize<'de> for BeaconContentKey {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use crate::utils::bytes::hex_decode;
-
     use super::*;
+    use crate::utils::bytes::hex_decode;
 
     fn test_encode_decode(content_key: &BeaconContentKey) {
         let bytes = content_key.to_bytes();

@@ -1,17 +1,19 @@
-use crate::{
-    utils::{
-        fixture_block_body, fixture_header_by_hash, fixture_header_by_number, fixture_receipts,
-    },
-    Peertest,
-};
+use std::str::FromStr;
+
 use alloy::primitives::B256;
 use ethportal_api::{
     jsonrpsee::async_client::Client,
     types::{enr::Enr, portal::FindContentInfo},
     ContentValue, HistoryContentKey, HistoryNetworkApiClient,
 };
-use std::str::FromStr;
 use tracing::info;
+
+use crate::{
+    utils::{
+        fixture_block_body, fixture_header_by_hash, fixture_header_by_number, fixture_receipts,
+    },
+    Peertest,
+};
 
 pub async fn test_validate_pre_merge_header_by_hash(peertest: &Peertest, target: &Client) {
     info!("Test validating a pre-merge header by block hash");

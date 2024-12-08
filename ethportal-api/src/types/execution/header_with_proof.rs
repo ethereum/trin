@@ -1,10 +1,11 @@
-use crate::{types::bytes::ByteList2048, Header};
 use alloy::{primitives::B256, rlp::Decodable};
 use jsonrpsee::core::Serialize;
 use serde::Deserialize;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector};
+
+use crate::{types::bytes::ByteList2048, Header};
 
 /// A block header with accumulator proof.
 /// Type definition:
@@ -183,11 +184,13 @@ impl ssz::Encode for SszNone {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
-    use crate::utils::bytes::{hex_decode, hex_encode};
+    use std::fs;
+
     use serde_json::Value;
     use ssz::Decode;
-    use std::fs;
+
+    use super::*;
+    use crate::utils::bytes::{hex_decode, hex_encode};
 
     #[test_log::test]
     fn decode_encode_header_with_proofs() {

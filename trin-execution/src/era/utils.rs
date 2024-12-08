@@ -12,12 +12,11 @@ use reqwest::Client;
 use tokio::time::sleep;
 use tracing::{info, warn};
 
+use super::types::ProcessedEra;
 use crate::era::{
     beacon::ProcessBeaconBlock,
     types::{EraType, ProcessedBlock, TransactionsWithSender},
 };
-
-use super::types::ProcessedEra;
 
 pub fn process_era1_file(raw_era1: Vec<u8>, epoch_index: u64) -> anyhow::Result<ProcessedEra> {
     let mut blocks = Vec::with_capacity(BLOCK_TUPLE_COUNT);

@@ -1,9 +1,10 @@
-use crate::{types::Bytes32, utils::bytes32_to_node};
 use anyhow::Result;
 use ethportal_api::consensus::{header::BeaconBlockHeader, signature::BlsSignature};
 use milagro_bls::{AggregateSignature, PublicKey};
 use ssz_rs::prelude::*;
 use tree_hash::TreeHash;
+
+use crate::{types::Bytes32, utils::bytes32_to_node};
 
 pub fn calc_sync_period(slot: u64) -> u64 {
     let epoch = slot / 32; // 32 slots per epoch

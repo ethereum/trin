@@ -492,13 +492,15 @@ where
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
+    use std::{cmp::min, time::Duration};
+
     use discv5::enr::NodeId;
     use quickcheck::*;
     use rand::{thread_rng, Rng};
-    use std::{cmp::min, time::Duration};
     use test_log::test;
     use tracing::trace;
+
+    use super::*;
 
     type TestQuery = FindContentQuery<NodeId>;
 

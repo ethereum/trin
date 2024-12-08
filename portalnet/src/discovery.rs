@@ -15,6 +15,12 @@ use discv5::{
     enr::{CombinedKey, Enr as Discv5Enr, NodeId},
     ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
 };
+use ethportal_api::{
+    types::{discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec},
+    utils::bytes::hex_decode,
+    version::get_trin_version,
+    NodeInfo,
+};
 use lru::LruCache;
 use parking_lot::RwLock;
 use tokio::sync::{mpsc, RwLock as TokioRwLock};
@@ -24,12 +30,6 @@ use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use super::config::PortalnetConfig;
 use crate::socket;
-use ethportal_api::{
-    types::{discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec},
-    utils::bytes::hex_decode,
-    version::get_trin_version,
-    NodeInfo,
-};
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
 const TALKREQ_CHANNEL_BUFFER: usize = 100;

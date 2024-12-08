@@ -4,15 +4,14 @@ use std::{
 };
 
 use discv5::TalkRequest;
-use futures::stream::{select_all, StreamExt};
-use tokio::sync::{broadcast, mpsc};
-use tokio_stream::wrappers::BroadcastStream;
-use tracing::{debug, error, trace, warn};
-
 use ethportal_api::{
     types::{network::Subnetwork, portal_wire::NetworkSpec},
     utils::bytes::{hex_encode, hex_encode_upper},
 };
+use futures::stream::{select_all, StreamExt};
+use tokio::sync::{broadcast, mpsc};
+use tokio_stream::wrappers::BroadcastStream;
+use tracing::{debug, error, trace, warn};
 
 /// Handles for communication between the main event handler and an overlay.
 pub struct OverlayHandle {
@@ -305,8 +304,9 @@ pub fn millis_to_epoch(time: SystemTime) -> i64 {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use std::time::SystemTime;
+
+    use super::*;
 
     #[test]
     fn test_timestamp_creation() {

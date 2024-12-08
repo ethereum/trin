@@ -1,23 +1,24 @@
-use alloy::primitives::B256;
-use parking_lot::RwLock as PLRwLock;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
-use tracing::{error, info};
-use utp_rs::socket::UtpSocket;
 
-use crate::{storage::BeaconStorage, sync::BeaconSync, validation::BeaconValidator};
+use alloy::primitives::B256;
 use ethportal_api::{
     types::{distance::XorMetric, network::Subnetwork},
     BeaconContentKey,
 };
 use light_client::{consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client};
+use parking_lot::RwLock as PLRwLock;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{config::OverlayConfig, protocol::OverlayProtocol},
 };
+use tokio::sync::{Mutex, RwLock};
+use tracing::{error, info};
 use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
+use utp_rs::socket::UtpSocket;
+
+use crate::{storage::BeaconStorage, sync::BeaconSync, validation::BeaconValidator};
 
 /// Beacon network layer on top of the overlay protocol. Encapsulates beacon network specific data
 /// and logic.

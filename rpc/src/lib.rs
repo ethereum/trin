@@ -15,8 +15,11 @@ mod serde;
 mod state_rpc;
 mod web3_rpc;
 
-use crate::jsonrpsee::server::ServerBuilder;
-pub use crate::rpc_server::RpcServerHandle;
+use std::{
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    sync::Arc,
+};
+
 use beacon_rpc::BeaconNetworkApi;
 pub use builder::{PortalRpcModule, RpcModuleBuilder, TransportRpcModuleConfig};
 use discv5_rpc::Discv5Api;
@@ -31,17 +34,14 @@ use ethportal_api::{
     },
 };
 use history_rpc::HistoryNetworkApi;
-use state_rpc::StateNetworkApi;
-use web3_rpc::Web3Api;
-
-use crate::rpc_server::RpcServerConfig;
 use portalnet::discovery::Discovery;
 use reth_ipc::server::Builder as IpcServerBuilder;
-use std::{
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
-    sync::Arc,
-};
+use state_rpc::StateNetworkApi;
 use tokio::sync::mpsc;
+use web3_rpc::Web3Api;
+
+pub use crate::rpc_server::RpcServerHandle;
+use crate::{jsonrpsee::server::ServerBuilder, rpc_server::RpcServerConfig};
 
 pub async fn launch_jsonrpc_server(
     trin_config: TrinConfig,

@@ -24,6 +24,7 @@ use trin_evm::{
     create_block_env, create_evm_with_tracer, spec_id::get_spec_id, tx_env_modifier::TxEnvModifier,
 };
 
+use super::post_block_beneficiaries::get_post_block_beneficiaries;
 use crate::{
     era::types::{ProcessedBlock, TransactionsWithSender},
     evm::pre_block_contracts::apply_pre_block_contracts,
@@ -33,8 +34,6 @@ use crate::{
     },
     storage::evm_db::EvmDB,
 };
-
-use super::post_block_beneficiaries::get_post_block_beneficiaries;
 
 pub const BLOCKHASH_SERVE_WINDOW: u64 = 256;
 const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";

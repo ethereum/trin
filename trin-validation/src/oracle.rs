@@ -1,10 +1,6 @@
 use alloy::primitives::B256;
 use anyhow::anyhow;
 use enr::NodeId;
-use serde_json::Value;
-use tokio::sync::mpsc;
-
-use crate::header_validator::HeaderValidator;
 use ethportal_api::{
     consensus::header::BeaconBlockHeader,
     light_client::store::LightClientStore,
@@ -18,6 +14,10 @@ use ethportal_api::{
     },
     ContentValue, Enr, HistoryContentKey, HistoryContentValue,
 };
+use serde_json::Value;
+use tokio::sync::mpsc;
+
+use crate::header_validator::HeaderValidator;
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation.
@@ -216,11 +216,11 @@ impl HeaderOracle {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use std::str::FromStr;
 
     use tree_hash::TreeHash;
 
+    use super::*;
     use crate::constants::DEFAULT_PRE_MERGE_ACC_HASH;
 
     #[tokio::test]

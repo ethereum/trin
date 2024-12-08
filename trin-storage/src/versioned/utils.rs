@@ -2,9 +2,8 @@ use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{named_params, OptionalExtension};
 
-use crate::error::ContentStoreError;
-
 use super::{sql, store::VersionedContentStore, ContentType, StoreVersion};
+use crate::error::ContentStoreError;
 
 /// Ensures that the correct version of the content store is used (by migrating the content if
 /// that's not the case).
@@ -87,9 +86,8 @@ fn update_store_info(
 pub mod test {
     use anyhow::Result;
 
-    use crate::{test_utils::create_test_portal_storage_config_with_capacity, PortalStorageConfig};
-
     use super::*;
+    use crate::{test_utils::create_test_portal_storage_config_with_capacity, PortalStorageConfig};
 
     const STORAGE_CAPACITY_MB: u32 = 10;
 

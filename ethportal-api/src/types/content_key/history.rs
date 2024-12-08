@@ -1,9 +1,10 @@
+use std::{fmt, hash::Hash};
+
 use bytes::{BufMut, BytesMut};
 use rand::{seq::SliceRandom, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
-use std::{fmt, hash::Hash};
 
 use crate::{
     types::content_key::{error::ContentKeyError, overlay::OverlayContentKey},

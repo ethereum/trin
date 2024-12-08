@@ -1,9 +1,10 @@
+use std::{path::PathBuf, process::exit};
+
 use figment::{
     providers::{Format, Serialized, Toml},
     Figment,
 };
 use serde::Deserialize;
-use std::{path::PathBuf, process::exit};
 
 use crate::config::{
     networks,

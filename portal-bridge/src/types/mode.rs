@@ -1,7 +1,6 @@
 use std::{ops::Range, path::PathBuf, str::FromStr};
 
 use anyhow::anyhow;
-
 use trin_validation::constants::EPOCH_SIZE;
 
 /// Used to help decode cli args identifying the desired bridge mode.
@@ -302,8 +301,9 @@ impl FromStr for FourFoursMode {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case("latest", BridgeMode::Latest)]

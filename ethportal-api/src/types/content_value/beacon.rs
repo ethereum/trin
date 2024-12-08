@@ -1,3 +1,9 @@
+use std::ops::Deref;
+
+use serde::{Serialize, Serializer};
+use ssz::{Decode, DecodeError, Encode};
+use ssz_types::{typenum::U128, VariableList};
+
 use crate::{
     light_client::{
         bootstrap::LightClientBootstrapDeneb, finality_update::LightClientFinalityUpdateDeneb,
@@ -29,10 +35,6 @@ use crate::{
     utils::bytes::hex_encode,
     BeaconContentKey, ContentValueError, RawContentValue,
 };
-use serde::{Serialize, Serializer};
-use ssz::{Decode, DecodeError, Encode};
-use ssz_types::{typenum::U128, VariableList};
-use std::ops::Deref;
 
 /// A wrapper type including a `ForkName` and `LightClientBootstrap`
 #[derive(Clone, Debug, PartialEq)]

@@ -7,24 +7,24 @@ use std::{
 };
 
 use cpu_time::ProcessTime;
+use ethportal_api::types::jsonrpc::request::StateJsonRpcRequest;
 use network::StateNetwork;
+use portalnet::{
+    config::PortalnetConfig,
+    discovery::{Discovery, UtpEnr},
+    events::{EventEnvelope, OverlayRequest},
+};
 use tokio::{
     sync::{broadcast, mpsc, RwLock},
     task::JoinHandle,
     time::interval,
 };
 use tracing::info;
+use trin_storage::PortalStorageConfig;
+use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
-use ethportal_api::types::jsonrpc::request::StateJsonRpcRequest;
-use portalnet::{
-    config::PortalnetConfig,
-    discovery::{Discovery, UtpEnr},
-    events::{EventEnvelope, OverlayRequest},
-};
-use trin_storage::PortalStorageConfig;
-use trin_validation::oracle::HeaderOracle;
 
 pub mod events;
 mod jsonrpc;

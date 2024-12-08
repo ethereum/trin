@@ -1,3 +1,6 @@
+use discv5::enr::NodeId;
+use jsonrpsee::{core::RpcResult, proc_macros::rpc};
+
 use crate::{
     types::{
         content_key::state::StateContentKey,
@@ -10,8 +13,6 @@ use crate::{
     },
     RawContentValue, RoutingTableInfo,
 };
-use discv5::enr::NodeId;
-use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Portal State JSON-RPC endpoints
 #[rpc(client, server, namespace = "portal")]

@@ -24,9 +24,9 @@ pub use beacon::{BeaconNetworkApiClient, BeaconNetworkApiServer};
 pub use discv5::{Discv5ApiClient, Discv5ApiServer};
 pub use eth::{EthApiClient, EthApiServer};
 pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
+// Re-exports jsonrpsee crate
+pub use jsonrpsee;
 pub use state::{StateNetworkApiClient, StateNetworkApiServer};
-pub use web3::{Web3ApiClient, Web3ApiServer};
-
 pub use types::{
     consensus,
     consensus::light_client,
@@ -47,8 +47,6 @@ pub use types::{
     node_id::*,
     portal::{RawContentKey, RawContentValue},
 };
-
-// Re-exports jsonrpsee crate
-pub use jsonrpsee;
+pub use web3::{Web3ApiClient, Web3ApiServer};
 
 shadow_rs::shadow!(build_info);

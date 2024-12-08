@@ -18,6 +18,22 @@ use discv5::{
     },
     rpc::RequestId,
 };
+use ethportal_api::{
+    generate_random_node_id,
+    types::{
+        distance::{Distance, Metric},
+        enr::{Enr, SszEnr},
+        network::Subnetwork,
+        portal_wire::{
+            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
+            OfferTrace, Ping, Pong, PopulatedOffer, Request, Response,
+            MAX_PORTAL_CONTENT_PAYLOAD_SIZE, MAX_PORTAL_NODES_ENRS_SIZE,
+        },
+        query_trace::{QueryFailureKind, QueryTrace},
+    },
+    utils::bytes::hex_encode_compact,
+    OverlayContentKey, RawContentKey, RawContentValue,
+};
 use futures::{channel::oneshot, future::join_all, prelude::*};
 use parking_lot::RwLock;
 use rand::Rng;
@@ -33,6 +49,9 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::{debug, enabled, error, info, trace, warn, Level};
+use trin_metrics::overlay::OverlayMetricsReporter;
+use trin_storage::{ContentStore, ShouldWeStoreContent};
+use trin_validation::validator::Validator;
 use utp_rs::cid::ConnectionId;
 
 use crate::{
@@ -68,25 +87,6 @@ use crate::{
     utils::portal_wire,
     utp_controller::UtpController,
 };
-use ethportal_api::{
-    generate_random_node_id,
-    types::{
-        distance::{Distance, Metric},
-        enr::{Enr, SszEnr},
-        network::Subnetwork,
-        portal_wire::{
-            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
-            OfferTrace, Ping, Pong, PopulatedOffer, Request, Response,
-            MAX_PORTAL_CONTENT_PAYLOAD_SIZE, MAX_PORTAL_NODES_ENRS_SIZE,
-        },
-        query_trace::{QueryFailureKind, QueryTrace},
-    },
-    utils::bytes::hex_encode_compact,
-    OverlayContentKey, RawContentKey, RawContentValue,
-};
-use trin_metrics::overlay::OverlayMetricsReporter;
-use trin_storage::{ContentStore, ShouldWeStoreContent};
-use trin_validation::validator::Validator;
 
 pub const FIND_NODES_MAX_NODES: usize = 32;
 
@@ -2606,12 +2606,17 @@ fn decode_and_validate_content_payload<TContentKey>(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
-
-    use std::{net::SocketAddr, time::Instant};
+    use std::{net::SocketAddr, str::FromStr, time::Instant};
 
     use alloy::primitives::U256;
     use discv5::kbucket;
+    use ethportal_api::types::{
+        cli::{DEFAULT_DISCOVERY_PORT, DEFAULT_UTP_TRANSFER_LIMIT},
+        content_key::overlay::IdentityContentKey,
+        distance::XorMetric,
+        enr::generate_random_remote_enr,
+        portal_wire::MAINNET,
+    };
     use kbucket::KBucketsTable;
     use rstest::*;
     use serial_test::serial;
@@ -2620,23 +2625,16 @@ mod tests {
         time::timeout,
     };
     use tokio_test::{assert_pending, assert_ready, task};
+    use trin_metrics::portalnet::PORTALNET_METRICS;
+    use trin_storage::{DistanceFunction, MemoryContentStore};
+    use trin_validation::{oracle::HeaderOracle, validator::MockValidator};
 
+    use super::*;
     use crate::{
         config::PortalnetConfig,
         discovery::{Discovery, NodeAddress},
         overlay::config::OverlayConfig,
     };
-    use ethportal_api::types::{
-        cli::{DEFAULT_DISCOVERY_PORT, DEFAULT_UTP_TRANSFER_LIMIT},
-        content_key::overlay::IdentityContentKey,
-        distance::XorMetric,
-        enr::generate_random_remote_enr,
-        portal_wire::MAINNET,
-    };
-    use std::str::FromStr;
-    use trin_metrics::portalnet::PORTALNET_METRICS;
-    use trin_storage::{DistanceFunction, MemoryContentStore};
-    use trin_validation::{oracle::HeaderOracle, validator::MockValidator};
 
     macro_rules! poll_command_rx {
         ($service:ident) => {

@@ -1,16 +1,16 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use discv5::enr::NodeId;
-use jsonrpsee::async_client::Client;
-use tracing::info;
-
-use crate::{utils::fixture_header_by_hash, Peertest};
 use ethportal_api::{
     types::{network::Subnetwork, portal::FindContentInfo},
     utils::bytes::hex_decode,
     BeaconNetworkApiClient, ContentValue, Enr, HistoryNetworkApiClient, OverlayContentKey,
     StateNetworkApiClient,
 };
+use jsonrpsee::async_client::Client;
+use tracing::info;
+
+use crate::{utils::fixture_header_by_hash, Peertest};
 
 pub async fn test_recursive_find_nodes_self(subnetwork: Subnetwork, peertest: &Peertest) {
     info!("Testing recursive find nodes self for {subnetwork}");

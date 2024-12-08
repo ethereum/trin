@@ -1,13 +1,6 @@
 use std::{fmt::Debug, sync::Arc};
 
 use discv5::{enr::NodeId, Enr};
-use portalnet::overlay::{config::FindContentConfig, errors::OverlayRequestError};
-use serde_json::{json, Value};
-use tokio::sync::mpsc;
-use tracing::error;
-use trin_storage::ContentStore;
-
-use crate::network::StateNetwork;
 use ethportal_api::{
     jsonrpsee::core::Serialize,
     types::{
@@ -20,6 +13,13 @@ use ethportal_api::{
     utils::bytes::hex_encode,
     ContentValue, OverlayContentKey, RawContentValue, StateContentKey, StateContentValue,
 };
+use portalnet::overlay::{config::FindContentConfig, errors::OverlayRequestError};
+use serde_json::{json, Value};
+use tokio::sync::mpsc;
+use tracing::error;
+use trin_storage::ContentStore;
+
+use crate::network::StateNetwork;
 
 /// Handles State network JSON-RPC requests
 pub struct StateRequestHandler {

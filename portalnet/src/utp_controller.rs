@@ -1,8 +1,8 @@
-use crate::discovery::UtpEnr;
+use std::{sync::Arc, time::Duration};
+
 use anyhow::anyhow;
 use bytes::Bytes;
 use lazy_static::lazy_static;
-use std::{sync::Arc, time::Duration};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tracing::debug;
 use trin_metrics::{
@@ -10,6 +10,8 @@ use trin_metrics::{
     overlay::OverlayMetricsReporter,
 };
 use utp_rs::{cid::ConnectionId, conn::ConnectionConfig, socket::UtpSocket};
+
+use crate::discovery::UtpEnr;
 /// UtpController is meant to be a container which contains all code related to/for managing uTP
 /// streams We are implementing this because we want the utils of controlling uTP connection to be
 /// as contained as it can, instead of extending overlay_service even more.

@@ -6,12 +6,12 @@ use ethportal_api::{
     types::{network::Subnetwork, portal_wire::OfferTrace},
     Enr,
 };
+use network::{Network, NetworkAction, NetworkInitializationConfig, NetworkManager};
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use tracing::{error, info, Instrument};
 
 use crate::cli::BridgeConfig;
-use network::{Network, NetworkAction, NetworkInitializationConfig, NetworkManager};
 
 mod network;
 mod peer;

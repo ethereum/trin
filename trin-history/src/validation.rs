@@ -2,9 +2,6 @@ use std::sync::Arc;
 
 use alloy::primitives::B256;
 use anyhow::{anyhow, ensure};
-use ssz::Decode;
-use tokio::sync::RwLock;
-
 use ethportal_api::{
     types::execution::{
         block_body::BlockBody, header::Header, header_with_proof::HeaderWithProof,
@@ -13,6 +10,8 @@ use ethportal_api::{
     utils::bytes::hex_encode,
     HistoryContentKey,
 };
+use ssz::Decode;
+use tokio::sync::RwLock;
 use trin_validation::{
     oracle::HeaderOracle,
     validator::{ValidationResult, Validator},
@@ -123,14 +122,14 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
     use std::fs;
 
     use alloy::primitives::U256;
+    use ethportal_api::utils::bytes::hex_decode;
     use serde_json::Value;
     use ssz::Encode;
 
-    use ethportal_api::utils::bytes::hex_decode;
+    use super::*;
 
     fn get_header_with_proof_ssz() -> Vec<u8> {
         let file =

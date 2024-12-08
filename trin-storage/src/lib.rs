@@ -5,7 +5,10 @@ pub mod test_utils;
 pub mod utils;
 pub mod versioned;
 
+use std::{ops::Deref, str::FromStr};
+
 use alloy::primitives::{Bytes, B256};
+pub use config::{PortalStorageConfig, PortalStorageConfigFactory};
 use discv5::enr::NodeId;
 use error::ContentStoreError;
 use ethportal_api::{
@@ -16,9 +19,6 @@ use ethportal_api::{
     RawContentValue,
 };
 use rusqlite::types::{FromSql, FromSqlError, ValueRef};
-use std::{ops::Deref, str::FromStr};
-
-pub use config::{PortalStorageConfig, PortalStorageConfigFactory};
 
 pub const DATABASE_NAME: &str = "trin.sqlite";
 
@@ -207,9 +207,10 @@ pub struct DataSize {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod test {
-    use super::*;
     use alloy::primitives::{bytes, B512};
     use ethportal_api::IdentityContentKey;
+
+    use super::*;
 
     #[test]
     fn memory_store_contains_key() {
