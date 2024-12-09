@@ -13,11 +13,6 @@ impl Filter {
     /// Create a new filter that includes the whole trie
     /// Slice index must be less than slice count or it will panic
     pub fn new(slice_index: u16, slice_count: u16) -> Self {
-        assert!(
-            slice_index < slice_count,
-            "slice_index must be less than slice_count"
-        );
-
         // if slice_count is 0 or 1, we want to include the whole trie
         if slice_count == 0 || slice_count == 1 {
             return Self {
@@ -25,6 +20,11 @@ impl Filter {
                 end: U256::MAX,
             };
         }
+
+        assert!(
+            slice_index < slice_count,
+            "slice_index must be less than slice_count"
+        );
 
         let slice_size = U256::MAX / U256::from(slice_count) + U256::from(1);
 
@@ -68,7 +68,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new_random_filter() {
+    fn random() {
         let filter = Filter::random(0);
         assert_eq!(filter.start, U256::ZERO);
         assert_eq!(filter.end, U256::MAX);
@@ -79,7 +79,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_included() {
+    fn contains() {
         let filter = Filter {
             start: nibbles_to_right_padded_b256(&[0x1, 0x5, 0x5]).into(),
             end: nibbles_to_right_padded_b256(&[0x3]).into(),
@@ -97,7 +97,7 @@ mod tests {
     }
 
     #[test]
-    fn test_new() {
+    fn new() {
         let filter = Filter::new(0, 1);
         assert_eq!(filter.start, U256::ZERO);
         assert_eq!(filter.end, U256::MAX);
