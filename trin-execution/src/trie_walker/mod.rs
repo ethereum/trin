@@ -84,7 +84,7 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
     ) -> anyhow::Result<()> {
         // If we have a filter, we only want to include nodes that are in the filter
         if let Some(filter) = &self.filter {
-            if !filter.is_included(&path) {
+            if !filter.contains(&path) {
                 return Ok(());
             }
         }
