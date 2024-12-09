@@ -8,15 +8,19 @@ pub fn full_nibble_path_to_address_hash(key_path: &[u8]) -> B256 {
         );
     }
 
-    let mut raw_address_hash = vec![];
-    for i in 0..key_path.len() {
+    nibbles_to_right_padded_b256(key_path)
+}
+
+pub fn nibbles_to_right_padded_b256(nibbles: &[u8]) -> B256 {
+    let mut result = B256::ZERO;
+    for (i, nibble) in nibbles.iter().enumerate() {
         if i % 2 == 0 {
-            raw_address_hash.push(key_path[i] << 4);
+            result[i / 2] |= nibble << 4;
         } else {
-            raw_address_hash[i / 2] |= key_path[i];
-        }
+            result[i / 2] |= nibble;
+        };
     }
-    B256::from_slice(&raw_address_hash)
+    result
 }
 
 pub fn address_to_nibble_path(address: Address) -> Vec<u8> {
@@ -28,10 +32,13 @@ pub fn address_to_nibble_path(address: Address) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    use alloy::hex::FromHex;
     use eth_trie::nibbles::Nibbles as EthNibbles;
-    use revm_primitives::{keccak256, Address};
+    use revm_primitives::{keccak256, Address, B256};
 
-    use crate::utils::{address_to_nibble_path, full_nibble_path_to_address_hash};
+    use crate::utils::{
+        address_to_nibble_path, full_nibble_path_to_address_hash, nibbles_to_right_padded_b256,
+    };
 
     #[test]
     fn test_eth_trie_and_ethportalapi_nibbles() {
@@ -51,5 +58,16 @@ mod tests {
         let path: Vec<u8> = address_to_nibble_path(address);
         let generated_address_hash = full_nibble_path_to_address_hash(&path);
         assert_eq!(address_hash, generated_address_hash);
+    }
+
+    #[test]
+    fn test_partial_nibble_path_to_right_padded_b256() {
+        let partial_nibble_path = vec![0xf, 0xf, 0x0, 0x1, 0x0, 0x2, 0x0, 0x3];
+        let partial_path = nibbles_to_right_padded_b256(&partial_nibble_path);
+        assert_eq!(
+            partial_path,
+            B256::from_hex("0xff01020300000000000000000000000000000000000000000000000000000000")
+                .unwrap()
+        );
     }
 }

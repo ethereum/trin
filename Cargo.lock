@@ -6892,6 +6892,7 @@ dependencies = [
  "lazy_static",
  "parking_lot 0.11.2",
  "prometheus_exporter",
+ "rand",
  "rayon",
  "reqwest",
  "revm",

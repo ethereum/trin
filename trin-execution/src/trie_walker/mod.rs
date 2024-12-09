@@ -1,4 +1,5 @@
 pub mod db;
+pub mod filter;
 
 use std::sync::Arc;
 
@@ -6,6 +7,7 @@ use alloy::primitives::{Bytes, B256};
 use anyhow::{anyhow, Ok};
 use db::TrieWalkerDb;
 use eth_trie::{decode_node, node::Node};
+use filter::Filter;
 
 use crate::types::trie_proof::TrieProof;
 
@@ -21,10 +23,13 @@ pub struct TrieWalker<DB: TrieWalkerDb> {
     is_partial_trie: bool,
     trie: Arc<DB>,
     stack: Vec<TrieProof>,
+
+    /// You can filter what slice of the trie you want to walk
+    filter: Option<Filter>,
 }
 
 impl<DB: TrieWalkerDb> TrieWalker<DB> {
-    pub fn new(root_hash: B256, trie: Arc<DB>) -> anyhow::Result<Self> {
+    pub fn new(root_hash: B256, trie: Arc<DB>, filter: Option<Filter>) -> anyhow::Result<Self> {
         let root_node_trie = match trie.get(root_hash.as_slice())? {
             Some(root_node_trie) => root_node_trie,
             None => return Err(anyhow!("Root node not found in the database")),
@@ -38,6 +43,7 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
             is_partial_trie: false,
             trie,
             stack: vec![root_proof],
+            filter,
         })
     }
 
@@ -52,6 +58,7 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
                     is_partial_trie: true,
                     trie: Arc::new(trie),
                     stack: vec![],
+                    filter: None,
                 });
             }
         };
@@ -65,6 +72,7 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
             is_partial_trie: true,
             trie: Arc::new(trie),
             stack: vec![root_proof],
+            filter: None,
         })
     }
 
@@ -74,6 +82,13 @@ impl<DB: TrieWalkerDb> TrieWalker<DB> {
         partial_proof: Vec<Bytes>,
         path: Vec<u8>,
     ) -> anyhow::Result<()> {
+        // If we have a filter, we only want to include nodes that are in the filter
+        if let Some(filter) = &self.filter {
+            if !filter.contains(&path) {
+                return Ok(());
+            }
+        }
+
         // We only need to process hash nodes, because if the node isn't a hash node then none of
         // its children is
         if let Node::Hash(hash) = node {
@@ -191,7 +206,7 @@ mod tests {
         }
 
         let root_hash = trie.root_hash().unwrap();
-        let walker = TrieWalker::new(root_hash, trie.db.clone()).unwrap();
+        let walker = TrieWalker::new(root_hash, trie.db.clone(), None).unwrap();
         let mut count = 0;
         let mut leaf_count = 0;
         for proof in walker {
