@@ -39,6 +39,14 @@ impl Filter {
     }
 
     pub fn random(slice_count: u16) -> Self {
+        // if slice_count is 0 or 1, we want to include the whole trie
+        if slice_count == 0 || slice_count == 1 {
+            return Self {
+                start: U256::ZERO,
+                end: U256::MAX,
+            };
+        }
+
         Self::new(thread_rng().gen_range(0..slice_count), slice_count)
     }
 
