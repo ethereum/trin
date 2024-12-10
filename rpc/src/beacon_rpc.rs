@@ -4,6 +4,10 @@ use ethportal_api::{
     consensus::header::BeaconBlockHeader,
     light_client::store::LightClientStore,
     types::{
+        consensus::light_client::{
+            finality_update::LightClientFinalityUpdate,
+            optimistic_update::LightClientOptimisticUpdate,
+        },
         enr::Enr,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
         portal::{
@@ -113,6 +117,18 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     /// Get the finalized beacon header.
     async fn finalized_header(&self) -> RpcResult<BeaconBlockHeader> {
         let endpoint = BeaconEndpoint::FinalizedHeader;
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
+    }
+
+    /// Get the latest optimistic update.
+    async fn optimistic_update(&self) -> RpcResult<LightClientOptimisticUpdate> {
+        let endpoint = BeaconEndpoint::OptimisticUpdate;
+        Ok(proxy_to_subnet(&self.network, endpoint).await?)
+    }
+
+    /// Get the latest finality update.
+    async fn finality_update(&self) -> RpcResult<LightClientFinalityUpdate> {
+        let endpoint = BeaconEndpoint::FinalityUpdate;
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

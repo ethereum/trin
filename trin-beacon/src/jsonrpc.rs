@@ -86,7 +86,7 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
                 Some(client) => {
                     let header = client.get_header().await;
                     match header {
-                        Ok(header) => Ok(json!((header.state_root))),
+                        Ok(header) => Ok(json!(header.state_root)),
                         Err(err) => Err(err.to_string()),
                     }
                 }
@@ -99,7 +99,7 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
                 Some(client) => {
                     let header = client.get_finalized_header().await;
                     match header {
-                        Ok(header) => Ok(json!((header.state_root))),
+                        Ok(header) => Ok(json!(header.state_root)),
                         Err(err) => Err(err.to_string()),
                     }
                 }
@@ -112,7 +112,33 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
                 Some(client) => {
                     let header = client.get_finalized_header().await;
                     match header {
-                        Ok(header) => Ok(json!((header))),
+                        Ok(header) => Ok(json!(header)),
+                        Err(err) => Err(err.to_string()),
+                    }
+                }
+                None => Err("Beacon client not initialized".to_string()),
+            }
+        }
+        BeaconEndpoint::FinalityUpdate => {
+            let beacon_client = network.beacon_client.lock().await;
+            match beacon_client.as_ref() {
+                Some(client) => {
+                    let update = client.get_finality_update().await;
+                    match update {
+                        Ok(update) => Ok(json!(update)),
+                        Err(err) => Err(err.to_string()),
+                    }
+                }
+                None => Err("Beacon client not initialized".to_string()),
+            }
+        }
+        BeaconEndpoint::OptimisticUpdate => {
+            let beacon_client = network.beacon_client.lock().await;
+            match beacon_client.as_ref() {
+                Some(client) => {
+                    let update = client.get_optimistic_update().await;
+                    match update {
+                        Ok(update) => Ok(json!(update)),
                         Err(err) => Err(err.to_string()),
                     }
                 }

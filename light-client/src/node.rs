@@ -1,7 +1,13 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Error, Result};
-use ethportal_api::{consensus::header::BeaconBlockHeader, light_client::store::LightClientStore};
+use ethportal_api::{
+    consensus::header::BeaconBlockHeader,
+    light_client::store::LightClientStore,
+    types::consensus::light_client::{
+        finality_update::LightClientFinalityUpdate, optimistic_update::LightClientOptimisticUpdate,
+    },
+};
 
 use crate::{
     config::client_config::Config,
@@ -91,6 +97,14 @@ impl<R: ConsensusRpc> Node<R> {
 
     pub fn get_last_checkpoint(&self) -> Option<Vec<u8>> {
         self.consensus.last_checkpoint.clone()
+    }
+
+    pub async fn get_optimistic_update(&self) -> Result<LightClientOptimisticUpdate> {
+        self.consensus.get_optimistic_update().await
+    }
+
+    pub async fn get_finality_update(&self) -> Result<LightClientFinalityUpdate> {
+        self.consensus.get_finality_update().await
     }
 
     fn check_head_age(&self) -> Result<(), NodeError> {
