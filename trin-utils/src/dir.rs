@@ -35,7 +35,7 @@ pub fn setup_data_dir(
 /// - Unix-like: `$HOME/.local/share/{app_name}`
 ///
 /// It returns `None` if no valid home directory path could be retrieved from the operating system.
-pub fn get_default_data_dir_path(app_name: &str) -> Option<PathBuf> {
+fn get_default_data_dir_path(app_name: &str) -> Option<PathBuf> {
     ProjectDirs::from("", "", app_name).map(|proj_dirs| proj_dirs.data_local_dir().to_path_buf())
 }
 

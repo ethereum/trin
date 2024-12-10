@@ -118,6 +118,10 @@ pub enum BeaconEndpoint {
     FinalizedHeader,
     /// params: None
     FinalizedStateRoot,
+    /// params: None
+    FinalityUpdate,
+    /// params: None
+    OptimisticUpdate,
     /// params: node_id
     GetEnr(NodeId),
     /// params: None
