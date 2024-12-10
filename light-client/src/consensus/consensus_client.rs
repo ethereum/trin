@@ -11,8 +11,8 @@ use ethportal_api::{
     consensus::{header::BeaconBlockHeader, signature::BlsSignature},
     light_client::{
         bootstrap::CurrentSyncCommitteeProofLen,
-        finality_update::LightClientFinalityUpdateDeneb,
-        optimistic_update::LightClientOptimisticUpdateDeneb,
+        finality_update::{LightClientFinalityUpdate, LightClientFinalityUpdateDeneb},
+        optimistic_update::{LightClientOptimisticUpdate, LightClientOptimisticUpdateDeneb},
         store::LightClientStore,
         update::{FinalizedRootProofLen, LightClientUpdateDeneb},
     },
@@ -89,6 +89,20 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
     pub fn get_finalized_header(&self) -> &BeaconBlockHeader {
         &self.store.finalized_header
+    }
+
+    pub async fn get_finality_update(&self) -> Result<LightClientFinalityUpdate> {
+        self.rpc
+            .get_finality_update()
+            .await
+            .map(|update| update.into())
+    }
+
+    pub async fn get_optimistic_update(&self) -> Result<LightClientOptimisticUpdate> {
+        self.rpc
+            .get_optimistic_update()
+            .await
+            .map(|update| update.into())
     }
 
     pub fn get_light_client_store(&self) -> &LightClientStore {
