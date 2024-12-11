@@ -12,7 +12,7 @@ type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
 #[derive(Debug, Deserialize, Serialize, Validate, Clone)]
 pub struct JsonRequest {
-    #[validate(custom = "validate_jsonrpc_version")]
+    #[validate(custom(function = "validate_jsonrpc_version"))]
     pub jsonrpc: String,
     #[serde(default = "default_params")]
     pub params: Params,
