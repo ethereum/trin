@@ -1,7 +1,13 @@
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{anyhow, Result};
-use ethportal_api::{consensus::header::BeaconBlockHeader, light_client::store::LightClientStore};
+use ethportal_api::{
+    consensus::header::BeaconBlockHeader,
+    light_client::store::LightClientStore,
+    types::consensus::light_client::{
+        finality_update::LightClientFinalityUpdate, optimistic_update::LightClientOptimisticUpdate,
+    },
+};
 use log::{error, info, warn};
 use tokio::{spawn, sync::RwLock, time::sleep};
 
@@ -457,6 +463,14 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
 
     pub async fn get_finalized_header(&self) -> Result<BeaconBlockHeader> {
         self.node.read().await.get_finalized_header()
+    }
+
+    pub async fn get_optimistic_update(&self) -> Result<LightClientOptimisticUpdate> {
+        self.node.read().await.get_optimistic_update().await
+    }
+
+    pub async fn get_finality_update(&self) -> Result<LightClientFinalityUpdate> {
+        self.node.read().await.get_finality_update().await
     }
 
     pub async fn get_light_client_store(&self) -> Result<LightClientStore> {

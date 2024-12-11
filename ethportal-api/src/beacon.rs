@@ -6,6 +6,10 @@ use crate::{
     consensus::header::BeaconBlockHeader,
     light_client::store::LightClientStore,
     types::{
+        consensus::light_client::{
+            finality_update::LightClientFinalityUpdate,
+            optimistic_update::LightClientOptimisticUpdate,
+        },
         content_key::beacon::BeaconContentKey,
         enr::Enr,
         portal::{
@@ -59,6 +63,14 @@ pub trait BeaconNetworkApi {
     /// Get the finalized beacon header
     #[method(name = "beaconFinalizedHeader")]
     async fn finalized_header(&self) -> RpcResult<BeaconBlockHeader>;
+
+    /// Get the latest finality update
+    #[method(name = "beaconFinalityUpdate")]
+    async fn finality_update(&self) -> RpcResult<LightClientFinalityUpdate>;
+
+    /// Get the latest optimistic update
+    #[method(name = "beaconOptimisticUpdate")]
+    async fn optimistic_update(&self) -> RpcResult<LightClientOptimisticUpdate>;
 
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the
     /// designated peer and wait for a response
