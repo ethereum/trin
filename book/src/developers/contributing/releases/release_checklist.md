@@ -15,9 +15,27 @@ anything.
 
 Make sure that version follows [semver](https://semver.org/) rules e.g (`0.2.0-alpha.3`).
 
-**For the time being, ALWAYS specify the `-alpha` suffix.**
+Since trin is now stable, but v0, breaking changes are a minor version bump,
+and all other changes are a patch version bump. Updating to v1 would require a
+group discussion and decision.
 
-## Release the version
+## Release dependencies
+
+For now, that's just ethportal-api. Manually bump the version in the
+Cargo.toml, and run `cargo update` to update the workspace lockfile. Commit and
+merge these changes to trin. Then run:
+
+```bash
+cd ethportal-api
+cargo publish --no-verify
+```
+
+We would like to get rid of the no-verify ASAP, but for now Cargo.lock is
+causing issues that we have no other workaround for. `cargo publish` generates
+a new lock file, and then complains that the lockfile is new. See this
+[StackOverflow post](https://stackoverflow.com/questions/79276315/how-to-build-a-cargo-lock-file-for-a-package-within-a-workspace).
+
+## Release Trin
 
 We use automated github release workflow to create a new release.
 This will create a new release draft with the new tag and will build all the binaries and attach them to the release. 
@@ -25,7 +43,7 @@ This will create a new release draft with the new tag and will build all the bin
 1. Checkout and rebase local master to upstream
 ```bash
 git checkout master
-git pull --rebase upstream master
+git pull --ff-only upstream master
 ```
 2. Create a new git tag with the chosen version, for example:
 ```bash
