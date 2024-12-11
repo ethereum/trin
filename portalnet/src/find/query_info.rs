@@ -67,10 +67,13 @@ impl<TContentKey: OverlayContentKey> QueryInfo<TContentKey> {
                 target,
                 distances_to_request,
                 ..
-            } => {
+            } if distances_to_request > 0 && distances_to_request <= 127 => {
                 let distances = findnode_log2distance(target, peer, distances_to_request)
-                    .ok_or("Requested a node find itself")?;
+                    .ok_or("Could not calculate distances")?;
                 Request::FindNodes(FindNodes { distances })
+            }
+            QueryType::FindNode { .. } => {
+                return Err("Invalid distances_to_request: must be between 1 and 127");
             }
             QueryType::FindContent { ref target, .. } => Request::FindContent(FindContent {
                 content_key: target.to_bytes(),
@@ -102,7 +105,7 @@ impl<TContentKey: OverlayContentKey> TargetKey<NodeId> for QueryInfo<TContentKey
 /// As an example, if the target has a distance of 12 from the remote peer, the sequence of
 /// distances that are sent for increasing iterations would be [12, 13, 11, 14, 10, .. ].
 fn findnode_log2distance(target: NodeId, peer: NodeId, size: usize) -> Option<Vec<u16>> {
-    if size > 127 {
+    if size == 0 || size > 127 {
         // invoke and endless loop - coding error
         panic!("Iterations cannot be greater than 127");
     }
