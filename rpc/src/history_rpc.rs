@@ -5,8 +5,8 @@ use ethportal_api::{
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
-            PaginateLocalContentInfo, PongInfo, TraceContentInfo, TraceGossipInfo,
-            MAX_CONTENT_KEYS_PER_OFFER,
+            PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
+            TracePutContentInfo, MAX_CONTENT_KEYS_PER_OFFER,
         },
         portal_wire::OfferTrace,
     },
@@ -127,27 +127,27 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
 
     /// Send the provided content to interested peers. Clients may choose to send to some or all
     /// peers. Return the number of peers that the content was gossiped to.
-    async fn gossip(
+    async fn put_content(
         &self,
         content_key: HistoryContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<u32> {
+    ) -> RpcResult<PutContentInfo> {
         let content_value = HistoryContentValue::decode(&content_key, &content_value)
             .map_err(RpcServeError::from)?;
-        let endpoint = HistoryEndpoint::Gossip(content_key, content_value);
+        let endpoint = HistoryEndpoint::PutContent(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Send the provided content to interested peers. Clients may choose to send to some or all
     /// peers. Return tracing info.
-    async fn trace_gossip(
+    async fn trace_put_content(
         &self,
         content_key: HistoryContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<TraceGossipInfo> {
+    ) -> RpcResult<TracePutContentInfo> {
         let content_value = HistoryContentValue::decode(&content_key, &content_value)
             .map_err(RpcServeError::from)?;
-        let endpoint = HistoryEndpoint::TraceGossip(content_key, content_value);
+        let endpoint = HistoryEndpoint::TracePutContent(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

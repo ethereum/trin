@@ -44,7 +44,7 @@ use trin_metrics::bridge::BridgeMetricsReporter;
 use crate::{
     api::consensus::ConsensusApi,
     constants::BEACON_GENESIS_TIME,
-    gossip::gossip_beacon_content,
+    put_content::put_content_beacon_content,
     stats::{BeaconSlotStats, StatsReporter},
     types::mode::BridgeMode,
     utils::{
@@ -127,7 +127,7 @@ impl BeaconBridge {
         // test files have no slot number data, so report all gossiped content at height 0.
         let slot_stats = Arc::new(StdMutex::new(BeaconSlotStats::new(0)));
         for asset in assets.0.into_iter() {
-            gossip_beacon_content(
+            put_content_beacon_content(
                 self.portal_client.clone(),
                 asset.content_key.clone(),
                 asset.content_value().expect("Error getting content value"),
@@ -336,7 +336,7 @@ impl BeaconBridge {
         });
 
         // Return the latest finalized block root if we successfully gossiped the latest bootstrap.
-        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        put_content_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
         finalized_bootstrap.lock().await.finalized_block_root = latest_finalized_block_root;
         finalized_bootstrap.lock().await.in_progress = false;
 
@@ -402,7 +402,7 @@ impl BeaconBridge {
         );
 
         // Update the current known period if we successfully gossiped the latest data.
-        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        put_content_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
         *current_period.lock().await = expected_current_period;
 
         Ok(())
@@ -426,7 +426,7 @@ impl BeaconBridge {
             LightClientOptimisticUpdateKey::new(update.signature_slot),
         );
         let content_value = BeaconContentValue::LightClientOptimisticUpdate(update.into());
-        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await
+        put_content_beacon_content(portal_client, content_key, content_value, slot_stats).await
     }
 
     async fn serve_light_client_finality_update(
@@ -465,7 +465,7 @@ impl BeaconBridge {
         );
         let content_value = BeaconContentValue::LightClientFinalityUpdate(update.into());
 
-        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        put_content_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
         *finalized_slot.lock().await = new_finalized_slot;
 
         Ok(())
@@ -532,7 +532,7 @@ impl BeaconBridge {
         let content_value =
             BeaconContentValue::HistoricalSummariesWithProof(historical_summaries_with_proof);
 
-        gossip_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
+        put_content_beacon_content(portal_client, content_key, content_value, slot_stats).await?;
         finalized_state_root.lock().await.state_root = latest_finalized_state_root;
         finalized_state_root.lock().await.in_progress = false;
 

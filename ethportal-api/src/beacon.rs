@@ -14,7 +14,8 @@ use crate::{
         enr::Enr,
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
-            PaginateLocalContentInfo, PongInfo, TraceContentInfo, TraceGossipInfo,
+            PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
+            TracePutContentInfo,
         },
         portal_wire::OfferTrace,
     },
@@ -114,21 +115,21 @@ pub trait BeaconNetworkApi {
 
     /// Send the provided content value to interested peers. Clients may choose to send to some or
     /// all peers. Return the number of peers that the content was gossiped to.
-    #[method(name = "beaconGossip")]
-    async fn gossip(
+    #[method(name = "beaconPutContent")]
+    async fn put_content(
         &self,
         content_key: BeaconContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<u32>;
+    ) -> RpcResult<PutContentInfo>;
 
     /// Send the provided content value to interested peers. Clients may choose to send to some or
     /// all peers. Return tracing info detailing the gossip propagation.
-    #[method(name = "beaconTraceGossip")]
-    async fn trace_gossip(
+    #[method(name = "beaconTracePutContent")]
+    async fn trace_put_content(
         &self,
         content_key: BeaconContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<TraceGossipInfo>;
+    ) -> RpcResult<TracePutContentInfo>;
 
     /// Send an OFFER request with given ContentItems, to the designated peer and wait for a
     /// response. Does not store the content locally.

@@ -37,7 +37,7 @@ use crate::{
         history::{HEADER_SATURATION_DELAY, SERVE_BLOCK_TIMEOUT},
         utils::lookup_epoch_acc,
     },
-    gossip::gossip_history_content,
+    put_content::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
     types::mode::{BridgeMode, FourFoursMode},
 };

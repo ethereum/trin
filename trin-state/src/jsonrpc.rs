@@ -65,8 +65,8 @@ impl StateRequestHandler {
             StateEndpoint::TraceOffer(enr, content_key, content_value) => {
                 trace_offer(network, enr, content_key, content_value).await
             }
-            StateEndpoint::Gossip(content_key, content_value) => {
-                gossip(
+            StateEndpoint::PutContent(content_key, content_value) => {
+                put_content(
                     network,
                     content_key,
                     content_value,
@@ -74,8 +74,8 @@ impl StateRequestHandler {
                 )
                 .await
             }
-            StateEndpoint::TraceGossip(content_key, content_value) => {
-                gossip(
+            StateEndpoint::TracePutContent(content_key, content_value) => {
+                put_content(
                     network,
                     content_key,
                     content_value,
@@ -341,7 +341,7 @@ async fn trace_offer(
     )
 }
 
-async fn gossip(
+async fn put_content(
     network: Arc<StateNetwork>,
     content_key: StateContentKey,
     content_value: StateContentValue,
@@ -351,14 +351,14 @@ async fn gossip(
         Ok(json!(
             network
                 .overlay
-                .propagate_gossip_trace(content_key, content_value.encode())
+                .propagate_put_content_trace(content_key, content_value.encode())
                 .await
         ))
     } else {
-        Ok(network
-            .overlay
-            .propagate_gossip(vec![(content_key, content_value.encode())])
-            .into())
+        Ok(json!(network.overlay.propagate_put_content(
+            content_key,
+            content_value.encode(),
+        )))
     }
 }
 
