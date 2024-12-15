@@ -5,8 +5,8 @@ use ethportal_api::{
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
-            PaginateLocalContentInfo, PongInfo, TraceContentInfo, TraceGossipInfo,
-            MAX_CONTENT_KEYS_PER_OFFER,
+            PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
+            TracePutContentInfo, MAX_CONTENT_KEYS_PER_OFFER,
         },
         portal_wire::OfferTrace,
     },
@@ -124,27 +124,27 @@ impl StateNetworkApiServer for StateNetworkApi {
 
     /// Send the provided content to interested peers. Clients may choose to send to some or all
     /// peers. Return the number of peers that the content was gossiped to.
-    async fn gossip(
+    async fn put_content(
         &self,
         content_key: StateContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<u32> {
+    ) -> RpcResult<PutContentInfo> {
         let content_value =
             StateContentValue::decode(&content_key, &content_value).map_err(RpcServeError::from)?;
-        let endpoint = StateEndpoint::Gossip(content_key, content_value);
+        let endpoint = StateEndpoint::PutContent(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Send the provided content to interested peers. Clients may choose to send to some or all
     /// peers. Return tracing info.
-    async fn trace_gossip(
+    async fn trace_put_content(
         &self,
         content_key: StateContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<TraceGossipInfo> {
+    ) -> RpcResult<TracePutContentInfo> {
         let content_value =
             StateContentValue::decode(&content_key, &content_value).map_err(RpcServeError::from)?;
-        let endpoint = StateEndpoint::TraceGossip(content_key, content_value);
+        let endpoint = StateEndpoint::TracePutContent(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

@@ -3,7 +3,7 @@ use std::{collections::HashSet, str::FromStr};
 use ethportal_api::{types::enr::Enr, BeaconContentKey, HistoryContentKey};
 use tracing::{debug, info};
 
-use crate::gossip::GossipReport;
+use crate::put_content::PutContentReport;
 
 // Trait for tracking / reporting gossip stats
 pub trait StatsReporter<TContentKey> {
@@ -194,18 +194,18 @@ impl std::fmt::Display for ContentStats {
     }
 }
 
-impl From<GossipReport> for ContentStats {
-    fn from(gossip_report: GossipReport) -> Self {
+impl From<PutContentReport> for ContentStats {
+    fn from(put_content_report: PutContentReport) -> Self {
         let mut content_stats = ContentStats {
-            retries: gossip_report.retries,
-            found: gossip_report.found,
+            retries: put_content_report.retries,
+            found: put_content_report.found,
             ..ContentStats::default()
         };
 
         let enr_from_str = |enr: &String| {
             Enr::from_str(enr).expect("ENR from trace gossip response to successfully decode.")
         };
-        for trace in &gossip_report.traces {
+        for trace in &put_content_report.traces {
             content_stats
                 .offered
                 .extend(trace.offered.iter().map(enr_from_str));

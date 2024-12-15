@@ -21,6 +21,7 @@ use ethportal_api::{
         distance::{Distance, Metric},
         enr::Enr,
         network::Subnetwork,
+        portal::PutContentInfo,
         portal_wire::{
             Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, OfferTrace,
             Ping, Pong, PopulatedOffer, PopulatedOfferWithResult, Request, Response,
@@ -35,7 +36,7 @@ use ssz::Encode;
 use tokio::sync::{broadcast, mpsc::UnboundedSender};
 use tracing::{debug, error, info, warn};
 use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
-use trin_storage::ContentStore;
+use trin_storage::{ContentStore, ShouldWeStoreContent};
 use trin_validation::validator::{ValidationResult, Validator};
 use utp_rs::socket::UtpSocket;
 
@@ -43,13 +44,16 @@ use crate::{
     discovery::{Discovery, UtpEnr},
     events::EventEnvelope,
     find::query_info::{FindContentResult, RecursiveFindContentResult},
-    gossip::{propagate_gossip_cross_thread, trace_propagate_gossip_cross_thread, GossipResult},
     overlay::{
         command::OverlayCommand,
         config::{FindContentConfig, OverlayConfig},
         errors::OverlayRequestError,
         request::{OverlayRequest, RequestDirection},
         service::OverlayService,
+    },
+    put_content::{
+        propagate_put_content_cross_thread, trace_propagate_put_content_cross_thread,
+        PutContentResult,
     },
     types::{
         kbucket::{Entry, SharedKBucketsTable},
@@ -204,24 +208,54 @@ impl<
         Ok(())
     }
 
-    /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
-    pub fn propagate_gossip(&self, content: Vec<(TContentKey, RawContentValue)>) -> usize {
-        propagate_gossip_cross_thread::<_, TMetric>(
-            content,
-            &self.kbuckets,
-            self.command_tx.clone(),
-            None,
-        )
+    /// Propagate put_content accepted content via OFFER/ACCEPT, return number of peers propagated
+    pub fn propagate_put_content(
+        &self,
+        content_key: TContentKey,
+        content_value: RawContentValue,
+    ) -> PutContentInfo {
+        let should_we_store = match self
+            .store
+            .read()
+            .is_key_within_radius_and_unavailable(&content_key)
+        {
+            Ok(should_we_store) => matches!(should_we_store, ShouldWeStoreContent::Store),
+            Err(err) => {
+                warn!(
+                    protocol = %self.protocol,
+                    error = %err,
+                    "Error checking if content key is within radius and unavailable",
+                );
+                false
+            }
+        };
+
+        if should_we_store {
+            let _ = self
+                .store
+                .write()
+                .put(content_key.clone(), content_value.clone());
+        }
+
+        PutContentInfo {
+            peer_count: propagate_put_content_cross_thread::<_, TMetric>(
+                vec![(content_key, content_value)],
+                &self.kbuckets,
+                self.command_tx.clone(),
+                None,
+            ) as u32,
+            stored_locally: should_we_store,
+        }
     }
 
-    /// Propagate gossip accepted content via OFFER/ACCEPT, returns trace detailing outcome of
-    /// gossip
-    pub async fn propagate_gossip_trace(
+    /// Propagate put content accepted content via OFFER/ACCEPT, returns trace detailing outcome of
+    /// put content
+    pub async fn propagate_put_content_trace(
         &self,
         content_key: TContentKey,
         data: RawContentValue,
-    ) -> GossipResult {
-        trace_propagate_gossip_cross_thread::<_, TMetric>(
+    ) -> PutContentResult {
+        trace_propagate_put_content_cross_thread::<_, TMetric>(
             content_key,
             data,
             &self.kbuckets,

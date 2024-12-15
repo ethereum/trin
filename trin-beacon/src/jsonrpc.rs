@@ -62,11 +62,11 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
         }
         BeaconEndpoint::FindNodes(enr, distances) => find_nodes(network, enr, distances).await,
         BeaconEndpoint::GetEnr(node_id) => get_enr(network, node_id).await,
-        BeaconEndpoint::Gossip(content_key, content_value) => {
-            gossip(network, content_key, content_value, false).await
+        BeaconEndpoint::PutContent(content_key, content_value) => {
+            put_content(network, content_key, content_value, false).await
         }
-        BeaconEndpoint::TraceGossip(content_key, content_value) => {
-            gossip(network, content_key, content_value, true).await
+        BeaconEndpoint::TracePutContent(content_key, content_value) => {
+            put_content(network, content_key, content_value, true).await
         }
         BeaconEndpoint::LightClientStore => light_client_store(&network).await,
         BeaconEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
@@ -366,8 +366,8 @@ async fn find_nodes(
     }
 }
 
-/// Constructs a JSON call for the Gossip method.
-async fn gossip(
+/// Constructs a JSON call for the PutContent method.
+async fn put_content(
     network: Arc<BeaconNetwork>,
     content_key: BeaconContentKey,
     content_value: BeaconContentValue,
@@ -378,13 +378,12 @@ async fn gossip(
         true => Ok(json!(
             network
                 .overlay
-                .propagate_gossip_trace(content_key, data)
+                .propagate_put_content_trace(content_key, data)
                 .await
         )),
-        false => Ok(network
+        false => Ok(json!(network
             .overlay
-            .propagate_gossip(vec![(content_key, data)])
-            .into()),
+            .propagate_put_content(content_key, data))),
     }
 }
 

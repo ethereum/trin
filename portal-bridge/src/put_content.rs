@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use ethportal_api::{
-    types::portal::TraceGossipInfo, BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient,
-    ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
-    OverlayContentKey,
+    types::portal::TracePutContentInfo, BeaconContentKey, BeaconContentValue,
+    BeaconNetworkApiClient, ContentValue, HistoryContentKey, HistoryContentValue,
+    HistoryNetworkApiClient, OverlayContentKey,
 };
 use jsonrpsee::http_client::HttpClient;
 use tokio::time::{sleep, Duration};
@@ -15,34 +15,35 @@ const GOSSIP_RETRY_COUNT: u64 = 3;
 const RETRY_AFTER: Duration = Duration::from_secs(15);
 
 /// Gossip any given content key / value to the beacon network.
-pub async fn gossip_beacon_content(
+pub async fn put_content_beacon_content(
     portal_client: HttpClient,
     content_key: BeaconContentKey,
     content_value: BeaconContentValue,
     slot_stats: Arc<Mutex<BeaconSlotStats>>,
 ) -> anyhow::Result<()> {
     let result = tokio::spawn(
-        beacon_trace_gossip(portal_client, content_key.clone(), content_value).in_current_span(),
+        beacon_trace_put_content(portal_client, content_key.clone(), content_value)
+            .in_current_span(),
     )
     .await?;
     if let Ok(mut data) = slot_stats.lock() {
         data.update(content_key, result.into());
     } else {
-        warn!("Error updating beacon gossip stats. Unable to acquire lock.");
+        warn!("Error updating beacon put content stats. Unable to acquire lock.");
     }
     Ok(())
 }
 
-async fn beacon_trace_gossip(
+async fn beacon_trace_put_content(
     client: HttpClient,
     content_key: BeaconContentKey,
     content_value: BeaconContentValue,
-) -> GossipReport {
+) -> PutContentReport {
     let mut retries = 0;
     let mut traces = vec![];
     let mut found = false;
     while retries < GOSSIP_RETRY_COUNT {
-        let result = BeaconNetworkApiClient::trace_gossip(
+        let result = BeaconNetworkApiClient::trace_put_content(
             &client,
             content_key.clone(),
             content_value.encode(),
@@ -52,7 +53,7 @@ async fn beacon_trace_gossip(
         if let Ok(trace) = result {
             traces.push(trace.clone());
             if !trace.transferred.is_empty() {
-                return GossipReport {
+                return PutContentReport {
                     traces,
                     retries,
                     found,
@@ -62,16 +63,16 @@ async fn beacon_trace_gossip(
         // if not, make rfc request to see if data is available on network
         let result = BeaconNetworkApiClient::get_content(&client, content_key.clone()).await;
         if result.is_ok() {
-            debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
+            debug!("Found content on network, after failing to put content, aborting put content. content key={:?}", content_key.to_hex());
             found = true;
-            return GossipReport {
+            return PutContentReport {
                 traces,
                 retries,
                 found,
             };
         }
         retries += 1;
-        debug!("Unable to locate content on network, after failing to gossip, retrying in {:?} seconds. content key={:?}", RETRY_AFTER, content_key.to_hex());
+        debug!("Unable to locate content on network, after failing to put content, retrying in {:?} seconds. content key={:?}", RETRY_AFTER, content_key.to_hex());
         sleep(RETRY_AFTER).await;
     }
     warn!(
@@ -79,7 +80,7 @@ async fn beacon_trace_gossip(
         GOSSIP_RETRY_COUNT,
         content_key.to_hex(),
     );
-    GossipReport {
+    PutContentReport {
         traces,
         retries,
         found,
@@ -109,12 +110,12 @@ async fn history_trace_gossip(
     client: HttpClient,
     content_key: HistoryContentKey,
     content_value: HistoryContentValue,
-) -> GossipReport {
+) -> PutContentReport {
     let mut retries = 0;
     let mut traces = vec![];
     let mut found = false;
     while retries < GOSSIP_RETRY_COUNT {
-        let result = HistoryNetworkApiClient::trace_gossip(
+        let result = HistoryNetworkApiClient::trace_put_content(
             &client,
             content_key.clone(),
             content_value.encode(),
@@ -124,7 +125,7 @@ async fn history_trace_gossip(
         if let Ok(trace) = result {
             traces.push(trace.clone());
             if !trace.transferred.is_empty() {
-                return GossipReport {
+                return PutContentReport {
                     traces,
                     retries,
                     found,
@@ -136,7 +137,7 @@ async fn history_trace_gossip(
         if result.is_ok() {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             found = true;
-            return GossipReport {
+            return PutContentReport {
                 traces,
                 retries,
                 found,
@@ -151,15 +152,15 @@ async fn history_trace_gossip(
         GOSSIP_RETRY_COUNT,
         content_key.to_hex(),
     );
-    GossipReport {
+    PutContentReport {
         traces,
         retries,
         found,
     }
 }
 
-pub struct GossipReport {
-    pub traces: Vec<TraceGossipInfo>,
+pub struct PutContentReport {
+    pub traces: Vec<TracePutContentInfo>,
     pub retries: u64,
     pub found: bool,
 }

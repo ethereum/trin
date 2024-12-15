@@ -62,11 +62,11 @@ async fn complete_request(network: Arc<HistoryNetwork>, request: HistoryJsonRpcR
         }
         HistoryEndpoint::FindNodes(enr, distances) => find_nodes(network, enr, distances).await,
         HistoryEndpoint::GetEnr(node_id) => get_enr(network, node_id).await,
-        HistoryEndpoint::Gossip(content_key, content_value) => {
-            gossip(network, content_key, content_value).await
+        HistoryEndpoint::PutContent(content_key, content_value) => {
+            put_content(network, content_key, content_value).await
         }
-        HistoryEndpoint::TraceGossip(content_key, content_value) => {
-            trace_gossip(network, content_key, content_value).await
+        HistoryEndpoint::TracePutContent(content_key, content_value) => {
+            trace_put_content(network, content_key, content_value).await
         }
         HistoryEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
         HistoryEndpoint::Offer(enr, content_items) => offer(network, enr, content_items).await,
@@ -306,21 +306,20 @@ async fn find_nodes(
     }
 }
 
-/// Constructs a JSON call for the Gossip method.
-async fn gossip(
+/// Constructs a JSON call for the PutContent method.
+async fn put_content(
     network: Arc<HistoryNetwork>,
     content_key: HistoryContentKey,
     content_value: ethportal_api::HistoryContentValue,
 ) -> Result<Value, String> {
     let data = content_value.encode();
-    Ok(network
+    Ok(json!(network
         .overlay
-        .propagate_gossip(vec![(content_key, data)])
-        .into())
+        .propagate_put_content(content_key, data)))
 }
 
-/// Constructs a JSON call for the Gossip method, with tracing enabled.
-async fn trace_gossip(
+/// Constructs a JSON call for the PutContent method, with tracing enabled.
+async fn trace_put_content(
     network: Arc<HistoryNetwork>,
     content_key: HistoryContentKey,
     content_value: ethportal_api::HistoryContentValue,
@@ -329,7 +328,7 @@ async fn trace_gossip(
     Ok(json!(
         network
             .overlay
-            .propagate_gossip_trace(content_key, data)
+            .propagate_put_content_trace(content_key, data)
             .await
     ))
 }

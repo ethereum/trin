@@ -12,8 +12,8 @@ use ethportal_api::{
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
-            PaginateLocalContentInfo, PongInfo, TraceContentInfo, TraceGossipInfo,
-            MAX_CONTENT_KEYS_PER_OFFER,
+            PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
+            TracePutContentInfo, MAX_CONTENT_KEYS_PER_OFFER,
         },
         portal_wire::OfferTrace,
     },
@@ -171,27 +171,27 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
 
     /// Send the provided content to interested peers. Clients may choose to send to some or all
     /// peers. Return the number of peers that the content was gossiped to.
-    async fn gossip(
+    async fn put_content(
         &self,
         content_key: BeaconContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<u32> {
+    ) -> RpcResult<PutContentInfo> {
         let content_value = BeaconContentValue::decode(&content_key, &content_value)
             .map_err(RpcServeError::from)?;
-        let endpoint = BeaconEndpoint::Gossip(content_key, content_value);
+        let endpoint = BeaconEndpoint::PutContent(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 
     /// Send the provided content to interested peers. Clients may choose to send to some or all
     /// peers. Return tracing info.
-    async fn trace_gossip(
+    async fn trace_put_content(
         &self,
         content_key: BeaconContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<TraceGossipInfo> {
+    ) -> RpcResult<TracePutContentInfo> {
         let content_value = BeaconContentValue::decode(&content_key, &content_value)
             .map_err(RpcServeError::from)?;
-        let endpoint = BeaconEndpoint::TraceGossip(content_key, content_value);
+        let endpoint = BeaconEndpoint::TracePutContent(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

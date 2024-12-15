@@ -95,7 +95,7 @@ async fn peertest_offer_concurrent_utp_transfer_limit() {
 async fn peertest_gossip_with_trace() {
     let (peertest, target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
-    peertest::scenarios::gossip::test_gossip_with_trace(&peertest, &target).await;
+    peertest::scenarios::put_content::test_gossip_with_trace(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
 }
@@ -297,7 +297,7 @@ async fn peertest_history_offer_propagates_gossip_multiple_large_content_values(
 async fn peertest_history_gossip_dropped_with_offer() {
     let (peertest, target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
-    peertest::scenarios::gossip::test_gossip_dropped_with_offer(&peertest, &target).await;
+    peertest::scenarios::put_content::test_gossip_dropped_with_offer(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
 }
@@ -307,7 +307,8 @@ async fn peertest_history_gossip_dropped_with_offer() {
 async fn peertest_history_gossip_dropped_with_find_content() {
     let (peertest, target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
-    peertest::scenarios::gossip::test_gossip_dropped_with_find_content(&peertest, &target).await;
+    peertest::scenarios::put_content::test_gossip_dropped_with_find_content(&peertest, &target)
+        .await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
 }

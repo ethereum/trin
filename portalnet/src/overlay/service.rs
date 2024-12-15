@@ -70,7 +70,6 @@ use crate::{
         query_info::{QueryInfo, QueryType, RecursiveFindContentResult},
         query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
     },
-    gossip::propagate_gossip_cross_thread,
     overlay::{
         command::OverlayCommand,
         config::FindContentConfig,
@@ -80,6 +79,7 @@ use crate::{
             RequestDirection,
         },
     },
+    put_content::propagate_put_content_cross_thread,
     types::{
         kbucket::{DiscoveredNodesUpdateResult, Entry, SharedKBucketsTable},
         node::Node,
@@ -1313,7 +1313,7 @@ impl<
                 })
                 .flatten()
                 .collect();
-            propagate_gossip_cross_thread::<_, TMetric>(
+            propagate_put_content_cross_thread::<_, TMetric>(
                 validated_content,
                 &utp_processing.kbuckets,
                 utp_processing.command_tx.clone(),
@@ -1789,7 +1789,7 @@ impl<
             }
         };
 
-        propagate_gossip_cross_thread::<_, TMetric>(
+        propagate_put_content_cross_thread::<_, TMetric>(
             validated_content,
             &utp_processing.kbuckets,
             utp_processing.command_tx.clone(),
@@ -1974,7 +1974,7 @@ impl<
                             );
                             content_to_propagate.extend(dropped_content.clone());
                         }
-                        propagate_gossip_cross_thread::<_, TMetric>(
+                        propagate_put_content_cross_thread::<_, TMetric>(
                             content_to_propagate,
                             &utp_processing.kbuckets,
                             utp_processing.command_tx.clone(),
