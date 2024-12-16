@@ -26,6 +26,7 @@ tree_hash.workspace = true
 trin-storage.workspace = true
 trin-validation.workspace = true
 utp-rs.workspace = true
+futures = "0.3.31"
 
 [dev-dependencies]
 env_logger.workspace = true
