@@ -23,6 +23,8 @@ pub struct OverlayMetrics {
     pub utp_outcome_total: IntCounterVec,
     pub utp_active_gauge: IntGaugeVec,
     pub utp_connection_duration: HistogramVec,
+    /// Total bytes transferred inbound
+    pub bytes_inbound_total: IntCounterVec,
     pub validation_total: IntCounterVec,
 }
 
@@ -60,6 +62,14 @@ impl OverlayMetrics {
             &["protocol", "direction"],
             registry
         )?;
+        let bytes_inbound_total = register_int_counter_vec_with_registry!(
+            opts!(
+                "trin_bytes_inbound_total",
+                "count all bytes transferred inbound"
+            ),
+            &["protocol"],
+            registry
+        )?;
         let validation_total = register_int_counter_vec_with_registry!(
             opts!(
                 "trin_validation_total",
@@ -73,6 +83,7 @@ impl OverlayMetrics {
             utp_outcome_total,
             utp_active_gauge,
             utp_connection_duration,
+            bytes_inbound_total,
             validation_total,
         })
     }
@@ -124,6 +135,14 @@ impl OverlayMetricsReporter {
             .message_total
             .with_label_values(&labels)
             .inc();
+    }
+    /// Increase the total bytes inbound metric by the given length.
+    pub fn report_bytes_inbound(&self, bytes_len: u64) {
+        let labels: [&str; 1] = [&self.protocol];
+        self.overlay_metrics
+            .bytes_inbound_total
+            .with_label_values(&labels)
+            .inc_by(bytes_len)
     }
 
     //
