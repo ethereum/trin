@@ -16,13 +16,23 @@ use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
 
-use crate::{storage::StateStorage, validation::StateValidator};
+use crate::{
+    ping_extensions::StatePingExtensions, storage::StateStorage, validation::StateValidator,
+};
 
 /// State network layer on top of the overlay protocol. Encapsulates state network specific data and
 /// logic.
 #[derive(Clone)]
 pub struct StateNetwork {
-    pub overlay: Arc<OverlayProtocol<StateContentKey, XorMetric, StateValidator, StateStorage>>,
+    pub overlay: Arc<
+        OverlayProtocol<
+            StateContentKey,
+            XorMetric,
+            StateValidator,
+            StateStorage,
+            StatePingExtensions,
+        >,
+    >,
 }
 
 /// Poke is disabled for state network because Offer/Accept and Find/Found Content are different,
@@ -52,6 +62,7 @@ impl StateNetwork {
         };
         let storage = Arc::new(PLRwLock::new(StateStorage::new(storage_config)?));
         let validator = Arc::new(StateValidator { header_oracle });
+        let ping_extensions = Arc::new(StatePingExtensions {});
         let overlay = OverlayProtocol::new(
             config,
             discovery,
@@ -59,6 +70,7 @@ impl StateNetwork {
             storage,
             Subnetwork::State,
             validator,
+            ping_extensions,
         )
         .await;
 

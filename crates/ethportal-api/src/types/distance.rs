@@ -1,11 +1,13 @@
 use std::{fmt, ops::Deref};
 
 use alloy::primitives::U256;
+use ssz_derive::{Decode, Encode};
 
 pub type DataRadius = U256;
 
 /// Represents a distance between two keys in the DHT key space.
-#[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug, Encode, Decode)]
+#[ssz(struct_behaviour = "transparent")]
 pub struct Distance(U256);
 
 impl fmt::Display for Distance {

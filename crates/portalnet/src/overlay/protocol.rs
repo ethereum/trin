@@ -20,10 +20,11 @@ use ethportal_api::{
         distance::{Distance, Metric},
         enr::Enr,
         network::Subnetwork,
+        ping_extensions::extensions::type_0::ClientInfoRadiusCapabilities,
         portal::PutContentInfo,
         portal_wire::{
-            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, OfferTrace,
-            Ping, Pong, PopulatedOffer, PopulatedOfferWithResult, Request, Response,
+            Accept, Content, FindContent, FindNodes, Message, Nodes, OfferTrace, Ping, Pong,
+            PopulatedOffer, PopulatedOfferWithResult, Request, Response,
         },
     },
     utils::bytes::hex_encode,
@@ -31,7 +32,6 @@ use ethportal_api::{
 };
 use futures::channel::oneshot;
 use parking_lot::RwLock;
-use ssz::Encode;
 use tokio::sync::{broadcast, mpsc::UnboundedSender};
 use tracing::{debug, error, info, warn};
 use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
@@ -39,6 +39,7 @@ use trin_storage::{ContentStore, ShouldWeStoreContent};
 use trin_validation::validator::{ValidationResult, Validator};
 use utp_rs::socket::UtpSocket;
 
+use super::{ping_extensions::PingExtension, service::OverlayService};
 use crate::{
     bootnodes::Bootnode,
     discovery::{Discovery, UtpEnr},
@@ -49,7 +50,6 @@ use crate::{
         config::{FindContentConfig, OverlayConfig},
         errors::OverlayRequestError,
         request::{OverlayRequest, RequestDirection},
-        service::OverlayService,
     },
     put_content::{
         propagate_put_content_cross_thread, trace_propagate_put_content_cross_thread,
@@ -67,7 +67,7 @@ use crate::{
 /// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic
 /// for handling common network requests/responses.
 #[derive(Clone)]
-pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
+pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore, TPingExtensions> {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
     /// The data store.
@@ -90,6 +90,8 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     validator: Arc<TValidator>,
     /// Runtime telemetry metrics for the overlay network.
     metrics: OverlayMetricsReporter,
+    /// Ping extensions for the overlay network.
+    ping_extensions: Arc<TPingExtensions>,
 }
 
 impl<
@@ -97,7 +99,8 @@ impl<
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
         TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
-    > OverlayProtocol<TContentKey, TMetric, TValidator, TStore>
+        TPingExtensions: 'static + PingExtension + Send + Sync,
+    > OverlayProtocol<TContentKey, TMetric, TValidator, TStore, TPingExtensions>
 {
     pub async fn new(
         config: OverlayConfig,
@@ -106,6 +109,7 @@ impl<
         store: Arc<RwLock<TStore>>,
         protocol: Subnetwork,
         validator: Arc<TValidator>,
+        ping_extensions: Arc<TPingExtensions>,
     ) -> Self {
         let local_node_id = discovery.local_enr().node_id();
         let kbuckets = SharedKBucketsTable::new(KBucketsTable::new(
@@ -125,25 +129,27 @@ impl<
             utp_socket,
             metrics.clone(),
         ));
-        let command_tx = OverlayService::<TContentKey, TMetric, TValidator, TStore>::spawn(
-            Arc::clone(&discovery),
-            Arc::clone(&store),
-            kbuckets.clone(),
-            config.bootnode_enrs,
-            config.ping_queue_interval,
-            protocol,
-            Arc::clone(&utp_controller),
-            metrics.clone(),
-            Arc::clone(&validator),
-            config.query_timeout,
-            config.query_peer_timeout,
-            config.query_parallelism,
-            config.query_num_results,
-            config.findnodes_query_distances_per_peer,
-            config.disable_poke,
-            config.gossip_dropped,
-        )
-        .await;
+        let command_tx =
+            OverlayService::<TContentKey, TMetric, TValidator, TStore, TPingExtensions>::spawn(
+                Arc::clone(&discovery),
+                Arc::clone(&store),
+                kbuckets.clone(),
+                config.bootnode_enrs,
+                config.ping_queue_interval,
+                protocol,
+                Arc::clone(&utp_controller),
+                metrics.clone(),
+                Arc::clone(&validator),
+                config.query_timeout,
+                config.query_peer_timeout,
+                config.query_parallelism,
+                config.query_num_results,
+                config.findnodes_query_distances_per_peer,
+                config.disable_poke,
+                config.gossip_dropped,
+                Arc::clone(&ping_extensions),
+            )
+            .await;
 
         Self {
             discovery,
@@ -156,6 +162,7 @@ impl<
             _phantom_metric: PhantomData,
             validator,
             metrics,
+            ping_extensions,
         }
     }
 
@@ -280,10 +287,7 @@ impl<
     /// `AddEnr` adds requested `enr` to our kbucket.
     pub fn add_enr(&self, enr: Enr) -> Result<(), OverlayRequestError> {
         match self.kbuckets.insert_or_update(
-            Node {
-                enr,
-                data_radius: Distance::MAX,
-            },
+            Node::new(enr.clone(), Distance::MAX),
             NodeStatus {
                 state: ConnectionState::Connected,
                 direction: ConnectionDirection::Incoming,
@@ -371,7 +375,9 @@ impl<
         // Construct the request.
         let enr_seq = self.discovery.local_enr().seq();
         let data_radius = self.data_radius();
-        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
+        let custom_payload =
+            ClientInfoRadiusCapabilities::new(data_radius, self.ping_extensions.raw_extensions())
+                .into();
         let request = Ping {
             enr_seq,
             custom_payload,

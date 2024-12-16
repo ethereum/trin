@@ -1,7 +1,6 @@
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
-    ops::Deref,
     sync::Arc,
 };
 
@@ -21,7 +20,6 @@ use validator::ValidationError;
 use crate::{
     types::{
         bytes::ByteList2048,
-        distance::Distance,
         enr::{Enr, SszEnr},
         network::{Network, Subnetwork},
     },
@@ -74,7 +72,7 @@ pub const MAX_PORTAL_CONTENT_PAYLOAD_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_S
 /// Custom payload element of Ping and Pong overlay messages
 #[derive(Debug, PartialEq, Clone)]
 pub struct CustomPayload {
-    payload: ByteList2048,
+    pub payload: ByteList2048,
 }
 
 impl TryFrom<&Value> for CustomPayload {
@@ -101,13 +99,6 @@ impl From<Vec<u8>> for CustomPayload {
         Self {
             payload: ByteList2048::from(ssz_bytes),
         }
-    }
-}
-
-impl From<CustomPayload> for Distance {
-    fn from(val: CustomPayload) -> Self {
-        let bytes = val.payload;
-        U256::from_le_slice(bytes.deref()).into()
     }
 }
 

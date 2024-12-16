@@ -27,6 +27,7 @@ ethereum_serde_utils.workspace = true
 ethereum_ssz.workspace = true
 ethereum_ssz_derive.workspace = true
 hex.workspace = true
+itertools.workspace = true
 jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"]}
 keccak-hash.workspace = true
 lazy_static.workspace = true

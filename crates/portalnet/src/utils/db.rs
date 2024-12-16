@@ -9,10 +9,10 @@ use discv5::enr::{CombinedKey, Enr, NodeId};
 use ethportal_api::{
     types::network::Network,
     utils::bytes::{hex_decode, hex_encode},
+    version::APP_NAME,
 };
 use trin_utils::dir::setup_data_dir;
 
-const APP_NAME: &str = "trin";
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 const UNSAFE_PRIVATE_KEY_FILE_NAME: &str = "unsafe_private_key.hex";
 

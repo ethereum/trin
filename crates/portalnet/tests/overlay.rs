@@ -21,6 +21,7 @@ use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
     overlay::{
         config::{FindContentConfig, OverlayConfig},
+        ping_extensions::MockPingExtension,
         protocol::OverlayProtocol,
     },
 };
@@ -35,7 +36,13 @@ use utp_rs::socket::UtpSocket;
 async fn init_overlay(
     discovery: Arc<Discovery>,
     subnetwork: Subnetwork,
-) -> OverlayProtocol<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore> {
+) -> OverlayProtocol<
+    IdentityContentKey,
+    XorMetric,
+    MockValidator,
+    MemoryContentStore,
+    MockPingExtension,
+> {
     let overlay_config = OverlayConfig::default();
 
     let node_id = discovery.local_enr().node_id();
@@ -50,6 +57,7 @@ async fn init_overlay(
     let utp_socket = Arc::new(UtpSocket::with_socket(discv5_utp));
 
     let validator = Arc::new(MockValidator {});
+    let ping_extensions = Arc::new(MockPingExtension {});
 
     OverlayProtocol::new(
         overlay_config,
@@ -58,13 +66,22 @@ async fn init_overlay(
         store,
         subnetwork,
         validator,
+        ping_extensions,
     )
     .await
 }
 
 async fn spawn_overlay(
     mut talk_req_rx: mpsc::Receiver<TalkRequest>,
-    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore>>,
+    overlay: Arc<
+        OverlayProtocol<
+            IdentityContentKey,
+            XorMetric,
+            MockValidator,
+            MemoryContentStore,
+            MockPingExtension,
+        >,
+    >,
 ) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
 

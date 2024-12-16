@@ -2202,6 +2202,7 @@ dependencies = [
  "ethereum_ssz",
  "ethereum_ssz_derive",
  "hex",
+ "itertools 0.13.0",
  "jsonrpsee",
  "keccak-hash",
  "lazy_static",

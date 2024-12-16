@@ -15,7 +15,10 @@ use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
 
-use crate::{storage::HistoryStorage, validation::ChainHistoryValidator};
+use crate::{
+    ping_extensions::HistoryPingExtensions, storage::HistoryStorage,
+    validation::ChainHistoryValidator,
+};
 
 /// Gossip content as it gets dropped from local storage,
 /// enabled by default for the history network.
@@ -25,8 +28,15 @@ const GOSSIP_DROPPED: bool = true;
 /// and logic.
 #[derive(Clone)]
 pub struct HistoryNetwork {
-    pub overlay:
-        Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, HistoryStorage>>,
+    pub overlay: Arc<
+        OverlayProtocol<
+            HistoryContentKey,
+            XorMetric,
+            ChainHistoryValidator,
+            HistoryStorage,
+            HistoryPingExtensions,
+        >,
+    >,
 }
 
 impl HistoryNetwork {
@@ -46,6 +56,7 @@ impl HistoryNetwork {
         };
         let storage = Arc::new(PLRwLock::new(HistoryStorage::new(storage_config)?));
         let validator = Arc::new(ChainHistoryValidator { header_oracle });
+        let ping_extensions = Arc::new(HistoryPingExtensions {});
         let overlay = OverlayProtocol::new(
             config,
             discovery,
@@ -53,6 +64,7 @@ impl HistoryNetwork {
             storage,
             Subnetwork::History,
             validator,
+            ping_extensions,
         )
         .await;
 

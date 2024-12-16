@@ -4,8 +4,8 @@ use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
         content_value::ContentValue,
-        distance::Distance,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
+        ping_extensions::decode::DecodedExtension,
         portal::{AcceptInfo, FindNodesInfo, GetContentInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
     },
@@ -399,10 +399,17 @@ async fn ping(
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
 ) -> Result<Value, String> {
     match network.overlay.send_ping(enr).await {
-        Ok(pong) => Ok(json!(PongInfo {
-            enr_seq: pong.enr_seq,
-            data_radius: *Distance::from(pong.custom_payload),
-        })),
+        Ok(pong) => {
+            let data_radius = match DecodedExtension::try_from(pong.custom_payload) {
+                Ok(DecodedExtension::Capabilities(capabilities)) => *capabilities.data_radius,
+                err => return Err(format!("Failed to decode capabilities: {err:?}")),
+            };
+
+            Ok(json!(PongInfo {
+                enr_seq: pong.enr_seq,
+                data_radius,
+            }))
+        }
         Err(msg) => Err(format!("Ping request timeout: {msg:?}")),
     }
 }

@@ -18,13 +18,24 @@ use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
 
-use crate::{storage::BeaconStorage, sync::BeaconSync, validation::BeaconValidator};
+use crate::{
+    ping_extensions::BeaconPingExtensions, storage::BeaconStorage, sync::BeaconSync,
+    validation::BeaconValidator,
+};
 
 /// Beacon network layer on top of the overlay protocol. Encapsulates beacon network specific data
 /// and logic.
 #[derive(Clone)]
 pub struct BeaconNetwork {
-    pub overlay: Arc<OverlayProtocol<BeaconContentKey, XorMetric, BeaconValidator, BeaconStorage>>,
+    pub overlay: Arc<
+        OverlayProtocol<
+            BeaconContentKey,
+            XorMetric,
+            BeaconValidator,
+            BeaconStorage,
+            BeaconPingExtensions,
+        >,
+    >,
     pub beacon_client: Arc<Mutex<Option<Client<FileDB, PortalRpc>>>>,
 }
 
@@ -49,6 +60,7 @@ impl BeaconNetwork {
         let storage = Arc::new(PLRwLock::new(BeaconStorage::new(storage_config)?));
         let storage_clone = Arc::clone(&storage);
         let validator = Arc::new(BeaconValidator::new(header_oracle));
+        let ping_extensions = Arc::new(BeaconPingExtensions {});
         let overlay = OverlayProtocol::new(
             config,
             discovery,
@@ -56,6 +68,7 @@ impl BeaconNetwork {
             storage,
             Subnetwork::Beacon,
             validator,
+            ping_extensions,
         )
         .await;
 
