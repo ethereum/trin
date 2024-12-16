@@ -1754,6 +1754,10 @@ impl<
         query_trace_events_tx: Option<UnboundedSender<QueryTraceEvent>>,
     ) {
         let mut content = content;
+        // report the total bytes of content received
+        utp_processing
+            .metrics
+            .report_bytes_inbound(content.len() as u64);
         // Operate under assumption that all content in the store is valid
         let local_value = utp_processing.store.read().get(&content_key);
         if let Ok(Some(val)) = local_value {
