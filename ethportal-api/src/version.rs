@@ -1,3 +1,5 @@
+pub const APP_NAME: &str = "trin";
+
 /// The latest git commit hash of the build.
 pub const TRIN_FULL_COMMIT: &str = env!("VERGEN_GIT_SHA");
 pub const TRIN_SHORT_COMMIT: &str = const_format::str_index!(TRIN_FULL_COMMIT, ..8);

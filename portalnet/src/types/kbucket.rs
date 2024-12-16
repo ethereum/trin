@@ -149,10 +149,9 @@ impl SharedKBucketsTable {
             // If the node is not in the routing table, then insert the node in a disconnected state
             // (a subsequent ping will establish connectivity with the node). Ignore insertion
             // failures.
-            if let Some(node) = Entry::from(kbuckets.entry(&key)).present_or_pending() {
+            if let Some(mut node) = Entry::from(kbuckets.entry(&key)).present_or_pending() {
                 if node.enr.seq() < enr.seq() {
-                    let node = Node::new(enr, node.data_radius());
-
+                    node.set_enr(enr);
                     if let UpdateResult::Failed(reason) = kbuckets.update_node(&key, node, None) {
                         // The update removed the node because it would violate the incoming peers
                         // condition or a bucket/table filter.

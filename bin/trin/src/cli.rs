@@ -14,7 +14,7 @@ use ethportal_api::{
         network::Subnetwork,
         portal_wire::{NetworkSpec, MAINNET},
     },
-    version::VERSION,
+    version::{APP_NAME, VERSION},
 };
 use portalnet::{
     bootnodes::Bootnodes,
@@ -32,7 +32,6 @@ const DEFAULT_SUBNETWORKS: &str = "history";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
-const APP_NAME: &str = "trin";
 #[derive(Parser, Debug, PartialEq, Clone)]
 #[command(name = APP_NAME,
     author = "https://github.com/ethereum/trin/graphs/contributors",

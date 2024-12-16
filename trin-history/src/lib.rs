@@ -4,6 +4,7 @@
 pub mod events;
 mod jsonrpc;
 pub mod network;
+mod ping_extensions;
 mod storage;
 pub mod validation;
 

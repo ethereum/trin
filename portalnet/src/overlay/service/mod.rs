@@ -1,3 +1,5 @@
+pub mod ping;
+
 use std::{
     collections::HashMap,
     marker::{PhantomData, Sync},
@@ -25,9 +27,9 @@ use ethportal_api::{
         enr::{Enr, SszEnr},
         network::Subnetwork,
         portal_wire::{
-            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
-            OfferTrace, Ping, Pong, PopulatedOffer, Request, Response,
-            MAX_PORTAL_CONTENT_PAYLOAD_SIZE, MAX_PORTAL_NODES_ENRS_SIZE,
+            Accept, Content, FindContent, FindNodes, Message, Nodes, Offer, OfferTrace,
+            PopulatedOffer, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
+            MAX_PORTAL_NODES_ENRS_SIZE,
         },
         query_trace::{QueryFailureKind, QueryTrace},
     },
@@ -54,6 +56,7 @@ use trin_storage::{ContentStore, ShouldWeStoreContent};
 use trin_validation::validator::Validator;
 use utp_rs::cid::ConnectionId;
 
+use super::ping_extensions::PingExtension;
 use crate::{
     accept_queue::AcceptQueue,
     discovery::{Discovery, UtpEnr},
@@ -105,7 +108,7 @@ const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 const EVENT_STREAM_CHANNEL_CAPACITY: usize = 10;
 
 /// The overlay service.
-pub struct OverlayService<TContentKey, TMetric, TValidator, TStore>
+pub struct OverlayService<TContentKey, TMetric, TValidator, TStore, TPingExtensions>
 where
     TContentKey: OverlayContentKey,
 {
@@ -169,6 +172,8 @@ where
     gossip_dropped: bool,
     /// Accept Queue for inbound content keys
     accept_queue: Arc<RwLock<AcceptQueue<TContentKey>>>,
+    /// Ping extensions for the overlay network.
+    ping_extensions: Arc<TPingExtensions>,
 }
 
 impl<
@@ -176,7 +181,8 @@ impl<
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
         TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
-    > OverlayService<TContentKey, TMetric, TValidator, TStore>
+        TPingExtensions: 'static + PingExtension + Send + Sync,
+    > OverlayService<TContentKey, TMetric, TValidator, TStore, TPingExtensions>
 {
     /// Spawns the overlay network service.
     ///
@@ -201,6 +207,7 @@ impl<
         findnodes_query_distances_per_peer: usize,
         disable_poke: bool,
         gossip_dropped: bool,
+        ping_extensions: Arc<TPingExtensions>,
     ) -> UnboundedSender<OverlayCommand<TContentKey>> {
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let internal_command_tx = command_tx.clone();
@@ -246,6 +253,7 @@ impl<
                 disable_poke,
                 gossip_dropped,
                 accept_queue: Arc::new(RwLock::new(AcceptQueue::default())),
+                ping_extensions,
             };
 
             info!(protocol = %protocol, "Starting overlay service");
@@ -394,18 +402,18 @@ impl<
                 }
                 Some(Ok(node_id)) = self.peers_to_ping.next() => {
                     if let Some(node) = self.kbuckets.entry(node_id).present() {
-                        self.ping_node(&node.enr);
+                        self.ping_node(node);
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                query_event = OverlayService::<TContentKey, TMetric, TValidator, TStore>::query_event_poll(&mut self.find_node_query_pool) => {
+                query_event = OverlayService::<TContentKey, TMetric, TValidator, TStore, TPingExtensions>::query_event_poll(&mut self.find_node_query_pool) => {
                     self.handle_find_nodes_query_event(query_event);
                 }
                 // Handle query events for queries in the find content query pool.
-                query_event = OverlayService::<TContentKey, TMetric, TValidator, TStore>::query_event_poll(&mut self.find_content_query_pool) => {
+                query_event = OverlayService::<TContentKey, TMetric, TValidator, TStore, TPingExtensions>::query_event_poll(&mut self.find_content_query_pool) => {
                     self.handle_find_content_query_event(query_event);
                 }
-                _ = OverlayService::<TContentKey, TMetric, TValidator, TStore>::bucket_maintenance_poll(self.protocol, &self.kbuckets) => {}
+                _ = OverlayService::<TContentKey, TMetric, TValidator, TStore, TPingExtensions>::bucket_maintenance_poll(self.protocol, &self.kbuckets) => {}
                 Some(trace_event) = self.content_query_trace_events_rx.recv() => {
                     self.track_content_query_trace_event(trace_event);
                 }
@@ -954,24 +962,6 @@ impl<
         }
     }
 
-    /// Builds a `Pong` response for a `Ping` request.
-    fn handle_ping(&self, request: Ping, source: &NodeId, request_id: RequestId) -> Pong {
-        trace!(
-            protocol = %self.protocol,
-            request.source = %source,
-            request.discv5.id = %request_id,
-            "Handling Ping message {request}",
-        );
-
-        let enr_seq = self.local_enr().seq();
-        let data_radius = self.data_radius();
-        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
-        Pong {
-            enr_seq,
-            custom_payload,
-        }
-    }
-
     /// Builds a `Nodes` response for a `FindNodes` request.
     fn handle_find_nodes(
         &self,
@@ -1392,32 +1382,8 @@ impl<
             // peer.
             if let Some(node_addr) = self.discovery.cached_node_addr(&source) {
                 // TODO: Decide default data radius, and define a constant.
-                let node = Node {
-                    enr: node_addr.enr,
-                    data_radius: Distance::MAX,
-                };
+                let node = Node::new(node_addr.enr, Distance::MAX);
                 self.connect_node(node, ConnectionDirection::Incoming);
-            }
-        }
-    }
-
-    /// Processes a ping request from some source node.
-    fn process_ping(&self, ping: Ping, source: NodeId) {
-        // If the node is in the routing table, then check if we need to update the node.
-        if let Some(node) = self.kbuckets.entry(source).present_or_pending() {
-            // TODO: How do we handle data in the custom payload? This is unique to each overlay
-            // network, so there may need to be some way to parameterize the update for a
-            // ping/pong.
-
-            // If the ENR sequence number in pong is less than the ENR sequence number for the
-            // routing table entry, then request the node.
-            if node.enr().seq() < ping.enr_seq {
-                self.request_node(&node.enr());
-            }
-
-            let data_radius: Distance = ping.custom_payload.into();
-            if node.data_radius != data_radius {
-                self.update_node_radius(node.enr(), data_radius);
             }
         }
     }
@@ -1798,39 +1764,11 @@ impl<
         Ok(())
     }
 
-    /// Processes a Pong response.
-    ///
-    /// Refreshes the node if necessary. Attempts to mark the node as connected.
-    fn process_pong(&self, pong: Pong, source: Enr) {
-        let node_id = source.node_id();
-        trace!(
-            protocol = %self.protocol,
-            response.source = %node_id,
-            "Processing Pong message {pong}"
-        );
-
-        // If the ENR sequence number in pong is less than the ENR sequence number for the routing
-        // table entry, then request the node.
-        //
-        // TODO: Perform update on non-ENR node entry state. See note in `process_ping`.
-        if let Some(node) = self.kbuckets.entry(node_id).present_or_pending() {
-            if node.enr().seq() < pong.enr_seq {
-                self.request_node(&node.enr());
-            }
-
-            let data_radius: Distance = pong.custom_payload.into();
-            if node.data_radius != data_radius {
-                self.update_node_radius(source, data_radius);
-            }
-        }
-    }
-
     /// Update the recorded radius of a node in our routing table.
-    fn update_node_radius(&self, enr: Enr, data_radius: Distance) {
-        let node_id = enr.node_id();
+    fn update_node(&self, node: Node) {
+        let node_id = node.enr.node_id();
 
-        let updated_node = Node::new(enr, data_radius);
-        if let UpdateResult::Failed(_) = self.kbuckets.update_node(updated_node, None) {
+        if let UpdateResult::Failed(_) = self.kbuckets.update_node(node, None) {
             error!(
                 "Failed to update radius of node {}",
                 hex_encode_compact(node_id.raw())
@@ -2179,35 +2117,6 @@ impl<
         }
     }
 
-    /// Submits a request to ping a destination (target) node.
-    ///
-    /// This can block the thread, so make sure you are not holding any lock while calling this.
-    fn ping_node(&self, destination: &Enr) {
-        trace!(
-            protocol = %self.protocol,
-            request.dest = %destination.node_id(),
-            "Sending Ping message",
-        );
-
-        let enr_seq = self.local_enr().seq();
-        let data_radius = self.data_radius();
-        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
-        let ping = Request::Ping(Ping {
-            enr_seq,
-            custom_payload,
-        });
-        let request = OverlayRequest::new(
-            ping,
-            RequestDirection::Outgoing {
-                destination: destination.clone(),
-            },
-            None,
-            None,
-            None,
-        );
-        let _ = self.command_tx.send(OverlayCommand::Request(request));
-    }
-
     /// Submits a request for the node info of a destination (target) node.
     fn request_node(&self, destination: &Enr) {
         let find_nodes = Request::FindNodes(FindNodes { distances: vec![0] });
@@ -2247,7 +2156,7 @@ impl<
                 // currently considered disconnected. This node should be pinged to check
                 // for connectivity.
                 if let Some(node) = self.kbuckets.entry(disconnected.into_preimage()).present() {
-                    self.ping_node(&node.enr);
+                    self.ping_node(node);
                 }
             }
             InsertResult::StatusUpdated {
@@ -2538,15 +2447,18 @@ where
     gossip_dropped: bool,
 }
 
-impl<TContentKey, TMetric, TValidator, TStore>
-    From<&OverlayService<TContentKey, TMetric, TValidator, TStore>>
+impl<TContentKey, TMetric, TValidator, TStore, TPingExtensions>
+    From<&OverlayService<TContentKey, TMetric, TValidator, TStore, TPingExtensions>>
     for UtpProcessing<TValidator, TStore, TContentKey>
 where
     TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
     TStore: ContentStore<Key = TContentKey>,
+    TPingExtensions: PingExtension,
 {
-    fn from(service: &OverlayService<TContentKey, TMetric, TValidator, TStore>) -> Self {
+    fn from(
+        service: &OverlayService<TContentKey, TMetric, TValidator, TStore, TPingExtensions>,
+    ) -> Self {
         Self {
             validator: Arc::clone(&service.validator),
             store: Arc::clone(&service.store),
@@ -2611,8 +2523,11 @@ mod tests {
     use alloy::primitives::U256;
     use discv5::kbucket;
     use ethportal_api::types::{
-        content_key::overlay::IdentityContentKey, distance::XorMetric,
-        enr::generate_random_remote_enr, portal_wire::MAINNET,
+        content_key::overlay::IdentityContentKey,
+        distance::XorMetric,
+        enr::generate_random_remote_enr,
+        ping_extensions::extensions::type_0::ClientInfoRadiusCapabilities,
+        portal_wire::{Ping, Pong, MAINNET},
     };
     use kbucket::KBucketsTable;
     use rstest::*;
@@ -2631,7 +2546,7 @@ mod tests {
         config::PortalnetConfig,
         constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_UTP_TRANSFER_LIMIT},
         discovery::{Discovery, NodeAddress},
-        overlay::config::OverlayConfig,
+        overlay::{config::OverlayConfig, ping_extensions::MockPingExtension},
     };
 
     macro_rules! poll_command_rx {
@@ -2640,8 +2555,13 @@ mod tests {
         };
     }
 
-    fn build_service(
-    ) -> OverlayService<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore> {
+    fn build_service() -> OverlayService<
+        IdentityContentKey,
+        XorMetric,
+        MockValidator,
+        MemoryContentStore,
+        MockPingExtension,
+    > {
         let portal_config = PortalnetConfig {
             no_stun: true,
             no_upnp: true,
@@ -2722,6 +2642,7 @@ mod tests {
             disable_poke: false,
             gossip_dropped: false,
             accept_queue,
+            ping_extensions: Arc::new(MockPingExtension {}),
         }
     }
 
@@ -2744,7 +2665,11 @@ mod tests {
 
         let ping = Ping {
             enr_seq: source.seq() + 1,
-            custom_payload: CustomPayload::from(data_radius.as_ssz_bytes()),
+            custom_payload: ClientInfoRadiusCapabilities::new(
+                data_radius,
+                service.ping_extensions.raw_extensions(),
+            )
+            .into(),
         };
 
         service.process_ping(ping, node_id);
@@ -2789,7 +2714,11 @@ mod tests {
 
         let ping = Ping {
             enr_seq: source.seq(),
-            custom_payload: CustomPayload::from(data_radius.as_ssz_bytes()),
+            custom_payload: ClientInfoRadiusCapabilities::new(
+                data_radius,
+                service.ping_extensions.raw_extensions(),
+            )
+            .into(),
         };
 
         service.process_ping(ping, node_id);
@@ -2850,7 +2779,11 @@ mod tests {
 
         let pong = Pong {
             enr_seq: source.seq() + 1,
-            custom_payload: CustomPayload::from(data_radius.as_ssz_bytes()),
+            custom_payload: ClientInfoRadiusCapabilities::new(
+                data_radius,
+                service.ping_extensions.raw_extensions(),
+            )
+            .into(),
         };
 
         service.process_pong(pong, source.clone());
@@ -2894,7 +2827,11 @@ mod tests {
 
         let pong = Pong {
             enr_seq: source.seq(),
-            custom_payload: CustomPayload::from(data_radius.as_ssz_bytes()),
+            custom_payload: ClientInfoRadiusCapabilities::new(
+                data_radius,
+                service.ping_extensions.raw_extensions(),
+            )
+            .into(),
         };
 
         service.process_pong(pong, source);
@@ -3032,7 +2969,13 @@ mod tests {
         let peer_node_ids: Vec<NodeId> = vec![peer.enr.node_id()];
 
         // Node has maximum radius, so there should be one offer in the channel.
-        OverlayService::<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore>::poke_content(
+        OverlayService::<
+            IdentityContentKey,
+            XorMetric,
+            MockValidator,
+            MemoryContentStore,
+            MockPingExtension,
+        >::poke_content(
             &service.kbuckets,
             service.command_tx.clone(),
             content_key,
@@ -3070,7 +3013,13 @@ mod tests {
         let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.node_id()).collect();
 
         // No nodes in the routing table, so no commands should be in the channel.
-        OverlayService::<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore>::poke_content(
+        OverlayService::<
+            IdentityContentKey,
+            XorMetric,
+            MockValidator,
+            MemoryContentStore,
+            MockPingExtension,
+        >::poke_content(
             &service.kbuckets,
             service.command_tx.clone(),
             content_key,
@@ -3108,7 +3057,13 @@ mod tests {
         let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.enr.node_id()).collect();
 
         // One offer should be in the channel for the maximum radius node.
-        OverlayService::<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore>::poke_content(
+        OverlayService::<
+            IdentityContentKey,
+            XorMetric,
+            MockValidator,
+            MemoryContentStore,
+            MockPingExtension,
+        >::poke_content(
             &service.kbuckets,
             service.command_tx.clone(),
             content_key,
@@ -3173,7 +3128,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let (_, destination) = generate_random_remote_enr();
-        service.ping_node(&destination);
+        service.ping_node(Node::new(destination.clone(), Distance::MAX));
 
         let command = assert_ready!(poll_command_rx!(service));
         assert!(command.is_some());
@@ -3382,6 +3337,7 @@ mod tests {
             XorMetric,
             MockValidator,
             MemoryContentStore,
+            MockPingExtension,
         >::query_event_poll(&mut service.find_node_query_pool)
         .await;
         match event {
@@ -3418,6 +3374,7 @@ mod tests {
             XorMetric,
             MockValidator,
             MemoryContentStore,
+            MockPingExtension,
         >::query_event_poll(&mut service.find_node_query_pool)
         .await;
 
@@ -3435,6 +3392,7 @@ mod tests {
             XorMetric,
             MockValidator,
             MemoryContentStore,
+            MockPingExtension,
         >::query_event_poll(&mut service.find_node_query_pool)
         .await;
 
@@ -3459,6 +3417,7 @@ mod tests {
             XorMetric,
             MockValidator,
             MemoryContentStore,
+            MockPingExtension,
         >::query_event_poll(&mut service.find_node_query_pool)
         .await;
 
@@ -3502,6 +3461,7 @@ mod tests {
             XorMetric,
             MockValidator,
             MemoryContentStore,
+            MockPingExtension,
         >::query_event_poll(&mut service.find_node_query_pool)
         .await;
 
@@ -3547,10 +3507,7 @@ mod tests {
         let (_, bootnode_enr) = generate_random_remote_enr();
 
         let data_radius = Distance::MAX;
-        let bootnode = Node {
-            enr: bootnode_enr.clone(),
-            data_radius,
-        };
+        let bootnode = Node::new(bootnode_enr.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3617,10 +3574,7 @@ mod tests {
         let (_, bootnode_enr) = generate_random_remote_enr();
 
         let data_radius = Distance::MAX;
-        let bootnode = Node {
-            enr: bootnode_enr.clone(),
-            data_radius,
-        };
+        let bootnode = Node::new(bootnode_enr.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3678,10 +3632,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
 
         let data_radius = Distance::MAX;
-        let bootnode = Node {
-            enr: bootnode_enr.clone(),
-            data_radius,
-        };
+        let bootnode = Node::new(bootnode_enr.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3741,10 +3692,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
 
         let data_radius = Distance::MAX;
-        let bootnode = Node {
-            enr: bootnode_enr.clone(),
-            data_radius,
-        };
+        let bootnode = Node::new(bootnode_enr.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3806,10 +3754,7 @@ mod tests {
         let (_, bootnode_enr) = generate_random_remote_enr();
 
         let data_radius = Distance::MAX;
-        let bootnode = Node {
-            enr: bootnode_enr.clone(),
-            data_radius,
-        };
+        let bootnode = Node::new(bootnode_enr.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3830,11 +3775,14 @@ mod tests {
         );
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
-        let query_event =
-            OverlayService::<_, XorMetric, MockValidator, MemoryContentStore>::query_event_poll(
-                &mut service.find_content_query_pool,
-            )
-            .await;
+        let query_event = OverlayService::<
+            _,
+            XorMetric,
+            MockValidator,
+            MemoryContentStore,
+            MockPingExtension,
+        >::query_event_poll(&mut service.find_content_query_pool)
+        .await;
 
         // Query event should be `Waiting` variant.
         assert!(matches!(query_event, QueryEvent::Waiting(_, _, _)));
@@ -3869,11 +3817,14 @@ mod tests {
             content.clone(),
         );
 
-        let query_event =
-            OverlayService::<_, XorMetric, MockValidator, MemoryContentStore>::query_event_poll(
-                &mut service.find_content_query_pool,
-            )
-            .await;
+        let query_event = OverlayService::<
+            _,
+            XorMetric,
+            MockValidator,
+            MemoryContentStore,
+            MockPingExtension,
+        >::query_event_poll(&mut service.find_content_query_pool)
+        .await;
 
         // Query event should be `Validating` variant.
         assert!(matches!(query_event, QueryEvent::Validating(..)));
@@ -3883,13 +3834,18 @@ mod tests {
         // Poll until content is validated
         let mut attempts_left = 5;
         let query_event = loop {
-            let polled = timeout(
-                Duration::from_millis(10),
-                OverlayService::<_, XorMetric, MockValidator, MemoryContentStore>::query_event_poll(
-                    &mut service.find_content_query_pool,
-                ),
-            )
-            .await;
+            let polled =
+                timeout(
+                    Duration::from_millis(10),
+                    OverlayService::<
+                        _,
+                        XorMetric,
+                        MockValidator,
+                        MemoryContentStore,
+                        MockPingExtension,
+                    >::query_event_poll(&mut service.find_content_query_pool),
+                )
+                .await;
             if let Ok(query_event) = polled {
                 break query_event;
             }
