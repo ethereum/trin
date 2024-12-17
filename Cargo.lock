@@ -6954,6 +6954,7 @@ dependencies = [
  "ethportal-api",
  "futures",
  "parking_lot 0.11.2",
+ "portal-bridge",
  "portalnet",
  "quickcheck",
  "rand",
