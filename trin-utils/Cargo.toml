@@ -1,6 +1,7 @@
 [package]
 name = "trin-utils"
 description = "Utils library for Trin."
+build = "build.rs"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
@@ -12,10 +13,15 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+const_format = {version = "0.2.0", features = ["rust_1_64"]}
 directories.workspace = true
+shadow-rs = "0.27"
 tempfile.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[build-dependencies]
+shadow-rs = "0.27"
 
 [target.'cfg(windows)'.dependencies]
 # The crates for detecting whether the terminal supports colors are OS-specific.
