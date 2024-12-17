@@ -17,7 +17,6 @@ mod state;
 mod test_utils;
 pub mod types;
 pub mod utils;
-pub mod version;
 mod web3;
 
 pub use beacon::{BeaconNetworkApiClient, BeaconNetworkApiServer};
@@ -48,5 +47,3 @@ pub use types::{
     portal::{RawContentKey, RawContentValue},
 };
 pub use web3::{Web3ApiClient, Web3ApiServer};
-
-shadow_rs::shadow!(build_info);
