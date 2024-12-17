@@ -123,7 +123,7 @@ impl QueryTrace {
     }
 
     /// Returns milliseconds since the time provided.
-    fn timestamp_millis_u64(since: u64) -> u64 {
+    pub fn timestamp_millis_u64(since: u64) -> u64 {
         // Convert `since` (milliseconds) to a `SystemTime`
         let since_time = UNIX_EPOCH + Duration::from_millis(since);
 

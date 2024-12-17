@@ -7,34 +7,49 @@ use std::fs::File;
 use std::{
     io::{self, BufRead},
     path::Path,
+    time::Duration,
 };
 
 use anyhow::anyhow;
 use ethportal_api::{
-    utils::bytes::hex_decode, BlockBodyKey, BlockReceiptsKey, ContentValue, HistoryContentKey,
-    HistoryContentValue,
+    jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
+    types::{cli::DEFAULT_WEB3_HTTP_ADDRESS, network::Subnetwork, query_trace::QueryTrace},
+    utils::bytes::hex_decode,
+    BlockBodyKey, BlockReceiptsKey, ContentValue, HistoryContentKey, HistoryContentValue,
 };
 use futures::{channel::oneshot, future::join_all};
-use portalnet::overlay::command::OverlayCommand;
+use portal_bridge::census::Census;
+use portalnet::overlay::{command::OverlayCommand, config::FindContentConfig};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{error, info, warn};
 
 /// The number of blocks to download in a single batch.
-const BATCH_SIZE: usize = 40;
+const BATCH_SIZE: usize = 3;
 /// The path to the CSV file with block numbers and block hashes.
 const CSV_PATH: &str = "ethereum_blocks_14000000_merge.csv";
 
 #[derive(Clone)]
 pub struct Downloader {
+    pub census: Census,
     pub overlay_tx: UnboundedSender<OverlayCommand<HistoryContentKey>>,
 }
 
 impl Downloader {
     pub fn new(overlay_tx: UnboundedSender<OverlayCommand<HistoryContentKey>>) -> Self {
-        Self { overlay_tx }
+        let http_client: HttpClient = HttpClientBuilder::default()
+            // increase default timeout to allow for trace_gossip requests that can take a long
+            // time
+            .request_timeout(Duration::from_secs(120))
+            .build(DEFAULT_WEB3_HTTP_ADDRESS)
+            .map_err(|e| e.to_string())
+            .expect("Failed to build http client");
+
+        // BUild hhtp client binded to the current node web3rpc
+        let census = Census::new(http_client, 0, vec![]);
+        Self { overlay_tx, census }
     }
 
-    pub async fn start(self) -> io::Result<()> {
+    pub async fn start(mut self) -> io::Result<()> {
         // set the csv path to a file in the root trin-history directory
         info!("Opening CSV file");
         let csv_path = Path::new(CSV_PATH);
@@ -47,6 +62,14 @@ impl Downloader {
         // skip the header of the csv file
         let lines = &lines[1..];
         let blocks: Vec<(u64, String)> = lines.iter().map(|line| parse_line(line)).collect();
+        // Initialize the census with the history subnetwork
+        let _ = Some(
+            self.census
+                .init([Subnetwork::History])
+                .await
+                .expect("Failed to initialize Census"),
+        );
+
         info!("Processing blocks");
         let batches = blocks.chunks(BATCH_SIZE);
 
@@ -91,7 +114,10 @@ impl Downloader {
         let overlay_command = OverlayCommand::FindContentQuery {
             target: content_key.clone(),
             callback: tx,
-            config: Default::default(),
+            config: FindContentConfig {
+                is_trace: true,
+                ..Default::default()
+            },
         };
 
         if let Err(err) = self.overlay_tx.send(overlay_command) {
@@ -104,7 +130,14 @@ impl Downloader {
             Ok(result) => match result {
                 Ok(result) => {
                     HistoryContentValue::decode(&content_key, &result.0)?;
-                    info!(block_number = block_number, "Downloaded content for block");
+                    let duration_ms = QueryTrace::timestamp_millis_u64(
+                        result.2.expect("QueryTrace not found").started_at_ms,
+                    );
+                    info!(
+                        block_number = block_number,
+                        query_duration = duration_ms,
+                        "Downloaded content for block"
+                    );
                     Ok(())
                 }
                 Err(err) => {
