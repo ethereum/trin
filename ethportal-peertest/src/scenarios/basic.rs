@@ -1,13 +1,13 @@
 use alloy::primitives::{B256, U256};
 use ethportal_api::{
     types::{distance::Distance, network::Subnetwork},
-    version::get_trin_version,
     BeaconNetworkApiClient, ContentValue, Discv5ApiClient, HistoryContentKey,
     HistoryNetworkApiClient, StateNetworkApiClient, Web3ApiClient,
 };
 use jsonrpsee::async_client::Client;
 use ssz::Encode;
 use tracing::info;
+use trin_utils::version::get_trin_version;
 
 use crate::{utils::fixture_header_by_hash, Peertest, PeertestNode};
 

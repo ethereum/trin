@@ -18,13 +18,13 @@ use discv5::{
 use ethportal_api::{
     types::{discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec},
     utils::bytes::hex_decode,
-    version::get_trin_version,
     NodeInfo,
 };
 use lru::LruCache;
 use parking_lot::RwLock;
 use tokio::sync::{mpsc, RwLock as TokioRwLock};
 use tracing::{debug, info, warn};
+use trin_utils::version::get_trin_short_version_commit;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
@@ -139,7 +139,7 @@ impl Discovery {
                 .as_secs();
             builder.seq(epoch_timestamp);
 
-            let trin_version = get_trin_version();
+            let trin_version = get_trin_short_version_commit();
             // Use "t" as short-hand for "Trin" to save bytes in ENR.
             let client_info = format!("t {trin_version}");
             // Use "c" as short-hand for "client".
