@@ -54,7 +54,7 @@ tree_hash.workspace = true
 tree_hash_derive.workspace = true
 ureq.workspace = true
 url.workspace = true
-validator = { version = "0.13.0", features = ["derive"] }
+validator = { version = "0.19.0", features = ["derive"] }
 
 [dev-dependencies]
 env_logger.workspace = true
