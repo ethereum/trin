@@ -1,8 +1,11 @@
 use discv5::enr::NodeId;
-use ethportal_api::types::{cli::StorageCapacityConfig, network::Subnetwork};
+use ethportal_api::types::network::Subnetwork;
 use tempfile::TempDir;
 
-use crate::{error::ContentStoreError, PortalStorageConfig, PortalStorageConfigFactory};
+use crate::{
+    config::StorageCapacityConfig, error::ContentStoreError, PortalStorageConfig,
+    PortalStorageConfigFactory,
+};
 
 /// Creates temporary directory and PortalStorageConfig.
 pub fn create_test_portal_storage_config_with_capacity(

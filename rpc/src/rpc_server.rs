@@ -3,10 +3,8 @@ use std::{
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
 };
 
-use ethportal_api::{
-    jsonrpsee::server::IdProvider,
-    types::cli::{DEFAULT_WEB3_HTTP_PORT, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_WS_PORT},
-};
+use ethportal_api::jsonrpsee::server::IdProvider;
+use portalnet::constants::{DEFAULT_WEB3_HTTP_PORT, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_WS_PORT};
 use reth_ipc::server::{Builder as IpcServerBuilder, IpcServer};
 use tower::layer::util::{Identity, Stack};
 use tower_http::cors::CorsLayer;

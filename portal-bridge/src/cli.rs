@@ -4,16 +4,16 @@ use alloy::primitives::B256;
 use clap::Parser;
 use ethportal_api::{
     types::{
-        cli::{
-            check_private_key_length, network_parser, DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK,
-            DEFAULT_WEB3_HTTP_PORT,
-        },
+        cli::{check_private_key_length, network_parser},
         network::Subnetwork,
         portal_wire::NetworkSpec,
     },
     Enr,
 };
-use portalnet::discovery::ENR_PORTAL_CLIENT_KEY;
+use portalnet::{
+    constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK, DEFAULT_WEB3_HTTP_PORT},
+    discovery::ENR_PORTAL_CLIENT_KEY,
+};
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client, IntoUrl, Request, Response,
