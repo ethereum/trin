@@ -48,5 +48,3 @@ pub use types::{
     portal::{RawContentKey, RawContentValue},
 };
 pub use web3::{Web3ApiClient, Web3ApiServer};
-
-shadow_rs::shadow!(build_info);
