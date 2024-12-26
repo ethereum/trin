@@ -4,14 +4,12 @@ use alloy::primitives::Bytes;
 use e2store::era1::Era1;
 use ethportal_api::{
     jsonrpsee::{async_client::Client, http_client::HttpClient},
-    types::{
-        cli::DEFAULT_UTP_TRANSFER_LIMIT, enr::Enr, execution::accumulator::EpochAccumulator,
-        portal_wire::OfferTrace,
-    },
+    types::{enr::Enr, execution::accumulator::EpochAccumulator, portal_wire::OfferTrace},
     utils::bytes::hex_encode,
     ContentValue, Discv5ApiClient, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use portal_bridge::api::execution::construct_proof;
+use portalnet::constants::DEFAULT_UTP_TRANSFER_LIMIT;
 use ssz::Decode;
 use tracing::info;
 

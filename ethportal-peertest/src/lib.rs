@@ -7,7 +7,6 @@ use std::{net::Ipv4Addr, path::PathBuf, thread, time};
 
 use ethportal_api::{
     types::{
-        cli::{TrinConfig, DEFAULT_DISCOVERY_PORT},
         enr::Enr,
         network::{Network, Subnetwork},
     },
@@ -16,7 +15,9 @@ use ethportal_api::{
 };
 use futures::future;
 use jsonrpsee::async_client::Client;
+use portalnet::constants::DEFAULT_DISCOVERY_PORT;
 use rpc::RpcServerHandle;
+use trin::cli::TrinConfig;
 
 pub struct PeertestNode {
     pub enr: Enr,

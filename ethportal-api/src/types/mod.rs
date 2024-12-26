@@ -1,4 +1,3 @@
-pub mod bootnodes;
 pub mod bytes;
 pub mod cli;
 pub mod consensus;

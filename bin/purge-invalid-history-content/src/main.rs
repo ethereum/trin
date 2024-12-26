@@ -2,13 +2,11 @@ use alloy::primitives::B256;
 use anyhow::Result;
 use clap::Parser;
 use discv5::enr::{CombinedKey, Enr};
-use ethportal_api::types::{
-    cli::StorageCapacityConfig,
-    network::{Network, Subnetwork},
-};
+use ethportal_api::types::network::{Network, Subnetwork};
 use portalnet::utils::db::{configure_node_data_dir, configure_trin_data_dir};
 use tracing::info;
 use trin_storage::{
+    config::StorageCapacityConfig,
     versioned::{ContentType, IdIndexedV1StoreConfig},
     PortalStorageConfigFactory,
 };

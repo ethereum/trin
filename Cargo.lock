@@ -2279,6 +2279,7 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "portal-bridge",
+ "portalnet",
  "rand",
  "reth-ipc",
  "rpc",
@@ -2776,6 +2777,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "historical-batch"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "e2store",
+ "ethereum_ssz",
+ "ethportal-api",
+ "regex",
+ "reqwest",
+ "tokio",
+ "tree_hash",
 ]
 
 [[package]]
@@ -4399,6 +4415,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
 
 [[package]]
+name = "poll-latest"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "clap",
+ "ethportal-api",
+ "futures",
+ "tokio",
+ "tracing",
+ "trin-utils",
+ "url",
+]
+
+[[package]]
 name = "polyval"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4660,6 +4691,21 @@ dependencies = [
  "rusty-fork",
  "tempfile",
  "unarray",
+]
+
+[[package]]
+name = "purge-invalid-history-content"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "clap",
+ "discv5",
+ "ethportal-api",
+ "portalnet",
+ "tracing",
+ "trin-storage",
+ "trin-utils",
 ]
 
 [[package]]
@@ -5434,6 +5480,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "sample-range"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "clap",
+ "ethportal-api",
+ "futures",
+ "rand",
+ "tokio",
+ "tracing",
+ "trin-utils",
+ "trin-validation",
+ "url",
 ]
 
 [[package]]
@@ -6239,6 +6302,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-providers"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "ethereum_ssz",
+ "ethportal-api",
+ "lazy_static",
+ "portal-bridge",
+ "rand",
+ "reqwest",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "trin-utils",
+ "trin-validation",
+ "url",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6782,32 +6865,15 @@ dependencies = [
  "alloy",
  "anyhow",
  "clap",
- "dirs",
  "discv5",
- "e2store",
- "ethereum_ssz",
  "ethportal-api",
- "ethportal-peertest",
- "futures",
- "jsonrpsee",
- "lazy_static",
- "parking_lot 0.11.2",
- "portal-bridge",
  "portalnet",
  "prometheus_exporter",
- "rand",
- "regex",
- "reqwest",
- "reth-ipc",
  "rpc",
- "serde_json",
- "serde_yaml",
- "serial_test",
- "sha3 0.9.1",
- "tempfile",
+ "rstest",
+ "test-log",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.19",
  "tree_hash",
  "trin-beacon",
  "trin-history",
@@ -6815,7 +6881,6 @@ dependencies = [
  "trin-storage",
  "trin-utils",
  "trin-validation",
- "ureq",
  "url",
  "utp-rs",
 ]

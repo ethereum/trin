@@ -1,62 +1,11 @@
-[package]
-name = "trin"
-default-run = "trin"
-description = "A Rust implementation of the Ethereum Portal Network"
-authors.workspace = true
-categories.workspace = true
-edition.workspace = true
-keywords.workspace = true
-license.workspace = true
-readme.workspace = true
-repository.workspace = true
-rust-version.workspace = true
-version.workspace = true
-
-[dependencies]
-alloy = { workspace = true, features = ["eips", "provider-ipc", "provider-ws", "pubsub", "reqwest", "rpc-types"] }
-anyhow.workspace = true
-clap.workspace = true
-dirs = "5.0.1"
-discv5.workspace = true
-e2store.workspace = true
-ethereum_ssz.workspace = true
-ethportal-api.workspace = true
-futures.workspace = true
-jsonrpsee.workspace = true
-lazy_static.workspace = true
-parking_lot.workspace = true
-portal-bridge.workspace = true
-portalnet.workspace = true
-prometheus_exporter.workspace = true
-rand.workspace = true
-regex = "1.10.2"
-reqwest.workspace = true
-reth-ipc.workspace = true
-rpc.workspace = true
-serde_json = { workspace = true, features = ["preserve_order"]}
-sha3.workspace = true
-tempfile.workspace = true
-tokio.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-tree_hash.workspace = true
-trin-beacon.workspace = true
-trin-history.workspace = true
-trin-state.workspace = true
-trin-storage.workspace = true
-trin-utils.workspace = true
-trin-validation.workspace = true
-url.workspace = true
-utp-rs.workspace = true
-
-[dev-dependencies]
-ethportal-peertest = { path = "ethportal-peertest" }
-serde_yaml.workspace = true
-serial_test.workspace = true
-ureq.workspace = true
-
 [workspace]
 members = [
+    "bin/historical-batch", 
+    "bin/poll-latest", 
+    "bin/purge-invalid-history-content", 
+    "bin/sample-range", 
+    "bin/trin", 
+    "bin/test-providers",
     "ethportal-api",
     "ethportal-peertest",
     "e2store",
@@ -74,6 +23,9 @@ members = [
     "trin-validation",
     "utp-testing",
 ]
+
+default-members = ["bin/trin"]
+resolver = "2"
 
 [workspace.package]
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
