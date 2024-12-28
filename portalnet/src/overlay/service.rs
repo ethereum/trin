@@ -2611,11 +2611,8 @@ mod tests {
     use alloy::primitives::U256;
     use discv5::kbucket;
     use ethportal_api::types::{
-        cli::{DEFAULT_DISCOVERY_PORT, DEFAULT_UTP_TRANSFER_LIMIT},
-        content_key::overlay::IdentityContentKey,
-        distance::XorMetric,
-        enr::generate_random_remote_enr,
-        portal_wire::MAINNET,
+        content_key::overlay::IdentityContentKey, distance::XorMetric,
+        enr::generate_random_remote_enr, portal_wire::MAINNET,
     };
     use kbucket::KBucketsTable;
     use rstest::*;
@@ -2632,6 +2629,7 @@ mod tests {
     use super::*;
     use crate::{
         config::PortalnetConfig,
+        constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_UTP_TRANSFER_LIMIT},
         discovery::{Discovery, NodeAddress},
         overlay::config::OverlayConfig,
     };

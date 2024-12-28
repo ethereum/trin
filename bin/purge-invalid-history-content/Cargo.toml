@@ -1,0 +1,22 @@
+[package]
+name = "purge-invalid-history-content"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+alloy.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+discv5.workspace = true
+ethportal-api.workspace = true
+portalnet.workspace = true
+tracing.workspace = true
+trin-storage.workspace = true
+trin-utils.workspace = true

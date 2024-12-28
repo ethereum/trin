@@ -3,6 +3,7 @@
 
 mod beacon_rpc;
 mod builder;
+pub mod config;
 mod cors;
 mod discv5_rpc;
 mod errors;
@@ -22,13 +23,14 @@ use std::{
 
 use beacon_rpc::BeaconNetworkApi;
 pub use builder::{PortalRpcModule, RpcModuleBuilder, TransportRpcModuleConfig};
+use config::RpcConfig;
 use discv5_rpc::Discv5Api;
 use errors::RpcError;
 use eth_rpc::EthApi;
 use ethportal_api::{
     jsonrpsee,
     types::{
-        cli::{TrinConfig, Web3TransportType},
+        cli::Web3TransportType,
         jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
         network::Subnetwork,
     },
@@ -44,7 +46,7 @@ pub use crate::rpc_server::RpcServerHandle;
 use crate::{jsonrpsee::server::ServerBuilder, rpc_server::RpcServerConfig};
 
 pub async fn launch_jsonrpc_server(
-    trin_config: TrinConfig,
+    rpc_config: RpcConfig,
     discv5: Arc<Discovery>,
     history_handler: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
     state_handler: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
@@ -53,7 +55,7 @@ pub async fn launch_jsonrpc_server(
     // Discv5 and Web3 modules are enabled with every network
     let mut modules = vec![PortalRpcModule::Discv5, PortalRpcModule::Web3];
 
-    for network in trin_config.portal_subnetworks.iter() {
+    for network in rpc_config.portal_subnetworks.iter() {
         match network {
             Subnetwork::History => {
                 modules.push(PortalRpcModule::History);
@@ -65,7 +67,7 @@ pub async fn launch_jsonrpc_server(
         }
     }
 
-    let handle: RpcServerHandle = match trin_config.web3_transport {
+    let handle: RpcServerHandle = match rpc_config.web3_transport {
         Web3TransportType::IPC => {
             let transport = TransportRpcModuleConfig::default().with_ipc(modules);
             let transport_modules = RpcModuleBuilder::new(discv5)
@@ -76,7 +78,7 @@ pub async fn launch_jsonrpc_server(
 
             RpcServerConfig::default()
                 .with_ipc_endpoint(
-                    trin_config
+                    rpc_config
                         .web3_ipc_path
                         .to_str()
                         .expect("Path should be string"),
@@ -86,7 +88,7 @@ pub async fn launch_jsonrpc_server(
                 .await?
         }
         Web3TransportType::HTTP => {
-            let transport = match trin_config.ws {
+            let transport = match rpc_config.ws {
                 true => TransportRpcModuleConfig::default().with_ws(modules.clone()),
                 false => TransportRpcModuleConfig::default(),
             };
@@ -100,17 +102,17 @@ pub async fn launch_jsonrpc_server(
 
             let rpc_server_config = RpcServerConfig::default()
                 .with_http_address(
-                    trin_config
+                    rpc_config
                         .web3_http_address
                         .socket_addrs(|| None)
                         .expect("Invalid socket address")[0],
                 )
                 .with_http(ServerBuilder::default());
-            let rpc_server_config = match trin_config.ws {
+            let rpc_server_config = match rpc_config.ws {
                 true => rpc_server_config
                     .with_ws_address(SocketAddr::V4(SocketAddrV4::new(
                         Ipv4Addr::UNSPECIFIED,
-                        trin_config.ws_port,
+                        rpc_config.ws_port,
                     )))
                     .with_ws(ServerBuilder::default()),
                 false => rpc_server_config,

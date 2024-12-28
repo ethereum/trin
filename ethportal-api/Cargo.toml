@@ -2,7 +2,6 @@
 name = "ethportal-api"
 version = "0.4.0"
 description = "Definitions for various Ethereum Portal Network JSONRPC APIs"
-build = "build.rs"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
@@ -45,7 +44,6 @@ serde-this-or-that.workspace = true
 serde_json.workspace = true
 sha2 = "0.10.1"
 sha3.workspace = true
-shadow-rs = "0.27"
 ssz_types.workspace = true
 superstruct = "0.7.0"
 thiserror.workspace = true
@@ -67,4 +65,4 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [build-dependencies]
-shadow-rs = "0.27"
+vergen = { version = "8.0.0", features = ["build", "cargo", "git", "gitcl", "rustc"] }

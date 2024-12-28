@@ -367,10 +367,7 @@ mod tests {
         enr::CombinedKey,
         kbucket::{FailureReason, MAX_NODES_PER_BUCKET},
     };
-    use ethportal_api::{
-        generate_random_remote_enr,
-        types::{cli::DEFAULT_DISCOVERY_PORT, distance::XorMetric},
-    };
+    use ethportal_api::{generate_random_remote_enr, types::distance::XorMetric};
     use itertools::chain;
 
     use super::*;
@@ -538,6 +535,7 @@ mod tests {
 
     mod insert_or_update_discovered_nodes {
         use super::*;
+        use crate::constants::DEFAULT_DISCOVERY_PORT;
 
         #[test]
         fn simple_insert_and_update() {
