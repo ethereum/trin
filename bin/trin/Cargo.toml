@@ -1,0 +1,37 @@
+[package]
+name = "trin"
+description = "A Rust implementation of the Ethereum Portal Network"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+alloy = { workspace = true, features = ["eips", "provider-ipc", "provider-ws", "pubsub", "reqwest", "rpc-types"] }
+anyhow.workspace = true
+clap.workspace = true
+discv5.workspace = true
+ethportal-api.workspace = true
+portalnet.workspace = true
+prometheus_exporter.workspace = true
+rpc.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tree_hash.workspace = true
+trin-beacon.workspace = true
+trin-history.workspace = true
+trin-state.workspace = true
+trin-storage.workspace = true
+trin-utils.workspace = true
+trin-validation.workspace = true
+utp-rs.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+test-log.workspace = true
+rstest.workspace = true

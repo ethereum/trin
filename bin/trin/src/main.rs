@@ -1,8 +1,7 @@
 #![warn(clippy::unwrap_used)]
 
-use ethportal_api::types::cli::TrinConfig;
 use tracing::error;
-use trin::run_trin;
+use trin::{cli::TrinConfig, run_trin};
 use trin_utils::log::init_tracing_logger;
 
 #[tokio::main]

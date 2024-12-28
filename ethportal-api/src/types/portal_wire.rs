@@ -74,7 +74,7 @@ pub const MAX_PORTAL_CONTENT_PAYLOAD_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_S
 /// Custom payload element of Ping and Pong overlay messages
 #[derive(Debug, PartialEq, Clone)]
 pub struct CustomPayload {
-    payload: ByteList2048,
+    pub payload: ByteList2048,
 }
 
 impl TryFrom<&Value> for CustomPayload {

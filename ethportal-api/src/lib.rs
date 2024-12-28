@@ -4,11 +4,10 @@
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::uninlined_format_args)]
 
-#[macro_use]
 extern crate lazy_static;
 
 mod beacon;
-mod dashboard;
+pub mod dashboard;
 pub mod discv5;
 mod eth;
 mod history;
@@ -48,5 +47,3 @@ pub use types::{
     portal::{RawContentKey, RawContentValue},
 };
 pub use web3::{Web3ApiClient, Web3ApiServer};
-
-shadow_rs::shadow!(build_info);

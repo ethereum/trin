@@ -149,10 +149,9 @@ impl SharedKBucketsTable {
             // If the node is not in the routing table, then insert the node in a disconnected state
             // (a subsequent ping will establish connectivity with the node). Ignore insertion
             // failures.
-            if let Some(node) = Entry::from(kbuckets.entry(&key)).present_or_pending() {
+            if let Some(mut node) = Entry::from(kbuckets.entry(&key)).present_or_pending() {
                 if node.enr.seq() < enr.seq() {
-                    let node = Node::new(enr, node.data_radius());
-
+                    node.set_enr(enr);
                     if let UpdateResult::Failed(reason) = kbuckets.update_node(&key, node, None) {
                         // The update removed the node because it would violate the incoming peers
                         // condition or a bucket/table filter.
@@ -367,10 +366,7 @@ mod tests {
         enr::CombinedKey,
         kbucket::{FailureReason, MAX_NODES_PER_BUCKET},
     };
-    use ethportal_api::{
-        generate_random_remote_enr,
-        types::{cli::DEFAULT_DISCOVERY_PORT, distance::XorMetric},
-    };
+    use ethportal_api::{generate_random_remote_enr, types::distance::XorMetric};
     use itertools::chain;
 
     use super::*;
@@ -538,6 +534,7 @@ mod tests {
 
     mod insert_or_update_discovered_nodes {
         use super::*;
+        use crate::constants::DEFAULT_DISCOVERY_PORT;
 
         #[test]
         fn simple_insert_and_update() {
