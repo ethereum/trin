@@ -71,9 +71,9 @@ pub struct AcceptInfo {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PutContentInfo {
-    // Indicates how many peers the content was gossiped to
+    /// Indicates how many peers the content was gossiped to
     pub peer_count: u32,
-    // Indicates whether the content was stored locally or not
+    /// Indicates whether the content was stored locally or not
     pub stored_locally: bool,
 }
 
@@ -81,11 +81,11 @@ pub struct PutContentInfo {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TracePutContentInfo {
-    // List of all ENRs that were offered the content
+    /// List of all ENRs that were offered the content
     pub offered: Vec<String>,
-    // List of all ENRs that accepted the offer
+    /// List of all ENRs that accepted the offer
     pub accepted: Vec<String>,
-    // List of all ENRs to whom the content was successfully transferred
+    /// List of all ENRs to whom the content was successfully transferred
     pub transferred: Vec<String>,
 }
 
