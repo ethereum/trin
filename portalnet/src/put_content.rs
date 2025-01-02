@@ -25,9 +25,9 @@ use crate::{
     utp_controller::UtpController,
 };
 
-/// Datatype to store the result of a gossip request.
+/// Datatype to store the result of a put content request.
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
-pub struct GossipResult {
+pub struct PutContentResult {
     /// List of all ENRs that were offered the content
     pub offered: Vec<Enr>,
     /// List of all ENRs that accepted the offer
@@ -36,9 +36,9 @@ pub struct GossipResult {
     pub transferred: Vec<Enr>,
 }
 
-/// Propagate gossip in a way that can be used across threads, without &self.
-/// Doesn't trace gossip results
-pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Metric>(
+/// Propagate put content in a way that can be used across threads, without &self.
+/// Doesn't trace put content results
+pub fn propagate_put_content_cross_thread<TContentKey: OverlayContentKey, TMetric: Metric>(
     content: Vec<(TContentKey, RawContentValue)>,
     kbuckets: &SharedKBucketsTable,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
@@ -61,7 +61,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Me
     // Map from content_ids to interested ENRs
     let mut content_id_to_interested_enrs = kbuckets.batch_interested_enrs::<TMetric>(&content_ids);
 
-    // Map from ENRs to content they will gossip
+    // Map from ENRs to content they will put content
     let mut enrs_and_content: HashMap<Enr, Vec<&(TContentKey, RawContentValue)>> = HashMap::new();
     for (content_id, content_key_value) in &content {
         let interested_enrs = content_id_to_interested_enrs.remove(content_id).unwrap_or_else(|| {
@@ -76,8 +76,8 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Me
             continue;
         };
 
-        // Select gossip recipients
-        for enr in select_gossip_recipients::<TMetric>(content_id, interested_enrs) {
+        // Select put content recipients
+        for enr in select_put_content_recipients::<TMetric>(content_id, interested_enrs) {
             enrs_and_content
                 .entry(enr)
                 .or_default()
@@ -93,7 +93,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Me
             Some(ref utp_controller) => match utp_controller.get_outbound_semaphore() {
                 Some(permit) => Some(permit),
                 None => {
-                    trace!("Permit for gossip not acquired! Skipping gossiping to enr: {enr}");
+                    trace!("Permit for put content not acquired! Skipping offering to enr: {enr}");
                     continue;
                 }
             },
@@ -140,11 +140,11 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey, TMetric: Me
     num_propagated_peers
 }
 
-/// Propagate gossip in a way that can be used across threads, without &self.
+/// Propagate put content in a way that can be used across threads, without &self.
 /// This function is designed to be used via the JSON-RPC API. Since it is blocking, it should not
 /// be used internally in the offer/accept flow.
-/// Returns a trace detailing the outcome of the gossip.
-pub async fn trace_propagate_gossip_cross_thread<
+/// Returns a trace detailing the outcome of the put content.
+pub async fn trace_propagate_put_content_cross_thread<
     TContentKey: OverlayContentKey,
     TMetric: Metric,
 >(
@@ -152,19 +152,19 @@ pub async fn trace_propagate_gossip_cross_thread<
     data: RawContentValue,
     kbuckets: &SharedKBucketsTable,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
-) -> GossipResult {
-    let mut gossip_result = GossipResult::default();
+) -> PutContentResult {
+    let mut put_content_result = PutContentResult::default();
 
     let content_id = content_key.content_id();
 
     let interested_enrs = kbuckets.interested_enrs::<TMetric>(&content_id);
     if interested_enrs.is_empty() {
-        debug!(content.id = %hex_encode(content_id), "No peers eligible for trace gossip");
-        return gossip_result;
+        debug!(content.id = %hex_encode(content_id), "No peers eligible for trace put content");
+        return put_content_result;
     };
 
-    // Select ENRs to gossip to, create and send OFFER overlay request to the interested nodes
-    for enr in select_gossip_recipients::<TMetric>(&content_id, interested_enrs) {
+    // Select ENRs to put content to, create and send OFFER overlay request to the interested nodes
+    for enr in select_put_content_recipients::<TMetric>(&content_id, interested_enrs) {
         let (result_tx, mut result_rx) = tokio::sync::mpsc::unbounded_channel();
         let offer_request = Request::PopulatedOfferWithResult(PopulatedOfferWithResult {
             content_item: (content_key.clone().to_bytes(), data.clone()),
@@ -186,14 +186,14 @@ pub async fn trace_propagate_gossip_cross_thread<
             error!(error = %err, "Error sending OFFER message to service");
             continue;
         }
-        // update gossip result with peer marked as being offered the content
-        gossip_result.offered.push(enr.clone());
+        // update put content result with peer marked as being offered the content
+        put_content_result.offered.push(enr.clone());
         match rx.await {
             Ok(res) => {
                 if let Ok(Response::Accept(accept)) = res {
                     if !accept.content_keys.is_zero() {
-                        // update gossip result with peer marked as accepting the content
-                        gossip_result.accepted.push(enr.clone());
+                        // update put content result with peer marked as accepting the content
+                        put_content_result.accepted.push(enr.clone());
                     }
                 } else {
                     // continue to next peer if no content was accepted
@@ -204,24 +204,24 @@ pub async fn trace_propagate_gossip_cross_thread<
             Err(_) => continue,
         }
         if let Some(OfferTrace::Success(_)) = result_rx.recv().await {
-            // update gossip result with peer marked as successfully transferring the content
-            gossip_result.transferred.push(enr);
+            // update put content result with peer marked as successfully transferring the content
+            put_content_result.transferred.push(enr);
         }
     }
-    gossip_result
+    put_content_result
 }
 
 const NUM_CLOSEST_NODES: usize = 4;
 const NUM_FARTHER_NODES: usize = 4;
 
-/// Selects gossip recipients from a vec of interested ENRs.
+/// Selects put content recipients from a vec of interested ENRs.
 ///
 /// If number of ENRs is at most `NUM_CLOSEST_NODES + NUM_FARTHER_NODES`, then all are returned.
 /// Otherwise, ENRs are sorted by distance from `content_id` and then:
 ///
 /// 1. Closest `NUM_CLOSEST_NODES` ENRs are selected
 /// 2. Random `NUM_FARTHER_NODES` ENRs are selected from the rest
-fn select_gossip_recipients<TMetric: Metric>(
+fn select_put_content_recipients<TMetric: Metric>(
     content_id: &[u8; 32],
     mut enrs: Vec<Enr>,
 ) -> Vec<Enr> {
@@ -263,11 +263,12 @@ mod tests {
     #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES + 1], NUM_CLOSEST_NODES + 1)]
     #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES + NUM_FARTHER_NODES], NUM_CLOSEST_NODES + NUM_FARTHER_NODES)]
     #[case(vec![generate_random_remote_enr().1; 256], NUM_CLOSEST_NODES + NUM_FARTHER_NODES)]
-    fn test_select_gossip_recipients_no_panic(
+    fn test_select_put_content_recipients_no_panic(
         #[case] all_nodes: Vec<Enr>,
         #[case] expected_size: usize,
     ) {
-        let gossip_recipients = select_gossip_recipients::<XorMetric>(&random(), all_nodes);
-        assert_eq!(gossip_recipients.len(), expected_size);
+        let put_content_recipients =
+            select_put_content_recipients::<XorMetric>(&random(), all_nodes);
+        assert_eq!(put_content_recipients.len(), expected_size);
     }
 }

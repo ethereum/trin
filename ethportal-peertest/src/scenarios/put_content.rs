@@ -20,7 +20,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     let _ = target.ping(peertest.bootnode.enr.clone()).await.unwrap();
     let (content_key, content_value) = fixture_header_by_hash();
     let result = target
-        .trace_gossip(content_key.clone(), content_value.encode())
+        .trace_put_content(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
@@ -50,7 +50,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
 
     // send new trace gossip request
     let result = target
-        .trace_gossip(content_key.clone(), content_value.encode())
+        .trace_put_content(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
@@ -67,7 +67,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
 
     // test trace gossip without any expected accepts
     let result = target
-        .trace_gossip(content_key, content_value.encode())
+        .trace_put_content(content_key, content_value.encode())
         .await
         .unwrap();
 

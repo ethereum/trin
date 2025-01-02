@@ -7,7 +7,8 @@ use crate::{
         enr::Enr,
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
-            PaginateLocalContentInfo, PongInfo, TraceContentInfo, TraceGossipInfo,
+            PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
+            TracePutContentInfo,
         },
         portal_wire::OfferTrace,
     },
@@ -85,21 +86,21 @@ pub trait HistoryNetworkApi {
 
     /// Send the provided content value to interested peers. Clients may choose to send to some or
     /// all peers. Return the number of peers that the content was gossiped to.
-    #[method(name = "historyGossip")]
-    async fn gossip(
+    #[method(name = "historyPutContent")]
+    async fn put_content(
         &self,
         content_key: HistoryContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<u32>;
+    ) -> RpcResult<PutContentInfo>;
 
     /// Send the provided content value to interested peers. Clients may choose to send to some or
     /// all peers. Return tracing info detailing the gossip propagation.
-    #[method(name = "historyTraceGossip")]
-    async fn trace_gossip(
+    #[method(name = "historyTracePutContent")]
+    async fn trace_put_content(
         &self,
         content_key: HistoryContentKey,
         content_value: RawContentValue,
-    ) -> RpcResult<TraceGossipInfo>;
+    ) -> RpcResult<TracePutContentInfo>;
 
     /// Send an OFFER request with given ContentItems, to the designated peer and wait for a
     /// response. Does not store the content locally.

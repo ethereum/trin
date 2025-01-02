@@ -23,7 +23,7 @@ use trin_validation::{
 use crate::{
     api::execution::ExecutionApi,
     bridge::utils::lookup_epoch_acc,
-    gossip::gossip_history_content,
+    put_content::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
     types::{full_header::FullHeader, mode::BridgeMode},
     utils::{read_test_assets_from_file, TestAssets},

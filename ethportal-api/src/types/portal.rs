@@ -67,15 +67,25 @@ pub struct AcceptInfo {
     pub content_keys: BitList<typenum::U64>,
 }
 
-/// Response for TraceGossip endpoint
+/// Response for PutContent endpoint
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TraceGossipInfo {
-    // List of all ENRs that were offered the content
+pub struct PutContentInfo {
+    /// Indicates how many peers the content was gossiped to
+    pub peer_count: u32,
+    /// Indicates whether the content was stored locally or not
+    pub stored_locally: bool,
+}
+
+/// Response for TracePutContent endpoint
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TracePutContentInfo {
+    /// List of all ENRs that were offered the content
     pub offered: Vec<String>,
-    // List of all ENRs that accepted the offer
+    /// List of all ENRs that accepted the offer
     pub accepted: Vec<String>,
-    // List of all ENRs to whom the content was successfully transferred
+    /// List of all ENRs to whom the content was successfully transferred
     pub transferred: Vec<String>,
 }
 

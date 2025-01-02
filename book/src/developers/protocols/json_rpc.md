@@ -12,7 +12,7 @@ The specification for these endpoints can be found [here](https://playground.ope
 - `discv5_routingTableInfo`
 - `portal_historyFindContent`
 - `portal_historyFindNodes`
-- `portal_historyGossip`
+- `portal_historyPutContent`
 - `portal_historyLocalContent`
 - `portal_historyPing`
 - `portal_historyOffer`
@@ -21,7 +21,7 @@ The specification for these endpoints can be found [here](https://playground.ope
 - `portal_stateFindContent`
 - `portal_stateFindNodes`
 - `portal_stateLocalContent`
-- `portal_stateGossip`
+- `portal_statePutContent`
 - `portal_stateOffer`
 - `portal_stateStore`
 - `portal_statePing`
