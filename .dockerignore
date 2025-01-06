@@ -1,5 +1,30 @@
-.git
-.env
-venv
-target
-/book
+# exclude everything
+*
+
+# include source files
+!Cargo.lock
+!Cargo.toml
+!/e2store
+!/ethportal-api
+!/ethportal-peertest
+!/light-client
+!/portalnet
+!/portal-bridge
+!/rpc
+!/src
+!/trin-beacon
+!/trin-evm
+!/trin-execution
+!/trin-history
+!/trin-metrics
+!/trin-state
+!/trin-storage
+!/trin-utils
+!/trin-validation
+!/utp-testing
+
+# include for vergen constants
+!/.git
+
+# include portal-accumulators, which is used in the portal-bridge Dockerfile
+!/portal-accumulators

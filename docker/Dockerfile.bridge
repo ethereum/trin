@@ -1,5 +1,5 @@
 # init final base
-FROM ubuntu:22.04 AS final_base
+FROM ubuntu AS final_base
 # These steps copy over the epoch accumulators repo for the bridge to use
 # This data is too large to be kept inside trin-source code
 # It must be downloaded separately and moved to the correct location
@@ -9,54 +9,36 @@ FROM ubuntu:22.04 AS final_base
 RUN mkdir /portal-accumulators
 COPY ./portal-accumulators /portal-accumulators
 
-# select build image
-FROM rust:1.81.0 AS builder
-
-# create a new empty shell project
-RUN USER=root cargo new --bin trin
-WORKDIR /trin
-
-# Docker build command *SHOULD* include --build-arg GIT_HASH=...
-# eg. --build-arg GIT_HASH=$(git rev-parse HEAD)
-ARG GIT_HASH=unknown
-ENV GIT_HASH=$GIT_HASH
+FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+WORKDIR /app
 
 RUN apt-get update && apt-get install clang -y
 
-# copy over manifests and source to build image
-COPY ./Cargo.lock ./Cargo.lock
-COPY ./Cargo.toml ./Cargo.toml
-COPY ./e2store ./e2store
-COPY ./ethportal-api ./ethportal-api
-COPY ./ethportal-peertest ./ethportal-peertest
-COPY ./light-client ./light-client
-COPY ./portalnet ./portalnet
-COPY ./portal-bridge ./portal-bridge
-COPY ./rpc ./rpc
-COPY ./src ./src 
-COPY ./trin-beacon ./trin-beacon
-COPY ./trin-evm ./trin-evm
-COPY ./trin-execution ./trin-execution
-COPY ./trin-history ./trin-history
-COPY ./trin-metrics ./trin-metrics
-COPY ./trin-state ./trin-state
-COPY ./trin-storage ./trin-storage
-COPY ./trin-utils ./trin-utils
-COPY ./trin-validation ./trin-validation 
-COPY ./utp-testing ./utp-testing
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
 
-# build for release
-RUN cargo build -p trin -p portal-bridge --release
+FROM chef AS builder 
+COPY --from=planner /app/recipe.json recipe.json
 
-# final base
+# Build dependencies - this is the caching Docker layer!
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Build application
+COPY . .
+RUN cargo build --release --locked -p trin -p portal-bridge
+
+# We do not need the Rust toolchain to run the binary!
 FROM final_base
+WORKDIR /app
 
 # copy build artifacts from build stage
-COPY --from=builder /trin/target/release/trin /usr/bin/
-COPY --from=builder /trin/trin-execution/resources /resources
-COPY --from=builder /trin/target/release/portal-bridge /usr/bin/
-COPY --from=builder /trin/target/release/sample_range /usr/bin/
-COPY --from=builder /trin/target/release/poll_latest /usr/bin/
+
+COPY --from=builder /app/target/release/trin /usr/bin/
+COPY --from=builder /app/trin-execution/resources /resources
+COPY --from=builder /app/target/release/portal-bridge /usr/bin/
+COPY --from=builder /app/target/release/sample_range /usr/bin/
+COPY --from=builder /app/target/release/poll_latest /usr/bin/
 
 RUN apt-get update && apt-get install libcurl4 -y
 
