@@ -157,7 +157,7 @@ pub async fn run_trin(
     // Launch JSON-RPC server
     let jsonrpc_discovery = Arc::clone(&discovery);
     let rpc_handle: RpcServerHandle = launch_jsonrpc_server(
-        trin_config.rpc_config(),
+        (&trin_config).into(),
         jsonrpc_discovery,
         history_jsonrpc_tx,
         state_jsonrpc_tx,

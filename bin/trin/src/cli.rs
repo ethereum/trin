@@ -475,15 +475,17 @@ impl TrinConfig {
             utp_transfer_limit: self.utp_transfer_limit,
         }
     }
+}
 
-    pub fn rpc_config(&self) -> RpcConfig {
+impl From<&TrinConfig> for RpcConfig {
+    fn from(config: &TrinConfig) -> Self {
         RpcConfig {
-            portal_subnetworks: self.portal_subnetworks.clone(),
-            web3_transport: self.web3_transport.clone(),
-            web3_ipc_path: self.web3_ipc_path.clone(),
-            web3_http_address: self.web3_http_address.clone(),
-            ws: self.ws,
-            ws_port: self.ws_port,
+            portal_subnetworks: config.portal_subnetworks.clone(),
+            web3_transport: config.web3_transport.clone(),
+            web3_ipc_path: config.web3_ipc_path.clone(),
+            web3_http_address: config.web3_http_address.clone(),
+            ws: config.ws,
+            ws_port: config.ws_port,
         }
     }
 }

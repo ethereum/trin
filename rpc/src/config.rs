@@ -3,6 +3,8 @@ use std::{path::PathBuf, sync::Arc};
 use alloy::transports::http::reqwest::Url;
 use ethportal_api::types::{cli::Web3TransportType, network::Subnetwork};
 
+/// Configuration for the RPC server.
+#[derive(Clone)]
 pub struct RpcConfig {
     pub portal_subnetworks: Arc<Vec<Subnetwork>>,
     pub web3_transport: Web3TransportType,
