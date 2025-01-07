@@ -4,6 +4,7 @@
 # include source files
 !Cargo.lock
 !Cargo.toml
+!/bin
 !/e2store
 !/ethportal-api
 !/ethportal-peertest
