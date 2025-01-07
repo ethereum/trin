@@ -329,7 +329,7 @@ pub async fn test_offer_concurrent_utp_transfer_limit(peertest: &Peertest, targe
     // if you're testing with a different limit, adjust the DEFAULT_UTP_TRANSFER_LIMIT
     // as desired up to maximum of 1000 (2 * the number of blocks in the test-era1 file)
     let limit = DEFAULT_UTP_TRANSFER_LIMIT / 2;
-    let epoch_acc = fs::read("./trin-validation/src/assets/epoch_accs/0xe6ebe562c89bc8ecb94dc9b2889a27a816ec05d3d6bd1625acad72227071e721.bin").unwrap();
+    let epoch_acc = fs::read("./crates/validation/src/assets/epoch_accs/0xe6ebe562c89bc8ecb94dc9b2889a27a816ec05d3d6bd1625acad72227071e721.bin").unwrap();
     let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
     // this is a special-case era1 file for testing that contains the first 500 blocks
     // from this epoch.

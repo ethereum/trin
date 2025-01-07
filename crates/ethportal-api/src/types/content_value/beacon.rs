@@ -557,7 +557,7 @@ mod test {
     #[test]
     fn light_client_bootstrap_encode_decode() {
         let file = fs::read_to_string(
-            "../test_assets/portalnet/content/beacon/light_client_bootstrap.json",
+            "../../test_assets/portalnet/content/beacon/light_client_bootstrap.json",
         )
         .unwrap();
         let json: serde_json::Value = serde_json::from_str(&file).unwrap();
@@ -587,7 +587,7 @@ mod test {
     #[test]
     fn light_client_updates_by_range_encode_decode() {
         let file = fs::read_to_string(
-            "../test_assets/portalnet/content/beacon/light_client_updates_by_range.json",
+            "../../test_assets/portalnet/content/beacon/light_client_updates_by_range.json",
         )
         .unwrap();
         let json: serde_json::Value = serde_json::from_str(&file).unwrap();
@@ -623,7 +623,7 @@ mod test {
     #[test]
     fn light_client_optimistic_update_encode_decode() {
         let file = fs::read_to_string(
-            "../test_assets/portalnet/content/beacon/light_client_optimistic_update.json",
+            "../../test_assets/portalnet/content/beacon/light_client_optimistic_update.json",
         )
         .unwrap();
         let json: serde_json::Value = serde_json::from_str(&file).unwrap();
@@ -653,7 +653,7 @@ mod test {
     #[test]
     fn light_client_finality_update_encode_decode() {
         let file = fs::read_to_string(
-            "../test_assets/portalnet/content/beacon/light_client_finality_update.json",
+            "../../test_assets/portalnet/content/beacon/light_client_finality_update.json",
         )
         .unwrap();
         let json: serde_json::Value = serde_json::from_str(&file).unwrap();
@@ -682,7 +682,7 @@ mod test {
 
     #[test]
     fn historical_summaries_with_proof_encode_decode() {
-        let file = fs::read_to_string("./../portal-spec-tests/tests/mainnet/beacon_chain/historical_summaries_with_proof/deneb/historical_summaries_with_proof.yaml").unwrap();
+        let file = fs::read_to_string("./../../portal-spec-tests/tests/mainnet/beacon_chain/historical_summaries_with_proof/deneb/historical_summaries_with_proof.yaml").unwrap();
         let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let content_key = BeaconContentKey::deserialize(&value["content_key"]).unwrap();
         let content_bytes = RawContentValue::deserialize(&value["content_value"]).unwrap();

@@ -385,7 +385,7 @@ mod test {
         let header_validator = get_mainnet_header_validator();
 
         // Read the historical roots block proof from a test file
-        let file = fs::read_to_string("./../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_bellatrix/beacon_block_proof-15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01.yaml").unwrap();
+        let file = fs::read_to_string("./../../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_bellatrix/beacon_block_proof-15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01.yaml").unwrap();
         let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let block_number: u64 = 15539558;
         let header_hash = value
@@ -430,7 +430,7 @@ mod test {
         let header_validator = get_mainnet_header_validator();
 
         // Read the historical roots block proof from a test file
-        let file = fs::read_to_string(format!("./../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/beacon_block_proof-{block_number}.yaml")).unwrap();
+        let file = fs::read_to_string(format!("./../../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/beacon_block_proof-{block_number}.yaml")).unwrap();
         let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let header_hash = value
             .get("execution_block_header")
@@ -442,7 +442,7 @@ mod test {
             serde_yaml::from_value(value).unwrap();
 
         // Load historical summaries from ssz file
-        let historical_summaries_bytes = std::fs::read("./../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/historical_summaries_at_slot_8953856.ssz"
+        let historical_summaries_bytes = std::fs::read("./../../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/historical_summaries_at_slot_8953856.ssz"
         ).expect("cannot load HistoricalSummaries bytes from test file");
         let historical_summaries = HistoricalSummaries::from_ssz_bytes(&historical_summaries_bytes)
             .expect("cannot decode HistoricalSummaries bytes");
@@ -513,7 +513,7 @@ mod test {
 
     fn read_epoch_accumulator_122() -> EpochAccumulator {
         let epoch_acc_bytes = fs::read(
-            "../portal-spec-tests/tests/mainnet/history/accumulator/epoch-record-00122.ssz",
+            "../../portal-spec-tests/tests/mainnet/history/accumulator/epoch-record-00122.ssz",
         )
         .unwrap();
         EpochAccumulator::from_ssz_bytes(&epoch_acc_bytes).unwrap()

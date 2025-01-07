@@ -660,7 +660,7 @@ mod tests {
         let encoded = receipts.as_ssz_bytes();
 
         let expected: Vec<u8> =
-            std::fs::read("../test_assets/mainnet/receipts_14764013.bin").unwrap();
+            std::fs::read("../../test_assets/mainnet/receipts_14764013.bin").unwrap();
         assert_eq!(hex_encode(&encoded), hex_encode(expected));
 
         let decoded = Receipts::from_ssz_bytes(&encoded).unwrap();
@@ -832,7 +832,8 @@ mod tests {
         // this block (15573637) was chosen since it contains all tx types (legacy, access list,
         // eip1559) as well as contract creation txs
         let expected: String =
-            std::fs::read_to_string("../test_assets/infura_batch/receipts-15573637.json").unwrap();
+            std::fs::read_to_string("../../test_assets/infura_batch/receipts-15573637.json")
+                .unwrap();
         let receipts: Receipts = serde_json::from_str(&expected).unwrap();
         let expected_receipts_root: B256 = B256::from_slice(
             &hex_decode("0xc9e543effd8c9708acc53249157c54b0c6aecd69285044bcb9df91cedc6437ad")
@@ -846,7 +847,8 @@ mod tests {
         // batched group of pre-byzantium receipts, containing the "root" field instead of "status"
         // sourced from infura.
         let expected: String =
-            std::fs::read_to_string("../test_assets/infura_batch/receipts-1114271.json").unwrap();
+            std::fs::read_to_string("../../test_assets/infura_batch/receipts-1114271.json")
+                .unwrap();
         let receipts: Receipts = serde_json::from_str(&expected).unwrap();
         let expected_receipts_root: B256 = B256::from_slice(
             &hex_decode("0xd262fe545cec9ec04f4246334d05437fac8d8dfe201a1f6476fab545878cb251")
@@ -868,7 +870,7 @@ mod tests {
     )]
     fn dencun_receipts(#[case] block_number: &str, #[case] expected_root: &str) {
         let receipts = std::fs::read_to_string(format!(
-            "../test_assets/infura_batch/receipts-{block_number}.json"
+            "../../test_assets/infura_batch/receipts-{block_number}.json"
         ))
         .unwrap();
         let receipts: Receipts = serde_json::from_str(&receipts).unwrap();

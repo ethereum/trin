@@ -21,7 +21,7 @@ use tree_hash::TreeHash;
 // Valid number range for the test cases is 0..=1
 pub fn get_light_client_bootstrap(number: u8) -> ForkVersionedLightClientBootstrap {
     let lc_bootstrap = std::fs::read(format!(
-        "../test_assets/beacon/deneb/LightClientBootstrap/ssz_random/case_{number}/serialized.ssz_snappy"
+        "../../../test_assets/beacon/deneb/LightClientBootstrap/ssz_random/case_{number}/serialized.ssz_snappy"
     ))
         .expect("cannot find test asset");
     let mut decoder = snap::raw::Decoder::new();
@@ -38,7 +38,7 @@ pub fn get_light_client_bootstrap(number: u8) -> ForkVersionedLightClientBootstr
 // Valid number range for the test cases is 0..=1
 pub fn get_light_client_update(number: u8) -> ForkVersionedLightClientUpdate {
     let lc_update = std::fs::read(format!(
-        "../test_assets/beacon/deneb/LightClientUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
+        "../../../test_assets/beacon/deneb/LightClientUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
     ))
         .expect("cannot find test asset");
     let mut decoder = snap::raw::Decoder::new();
@@ -54,7 +54,7 @@ pub fn get_light_client_update(number: u8) -> ForkVersionedLightClientUpdate {
 // Valid number range for the test cases is 0..=1
 pub fn get_light_client_finality_update(number: u8) -> ForkVersionedLightClientFinalityUpdate {
     let lc_finality_update = std::fs::read(format!(
-        "../test_assets/beacon/deneb/LightClientFinalityUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
+        "../../../test_assets/beacon/deneb/LightClientFinalityUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
     ))
         .expect("cannot find test asset");
     let mut decoder = snap::raw::Decoder::new();
@@ -71,7 +71,7 @@ pub fn get_light_client_finality_update(number: u8) -> ForkVersionedLightClientF
 // Valid number range for the test cases is 0..=1
 pub fn get_light_client_optimistic_update(number: u8) -> ForkVersionedLightClientOptimisticUpdate {
     let lc_optimistic_update = std::fs::read(format!(
-        "../test_assets/beacon/deneb/LightClientOptimisticUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
+        "../../../test_assets/beacon/deneb/LightClientOptimisticUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
     ))
         .expect("cannot find test asset");
     let mut decoder = snap::raw::Decoder::new();
@@ -88,7 +88,7 @@ pub fn get_light_client_optimistic_update(number: u8) -> ForkVersionedLightClien
 
 pub fn get_history_summaries_with_proof() -> (ForkVersionedHistoricalSummariesWithProof, B256) {
     let value = std::fs::read(
-        "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/serialized.ssz_snappy",
+        "../../../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/serialized.ssz_snappy",
     )
     .expect("cannot find test asset");
     let mut decoder = snap::raw::Decoder::new();

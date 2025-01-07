@@ -313,7 +313,7 @@ fn assert_header(actual: &RpcHeader, expected: &Header) {
 }
 
 fn get_full_block() -> (HeaderWithProof, BlockBody) {
-    let file = fs::read_to_string("trin-validation/src/assets/hive/blocks.yaml").unwrap();
+    let file = fs::read_to_string("crates/validation/src/assets/hive/blocks.yaml").unwrap();
     let value: Value = serde_yaml::from_str(&file).unwrap();
     let all_blocks = value.as_sequence().unwrap();
     let post_shanghai = all_blocks.last().unwrap();

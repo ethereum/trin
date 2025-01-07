@@ -568,7 +568,7 @@ mod tests {
         let encoded = block_body.as_ssz_bytes();
 
         let expected: Vec<u8> =
-            std::fs::read("../test_assets/mainnet/block_body_14764013.bin").unwrap();
+            std::fs::read("../../test_assets/mainnet/block_body_14764013.bin").unwrap();
         assert_eq!(hex_encode(&encoded), hex_encode(expected));
 
         let decoded = BlockBody::from_ssz_bytes(&encoded).unwrap();
@@ -601,7 +601,7 @@ mod tests {
     #[test_log::test]
     fn shanghai_block_body_round_trip() {
         // block 17139055
-        let raw = std::fs::read("../test_assets/mainnet/block_body_17139055.bin").unwrap();
+        let raw = std::fs::read("../../test_assets/mainnet/block_body_17139055.bin").unwrap();
         let body = BlockBodyShanghai::from_ssz_bytes(&raw).unwrap();
         assert_eq!(body.withdrawals.len(), 16);
         let withdrawals: Vec<Withdrawal> = serde_json::from_str(&shanghai_withdrawals()).unwrap();
@@ -613,7 +613,7 @@ mod tests {
     #[test_log::test]
     fn shanghai_block_body_transaction_hashes() {
         // block 17139055
-        let raw = std::fs::read("../test_assets/mainnet/block_body_17139055.bin").unwrap();
+        let raw = std::fs::read("../../test_assets/mainnet/block_body_17139055.bin").unwrap();
         let body = BlockBodyShanghai::from_ssz_bytes(&raw).unwrap();
         assert_eq!(body.txs.len(), 117);
         // Select a few transactions to compare against hashes from a block explorer:
