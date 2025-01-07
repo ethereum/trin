@@ -14,6 +14,7 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
 # Build application
+# Copy over all project folders specified in the .dockerignore
 COPY . .
 RUN cargo build --release --locked --bin trin
 
@@ -26,7 +27,6 @@ COPY --from=builder /app/target/release/trin /usr/bin/
 COPY --from=builder /app/target/release/poll_latest /usr/bin/
 COPY --from=builder /app/target/release/purge_invalid_history_content /usr/bin/
 COPY --from=builder /app/target/release/sample_range /usr/bin/
-
 
 ENV RUST_LOG=debug
 

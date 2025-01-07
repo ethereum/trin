@@ -25,6 +25,7 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
 # Build application
+# Copy over all project folders specified in the .dockerignore
 COPY . .
 RUN cargo build --release --locked -p trin -p portal-bridge
 
@@ -33,7 +34,6 @@ FROM final_base
 WORKDIR /app
 
 # copy build artifacts from build stage
-
 COPY --from=builder /app/target/release/trin /usr/bin/
 COPY --from=builder /app/trin-execution/resources /resources
 COPY --from=builder /app/target/release/portal-bridge /usr/bin/
