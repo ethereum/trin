@@ -1,10 +1,5 @@
 [workspace]
 members = [
-    "bin/historical-batch", 
-    "bin/poll-latest", 
-    "bin/purge-invalid-history-content", 
-    "bin/sample-range", 
-    "bin/test-providers",
     "bin/trin", 
     "ethportal-api",
     "ethportal-peertest",

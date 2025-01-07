@@ -1849,16 +1849,7 @@ version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e69600ff1703123957937708eb27f7a564e48885c537782722ed0ba3189ce1d7"
 dependencies = [
- "dirs-sys 0.3.7",
-]
-
-[[package]]
-name = "dirs"
-version = "5.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
-dependencies = [
- "dirs-sys 0.4.1",
+ "dirs-sys",
 ]
 
 [[package]]
@@ -1870,18 +1861,6 @@ dependencies = [
  "libc",
  "redox_users",
  "winapi",
-]
-
-[[package]]
-name = "dirs-sys"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "520f05a5cbd335fae5a99ff7a6ab8627577660ee5cfd6a94a6a929b52ff0321c"
-dependencies = [
- "libc",
- "option-ext",
- "redox_users",
- "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2222,7 +2201,6 @@ dependencies = [
  "bimap",
  "bytes",
  "c-kzg",
- "clap",
  "const_format",
  "discv5",
  "env_logger 0.9.3",
@@ -2260,7 +2238,6 @@ dependencies = [
  "tree_hash",
  "tree_hash_derive",
  "ureq",
- "url",
  "validator",
  "vergen",
 ]
@@ -2777,21 +2754,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "historical-batch"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "dirs",
- "e2store",
- "ethereum_ssz",
- "ethportal-api",
- "regex",
- "reqwest",
- "tokio",
- "tree_hash",
 ]
 
 [[package]]
@@ -4145,12 +4107,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "option-ext"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
-
-[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4415,21 +4371,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
 
 [[package]]
-name = "poll-latest"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "anyhow",
- "clap",
- "ethportal-api",
- "futures",
- "tokio",
- "tracing",
- "trin-utils",
- "url",
-]
-
-[[package]]
 name = "polyval"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4691,21 +4632,6 @@ dependencies = [
  "rusty-fork",
  "tempfile",
  "unarray",
-]
-
-[[package]]
-name = "purge-invalid-history-content"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "anyhow",
- "clap",
- "discv5",
- "ethportal-api",
- "portalnet",
- "tracing",
- "trin-storage",
- "trin-utils",
 ]
 
 [[package]]
@@ -5480,23 +5406,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "sample-range"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "anyhow",
- "clap",
- "ethportal-api",
- "futures",
- "rand",
- "tokio",
- "tracing",
- "trin-utils",
- "trin-validation",
- "url",
 ]
 
 [[package]]
@@ -6299,26 +6208,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.94",
-]
-
-[[package]]
-name = "test-providers"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "ethereum_ssz",
- "ethportal-api",
- "lazy_static",
- "portal-bridge",
- "rand",
- "reqwest",
- "serde_json",
- "tokio",
- "tracing",
- "trin-utils",
- "trin-validation",
- "url",
 ]
 
 [[package]]
