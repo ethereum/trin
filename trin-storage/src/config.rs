@@ -1,13 +1,27 @@
 use std::path::PathBuf;
 
 use discv5::enr::NodeId;
-use ethportal_api::types::{cli::StorageCapacityConfig, network::Subnetwork};
+use ethportal_api::types::network::Subnetwork;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 
 use crate::{error::ContentStoreError, utils::setup_sql, DistanceFunction};
 
 const BYTES_IN_MB_U64: u64 = 1000 * 1000;
+
+/// The storage capacity configurtion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StorageCapacityConfig {
+    Combined {
+        total_mb: u32,
+        subnetworks: Vec<Subnetwork>,
+    },
+    Specific {
+        beacon_mb: Option<u32>,
+        history_mb: Option<u32>,
+        state_mb: Option<u32>,
+    },
+}
 
 /// Factory for creating [PortalStorageConfig] instances
 pub struct PortalStorageConfigFactory {

@@ -37,8 +37,6 @@ WORKDIR /app
 COPY --from=builder /app/target/release/trin /usr/bin/
 COPY --from=builder /app/trin-execution/resources /resources
 COPY --from=builder /app/target/release/portal-bridge /usr/bin/
-COPY --from=builder /app/target/release/sample_range /usr/bin/
-COPY --from=builder /app/target/release/poll_latest /usr/bin/
 
 RUN apt-get update && apt-get install libcurl4 -y
 

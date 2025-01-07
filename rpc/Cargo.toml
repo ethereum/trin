@@ -12,7 +12,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-alloy = { workspace = true, features = ["rpc-types-eth"] }
+alloy = { workspace = true, features = ["rpc-types-eth", "provider-ipc", "provider-ws", "pubsub", "reqwest"] }
 discv5.workspace = true
 eth_trie.workspace = true
 ethportal-api.workspace = true

@@ -21,6 +21,7 @@ ethportal-api.workspace = true
 futures.workspace = true
 hex.workspace = true
 jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"]}
+portalnet.workspace = true
 portal-bridge.workspace = true
 rand.workspace = true
 reth-ipc.workspace = true
@@ -33,7 +34,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tree_hash.workspace = true
-trin = { path = ".." }
+trin.workspace = true
 trin-history.workspace = true
 trin-state.workspace = true
 trin-utils.workspace = true

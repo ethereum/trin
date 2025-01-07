@@ -24,9 +24,6 @@ WORKDIR /app
 
 # copy build artifacts from build stage
 COPY --from=builder /app/target/release/trin /usr/bin/
-COPY --from=builder /app/target/release/poll_latest /usr/bin/
-COPY --from=builder /app/target/release/purge_invalid_history_content /usr/bin/
-COPY --from=builder /app/target/release/sample_range /usr/bin/
 
 ENV RUST_LOG=debug
 

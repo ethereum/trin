@@ -1,10 +1,10 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use ethportal_api::{
-    jsonrpsee::async_client::Client, types::cli::TrinConfig, ContentValue, Discv5ApiClient,
-    HistoryNetworkApiClient,
+    jsonrpsee::async_client::Client, ContentValue, Discv5ApiClient, HistoryNetworkApiClient,
 };
 use tracing::info;
+use trin::cli::TrinConfig;
 
 use crate::{
     utils::{

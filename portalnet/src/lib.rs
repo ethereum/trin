@@ -2,6 +2,7 @@
 #![warn(clippy::uninlined_format_args)]
 
 pub mod accept_queue;
+pub mod bootnodes;
 pub mod config;
 pub mod constants;
 pub mod discovery;

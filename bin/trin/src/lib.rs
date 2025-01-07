@@ -1,17 +1,15 @@
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::uninlined_format_args)]
 
+pub mod cli;
+
 use std::sync::Arc;
 
-#[cfg(windows)]
-use ethportal_api::types::cli::Web3TransportType;
+use cli::TrinConfig;
 use ethportal_api::{
-    types::{cli::TrinConfig, network::Subnetwork},
-    utils::bytes::hex_encode,
-    version::get_trin_version,
+    types::network::Subnetwork, utils::bytes::hex_encode, version::get_trin_version,
 };
 use portalnet::{
-    config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
     events::PortalnetEvents,
     utils::db::{configure_node_data_dir, configure_trin_data_dir},
@@ -24,6 +22,8 @@ use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
 use trin_storage::PortalStorageConfigFactory;
+#[cfg(windows)]
+use trin_utils::cli::Web3TransportType;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
 
@@ -52,7 +52,7 @@ pub async fn run_trin(
         trin_config.network.network(),
     )?;
 
-    let portalnet_config = PortalnetConfig::new(&trin_config, private_key);
+    let portalnet_config = trin_config.to_portalnet_config(private_key);
 
     // Initialize base discovery protocol
     let mut discovery = Discovery::new(portalnet_config.clone(), trin_config.network.clone())?;
@@ -155,10 +155,9 @@ pub async fn run_trin(
     };
 
     // Launch JSON-RPC server
-    let jsonrpc_trin_config = trin_config.clone();
     let jsonrpc_discovery = Arc::clone(&discovery);
     let rpc_handle: RpcServerHandle = launch_jsonrpc_server(
-        jsonrpc_trin_config,
+        (&trin_config).into(),
         jsonrpc_discovery,
         history_jsonrpc_tx,
         state_jsonrpc_tx,

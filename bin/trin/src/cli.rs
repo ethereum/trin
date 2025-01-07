@@ -7,70 +7,34 @@ use clap::{
     error::{Error, ErrorKind},
     Args, Parser, Subcommand,
 };
-use url::Url;
-
-use crate::{
-    types::{bootnodes::Bootnodes, network::Subnetwork},
+use ethportal_api::{
+    dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES},
+    types::{
+        network::Subnetwork,
+        portal_wire::{NetworkSpec, MAINNET},
+    },
     version::FULL_VERSION,
 };
+use portalnet::{
+    bootnodes::Bootnodes,
+    config::{PortalnetConfig, NODE_ADDR_CACHE_CAPACITY},
+    constants::{
+        DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK, DEFAULT_UTP_TRANSFER_LIMIT,
+        DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_WS_PORT,
+    },
+};
+use rpc::config::RpcConfig;
+use trin_storage::config::StorageCapacityConfig;
+use trin_utils::cli::{
+    check_private_key_length, network_parser, subnetwork_parser, Web3TransportType,
+};
+use url::Url;
 
-pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
-pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "http://127.0.0.1:8545/";
-pub const DEFAULT_WEB3_HTTP_PORT: u16 = 8545;
-pub const DEFAULT_WEB3_WS_PORT: u16 = 8546;
-pub const DEFAULT_DISCOVERY_PORT: u16 = 9009;
-pub const DEFAULT_UTP_TRANSFER_LIMIT: usize = 50;
 const DEFAULT_SUBNETWORKS: &str = "history";
-pub const DEFAULT_NETWORK: &str = "mainnet";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
-use super::portal_wire::{NetworkSpec, ANGELFOOD, MAINNET};
-use crate::dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Web3TransportType {
-    HTTP,
-    IPC,
-}
-
-impl fmt::Display for Web3TransportType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::HTTP => write!(f, "http"),
-            Self::IPC => write!(f, "ipc"),
-        }
-    }
-}
-
-impl FromStr for Web3TransportType {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "http" => Ok(Web3TransportType::HTTP),
-            "ipc" => Ok(Web3TransportType::IPC),
-            _ => Err("Invalid web3-transport arg. Expected either 'http' or 'ipc'"),
-        }
-    }
-}
-
 const APP_NAME: &str = "trin";
-
-/// The storage capacity configurtion.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StorageCapacityConfig {
-    Combined {
-        total_mb: u32,
-        subnetworks: Vec<Subnetwork>,
-    },
-    Specific {
-        beacon_mb: Option<u32>,
-        history_mb: Option<u32>,
-        state_mb: Option<u32>,
-    },
-}
-
 #[derive(Parser, Debug, PartialEq, Clone)]
 #[command(name = APP_NAME,
     author = "https://github.com/ethereum/trin/graphs/contributors",
@@ -417,45 +381,6 @@ impl TrinConfig {
     }
 }
 
-pub fn check_private_key_length(private_key: &str) -> Result<B256, String> {
-    if private_key.len() == 66 {
-        return B256::from_str(private_key).map_err(|err| format!("HexError: {err}"));
-    }
-    Err(format!(
-        "Invalid private key length: {}, expected 66 (0x-prefixed 32 byte hexstring)",
-        private_key.len()
-    ))
-}
-
-pub fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> {
-    match network_string {
-        "mainnet" => Ok(MAINNET.clone()),
-        "angelfood" => Ok(ANGELFOOD.clone()),
-        _ => Err(format!(
-            "Not a valid network: {network_string}, must be 'angelfood' or 'mainnet'"
-        )),
-    }
-}
-
-pub fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>, String> {
-    let subnetworks = subnetwork_string
-        .split(',')
-        .map(Subnetwork::from_cli_arg)
-        .collect::<Result<Vec<Subnetwork>, String>>()?;
-
-    if subnetworks.is_empty() {
-        return Err("At least one subnetwork must be enabled".to_owned());
-    }
-
-    for subnetwork in &subnetworks {
-        if !subnetwork.is_active() {
-            return Err("{subnetwork} subnetwork has not yet been activated".to_owned());
-        }
-    }
-
-    Ok(Arc::new(subnetworks))
-}
-
 fn check_trusted_block_root(trusted_root: &str) -> Result<B256, String> {
     if !trusted_root.starts_with("0x") {
         return Err("Trusted block root must be prefixed with 0x".to_owned());
@@ -537,15 +462,43 @@ pub fn create_dashboard(
     Ok(())
 }
 
+impl TrinConfig {
+    pub fn to_portalnet_config(&self, private_key: B256) -> PortalnetConfig {
+        PortalnetConfig {
+            external_addr: self.external_addr,
+            private_key,
+            listen_port: self.discovery_port,
+            bootnodes: self.bootnodes.to_enrs(self.network.network()),
+            no_stun: self.no_stun,
+            no_upnp: self.no_upnp,
+            node_addr_cache_capacity: NODE_ADDR_CACHE_CAPACITY,
+            disable_poke: self.disable_poke,
+            trusted_block_root: self.trusted_block_root,
+            utp_transfer_limit: self.utp_transfer_limit,
+        }
+    }
+}
+
+impl From<&TrinConfig> for RpcConfig {
+    fn from(config: &TrinConfig) -> Self {
+        RpcConfig {
+            portal_subnetworks: config.portal_subnetworks.clone(),
+            web3_transport: config.web3_transport.clone(),
+            web3_ipc_path: config.web3_ipc_path.clone(),
+            web3_http_address: config.web3_http_address.clone(),
+            ws: config.ws,
+            ws_port: config.ws_port,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
-    use test_log::test;
-
     use super::*;
 
-    #[test]
+    #[test_log::test]
     fn test_default_args() {
         let expected_config = TrinConfig::default();
         let actual_config = TrinConfig::new_from(["trin"]).unwrap();
@@ -560,12 +513,12 @@ mod tests {
         assert_eq!(actual_config.ephemeral, expected_config.ephemeral);
     }
 
-    #[test]
+    #[test_log::test]
     fn test_help() {
         TrinConfig::new_from(["trin", "-h"]).expect_err("Should be an error to exit early");
     }
 
-    #[test]
+    #[test_log::test]
     fn test_custom_http_args() {
         let expected_config = TrinConfig {
             web3_http_address: Url::parse("http://0.0.0.0:8080/").unwrap(),
@@ -587,7 +540,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[test_log::test]
     fn test_ipc_protocol() {
         let actual_config: TrinConfig = Default::default();
         let expected_config = TrinConfig {
@@ -602,7 +555,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[test_log::test]
     fn test_ipc_with_custom_path() {
         let actual_config =
             TrinConfig::new_from(["trin", "--web3-ipc-path", "/path/test.ipc"]).unwrap();
@@ -620,7 +573,7 @@ mod tests {
         assert_eq!(actual_config.web3_ipc_path, expected_config.web3_ipc_path);
     }
 
-    #[test]
+    #[test_log::test]
     #[should_panic(expected = "Must not supply an ipc path when using http")]
 
     fn test_http_protocol_rejects_custom_web3_ipc_path() {
@@ -634,13 +587,13 @@ mod tests {
         .unwrap();
     }
 
-    #[test]
+    #[test_log::test]
     #[should_panic(expected = "Must not supply an http address when using ipc")]
     fn test_ipc_protocol_rejects_custom_web3_http_address() {
         TrinConfig::new_from(["trin", "--web3-http-address", "http://127.0.0.1:1234/"]).unwrap();
     }
 
-    #[test]
+    #[test_log::test]
     fn test_custom_discovery_port() {
         let expected_config = TrinConfig {
             discovery_port: 999,
@@ -650,7 +603,7 @@ mod tests {
         assert_eq!(actual_config.discovery_port, expected_config.discovery_port);
     }
 
-    #[test]
+    #[test_log::test]
     fn test_manual_external_addr_v4() {
         let actual_config =
             TrinConfig::new_from(["trin", "--external-address", "127.0.0.1:1234"]).unwrap();
@@ -660,7 +613,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[test_log::test]
     fn test_manual_external_addr_v6() {
         let actual_config =
             TrinConfig::new_from(["trin", "--external-address", "[::1]:1234"]).unwrap();
@@ -670,7 +623,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[test_log::test]
     fn test_custom_private_key() {
         let expected_config = TrinConfig {
             private_key: Some(B256::from_slice(&[1; 32])),
@@ -685,7 +638,7 @@ mod tests {
         assert_eq!(actual_config.private_key, expected_config.private_key);
     }
 
-    #[test]
+    #[test_log::test]
     fn test_ephemeral() {
         let expected_config = TrinConfig {
             ephemeral: true,
@@ -695,7 +648,7 @@ mod tests {
         assert_eq!(actual_config.ephemeral, expected_config.ephemeral);
     }
 
-    #[test]
+    #[test_log::test]
     fn test_enable_metrics_with_url() {
         let expected_config = TrinConfig {
             enable_metrics_with_url: Some(SocketAddr::new(
@@ -712,7 +665,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[test_log::test]
     #[should_panic(
         expected = "Invalid private key length: 65, expected 66 (0x-prefixed 32 byte hexstring)"
     )]
@@ -725,7 +678,7 @@ mod tests {
         .unwrap();
     }
 
-    #[test]
+    #[test_log::test]
     #[should_panic(
         expected = "Invalid private key length: 64, expected 66 (0x-prefixed 32 byte hexstring)"
     )]
@@ -738,7 +691,7 @@ mod tests {
         .unwrap();
     }
 
-    #[test]
+    #[test_log::test]
     #[should_panic(
         expected = "Invalid trusted block root length: 64, expected 66 (0x-prefixed 32 byte hexstring)"
     )]
@@ -751,7 +704,7 @@ mod tests {
         .unwrap();
     }
 
-    #[test]
+    #[test_log::test]
     #[should_panic(expected = "Trusted block root must be prefixed with 0x")]
     fn test_trusted_block_root_starts_with_0x() {
         TrinConfig::new_from([
@@ -762,7 +715,7 @@ mod tests {
         .unwrap();
     }
 
-    #[test]
+    #[test_log::test]
     fn test_trin_with_create_dashboard() {
         let config = TrinConfig::try_parse_from([
             "trin",
@@ -789,18 +742,16 @@ mod tests {
         }
     }
 
-    #[test]
+    #[test_log::test]
     #[should_panic(expected = "Invalid web3-transport arg. Expected either 'http' or 'ipc'")]
     fn test_invalid_web3_transport_argument() {
         TrinConfig::new_from(["trin", "--web3-transport", "invalid"]).unwrap();
     }
 
     mod storage_config {
-        use test_log::test;
-
         use super::*;
 
-        #[test]
+        #[test_log::test]
         fn no_flags() {
             let config = TrinConfig::new_from(["trin"]).unwrap();
             assert_eq!(
@@ -812,7 +763,7 @@ mod tests {
             );
         }
 
-        #[test]
+        #[test_log::test]
         fn with_subnetworks() {
             let config =
                 TrinConfig::new_from(["trin", "--portal-subnetworks", "history,state"]).unwrap();
@@ -825,7 +776,7 @@ mod tests {
             );
         }
 
-        #[test]
+        #[test_log::test]
         fn with_total() {
             let config = TrinConfig::new_from(["trin", "--storage.total", "200"]).unwrap();
             assert_eq!(
@@ -837,7 +788,7 @@ mod tests {
             );
         }
 
-        #[test]
+        #[test_log::test]
         fn with_total_and_subnetworks() {
             let config = TrinConfig::new_from([
                 "trin",
@@ -856,7 +807,7 @@ mod tests {
             );
         }
 
-        #[test]
+        #[test_log::test]
         fn with_mb() {
             let config = TrinConfig::new_from(["trin", "--mb", "200"]).unwrap();
             assert_eq!(
@@ -868,7 +819,7 @@ mod tests {
             );
         }
 
-        #[test]
+        #[test_log::test]
         fn with_mb_and_subnetworks() {
             let config = TrinConfig::new_from([
                 "trin",
@@ -887,7 +838,7 @@ mod tests {
             );
         }
 
-        #[test]
+        #[test_log::test]
         fn with_total_and_all_subnetworks() {
             let config = TrinConfig::new_from([
                 "trin",
@@ -906,7 +857,7 @@ mod tests {
             );
         }
 
-        #[test]
+        #[test_log::test]
         #[should_panic(
             expected = "--storage.total and --storage.beacon can't be set at the same time"
         )]
@@ -915,7 +866,7 @@ mod tests {
                 .unwrap();
         }
 
-        #[test]
+        #[test_log::test]
         #[should_panic(
             expected = "--storage.total and --storage.history can't be set at the same time"
         )]
@@ -924,7 +875,7 @@ mod tests {
                 .unwrap();
         }
 
-        #[test]
+        #[test_log::test]
         #[should_panic(
             expected = "--storage.total and --storage.state can't be set at the same time"
         )]
@@ -933,7 +884,7 @@ mod tests {
                 .unwrap();
         }
 
-        #[test]
+        #[test_log::test]
         fn with_history() {
             let config = TrinConfig::new_from(["trin", "--storage.history", "200"]).unwrap();
             assert_eq!(
@@ -946,7 +897,7 @@ mod tests {
             );
         }
 
-        #[test]
+        #[test_log::test]
         fn with_history_and_state() {
             let config = TrinConfig::new_from([
                 "trin",
@@ -968,7 +919,7 @@ mod tests {
             );
         }
 
-        #[test]
+        #[test_log::test]
         fn with_history_and_state_and_beacon() {
             let config = TrinConfig::new_from([
                 "trin",
@@ -992,14 +943,14 @@ mod tests {
             );
         }
 
-        #[test]
+        #[test_log::test]
         #[should_panic(expected = "--storage.state is set but State subnetwork is not enabled")]
         fn with_history_and_state_without_subnetworks() {
             TrinConfig::new_from(["trin", "--storage.history", "200", "--storage.state", "300"])
                 .unwrap();
         }
 
-        #[test]
+        #[test_log::test]
         #[should_panic(expected = "--storage.beacon is set but Beacon subnetwork is not enabled")]
         fn with_history_and_beacon_without_subnetworks() {
             TrinConfig::new_from([
@@ -1012,7 +963,7 @@ mod tests {
             .unwrap();
         }
 
-        #[test]
+        #[test_log::test]
         #[should_panic(expected = "--storage.history is set but History subnetwork is not enabled")]
         fn with_history_and_beacon_without_history_subnetwork() {
             TrinConfig::new_from([
@@ -1027,7 +978,7 @@ mod tests {
             .unwrap();
         }
 
-        #[test]
+        #[test_log::test]
         #[should_panic(expected = "History subnetwork enabled but --storage.history is not set")]
         fn specific_without_history_with_subnetwork() {
             TrinConfig::new_from([
@@ -1040,7 +991,7 @@ mod tests {
             .unwrap();
         }
 
-        #[test]
+        #[test_log::test]
         #[should_panic(expected = "State subnetwork enabled but --storage.state is not set")]
         fn specific_without_state_with_subnetwork() {
             TrinConfig::new_from([
@@ -1053,7 +1004,7 @@ mod tests {
             .unwrap();
         }
 
-        #[test]
+        #[test_log::test]
         #[should_panic(expected = "Beacon subnetwork enabled but --storage.beacon is not set")]
         fn specific_without_beacon_with_subnetwork() {
             TrinConfig::new_from([
@@ -1066,7 +1017,7 @@ mod tests {
             .unwrap();
         }
 
-        #[test]
+        #[test_log::test]
         fn with_total_zero() {
             let config = TrinConfig::new_from([
                 "trin",
@@ -1085,7 +1036,7 @@ mod tests {
             );
         }
 
-        #[test]
+        #[test_log::test]
         fn with_zero_per_subnetwork() {
             let config = TrinConfig::new_from([
                 "trin",
@@ -1107,6 +1058,88 @@ mod tests {
                     state_mb: Some(0),
                 }
             );
+        }
+    }
+
+    mod bootnodes {
+        use ethportal_api::{types::network::Network, Enr};
+        use portalnet::bootnodes::Bootnode;
+
+        use super::*;
+
+        #[test_log::test]
+        fn test_bootnodes_default_with_default_bootnodes() {
+            let config = TrinConfig::new_from(["trin"]).unwrap();
+            assert_eq!(config.bootnodes, Bootnodes::Default);
+            let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
+            assert_eq!(bootnodes.len(), 11);
+        }
+
+        #[test_log::test]
+        fn test_bootnodes_default_with_explicit_default_bootnodes() {
+            let config = TrinConfig::new_from(["trin", "--bootnodes", "default"]).unwrap();
+            assert_eq!(config.bootnodes, Bootnodes::Default);
+            let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
+            assert_eq!(bootnodes.len(), 11);
+        }
+
+        #[test_log::test]
+        fn test_bootnodes_default_with_no_bootnodes() {
+            let config = TrinConfig::new_from(["trin", "--bootnodes", "none"]).unwrap();
+            assert_eq!(config.bootnodes, Bootnodes::None);
+            let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
+            assert_eq!(bootnodes.len(), 0);
+        }
+
+        #[rstest::rstest]
+        #[case("invalid")]
+        #[case("enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg,invalid")]
+        #[should_panic]
+        fn test_bootnodes_invalid_enr(#[case] bootnode: &str) {
+            TrinConfig::new_from(["trin", "--bootnodes", bootnode]).unwrap();
+        }
+
+        #[rstest::rstest]
+        #[case("enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg", 1)]
+        #[case("enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg,enr:-IS4QPUT9hwV4YfNTxazR2ltch4qKzvX_HwxQBw8gUN3q1MDfNyaD1EHc1wQZRTUzQQD-RVYx3h4nA1Sqk0Wx9DwzNABgmlkgnY0gmlwhM69ZOyJc2VjcDI1NmsxoQLaI-m2CDIjpwcnUf1ESspvOctJLpIrLA8AZ4zbo_1bFIN1ZHCCIyg", 2)]
+        #[case("enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg,enr:-IS4QPUT9hwV4YfNTxazR2ltch4qKzvX_HwxQBw8gUN3q1MDfNyaD1EHc1wQZRTUzQQD-RVYx3h4nA1Sqk0Wx9DwzNABgmlkgnY0gmlwhM69ZOyJc2VjcDI1NmsxoQLaI-m2CDIjpwcnUf1ESspvOctJLpIrLA8AZ4zbo_1bFIN1ZHCCIyg,enr:-IS4QB77AROcGX-TSkY-U-SaZJ5ma9ICQj6ETO3FqUdCnTZeJ0mDrdCKUqd5AQ0jrHa7m9-mOLvFFKMV_-tBD8uDYZUBgmlkgnY0gmlwhJ_fCDaJc2VjcDI1NmsxoQN9rahqamBOJfj4u6yssJQJ1-EZoyAw-7HIgp1FwNUdnoN1ZHCCIyg", 3)]
+        fn test_bootnodes_valid_enrs(#[case] bootnode: &str, #[case] expected_length: usize) {
+            use ethportal_api::types::network::Network;
+
+            let config = TrinConfig::new_from(["trin", "--bootnodes", bootnode]).unwrap();
+            match config.bootnodes.clone() {
+                Bootnodes::Custom(bootnodes) => {
+                    assert_eq!(bootnodes.len(), expected_length);
+                }
+                _ => panic!("Bootnodes should be custom"),
+            };
+            let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
+            assert_eq!(bootnodes.len(), expected_length);
+        }
+
+        #[rstest::rstest]
+        fn test_angelfood_network_defaults_to_correct_bootnodes() {
+            let config = TrinConfig::new_from(["trin", "--network", "angelfood"]).unwrap();
+            assert_eq!(config.bootnodes, Bootnodes::Default);
+            let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Angelfood);
+            assert_eq!(bootnodes.len(), 1);
+        }
+
+        #[rstest::rstest]
+        fn test_custom_bootnodes_override_angelfood_default() {
+            let enr = "enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg";
+            let config =
+                TrinConfig::new_from(["trin", "--network", "angelfood", "--bootnodes", enr])
+                    .unwrap();
+            assert_eq!(
+                config.bootnodes,
+                Bootnodes::Custom(vec![Bootnode {
+                    enr: Enr::from_str(enr).unwrap(),
+                    alias: "custom".to_string(),
+                }])
+            );
+            let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Angelfood);
+            assert_eq!(bootnodes.len(), 1);
         }
     }
 }

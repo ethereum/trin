@@ -16,7 +16,6 @@ use discv5::{
 };
 use ethportal_api::{
     types::{
-        bootnodes::Bootnode,
         discv5::RoutingTableInfo,
         distance::{Distance, Metric},
         enr::Enr,
@@ -41,6 +40,7 @@ use trin_validation::validator::{ValidationResult, Validator};
 use utp_rs::socket::UtpSocket;
 
 use crate::{
+    bootnodes::Bootnode,
     discovery::{Discovery, UtpEnr},
     events::EventEnvelope,
     find::query_info::{FindContentResult, RecursiveFindContentResult},

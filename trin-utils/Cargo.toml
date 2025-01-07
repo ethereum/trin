@@ -12,6 +12,8 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+alloy.workspace = true
+ethportal-api.workspace = true
 directories.workspace = true
 tempfile.workspace = true
 tracing.workspace = true

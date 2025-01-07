@@ -1849,16 +1849,7 @@ version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e69600ff1703123957937708eb27f7a564e48885c537782722ed0ba3189ce1d7"
 dependencies = [
- "dirs-sys 0.3.7",
-]
-
-[[package]]
-name = "dirs"
-version = "5.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
-dependencies = [
- "dirs-sys 0.4.1",
+ "dirs-sys",
 ]
 
 [[package]]
@@ -1870,18 +1861,6 @@ dependencies = [
  "libc",
  "redox_users",
  "winapi",
-]
-
-[[package]]
-name = "dirs-sys"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "520f05a5cbd335fae5a99ff7a6ab8627577660ee5cfd6a94a6a929b52ff0321c"
-dependencies = [
- "libc",
- "option-ext",
- "redox_users",
- "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2222,7 +2201,6 @@ dependencies = [
  "bimap",
  "bytes",
  "c-kzg",
- "clap",
  "const_format",
  "discv5",
  "env_logger 0.9.3",
@@ -2260,7 +2238,6 @@ dependencies = [
  "tree_hash",
  "tree_hash_derive",
  "ureq",
- "url",
  "validator",
  "vergen",
 ]
@@ -2279,6 +2256,7 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "portal-bridge",
+ "portalnet",
  "rand",
  "reth-ipc",
  "rpc",
@@ -4127,12 +4105,6 @@ dependencies = [
  "pkg-config",
  "vcpkg",
 ]
-
-[[package]]
-name = "option-ext"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "overload"
@@ -6782,32 +6754,15 @@ dependencies = [
  "alloy",
  "anyhow",
  "clap",
- "dirs",
  "discv5",
- "e2store",
- "ethereum_ssz",
  "ethportal-api",
- "ethportal-peertest",
- "futures",
- "jsonrpsee",
- "lazy_static",
- "parking_lot 0.11.2",
- "portal-bridge",
  "portalnet",
  "prometheus_exporter",
- "rand",
- "regex",
- "reqwest",
- "reth-ipc",
  "rpc",
- "serde_json",
- "serde_yaml",
- "serial_test",
- "sha3 0.9.1",
- "tempfile",
+ "rstest",
+ "test-log",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.19",
  "tree_hash",
  "trin-beacon",
  "trin-history",
@@ -6815,7 +6770,6 @@ dependencies = [
  "trin-storage",
  "trin-utils",
  "trin-validation",
- "ureq",
  "url",
  "utp-rs",
 ]
@@ -6992,9 +6946,11 @@ dependencies = [
 name = "trin-utils"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "ansi_term",
  "atty",
  "directories",
+ "ethportal-api",
  "tempfile",
  "tracing",
  "tracing-subscriber 0.3.19",
