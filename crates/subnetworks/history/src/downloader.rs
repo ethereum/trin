@@ -1,41 +1,71 @@
 /// Downloader struct that load a data CSV file from disk with block number and block hashes
 /// and do FIndContent queries in batches to download all the content from the csv file.
 /// We don't save the content to disk, we just download it and drop
-/// it. But we need to measure the time it takes to download all the content, the number of
-/// queries and the number of bytes downloaded, the data ingress rate and the query rate.
+/// it.
 use std::fs::File;
 use std::{
+    fmt::{Display, Formatter},
     io::{self, BufRead},
     path::Path,
+    sync::Arc,
     time::Duration,
 };
 
 use anyhow::anyhow;
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::{cli::DEFAULT_WEB3_HTTP_ADDRESS, network::Subnetwork, query_trace::QueryTrace},
+    types::{
+        distance::XorMetric,
+        network::Subnetwork,
+        portal_wire::{Content, OfferTrace},
+    },
     utils::bytes::hex_decode,
     BlockBodyKey, BlockReceiptsKey, ContentValue, HistoryContentKey, HistoryContentValue,
+    OverlayContentKey,
 };
-use futures::{channel::oneshot, future::join_all};
+use futures::future::join_all;
 use portal_bridge::census::Census;
-use portalnet::overlay::{command::OverlayCommand, config::FindContentConfig};
-use tokio::sync::mpsc::UnboundedSender;
-use tracing::{error, info, warn};
+use portalnet::{constants::DEFAULT_WEB3_HTTP_ADDRESS, overlay::protocol::OverlayProtocol};
+use ssz_types::BitList;
+use tracing::{info, warn};
+
+use crate::{storage::HistoryStorage, validation::ChainHistoryValidator};
 
 /// The number of blocks to download in a single batch.
-const BATCH_SIZE: usize = 3;
+const BATCH_SIZE: usize = 100;
+/// The max number of ENRs to send FindContent queries to.
+const CENSUS_ENR_LIMIT: usize = 4;
 /// The path to the CSV file with block numbers and block hashes.
 const CSV_PATH: &str = "ethereum_blocks_14000000_merge.csv";
+
+enum ContentType {
+    BlockBody,
+    BlockReceipts,
+}
+
+impl Display for ContentType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ContentType::BlockBody => write!(f, "BlockBody"),
+            ContentType::BlockReceipts => write!(f, "BlockReceipts"),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Downloader {
     pub census: Census,
-    pub overlay_tx: UnboundedSender<OverlayCommand<HistoryContentKey>>,
+    pub overlay_arc:
+        Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, HistoryStorage>>,
 }
 
 impl Downloader {
-    pub fn new(overlay_tx: UnboundedSender<OverlayCommand<HistoryContentKey>>) -> Self {
+    pub fn new(
+        overlay_arc: Arc<
+            OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, HistoryStorage>,
+        >,
+    ) -> Self {
+        // Build hhtp client bound to the current node web3rpc
         let http_client: HttpClient = HttpClientBuilder::default()
             // increase default timeout to allow for trace_gossip requests that can take a long
             // time
@@ -44,9 +74,11 @@ impl Downloader {
             .map_err(|e| e.to_string())
             .expect("Failed to build http client");
 
-        // BUild hhtp client binded to the current node web3rpc
-        let census = Census::new(http_client, 0, vec![]);
-        Self { overlay_tx, census }
+        let census = Census::new(http_client, CENSUS_ENR_LIMIT, vec![]);
+        Self {
+            overlay_arc,
+            census,
+        }
     }
 
     pub async fn start(mut self) -> io::Result<()> {
@@ -57,7 +89,6 @@ impl Downloader {
         let reader = io::BufReader::new(file);
         info!("Reading CSV file");
         let lines: Vec<_> = reader.lines().collect::<Result<_, _>>()?;
-        // Create a hash table in memory with all the block hashes and block numbers
         info!("Parsing CSV file");
         // skip the header of the csv file
         let lines = &lines[1..];
@@ -89,17 +120,17 @@ impl Downloader {
 
         for (block_number, block_hash) in batch {
             let block_body_content_key = generate_block_body_content_key(block_hash.clone());
-            futures.push(self.find_content(block_body_content_key, block_number));
-            info!(
-                block_number = block_number,
-                "Sent FindContent query for block body"
-            );
+            futures.push(self.find_content(
+                block_body_content_key,
+                block_number,
+                ContentType::BlockBody,
+            ));
             let block_receipts_content_key = generate_block_receipts_content_key(block_hash);
-            futures.push(self.find_content(block_receipts_content_key, block_number));
-            info!(
-                block_number = block_number,
-                "Sent FindContent query for block receipts"
-            );
+            futures.push(self.find_content(
+                block_receipts_content_key,
+                block_number,
+                ContentType::BlockReceipts,
+            ));
         }
         join_all(futures).await;
     }
@@ -108,56 +139,116 @@ impl Downloader {
         &self,
         content_key: HistoryContentKey,
         block_number: u64,
+        content_type: ContentType,
     ) -> anyhow::Result<()> {
-        let (tx, rx) = oneshot::channel();
-
-        let overlay_command = OverlayCommand::FindContentQuery {
-            target: content_key.clone(),
-            callback: tx,
-            config: FindContentConfig {
-                is_trace: true,
-                ..Default::default()
-            },
+        // Select interested peers from the census
+        let enrs = self
+            .census
+            .select_peers(Subnetwork::History, &content_key.content_id())
+            .expect("Failed to select peers");
+        // Send FindContent query to the interested peers
+        if enrs.is_empty() {
+            warn!(
+                block_number = block_number,
+                content_type = %content_type,
+                "No peers found for block. Skipping"
+            );
+            return Err(anyhow!("No peers found for block {block_number}"));
         };
 
-        if let Err(err) = self.overlay_tx.send(overlay_command) {
-            warn!(
-                error = %err,
-                "Error submitting FindContent query to service"
+        for (index, enr) in enrs.iter().enumerate() {
+            info!(
+                block_number = block_number,
+                content_type = %content_type,
+                peer_index = index,
+                "Sending FindContent query to peer"
             );
-        }
-        match rx.await {
-            Ok(result) => match result {
-                Ok(result) => {
-                    HistoryContentValue::decode(&content_key, &result.0)?;
-                    let duration_ms = QueryTrace::timestamp_millis_u64(
-                        result.2.expect("QueryTrace not found").started_at_ms,
-                    );
-                    info!(
+
+            let result = self
+                .overlay_arc
+                .send_find_content(enr.clone(), content_key.to_bytes())
+                .await?;
+            let content = result.0;
+
+            match content {
+                Content::ConnectionId(_) => {
+                    // Should not return connection ID, should always return the content
+                    warn!(
                         block_number = block_number,
-                        query_duration = duration_ms,
-                        "Downloaded content for block"
+                        content_type = %content_type,
+                        "Received ConnectionId content"
                     );
-                    Ok(())
+                    self.census.record_offer_result(
+                        Subnetwork::History,
+                        enr.node_id(),
+                        0,
+                        Duration::from_secs(0),
+                        &OfferTrace::Failed,
+                    );
+                    continue;
                 }
-                Err(err) => {
-                    error!(
+                Content::Content(content_bytes) => {
+                    let content = HistoryContentValue::decode(&content_key, &content_bytes);
+
+                    match content {
+                        Ok(_) => {
+                            info!(
+                                block_number = block_number,
+                                content_type = %content_type,
+                                "Received content from peer"
+                            );
+                            self.census.record_offer_result(
+                                Subnetwork::History,
+                                enr.node_id(),
+                                content_bytes.len(),
+                                Duration::from_secs(0),
+                                &OfferTrace::Success(
+                                    BitList::with_capacity(1).expect("Failed to create bitlist"),
+                                ),
+                            );
+                            return Ok(());
+                        }
+                        Err(_) => {
+                            warn!(
+                                block_number = block_number,
+                                content_type = %content_type,
+                                "Failed to parse content from peer, invalid content"
+                            );
+                            self.census.record_offer_result(
+                                Subnetwork::History,
+                                enr.node_id(),
+                                0,
+                                Duration::from_secs(0),
+                                &OfferTrace::Failed,
+                            );
+                            continue;
+                        }
+                    }
+                }
+                Content::Enrs(_) => {
+                    //  Content not found
+                    warn!(
                         block_number = block_number,
-                        error = %err,
-                        "Error in FindContent query"
+                        content_type = %content_type,
+                        "Received Enrs content, content not found from peer"
                     );
-                    Err(anyhow!("Error in FindContent query: {:?}", err))
+                    self.census.record_offer_result(
+                        Subnetwork::History,
+                        enr.node_id(),
+                        0,
+                        Duration::from_secs(0),
+                        &OfferTrace::Failed,
+                    );
+                    continue;
                 }
-            },
-            Err(err) => {
-                error!(
-                    block_number = block_number,
-                    error = %err,
-                    "Error receiving FindContent query response"
-                );
-                Err(err.into())
             }
         }
+        warn!(
+            block_number = block_number,
+            content_type = %content_type,
+            "Failed to find content for block"
+        );
+        Err(anyhow!("Failed to find content for block"))
     }
 }
 

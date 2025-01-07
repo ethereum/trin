@@ -104,8 +104,8 @@ pub fn spawn_history_network(
         // hacky test: make sure we establish a session with the boot node
         network.overlay.ping_bootnodes().await;
 
-        let overlay_tx = network.overlay.command_tx.clone();
-        let downloader = Downloader::new(overlay_tx);
+        let overlay_arc = network.overlay.clone();
+        let downloader = Downloader::new(overlay_arc);
         tokio::spawn(async move {
             if let Err(e) = downloader.start().await {
                 error!("Downloader error: {:?}", e);
