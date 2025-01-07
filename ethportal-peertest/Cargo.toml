@@ -34,7 +34,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tree_hash.workspace = true
-trin = { path = "../bin/trin" }
+trin.workspace = true
 trin-history.workspace = true
 trin-state.workspace = true
 trin-utils.workspace = true

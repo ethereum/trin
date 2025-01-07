@@ -13,7 +13,7 @@ use ethportal_api::{
         network::Subnetwork,
         portal_wire::{NetworkSpec, MAINNET},
     },
-    version::VERSION,
+    version::FULL_VERSION,
 };
 use portalnet::{
     bootnodes::Bootnodes,
@@ -39,7 +39,7 @@ const APP_NAME: &str = "trin";
 #[command(name = APP_NAME,
     author = "https://github.com/ethereum/trin/graphs/contributors",
     about = "Run an eth portal client",
-    version = VERSION
+    version = FULL_VERSION
 )]
 pub struct TrinConfig {
     #[arg(

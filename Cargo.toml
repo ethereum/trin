@@ -4,8 +4,8 @@ members = [
     "bin/poll-latest", 
     "bin/purge-invalid-history-content", 
     "bin/sample-range", 
-    "bin/trin", 
     "bin/test-providers",
+    "bin/trin", 
     "ethportal-api",
     "ethportal-peertest",
     "e2store",
@@ -49,12 +49,10 @@ clap = { version = "4.2.1", features = ["derive"] }
 delay_map = "0.4.0"
 directories = "3.0"
 discv5 = { version = "0.4.1", features = ["serde"] }
-e2store = { path = "e2store" }
 env_logger = "0.9.0"
 eth_trie = "0.5.0"
 ethereum_ssz = "0.7.1"
 ethereum_ssz_derive = "0.7.1"
-ethportal-api = { path = "ethportal-api" }
 futures = "0.3.23"
 futures-util = "0.3.23"
 hex = "0.4.3"
@@ -63,10 +61,7 @@ itertools = "0.13.0"
 jsonrpsee = "0.24.4"
 keccak-hash = "0.10.0"
 lazy_static = "1.4.0"
-light-client = { path = "light-client" }
 parking_lot = "0.11.2"
-portal-bridge = { path = "portal-bridge" }
-portalnet = { path = "portalnet" }
 prometheus_exporter = "0.8.4"
 quickcheck = "1.0.3"
 r2d2 = "0.8.9"
@@ -76,7 +71,6 @@ reqwest = { version = "0.12.7", features = ["native-tls-vendored", "json"] }
 reth-ipc = { tag = "v1.0.8", git = "https://github.com/paradigmxyz/reth.git"}
 revm = { version = "14.0.3", default-features = false, features = ["std", "secp256k1", "serde-json", "c-kzg"] }
 revm-primitives = { version = "10.0.0", default-features = false, features = ["std", "serde"] }
-rpc = { path = "rpc"}
 rstest = "0.18.2"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
 scraper = "0.18.1"
@@ -99,6 +93,19 @@ tracing-subscriber = "0.3.15"
 tracing-test = "0.1"
 tree_hash = "0.8.0"
 tree_hash_derive = "0.8.0"
+uds_windows = "1.0.1"
+ureq = { version = "2.5.0", features = ["json"] }
+url = "2.3.1"
+utp-rs = { tag = "v0.1.0-alpha.14", git = "https://github.com/ethereum/utp" }
+
+# Trin workspace crates
+e2store = { path = "e2store" }
+ethportal-api = { path = "ethportal-api" }
+light-client = { path = "light-client" }
+portal-bridge = { path = "portal-bridge" }
+portalnet = { path = "portalnet" }
+rpc = { path = "rpc"}
+trin = { path = "bin/trin"}
 trin-beacon = { path = "trin-beacon" }
 trin-evm = { path = "trin-evm" }
 trin-execution = { path = "trin-execution" }
@@ -108,7 +115,3 @@ trin-state = { path = "trin-state" }
 trin-storage = { path = "trin-storage" }
 trin-utils = { path = "trin-utils" }
 trin-validation = { path = "trin-validation" }
-uds_windows = "1.0.1"
-ureq = { version = "2.5.0", features = ["json"] }
-url = "2.3.1"
-utp-rs = { tag = "v0.1.0-alpha.14", git = "https://github.com/ethereum/utp" }
