@@ -6,8 +6,6 @@ pub mod cli;
 use std::sync::Arc;
 
 use cli::TrinConfig;
-#[cfg(windows)]
-use ethportal_api::types::cli::Web3TransportType;
 use ethportal_api::{
     types::network::Subnetwork, utils::bytes::hex_encode, version::get_trin_version,
 };
@@ -24,6 +22,8 @@ use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
 use trin_storage::PortalStorageConfigFactory;
+#[cfg(windows)]
+use trin_utils::cli::Web3TransportType;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
 
