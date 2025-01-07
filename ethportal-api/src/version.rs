@@ -16,7 +16,7 @@ pub const BUILD_ARCHITECTURE: &str =
 // /// The version of the programming language used to build the binary.
 pub const PROGRAMMING_LANGUAGE_VERSION: &str = env!("VERGEN_RUSTC_SEMVER");
 
-pub const VERSION: &str = const_format::formatcp!(
+pub const FULL_VERSION: &str = const_format::formatcp!(
     "{version}-{hash} {build_os}-{build_arch} rustc{rust_version}",
     version = TRIN_VERSION,
     hash = TRIN_SHORT_COMMIT,

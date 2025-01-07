@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::{
     types::{bootnodes::Bootnodes, network::Subnetwork},
-    version::VERSION,
+    version::FULL_VERSION,
 };
 
 pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
@@ -75,7 +75,7 @@ pub enum StorageCapacityConfig {
 #[command(name = APP_NAME,
     author = "https://github.com/ethereum/trin/graphs/contributors",
     about = "Run an eth portal client",
-    version = VERSION
+    version = FULL_VERSION
 )]
 pub struct TrinConfig {
     #[arg(
