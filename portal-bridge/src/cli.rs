@@ -3,11 +3,7 @@ use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 use alloy::primitives::B256;
 use clap::Parser;
 use ethportal_api::{
-    types::{
-        cli::{check_private_key_length, network_parser},
-        network::Subnetwork,
-        portal_wire::NetworkSpec,
-    },
+    types::{network::Subnetwork, portal_wire::NetworkSpec},
     Enr,
 };
 use portalnet::{
@@ -22,6 +18,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use tokio::time::Duration;
 use tracing::error;
+use trin_utils::cli::{check_private_key_length, network_parser};
 use url::Url;
 
 use crate::{

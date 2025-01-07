@@ -2,8 +2,7 @@ use core::fmt;
 use std::{str::FromStr, sync::Arc};
 
 use alloy::primitives::B256;
-
-use super::{
+use ethportal_api::types::{
     network::Subnetwork,
     portal_wire::{NetworkSpec, ANGELFOOD, MAINNET},
 };

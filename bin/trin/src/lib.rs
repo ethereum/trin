@@ -52,7 +52,7 @@ pub async fn run_trin(
         trin_config.network.network(),
     )?;
 
-    let portalnet_config = trin_config.portalnet_config(private_key);
+    let portalnet_config = trin_config.to_portalnet_config(private_key);
 
     // Initialize base discovery protocol
     let mut discovery = Discovery::new(portalnet_config.clone(), trin_config.network.clone())?;

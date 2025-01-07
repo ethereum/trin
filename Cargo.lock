@@ -7057,9 +7057,11 @@ dependencies = [
 name = "trin-utils"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "ansi_term",
  "atty",
  "directories",
+ "ethportal-api",
  "tempfile",
  "tracing",
  "tracing-subscriber 0.3.19",

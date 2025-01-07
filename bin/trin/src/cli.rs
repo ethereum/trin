@@ -10,7 +10,6 @@ use clap::{
 use ethportal_api::{
     dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES},
     types::{
-        cli::{check_private_key_length, network_parser, subnetwork_parser, Web3TransportType},
         network::Subnetwork,
         portal_wire::{NetworkSpec, MAINNET},
     },
@@ -26,6 +25,9 @@ use portalnet::{
 };
 use rpc::config::RpcConfig;
 use trin_storage::config::StorageCapacityConfig;
+use trin_utils::cli::{
+    check_private_key_length, network_parser, subnetwork_parser, Web3TransportType,
+};
 use url::Url;
 
 const DEFAULT_SUBNETWORKS: &str = "history";
@@ -461,7 +463,7 @@ pub fn create_dashboard(
 }
 
 impl TrinConfig {
-    pub fn portalnet_config(&self, private_key: B256) -> PortalnetConfig {
+    pub fn to_portalnet_config(&self, private_key: B256) -> PortalnetConfig {
         PortalnetConfig {
             external_addr: self.external_addr,
             private_key,

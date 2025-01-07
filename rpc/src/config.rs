@@ -1,7 +1,8 @@
 use std::{path::PathBuf, sync::Arc};
 
 use alloy::transports::http::reqwest::Url;
-use ethportal_api::types::{cli::Web3TransportType, network::Subnetwork};
+use ethportal_api::types::network::Subnetwork;
+use trin_utils::cli::Web3TransportType;
 
 /// Configuration for the RPC server.
 #[derive(Clone)]

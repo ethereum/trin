@@ -30,7 +30,6 @@ use eth_rpc::EthApi;
 use ethportal_api::{
     jsonrpsee,
     types::{
-        cli::Web3TransportType,
         jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
         network::Subnetwork,
     },
@@ -40,6 +39,7 @@ use portalnet::discovery::Discovery;
 use reth_ipc::server::Builder as IpcServerBuilder;
 use state_rpc::StateNetworkApi;
 use tokio::sync::mpsc;
+use trin_utils::cli::Web3TransportType;
 use web3_rpc::Web3Api;
 
 pub use crate::rpc_server::RpcServerHandle;
