@@ -390,7 +390,6 @@ struct AccessListTransactionHelper {
     #[serde(rename(deserialize = "input"))]
     pub data: JsonBytes,
     pub access_list: Vec<AccessListItem>,
-    #[serde(rename(deserialize = "v"))]
     pub y_parity: U64,
     pub r: U256,
     pub s: U256,
@@ -471,7 +470,6 @@ struct EIP1559TransactionHelper {
     #[serde(rename(deserialize = "input"))]
     pub data: JsonBytes,
     pub access_list: Vec<AccessListItem>,
-    #[serde(rename(deserialize = "v"))]
     pub y_parity: U64,
     pub r: U256,
     pub s: U256,
@@ -559,7 +557,6 @@ struct BlobTransactionHelper {
     pub access_list: Vec<AccessListItem>,
     pub max_fee_per_blob_gas: U256,
     pub blob_versioned_hashes: Vec<B256>,
-    #[serde(rename(deserialize = "v"))]
     pub y_parity: U64,
     pub r: U256,
     pub s: U256,
