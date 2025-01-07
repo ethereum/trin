@@ -1999,6 +1999,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "ef-tests"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "ethereum_hashing",
+ "ethereum_serde_utils",
+ "ethereum_ssz",
+ "ethereum_ssz_derive",
+ "ethportal-api",
+ "paste",
+ "rstest",
+ "serde",
+ "serde_yaml",
+ "snap",
+ "ssz_types",
+ "tree_hash",
+ "tree_hash_derive",
+]
+
+[[package]]
 name = "ego-tree"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

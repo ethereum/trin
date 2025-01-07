@@ -4,3 +4,6 @@
 .python-version
 .DS_Store
 *rusty-tags.vi
+
+# Ignore downloaded consensus specs test data
+testing/ef-tests/mainnet*

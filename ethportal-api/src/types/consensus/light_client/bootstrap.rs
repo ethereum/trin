@@ -4,6 +4,7 @@ use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum::U5, FixedVector};
 use superstruct::superstruct;
+use tree_hash_derive::TreeHash;
 
 use crate::{
     consensus::header::BeaconBlockHeader,
@@ -22,7 +23,16 @@ pub type CurrentSyncCommitteeProofLen = U5;
 #[superstruct(
     variants(Bellatrix, Capella, Deneb),
     variant_attributes(
-        derive(Debug, Clone, Serialize, PartialEq, Deserialize, Encode, Decode,),
+        derive(
+            Debug,
+            Clone,
+            Serialize,
+            PartialEq,
+            Deserialize,
+            Encode,
+            Decode,
+            TreeHash
+        ),
         serde(deny_unknown_fields),
     )
 )]
@@ -62,132 +72,5 @@ impl LightClientBootstrap {
             LightClientBootstrap::Capella(bootstrap) => bootstrap.header.beacon,
             LightClientBootstrap::Deneb(bootstrap) => bootstrap.header.beacon,
         }
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod test {
-    use ::ssz::Encode;
-    use rstest::rstest;
-    use serde_json::Value;
-
-    use super::*;
-
-    #[rstest]
-    #[case("case_0")]
-    #[case("case_1")]
-    #[case("case_2")]
-    #[case("case_3")]
-    #[case("case_4")]
-    fn serde_light_client_bootstrap_bellatrix(#[case] case: &str) {
-        let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/bellatrix/LightClientBootstrap/ssz_random/{case}/value.yaml"
-        ))
-        .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: LightClientBootstrapBellatrix = serde_json::from_value(value.clone()).unwrap();
-        let serialized = serde_json::to_value(content).unwrap();
-        assert_eq!(serialized, value);
-    }
-
-    #[rstest]
-    #[case("case_0")]
-    #[case("case_1")]
-    #[case("case_2")]
-    #[case("case_3")]
-    #[case("case_4")]
-    fn ssz_light_client_bootstrap_bellatrix(#[case] case: &str) {
-        let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/bellatrix/LightClientBootstrap/ssz_random/{case}/value.yaml"
-        ))
-        .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: LightClientBootstrapBellatrix = serde_json::from_value(value).unwrap();
-
-        let compressed = std::fs::read(format!(
-            "../test_assets/beacon/bellatrix/LightClientBootstrap/ssz_random/{case}/serialized.ssz_snappy"
-        ))
-            .expect("cannot find test asset");
-        let mut decoder = snap::raw::Decoder::new();
-        let expected = decoder.decompress_vec(&compressed).unwrap();
-        LightClientBootstrap::from_ssz_bytes(&expected, ForkName::Bellatrix).unwrap();
-        assert_eq!(content.as_ssz_bytes(), expected);
-    }
-
-    #[rstest]
-    #[case("case_0")]
-    #[case("case_1")]
-    #[case("case_2")]
-    #[case("case_3")]
-    #[case("case_4")]
-    fn serde_light_client_bootstrap_capella(#[case] case: &str) {
-        let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/capella/LightClientBootstrap/ssz_random/{case}/value.yaml"
-        ))
-        .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: LightClientBootstrapCapella = serde_json::from_value(value.clone()).unwrap();
-        let serialized = serde_json::to_value(content).unwrap();
-        assert_eq!(serialized, value);
-    }
-
-    #[rstest]
-    #[case("case_0")]
-    #[case("case_1")]
-    #[case("case_2")]
-    #[case("case_3")]
-    #[case("case_4")]
-    fn ssz_light_client_bootstrap_capella(#[case] case: &str) {
-        let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/capella/LightClientBootstrap/ssz_random/{case}/value.yaml"
-        ))
-        .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: LightClientBootstrapCapella = serde_json::from_value(value).unwrap();
-
-        let compressed = std::fs::read(format!(
-            "../test_assets/beacon/capella/LightClientBootstrap/ssz_random/{case}/serialized.ssz_snappy"
-        ))
-            .expect("cannot find test asset");
-        let mut decoder = snap::raw::Decoder::new();
-        let expected = decoder.decompress_vec(&compressed).unwrap();
-        LightClientBootstrap::from_ssz_bytes(&expected, ForkName::Capella).unwrap();
-        assert_eq!(content.as_ssz_bytes(), expected);
-    }
-
-    #[rstest]
-    #[case("case_0")]
-    #[case("case_1")]
-    fn serde_light_client_bootstrap_deneb(#[case] case: &str) {
-        let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/deneb/LightClientBootstrap/ssz_random/{case}/value.yaml"
-        ))
-        .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: LightClientBootstrapDeneb = serde_json::from_value(value.clone()).unwrap();
-        let serialized = serde_json::to_value(content).unwrap();
-        assert_eq!(serialized, value);
-    }
-
-    #[rstest]
-    #[case("case_0")]
-    #[case("case_1")]
-    fn ssz_light_client_bootstrap_deneb(#[case] case: &str) {
-        let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/deneb/LightClientBootstrap/ssz_random/{case}/value.yaml"
-        ))
-        .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: LightClientBootstrapDeneb = serde_json::from_value(value).unwrap();
-
-        let compressed = std::fs::read(format!(
-            "../test_assets/beacon/deneb/LightClientBootstrap/ssz_random/{case}/serialized.ssz_snappy"
-        ))
-            .expect("cannot find test asset");
-        let mut decoder = snap::raw::Decoder::new();
-        let expected = decoder.decompress_vec(&compressed).unwrap();
-        LightClientBootstrap::from_ssz_bytes(&expected, ForkName::Deneb).unwrap();
-        assert_eq!(content.as_ssz_bytes(), expected);
     }
 }
