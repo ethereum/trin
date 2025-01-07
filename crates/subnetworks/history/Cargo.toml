@@ -20,6 +20,7 @@ ethportal-api.workspace = true
 parking_lot.workspace = true
 portalnet.workspace = true
 serde_json.workspace = true
+ssz_types.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tree_hash.workspace = true
