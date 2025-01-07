@@ -304,20 +304,14 @@ jobs:
 workflows:
   merge-test:
     jobs:
-      - docker-build:
-          filters:
-            branches:
-              only: master
+      - docker-build
       - docker-publish:
           requires:
             - docker-build
           filters:
             branches:
               only: master
-      - docker-build-bridge:
-          filters:
-            branches:
-              only: master
+      - docker-build-bridge
       - docker-publish-bridge:
           requires:
             - docker-build-bridge
