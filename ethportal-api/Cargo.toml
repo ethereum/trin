@@ -31,7 +31,6 @@ hex.workspace = true
 jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"]}
 keccak-hash.workspace = true
 lazy_static.workspace = true
-nanotemplate = "0.3.0"
 once_cell = "1.17"
 quickcheck.workspace = true
 rand.workspace = true

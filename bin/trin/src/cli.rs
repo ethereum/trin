@@ -5,10 +5,9 @@ use clap::{
     arg,
     builder::ArgPredicate,
     error::{Error, ErrorKind},
-    Args, Parser, Subcommand,
+    Parser,
 };
 use ethportal_api::{
-    dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES},
     types::{
         network::Subnetwork,
         portal_wire::{NetworkSpec, MAINNET},
@@ -206,9 +205,6 @@ pub struct TrinConfig {
         default_value_t = DEFAULT_UTP_TRANSFER_LIMIT,
     )]
     pub utp_transfer_limit: usize,
-
-    #[command(subcommand)]
-    pub command: Option<TrinConfigCommands>,
 }
 
 impl Default for TrinConfig {
@@ -238,7 +234,6 @@ impl Default for TrinConfig {
             disable_poke: false,
             ws: false,
             ws_port: DEFAULT_WEB3_WS_PORT,
-            command: None,
             utp_transfer_limit: DEFAULT_UTP_TRANSFER_LIMIT,
             network: MAINNET.clone(),
         }
@@ -256,14 +251,6 @@ impl TrinConfig {
         T: Into<OsString> + Clone,
     {
         let config = Self::try_parse_from(args)?;
-
-        if let Some(TrinConfigCommands::CreateDashboard(dashboard_config)) = config.command {
-            if let Err(err) = create_dashboard(dashboard_config) {
-                panic!("Creating dashboard failed {err}");
-            }
-            // exit program since if the user uses create dashboard this is all we do
-            std::process::exit(0);
-        }
 
         match config.web3_transport {
             Web3TransportType::HTTP => {
@@ -414,52 +401,6 @@ impl fmt::Display for TrinConfig {
             .field("metrics_enabled", &self.enable_metrics_with_url.is_some())
             .finish()
     }
-}
-
-#[derive(Subcommand, Debug, Clone, PartialEq)]
-#[allow(clippy::enum_variant_names)]
-pub enum TrinConfigCommands {
-    CreateDashboard(DashboardConfig),
-}
-
-#[derive(Args, Debug, Default, Clone, PartialEq)]
-#[allow(clippy::enum_variant_names)]
-pub struct DashboardConfig {
-    #[arg(default_value = "http://localhost:3000")]
-    pub grafana_address: String,
-
-    #[arg(default_value = "admin")]
-    pub grafana_username: String,
-
-    #[arg(default_value = "admin")]
-    pub grafana_password: String,
-
-    #[arg(default_value = "http://host.docker.internal:9090")]
-    pub prometheus_address: String,
-}
-
-pub fn create_dashboard(
-    dashboard_config: DashboardConfig,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let grafana = GrafanaAPI::new(
-        dashboard_config.grafana_username,
-        dashboard_config.grafana_password,
-        dashboard_config.grafana_address,
-    );
-
-    let prometheus_uid = grafana.create_datasource(
-        "prometheus".to_string(),
-        "prometheus".to_string(),
-        dashboard_config.prometheus_address,
-    )?;
-
-    // Create a dashboard from each pre-defined template
-    for template_path in DASHBOARD_TEMPLATES {
-        let dashboard_url = grafana.create_dashboard(template_path, &prometheus_uid)?;
-        println!("Dashboard successfully created: {dashboard_url}");
-    }
-
-    Ok(())
 }
 
 impl TrinConfig {
@@ -713,33 +654,6 @@ mod tests {
             "010101010101010101010101010101010101010101010101010101010101010101",
         ])
         .unwrap();
-    }
-
-    #[test_log::test]
-    fn test_trin_with_create_dashboard() {
-        let config = TrinConfig::try_parse_from([
-            "trin",
-            "create-dashboard",
-            "http://localhost:8787",
-            "username",
-            "password",
-            "http://docker:9090",
-        ])
-        .unwrap();
-        if let Some(TrinConfigCommands::CreateDashboard(dashboard_config)) = config.command {
-            assert_eq!(
-                dashboard_config.grafana_address,
-                "http://localhost:8787".to_string()
-            );
-            assert_eq!(dashboard_config.grafana_username, "username".to_string());
-            assert_eq!(dashboard_config.grafana_password, "password".to_string());
-            assert_eq!(
-                dashboard_config.prometheus_address,
-                "http://docker:9090".to_string()
-            );
-        } else {
-            unreachable!("")
-        }
     }
 
     #[test_log::test]
