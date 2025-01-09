@@ -119,10 +119,10 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         // If we are using the portal network, we need to request updates for all periods one by one
         if &self.rpc.name() == "portal" {
             // Get expected current period
-            let current_perriod = calc_sync_period(expected_current_slot());
+            let current_period = calc_sync_period(expected_current_slot());
 
             // Create a range of periods to request updates for
-            let periods = bootstrap_period..current_perriod;
+            let periods = bootstrap_period..current_period;
 
             for period in periods {
                 let mut period_update = self.rpc.get_updates(period, 1).await?;
