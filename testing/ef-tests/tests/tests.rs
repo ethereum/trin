@@ -1,6 +1,6 @@
 #![cfg(feature = "ef-tests")]
 
-use ef_tests::{test_consensus_type, types::NetworkUpgrade};
+use ef_tests::test_consensus_type;
 use ethportal_api::{
     consensus::{
         beacon_block::{
@@ -22,6 +22,7 @@ use ethportal_api::{
             ExecutionPayloadHeaderBellatrix, ExecutionPayloadHeaderCapella,
             ExecutionPayloadHeaderDeneb, Withdrawal,
         },
+        fork::ForkName,
         header::BeaconBlockHeader,
         historical_summaries::HistoricalSummary,
         sync_committee::SyncCommittee,
@@ -44,71 +45,65 @@ use ethportal_api::{
 };
 
 // Generic types
-test_consensus_type!(Attestation, NetworkUpgrade::Bellatrix);
-test_consensus_type!(AttestationData, NetworkUpgrade::Bellatrix);
-test_consensus_type!(AttesterSlashing, NetworkUpgrade::Bellatrix);
-test_consensus_type!(BeaconBlockHeader, NetworkUpgrade::Bellatrix);
-test_consensus_type!(Checkpoint, NetworkUpgrade::Bellatrix);
-test_consensus_type!(Deposit, NetworkUpgrade::Bellatrix);
-test_consensus_type!(DepositData, NetworkUpgrade::Bellatrix);
-test_consensus_type!(Eth1Data, NetworkUpgrade::Bellatrix);
-test_consensus_type!(Fork, NetworkUpgrade::Bellatrix);
-test_consensus_type!(HistoricalBatch, NetworkUpgrade::Bellatrix);
-test_consensus_type!(IndexedAttestation, NetworkUpgrade::Bellatrix);
-test_consensus_type!(ProposerSlashing, NetworkUpgrade::Bellatrix);
-test_consensus_type!(SignedVoluntaryExit, NetworkUpgrade::Bellatrix);
-test_consensus_type!(SyncAggregate, NetworkUpgrade::Bellatrix);
-test_consensus_type!(SyncCommittee, NetworkUpgrade::Bellatrix);
-test_consensus_type!(Validator, NetworkUpgrade::Bellatrix);
-test_consensus_type!(VoluntaryExit, NetworkUpgrade::Bellatrix);
+test_consensus_type!(Attestation, ForkName::Bellatrix);
+test_consensus_type!(AttestationData, ForkName::Bellatrix);
+test_consensus_type!(AttesterSlashing, ForkName::Bellatrix);
+test_consensus_type!(BeaconBlockHeader, ForkName::Bellatrix);
+test_consensus_type!(Checkpoint, ForkName::Bellatrix);
+test_consensus_type!(Deposit, ForkName::Bellatrix);
+test_consensus_type!(DepositData, ForkName::Bellatrix);
+test_consensus_type!(Eth1Data, ForkName::Bellatrix);
+test_consensus_type!(Fork, ForkName::Bellatrix);
+test_consensus_type!(HistoricalBatch, ForkName::Bellatrix);
+test_consensus_type!(IndexedAttestation, ForkName::Bellatrix);
+test_consensus_type!(ProposerSlashing, ForkName::Bellatrix);
+test_consensus_type!(SignedVoluntaryExit, ForkName::Bellatrix);
+test_consensus_type!(SyncAggregate, ForkName::Bellatrix);
+test_consensus_type!(SyncCommittee, ForkName::Bellatrix);
+test_consensus_type!(Validator, ForkName::Bellatrix);
+test_consensus_type!(VoluntaryExit, ForkName::Bellatrix);
 
 // Bellatrix types
-test_consensus_type!(BeaconBlockBellatrix, NetworkUpgrade::Bellatrix);
-test_consensus_type!(BeaconBlockBodyBellatrix, NetworkUpgrade::Bellatrix);
-test_consensus_type!(BeaconStateBellatrix, NetworkUpgrade::Bellatrix);
-test_consensus_type!(ExecutionPayloadBellatrix, NetworkUpgrade::Bellatrix);
-test_consensus_type!(ExecutionPayloadHeaderBellatrix, NetworkUpgrade::Bellatrix);
-test_consensus_type!(LightClientBootstrapBellatrix, NetworkUpgrade::Bellatrix);
-test_consensus_type!(
-    LightClientFinalityUpdateBellatrix,
-    NetworkUpgrade::Bellatrix
-);
-test_consensus_type!(LightClientHeaderBellatrix, NetworkUpgrade::Bellatrix);
-test_consensus_type!(
-    LightClientOptimisticUpdateBellatrix,
-    NetworkUpgrade::Bellatrix
-);
-test_consensus_type!(LightClientUpdateBellatrix, NetworkUpgrade::Bellatrix);
-test_consensus_type!(SignedBeaconBlockBellatrix, NetworkUpgrade::Bellatrix);
+test_consensus_type!(BeaconBlockBellatrix, ForkName::Bellatrix);
+test_consensus_type!(BeaconBlockBodyBellatrix, ForkName::Bellatrix);
+test_consensus_type!(BeaconStateBellatrix, ForkName::Bellatrix);
+test_consensus_type!(ExecutionPayloadBellatrix, ForkName::Bellatrix);
+test_consensus_type!(ExecutionPayloadHeaderBellatrix, ForkName::Bellatrix);
+test_consensus_type!(LightClientBootstrapBellatrix, ForkName::Bellatrix);
+test_consensus_type!(LightClientFinalityUpdateBellatrix, ForkName::Bellatrix);
+test_consensus_type!(LightClientHeaderBellatrix, ForkName::Bellatrix);
+test_consensus_type!(LightClientOptimisticUpdateBellatrix, ForkName::Bellatrix);
+test_consensus_type!(LightClientUpdateBellatrix, ForkName::Bellatrix);
+test_consensus_type!(SignedBeaconBlockBellatrix, ForkName::Bellatrix);
 
 // Generic types added in Capella
-test_consensus_type!(BLSToExecutionChange, NetworkUpgrade::Capella);
-test_consensus_type!(HistoricalSummary, NetworkUpgrade::Capella);
-test_consensus_type!(SignedBLSToExecutionChange, NetworkUpgrade::Capella);
-test_consensus_type!(Withdrawal, NetworkUpgrade::Capella);
+test_consensus_type!(BLSToExecutionChange, ForkName::Capella);
+test_consensus_type!(HistoricalSummary, ForkName::Capella);
+test_consensus_type!(SignedBLSToExecutionChange, ForkName::Capella);
+test_consensus_type!(Withdrawal, ForkName::Capella);
 
 // Capella types
-test_consensus_type!(BeaconBlockCapella, NetworkUpgrade::Capella);
-test_consensus_type!(BeaconBlockBodyCapella, NetworkUpgrade::Capella);
-test_consensus_type!(BeaconStateCapella, NetworkUpgrade::Capella);
-test_consensus_type!(ExecutionPayloadCapella, NetworkUpgrade::Capella);
-test_consensus_type!(ExecutionPayloadHeaderCapella, NetworkUpgrade::Capella);
-test_consensus_type!(LightClientBootstrapCapella, NetworkUpgrade::Capella);
-test_consensus_type!(LightClientFinalityUpdateCapella, NetworkUpgrade::Capella);
-test_consensus_type!(LightClientHeaderCapella, NetworkUpgrade::Capella);
-test_consensus_type!(LightClientOptimisticUpdateCapella, NetworkUpgrade::Capella);
-test_consensus_type!(LightClientUpdateCapella, NetworkUpgrade::Capella);
-test_consensus_type!(SignedBeaconBlockCapella, NetworkUpgrade::Capella);
+test_consensus_type!(BeaconBlockCapella, ForkName::Capella);
+test_consensus_type!(BeaconBlockBodyCapella, ForkName::Capella);
+test_consensus_type!(BeaconStateCapella, ForkName::Capella);
+test_consensus_type!(ExecutionPayloadCapella, ForkName::Capella);
+test_consensus_type!(ExecutionPayloadHeaderCapella, ForkName::Capella);
+test_consensus_type!(LightClientBootstrapCapella, ForkName::Capella);
+test_consensus_type!(LightClientFinalityUpdateCapella, ForkName::Capella);
+test_consensus_type!(LightClientHeaderCapella, ForkName::Capella);
+test_consensus_type!(LightClientOptimisticUpdateCapella, ForkName::Capella);
+test_consensus_type!(LightClientUpdateCapella, ForkName::Capella);
+test_consensus_type!(SignedBeaconBlockCapella, ForkName::Capella);
 
 // Deneb types
-test_consensus_type!(BeaconBlockDeneb, NetworkUpgrade::Deneb);
-test_consensus_type!(BeaconBlockBodyDeneb, NetworkUpgrade::Deneb);
-test_consensus_type!(BeaconStateDeneb, NetworkUpgrade::Deneb);
-test_consensus_type!(ExecutionPayloadDeneb, NetworkUpgrade::Deneb);
-test_consensus_type!(ExecutionPayloadHeaderDeneb, NetworkUpgrade::Deneb);
-test_consensus_type!(LightClientBootstrapDeneb, NetworkUpgrade::Deneb);
-test_consensus_type!(LightClientFinalityUpdateDeneb, NetworkUpgrade::Deneb);
-test_consensus_type!(LightClientHeaderDeneb, NetworkUpgrade::Deneb);
-test_consensus_type!(LightClientOptimisticUpdateDeneb, NetworkUpgrade::Deneb);
-test_consensus_type!(LightClientUpdateDeneb, NetworkUpgrade::Deneb);
-test_consensus_type!(SignedBeaconBlockDeneb, NetworkUpgrade::Deneb);
+test_consensus_type!(BeaconBlockDeneb, ForkName::Deneb);
+test_consensus_type!(BeaconBlockBodyDeneb, ForkName::Deneb);
+test_consensus_type!(BeaconStateDeneb, ForkName::Deneb);
+test_consensus_type!(ExecutionPayloadDeneb, ForkName::Deneb);
+test_consensus_type!(ExecutionPayloadHeaderDeneb, ForkName::Deneb);
+test_consensus_type!(LightClientBootstrapDeneb, ForkName::Deneb);
+test_consensus_type!(LightClientFinalityUpdateDeneb, ForkName::Deneb);
+test_consensus_type!(LightClientHeaderDeneb, ForkName::Deneb);
+test_consensus_type!(LightClientOptimisticUpdateDeneb, ForkName::Deneb);
+test_consensus_type!(LightClientUpdateDeneb, ForkName::Deneb);
+test_consensus_type!(SignedBeaconBlockDeneb, ForkName::Deneb);

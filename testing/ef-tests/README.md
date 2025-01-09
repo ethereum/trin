@@ -41,6 +41,6 @@ Currently the main testing we are doing is the `ssz_static` tests which test
 - ssz decode
 - merkle root calculation
 
-Testing these is as easy as adding `test_consensus_type!(SignedBeaconBlockDeneb, NetworkUpgrade::Deneb);` and passing in the type and an enum for the network upgrade into the macro and it will generate tests for you.
+Testing these is as easy as adding `test_consensus_type!(SignedBeaconBlockDeneb, ForkName::Deneb);` and passing in the type and an enum for the network upgrade into the macro and it will generate tests for you.
 
 For testing more niche test cases it might not make sense to write a macro and in that case we can just write a traditional test case

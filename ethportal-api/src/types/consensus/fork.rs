@@ -43,6 +43,14 @@ impl ForkName {
             ForkName::Deneb => [0x6a, 0x95, 0xa1, 0xa9],
         }
     }
+
+    pub fn as_capitalized_str(&self) -> &'static str {
+        match self {
+            ForkName::Bellatrix => "Bellatrix",
+            ForkName::Capella => "Capella",
+            ForkName::Deneb => "Deneb",
+        }
+    }
 }
 
 impl FromStr for ForkName {

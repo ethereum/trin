@@ -23,12 +23,11 @@ macro_rules! test_consensus_type {
                 #[case("case_3")]
                 #[case("case_4")]
                 fn test_type(#[case] case: &str) -> anyhow::Result<()> {
-                    let network_upgrade = $network_upgrade.as_str();
-                    let struct_name_stripped = stringify!($struct_name).replace(network_upgrade, "");
+                    let struct_name_stripped = stringify!($struct_name).replace($network_upgrade.as_capitalized_str(), "");
 
                     let path = format!(
                         "mainnet/tests/mainnet/{}/ssz_static/{}/ssz_random/{case}/",
-                        network_upgrade.to_lowercase(), struct_name_stripped
+                        $network_upgrade.to_string(), struct_name_stripped
                     );
 
                     // Read and parse hash root
