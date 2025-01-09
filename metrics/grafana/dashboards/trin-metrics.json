@@ -26,14 +26,9 @@
   "graphTooltip": 0,
   "id": 2,
   "links": [],
-  "liveNow": false,
   "panels": [
     {
       "collapsed": false,
-      "datasource": {
-        "type": "datasource",
-        "uid": "grafana"
-      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -42,22 +37,13 @@
       },
       "id": 38,
       "panels": [],
-      "targets": [
-        {
-          "datasource": {
-            "type": "datasource",
-            "uid": "grafana"
-          },
-          "refId": "A"
-        }
-      ],
       "title": "Content Validation",
       "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -71,6 +57,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -109,8 +96,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -133,38 +119,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "sum(trin_validation_total{protocol=\"History\", success=\"false\"})",
+          "expr": "trin_validation_total{success=\"false\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "sum(trin_validation_total{protocol=\"Beacon\", success=\"false\"})",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -174,7 +144,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -188,6 +158,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -226,8 +197,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": [
           {
@@ -236,9 +206,7 @@
               "id": "byNames",
               "options": {
                 "mode": "exclude",
-                "names": [
-                  "Value"
-                ],
+                "names": ["Value"],
                 "prefix": "All except:",
                 "readOnly": true
               }
@@ -275,39 +243,23 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "sum(trin_validation_total{protocol=\"History\", success=\"true\"})",
+          "expr": "trin_validation_total{success=\"true\"}",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "sum(trin_validation_total{protocol=\"Beacon\", success=\"true\"})",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -316,10 +268,6 @@
     },
     {
       "collapsed": false,
-      "datasource": {
-        "type": "datasource",
-        "uid": "grafana"
-      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -328,22 +276,13 @@
       },
       "id": 25,
       "panels": [],
-      "targets": [
-        {
-          "datasource": {
-            "type": "datasource",
-            "uid": "grafana"
-          },
-          "refId": "A"
-        }
-      ],
       "title": "uTP",
       "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -357,6 +296,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -395,8 +335,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -419,38 +358,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_utp_active_streams{direction=\"inbound\", protocol=\"History\"}",
+          "expr": "trin_utp_active_streams{direction=\"inbound\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "sum(trin_utp_active_streams{direction=\"inbound\", protocol=\"Beacon\"})",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -460,7 +383,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -474,6 +397,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -512,8 +436,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -536,38 +459,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_utp_active_streams{direction=\"outbound\", protocol=\"History\"}",
+          "expr": "trin_utp_active_streams{direction=\"outbound\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_utp_active_streams{direction=\"outbound\", protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -577,7 +484,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -591,6 +498,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -629,8 +537,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -653,38 +560,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{outcome=\"failed data tx\", protocol=\"History\", direction=\"inbound\"}",
+          "expr": "trin_utp_outcome_total{outcome=\"failed data tx\", direction=\"inbound\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{outcome=\"failed data tx\", protocol=\"Beacon\", direction=\"inbound\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -694,7 +585,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -708,6 +599,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -746,8 +638,7 @@
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -770,38 +661,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"failed data tx\", protocol=\"History\"}",
+          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"failed data tx\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"failed data tx\", protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -811,7 +686,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -825,6 +700,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -855,16 +731,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -887,38 +761,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"inbound\", outcome=\"failed shutdown\", protocol=\"History\"}",
+          "expr": "trin_utp_outcome_total{direction=\"inbound\", outcome=\"failed shutdown\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"inbound\", outcome=\"failed shutdown\", protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -928,7 +786,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -942,6 +800,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -972,16 +831,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -1004,38 +861,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"failed shutdown\", protocol=\"History\"}",
+          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"failed shutdown\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"failed shutdown\", protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -1045,7 +886,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -1059,6 +900,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1089,16 +931,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -1121,38 +961,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{outcome=\"failed connection\", direction=\"inbound\", protocol=\"History\"}",
+          "expr": "trin_utp_outcome_total{outcome=\"failed connection\", direction=\"inbound\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{outcome=\"failed connection\", direction=\"inbound\", protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -1162,7 +986,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -1176,6 +1000,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1206,43 +1031,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
-        },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "Beacon"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
           }
-        ]
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 9,
@@ -1263,38 +1061,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"failed connection\", protocol=\"History\"}",
+          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"failed connection\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"failed connection\", protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -1304,7 +1086,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -1318,6 +1100,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1348,16 +1131,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -1380,38 +1161,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"inbound\", outcome=\"success\", protocol=\"History\"}",
+          "expr": "trin_utp_outcome_total{direction=\"inbound\", outcome=\"success\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"inbound\", outcome=\"success\", protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -1421,7 +1186,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -1435,6 +1200,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1465,16 +1231,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -1497,38 +1261,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"success\", protocol=\"History\"}",
+          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"success\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_utp_outcome_total{direction=\"outbound\", outcome=\"success\", protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -1537,10 +1285,6 @@
     },
     {
       "collapsed": false,
-      "datasource": {
-        "type": "datasource",
-        "uid": "grafana"
-      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1549,22 +1293,13 @@
       },
       "id": 19,
       "panels": [],
-      "targets": [
-        {
-          "datasource": {
-            "type": "datasource",
-            "uid": "grafana"
-          },
-          "refId": "A"
-        }
-      ],
       "title": "Messages",
       "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -1578,6 +1313,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1608,16 +1344,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -1640,38 +1374,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"ping\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "rate(trin_message_total{direction=\"received\", type=\"ping\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"ping\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -1681,7 +1399,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -1695,6 +1413,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1725,16 +1444,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -1757,38 +1474,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"ping\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "sum by(protocol) (rate(trin_message_total{direction=\"sent\", type=\"ping\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"ping\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -1798,7 +1499,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -1812,6 +1513,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1842,16 +1544,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -1874,38 +1574,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"pong\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "rate(trin_message_total{direction=\"received\", type=\"pong\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"pong\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -1915,7 +1599,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -1929,6 +1613,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1959,16 +1644,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -1991,38 +1674,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"pong\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "rate(trin_message_total{direction=\"sent\", type=\"pong\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"pong\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -2032,7 +1699,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -2046,6 +1713,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -2076,16 +1744,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -2108,38 +1774,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"find_nodes\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "rate(trin_message_total{direction=\"received\", type=\"find_nodes\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"find_nodes\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -2149,7 +1799,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -2163,6 +1813,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -2193,16 +1844,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -2225,38 +1874,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"find_nodes\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "sum by(protocol) (rate(trin_message_total{direction=\"sent\", type=\"find_nodes\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"find_nodes\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -2266,7 +1899,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -2280,6 +1913,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -2310,16 +1944,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -2342,38 +1974,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"nodes\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "rate(trin_message_total{direction=\"received\", type=\"nodes\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"nodes\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -2383,7 +1999,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -2397,6 +2013,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -2427,16 +2044,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -2459,38 +2074,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"nodes\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "rate(trin_message_total{direction=\"sent\", type=\"nodes\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"nodes\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -2500,7 +2099,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -2514,6 +2113,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -2544,43 +2144,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
-        },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "trin-ams3-11"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
           }
-        ]
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -2601,38 +2174,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"find_content\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "rate(trin_message_total{direction=\"received\", type=\"find_content\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"find_content\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -2642,7 +2199,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -2656,6 +2213,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -2686,16 +2244,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -2718,38 +2274,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"find_content\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "sum by(protocol) (rate(trin_message_total{direction=\"sent\", type=\"find_content\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"find_content\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -2759,7 +2299,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -2773,6 +2313,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -2803,16 +2344,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -2835,38 +2374,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"content\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "sum by(protocol) (rate(trin_message_total{direction=\"received\", type=\"content\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"received\", type=\"content\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -2876,7 +2399,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -2890,6 +2413,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -2920,16 +2444,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -2952,38 +2474,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"content\", protocol=\"History\"}[$__rate_interval])",
+          "expr": "rate(trin_message_total{direction=\"sent\", type=\"content\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "rate(trin_message_total{direction=\"sent\", type=\"content\", protocol=\"Beacon\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": false,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -2992,10 +2498,6 @@
     },
     {
       "collapsed": false,
-      "datasource": {
-        "type": "datasource",
-        "uid": "grafana"
-      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -3004,22 +2506,13 @@
       },
       "id": 17,
       "panels": [],
-      "targets": [
-        {
-          "datasource": {
-            "type": "datasource",
-            "uid": "grafana"
-          },
-          "refId": "A"
-        }
-      ],
       "title": "Storage",
       "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "description": "total number of storage entries",
       "fieldConfig": {
@@ -3034,6 +2527,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -3064,8 +2558,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3073,7 +2566,7 @@
               }
             ]
           },
-          "unitScale": true
+          "unit": "sishort"
         },
         "overrides": []
       },
@@ -3096,38 +2589,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_entry_count{protocol=\"History\"}",
+          "expr": "trin_entry_count",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_entry_count{protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -3137,7 +2614,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "description": "the fraction of the whole data ring covered by the data radius",
       "fieldConfig": {
@@ -3152,6 +2629,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -3182,16 +2660,14 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          },
-          "unitScale": true
+          }
         },
         "overrides": []
       },
@@ -3214,38 +2690,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_radius_ratio{protocol=\"History\"}",
+          "expr": "trin_radius_ratio",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_radius_ratio{protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -3255,7 +2715,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "description": "sum of size of individual content stored, in bytes",
       "fieldConfig": {
@@ -3270,6 +2730,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -3300,8 +2761,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3309,8 +2769,7 @@
               }
             ]
           },
-          "unit": "decbytes",
-          "unitScale": true
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -3333,38 +2792,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_content_storage_usage_bytes{protocol=\"History\"}",
+          "expr": "trin_content_storage_usage_bytes",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_content_storage_usage_bytes{protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -3374,7 +2817,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "description": "full on-disk database size, in bytes",
       "fieldConfig": {
@@ -3389,6 +2832,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -3419,8 +2863,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3428,8 +2871,7 @@
               }
             ]
           },
-          "unit": "decbytes",
-          "unitScale": true
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -3452,38 +2894,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_total_storage_usage_bytes{protocol=\"History\"}",
+          "expr": "trin_total_storage_usage_bytes",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_total_storage_usage_bytes{protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -3493,7 +2919,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "description": "user-defined limit on storage usage",
       "fieldConfig": {
@@ -3508,6 +2934,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -3538,8 +2965,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3547,35 +2973,9 @@
               }
             ]
           },
-          "unit": "decbytes",
-          "unitScale": true
+          "unit": "decbytes"
         },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "trin-ams3-10-History"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -3596,38 +2996,22 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "trin_storage_capacity_bytes{protocol=\"History\"}",
+          "expr": "trin_storage_capacity_bytes",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "History",
+          "legendFormat": "{{protocol}}",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "{prometheus_uid}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "trin_storage_capacity_bytes{protocol=\"Beacon\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Beacon",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -3637,7 +3021,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "{prometheus_uid}"
+        "uid": "trinprom"
       },
       "fieldConfig": {
         "defaults": {
@@ -3651,6 +3035,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -3681,13 +3066,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
-          "unit": "s",
-          "unitScale": true
+          "unit": "s"
         },
         "overrides": []
       },
@@ -3710,15 +3093,16 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.4.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "{prometheus_uid}"
+            "uid": "trinprom"
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "rate(trin_storage_process_timer_sum[1m])/rate(trin_storage_process_timer_count[1m])",
+          "expr": "rate(trin_storage_process_timer_sum[$__rate_interval])/rate(trin_storage_process_timer_count[$__rate_interval])",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
@@ -3740,13 +3124,13 @@
     "list": []
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Trin Metrics",
   "uid": "trin-metrics",
-  "version": 2,
+  "version": 1,
   "weekStart": ""
 }
