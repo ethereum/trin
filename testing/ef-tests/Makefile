@@ -6,17 +6,18 @@ LATEST_RELEASE_URL = https://api.github.com/repos/ethereum/consensus-spec-tests/
 
 all: test
 
-$(EXTRACT_DIR): $(TARGET)
+extract_test_data: download_test_data
 	@if [ -d $(EXTRACT_DIR) ]; then \
 		echo "$(EXTRACT_DIR) already exists. Skipping extraction."; \
 	else \
 		echo "Extracting $(TARGET) into $(EXTRACT_DIR)..."; \
 		mkdir -p $(EXTRACT_DIR); \
 		tar -xzf $(TARGET) -C $(EXTRACT_DIR); \
+		rm -f $(TARGET); \
 		echo "Extraction complete."; \
 	fi
 
-$(TARGET):
+download_test_data:
 	@if [ -f $(TARGET) ]; then \
 		echo "$(TARGET) already downloaded. Skipping download."; \
 	else \
@@ -29,7 +30,7 @@ $(TARGET):
 		echo "$(TARGET) downloaded successfully."; \
 	fi
 
-test: $(EXTRACT_DIR)
+test: extract_test_data
 	@echo "Running tests..."
 	@cargo test --features ef-tests
 	@echo "Tests complete."
