@@ -222,10 +222,10 @@ jobs:
       - setup-and-restore-sccache-cache
       - run:
           name: Test Trin workspace
-          command: cargo test --workspace -- --nocapture
+          command: make test
       - run:
           name: Test Consensus spec tests
-          command: cd testing/ef-tests && make test
+          command: make ef-tests
       - save-sccache-cache
   # 'cargo check' performs all the compilation without actually building the crate, so it is quicker for the same guarantee
   check-workspace-crates:
