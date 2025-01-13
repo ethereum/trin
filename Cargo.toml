@@ -6,6 +6,7 @@ members = [
     "crates/evm",
     "crates/light-client",
     "crates/metrics",
+    "crates/portalnet",
     "crates/rpc",
     "crates/storage",
     "crates/subnetworks/beacon",
