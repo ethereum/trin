@@ -424,7 +424,7 @@ mod tests {
     #[test_log::test]
     fn post_shanghai_header() {
         let body =
-            std::fs::read_to_string("../test_assets/mainnet/block_17034871_value.json").unwrap();
+            std::fs::read_to_string("../../test_assets/mainnet/block_17034871_value.json").unwrap();
         let response: Value = serde_json::from_str(&body).unwrap();
         let header: Header = serde_json::from_value(response["result"].clone()).unwrap();
         let expected_hash = B256::from_slice(
@@ -502,7 +502,7 @@ mod tests {
     #[case("19433903")]
     fn post_dencun_header(#[case] case: &str) {
         let body =
-            std::fs::read_to_string(format!("../test_assets/mainnet/block_{case}_value.json"))
+            std::fs::read_to_string(format!("../../test_assets/mainnet/block_{case}_value.json"))
                 .unwrap();
         let response: Value = serde_json::from_str(&body).unwrap();
         let header: Header = serde_json::from_value(response["result"].clone()).unwrap();

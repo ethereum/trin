@@ -90,7 +90,7 @@ that the data is canonical.
 ## Accumulator distribution
 
 The Accumulator is built once and then distributed in Trin (and other clients). It does not
-change over time and so can be incorporated into the `trin-validation` (`./trin-validation/src/assets`) and
+change over time and so can be incorporated into the `trin-validation` (`./crates/validation/src/assets`) and
 included in binary releases.
 
 The History network contains individual epoch hashes from the Master Accumulator and

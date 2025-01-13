@@ -413,16 +413,16 @@ mod tests {
     use super::*;
 
     #[rstest::rstest]
-    #[case::era1("../test_assets/era1/mainnet-00000-5ec1ffb8.era1")]
-    #[case::era1("../test_assets/era1/mainnet-00001-a5364e9a.era1")]
+    #[case::era1("../../test_assets/era1/mainnet-00000-5ec1ffb8.era1")]
+    #[case::era1("../../test_assets/era1/mainnet-00001-a5364e9a.era1")]
     // epoch #10 contains txs
-    #[case::era1("../test_assets/era1/mainnet-00010-5f5d4516.era1")]
+    #[case::era1("../../test_assets/era1/mainnet-00010-5f5d4516.era1")]
     // this is a test era1 file that has been amended for size purposes,
     // since era1 files that contain typed txs are quite large.
     // it was created by copying the `mainnet-01600-c6a9ee35.era1` file
     // - the first 10 block tuples are included, unchanged
     // - the following 8182 block tuples contain empty bodies and receipts
-    #[case::era1("../test_assets/era1/test-mainnet-01600-xxxxxxxx.era1")]
+    #[case::era1("../../test_assets/era1/test-mainnet-01600-xxxxxxxx.era1")]
     fn test_era1(#[case] path: &str) {
         let era1 = Era1::read_from_file(path.to_string()).unwrap();
         let actual = era1.write().unwrap();
@@ -433,9 +433,9 @@ mod tests {
     }
 
     #[rstest::rstest]
-    #[case("../test_assets/era1/mainnet-00000-5ec1ffb8.era1", 0)]
-    #[case("../test_assets/era1/mainnet-00001-a5364e9a.era1", 8192)]
-    #[case("../test_assets/era1/mainnet-00010-5f5d4516.era1", 81920)]
+    #[case("../../test_assets/era1/mainnet-00000-5ec1ffb8.era1", 0)]
+    #[case("../../test_assets/era1/mainnet-00001-a5364e9a.era1", 8192)]
+    #[case("../../test_assets/era1/mainnet-00010-5f5d4516.era1", 81920)]
     fn test_era1_index(#[case] path: &str, #[case] index: u64) {
         let era1 = Era1::read_from_file(path.to_string()).unwrap();
         assert_eq!(era1.block_index.block_index.starting_number, index);

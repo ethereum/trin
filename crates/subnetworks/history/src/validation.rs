@@ -132,9 +132,8 @@ mod tests {
     use super::*;
 
     fn get_header_with_proof_ssz() -> Vec<u8> {
-        let file =
-            fs::read_to_string("../trin-validation/src/assets/fluffy/header_with_proofs.json")
-                .unwrap();
+        let file = fs::read_to_string("../../validation/src/assets/fluffy/header_with_proofs.json")
+            .unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
         let raw_header = json.get("1000001").unwrap().as_object().unwrap();

@@ -5,23 +5,11 @@
 !Cargo.lock
 !Cargo.toml
 !/bin
-!/e2store
-!/ethportal-api
+!/crates
 !/ethportal-peertest
-!/light-client
-!/portalnet
 !/portal-bridge
-!/rpc
-!/src
-!/trin-beacon
-!/trin-evm
+!/testing
 !/trin-execution
-!/trin-history
-!/trin-metrics
-!/trin-state
-!/trin-storage
-!/trin-utils
-!/trin-validation
 !/utp-testing
 
 # include for vergen constants

@@ -67,8 +67,7 @@ mod test {
     #[test]
     fn header_with_proof_encode_decode_fluffy() {
         let file =
-            fs::read_to_string("../trin-validation/src/assets/fluffy/header_with_proofs.json")
-                .unwrap();
+            fs::read_to_string("../validation/src/assets/fluffy/header_with_proofs.json").unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
         for (block_num, obj) in json {
