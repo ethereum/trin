@@ -28,6 +28,7 @@ use portal_bridge::census::Census;
 use portalnet::{constants::DEFAULT_WEB3_HTTP_ADDRESS, overlay::protocol::OverlayProtocol};
 use ssz_types::BitList;
 use tracing::{info, warn};
+use trin_metrics::downloader::DownloaderMetricsReporter;
 
 use crate::{storage::HistoryStorage, validation::ChainHistoryValidator};
 
@@ -57,6 +58,7 @@ pub struct Downloader {
     pub census: Census,
     pub overlay_arc:
         Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, HistoryStorage>>,
+    pub metrics: DownloaderMetricsReporter,
 }
 
 impl Downloader {
@@ -74,10 +76,13 @@ impl Downloader {
             .map_err(|e| e.to_string())
             .expect("Failed to build http client");
 
+        let metrics = DownloaderMetricsReporter::new();
+
         let census = Census::new(http_client, CENSUS_ENR_LIMIT, vec![]);
         Self {
             overlay_arc,
             census,
+            metrics,
         }
     }
 
@@ -119,6 +124,7 @@ impl Downloader {
         let mut futures = Vec::new();
 
         for (block_number, block_hash) in batch {
+            self.metrics.report_current_block(block_number);
             let block_body_content_key = generate_block_body_content_key(block_hash.clone());
             futures.push(self.find_content(
                 block_body_content_key,
