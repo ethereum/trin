@@ -16,8 +16,8 @@ members = [
     "portal-bridge",
     "testing/ef-tests",
     "testing/ethportal-peertest",
+    "testing/utp",
     "trin-execution",
-    "utp-testing",
 ]
 
 default-members = ["bin/trin"]
