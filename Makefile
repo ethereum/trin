@@ -137,6 +137,9 @@ ef-tests: extract_test_data ## Runs Ethereum Foundation tests.
 test: ## Runs workspace tests.
 	cargo test --workspace -- --nocapture
 
+.PHONY: test-full
+test-full: test ef-tests ## Runs all tests.
+
 ##@ Other
 
 .PHONY: clean
