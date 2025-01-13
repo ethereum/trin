@@ -13,9 +13,9 @@ members = [
     "crates/subnetworks/state",
     "crates/utils",
     "crates/validation",    
-    "ethportal-peertest",
     "portal-bridge",
     "testing/ef-tests",
+    "testing/ethportal-peertest",
     "trin-execution",
     "utp-testing",
 ]

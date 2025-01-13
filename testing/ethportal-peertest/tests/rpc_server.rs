@@ -11,20 +11,19 @@ use alloy::{
     transports::RpcError,
 };
 use ethportal_api::{
-    types::{
-        cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH},
-        execution::{block_body::BlockBody, header_with_proof::HeaderWithProof},
-    },
+    types::execution::{block_body::BlockBody, header_with_proof::HeaderWithProof},
     utils::bytes::{hex_decode, hex_encode},
     ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use jsonrpsee::async_client::Client;
+use portalnet::constants::DEFAULT_WEB3_IPC_PATH;
 use rpc::RpcServerHandle;
 use serde_yaml::Value;
 use serial_test::serial;
 use ssz::Decode;
 
 mod utils;
+use trin::cli::TrinConfig;
 use utils::init_tracing;
 
 async fn setup_web3_server() -> (RpcServerHandle, RootProvider<PubSubFrontend>, Client) {
@@ -313,7 +312,7 @@ fn assert_header(actual: &RpcHeader, expected: &Header) {
 }
 
 fn get_full_block() -> (HeaderWithProof, BlockBody) {
-    let file = fs::read_to_string("crates/validation/src/assets/hive/blocks.yaml").unwrap();
+    let file = fs::read_to_string("../../crates/validation/src/assets/hive/blocks.yaml").unwrap();
     let value: Value = serde_yaml::from_str(&file).unwrap();
     let all_blocks = value.as_sequence().unwrap();
     let post_shanghai = all_blocks.last().unwrap();
