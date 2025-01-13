@@ -222,7 +222,10 @@ jobs:
       - setup-and-restore-sccache-cache
       - run:
           name: Test Trin workspace
-          command: cargo test --workspace -- --nocapture
+          command: make test
+      - run:
+          name: Test Consensus spec tests
+          command: make ef-tests
       - save-sccache-cache
   # 'cargo check' performs all the compilation without actually building the crate, so it is quicker for the same guarantee
   check-workspace-crates:
@@ -232,7 +235,7 @@ jobs:
     # parallelism level should be set to the amount of simulators we have or greater
     # The reason for this is the CI code currently only supports 1 input at a time
     # if we have a parallelism level of 5 and 6 sims one test runner will get 2 test sims and fail
-    parallelism: 18
+    parallelism: 19
     steps:
       - checkout
       - run:

@@ -28,7 +28,7 @@ use crate::{
 };
 
 type MaxBlobCommitmentsPerBlock = U4096;
-type MaxBlsToExecutionChanges = U16;
+type MaxBLSToExecutionChanges = U16;
 pub type KzgCommitments = VariableList<KzgCommitment, MaxBlobCommitmentsPerBlock>;
 
 /// Types based off specs @
@@ -70,7 +70,7 @@ pub struct BeaconBlockBody {
     pub execution_payload: ExecutionPayloadDeneb,
     #[superstruct(only(Capella, Deneb))]
     pub bls_to_execution_changes:
-        VariableList<SignedBlsToExecutionChange, MaxBlsToExecutionChanges>,
+        VariableList<SignedBLSToExecutionChange, MaxBLSToExecutionChanges>,
     #[superstruct(only(Deneb))]
     pub blob_kzg_commitments: KzgCommitments,
 }
@@ -222,105 +222,15 @@ pub struct Eth1Data {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Encode, Decode, TreeHash)]
-pub struct SignedBlsToExecutionChange {
-    pub message: BlsToExecutionChange,
+pub struct SignedBLSToExecutionChange {
+    pub message: BLSToExecutionChange,
     pub signature: BlsSignature,
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Encode, Decode, TreeHash)]
-pub struct BlsToExecutionChange {
+pub struct BLSToExecutionChange {
     #[serde(deserialize_with = "as_u64")]
     pub validator_index: u64,
     pub from_bls_pubkey: PubKey,
     pub to_execution_address: Address,
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod test {
-    use std::str::FromStr;
-
-    use ::ssz::Encode;
-    use rstest::rstest;
-    use serde_json::Value;
-
-    use super::*;
-
-    /// Test vectors sourced from:
-    /// https://github.com/ethereum/consensus-spec-tests/commit/c6e69469a75392b35169bc6234d4d3e6c4e288da
-    #[rstest]
-    #[case("case_0")]
-    #[case("case_1")]
-    #[case("case_2")]
-    #[case("case_3")]
-    #[case("case_4")]
-    fn serde(#[case] case: &str) {
-        let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/bellatrix/BeaconBlockBody/ssz_random/{case}/value.yaml"
-        ))
-        .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let body: BeaconBlockBodyBellatrix = serde_json::from_value(value.clone()).unwrap();
-        let serialized = serde_json::to_value(body).unwrap();
-        assert_eq!(serialized, value);
-    }
-
-    #[rstest]
-    #[case("case_0")]
-    #[case("case_1")]
-    #[case("case_2")]
-    #[case("case_3")]
-    #[case("case_4")]
-    fn ssz(#[case] case: &str) {
-        let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/bellatrix/BeaconBlockBody/ssz_random/{case}/value.yaml"
-        ))
-        .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let body: BeaconBlockBodyBellatrix = serde_json::from_value(value).unwrap();
-
-        let compressed = std::fs::read(format!(
-            "../test_assets/beacon/bellatrix/BeaconBlockBody/ssz_random/{case}/serialized.ssz_snappy"
-        ))
-        .expect("cannot find test asset");
-        let mut decoder = snap::raw::Decoder::new();
-        let expected = decoder.decompress_vec(&compressed).unwrap();
-        BeaconBlockBody::from_ssz_bytes(&expected, ForkName::Bellatrix).unwrap();
-        assert_eq!(body.as_ssz_bytes(), expected);
-    }
-
-    #[test]
-    fn block_body_execution_payload_proof() {
-        let value = std::fs::read_to_string(
-            "../test_assets/beacon/bellatrix/BeaconBlockBody/ssz_random/case_0/value.yaml",
-        )
-        .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let content: BeaconBlockBodyBellatrix = serde_json::from_value(value).unwrap();
-        let expected_execution_payload_proof = [
-            "0xf5bf9e85dce9cc5f1edbed4085bf4e37da4ddec337483f847cc451f296ff0799",
-            "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
-            "0xdb56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d71",
-            "0x38373fc5d635131b9054c0a97cf1eeb397621f2f6e54ffc54f5f2516088b87d9",
-        ]
-        .map(|x| B256::from_str(x).unwrap());
-        let proof = content.build_execution_payload_proof();
-
-        assert_eq!(proof.len(), 4);
-        assert_eq!(proof, expected_execution_payload_proof.to_vec());
-
-        let mut expected_block_hash_proof = [
-            "0x7ffe241ea60187fdb0187bfa22de35d1f9bed7ab061d9401fd47e34a54fbede1",
-            "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
-            "0xf00e3441849a7e4228e6f48d5a5b231e153b39cb2ef283febdd9f7df1f777551",
-            "0x6911c0b766b06671612d77e8f3061320f2a3471c2ba8d3f8251b53da8efb111a",
-        ]
-        .map(|x| B256::from_str(x).unwrap())
-        .to_vec();
-        let proof = content.build_execution_block_hash_proof();
-        expected_block_hash_proof.extend(expected_execution_payload_proof);
-
-        assert_eq!(proof.len(), 8);
-        assert_eq!(proof, expected_block_hash_proof);
-    }
 }

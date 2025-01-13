@@ -8,6 +8,7 @@ members = [
     "trin-metrics",
     "portal-bridge",
     "rpc",
+    "testing/ef-tests",
     "trin-beacon",
     "trin-evm",
     "trin-execution",
@@ -46,6 +47,8 @@ directories = "3.0"
 discv5 = { version = "0.4.1", features = ["serde"] }
 env_logger = "0.9.0"
 eth_trie = "0.5.0"
+ethereum_hashing = "0.7.0"
+ethereum_serde_utils = "0.7.0"
 ethereum_ssz = "0.7.1"
 ethereum_ssz_derive = "0.7.1"
 futures = "0.3.23"

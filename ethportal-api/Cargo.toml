@@ -23,8 +23,8 @@ c-kzg = "1.0.0"
 const_format = {version = "0.2.0", features = ["rust_1_64"]}
 discv5.workspace = true
 eth_trie.workspace = true
-ethereum_hashing = "0.7.0"
-ethereum_serde_utils = "0.7.0"
+ethereum_hashing.workspace = true
+ethereum_serde_utils.workspace = true
 ethereum_ssz.workspace = true
 ethereum_ssz_derive.workspace = true
 hex.workspace = true

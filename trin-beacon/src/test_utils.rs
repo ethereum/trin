@@ -15,7 +15,7 @@ use ethportal_api::{
         ForkVersionedLightClientUpdate,
     },
 };
-use serde_json::Value;
+use ssz::Decode;
 use tree_hash::TreeHash;
 
 // Valid number range for the test cases is 0..=1
@@ -87,12 +87,14 @@ pub fn get_light_client_optimistic_update(number: u8) -> ForkVersionedLightClien
 }
 
 pub fn get_history_summaries_with_proof() -> (ForkVersionedHistoricalSummariesWithProof, B256) {
-    let value = std::fs::read_to_string(
-        "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/value.yaml",
+    let value = std::fs::read(
+        "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/serialized.ssz_snappy",
     )
     .expect("cannot find test asset");
-    let value: Value = serde_yaml::from_str(&value).unwrap();
-    let beacon_state: BeaconStateDeneb = serde_json::from_value(value).unwrap();
+    let mut decoder = snap::raw::Decoder::new();
+    let value = decoder.decompress_vec(&value).unwrap();
+    let beacon_state = BeaconStateDeneb::from_ssz_bytes(&value).unwrap();
+
     let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
     let historical_summaries_state_proof =
         HistoricalSummariesStateProof::from(historical_summaries_proof);

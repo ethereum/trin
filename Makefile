@@ -16,12 +16,12 @@ PROFILE ?= release
 CARGO_INSTALL_EXTRA_FLAGS ?=
 
 .PHONY: lint
-lint: # Run clippy and rustfmt
+lint: ## Run clippy and rustfmt
 	cargo +nightly fmt --all
 	cargo clippy --all --all-targets --all-features --no-deps -- --deny warnings
 
 .PHONY: lint-unstable
-lint-unstable: #run clippy, rustfmt and rustc lints with unstable features. expect errors, which cannot be resolved, so the user must step through and evaluate each one manually.
+lint-unstable: ## run clippy, rustfmt and rustc lints with unstable features. expect errors, which cannot be resolved, so the user must step through and evaluate each one manually.
 	cargo +nightly fmt --all
 	cargo clippy --all --all-targets --all-features --no-deps -- -Wclippy::cargo
 	RUSTFLAGS="-W unused_crate_dependencies" cargo build
@@ -96,6 +96,49 @@ build-release-tarballs: ## Create a series of `.tar.gz` files in the BIN_DIR dir
 	$(call tarball_release_binary,"aarch64-unknown-linux-gnu","trin","")
 	$(MAKE) build-x86_64-pc-windows-gnu
 	$(call tarball_release_binary,"x86_64-pc-windows-gnu","trin.exe","")
+
+##@ Tests
+
+EF_TESTS_TARGET = mainnet.tar.gz
+EF_TESTS_DIR = ./testing/ef-tests/mainnet
+LATEST_RELEASE_URL = https://api.github.com/repos/ethereum/consensus-spec-tests/releases/latest
+
+download_test_data:
+	@if [ -d $(EF_TESTS_DIR) ]; then \
+		echo "$(EF_TESTS_DIR) already downloaded. Skipping download."; \
+	else \
+		echo "Fetching the latest release URL for $(EF_TESTS_TARGET)..."; \
+		curl -s $(LATEST_RELEASE_URL) \
+		| grep "browser_download_url.*$(EF_TESTS_TARGET)" \
+		| cut -d : -f 2,3 \
+		| tr -d \" \
+		| wget -qi -; \
+		echo "$(EF_TESTS_TARGET) downloaded successfully."; \
+	fi
+
+extract_test_data: download_test_data
+	@if [ -d $(EF_TESTS_DIR) ]; then \
+		echo "$(EF_TESTS_DIR) already exists. Skipping extraction."; \
+	else \
+		echo "Extracting $(EF_TESTS_TARGET) into $(EF_TESTS_DIR)..."; \
+		mkdir -p $(EF_TESTS_DIR); \
+		tar -xzf $(EF_TESTS_TARGET) -C $(EF_TESTS_DIR); \
+		rm -f $(EF_TESTS_TARGET); \
+		echo "Extraction complete."; \
+	fi
+
+.PHONY: ef-tests
+ef-tests: extract_test_data ## Runs Ethereum Foundation tests.
+	@echo "Running tests..."
+	@cargo test -p ef-tests --features ef-tests
+	@echo "Tests complete."
+
+.PHONY: test
+test: ## Runs workspace tests.
+	cargo test --workspace -- --nocapture
+
+.PHONY: test-full
+test-full: test ef-tests ## Runs all tests.
 
 ##@ Other
 
