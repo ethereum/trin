@@ -309,7 +309,11 @@ impl<
                                 self.metrics.report_inbound_response(&response);
                                 self.process_response(response, request.destination, request.request, request.query_id, request.request_permit)
                             }
-                            Err(error) => self.process_request_failure(response.request_id, request.destination, error),
+                            Err(error) => {
+                                // Metric repord failed request
+                                self.metrics.report_failed_outbound_request(&request.request);
+                                self.process_request_failure(response.request_id, request.destination, error)
+                            },
                         }
 
                     } else {
