@@ -548,140 +548,141 @@ impl ContentValue for BeaconContentValue {
 
 #[cfg(test)]
 mod test {
-    use std::fs;
+    use std::{fs, str::FromStr};
 
+    use alloy::primitives::Bytes;
     use serde::Deserialize;
+    use serde_yaml::Value;
 
     use super::*;
 
-    #[test]
-    fn light_client_bootstrap_encode_decode() {
-        let file = fs::read_to_string(
-            "../../test_assets/portalnet/content/beacon/light_client_bootstrap.json",
-        )
+    #[rstest::rstest]
+    #[case("capella", 6718368)]
+    #[case("deneb", 10248000)]
+    fn light_client_bootstrap_encode_decode(#[case] fork_name: &str, #[case] expected_slot: u64) {
+        let file = fs::read_to_string(format!(
+            "./../../portal-spec-tests/tests/mainnet/beacon_chain/light_client/{fork_name}/bootstrap.yaml",
+        ))
         .unwrap();
-        let json: serde_json::Value = serde_json::from_str(&file).unwrap();
-        let json = json.as_object().unwrap();
-        for (slot_num, obj) in json {
-            let slot_num: u64 = slot_num.parse().unwrap();
-            let content_key = BeaconContentKey::deserialize(&obj["content_key"]).unwrap();
-            let content_bytes = RawContentValue::deserialize(&obj["content_value"]).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_key, &content_bytes).unwrap();
 
-            match &beacon_content {
-                BeaconContentValue::LightClientBootstrap(value) => {
-                    assert_eq!(
-                        slot_num,
-                        value.bootstrap.header_capella().unwrap().beacon.slot
-                    );
-                }
-                _ => panic!("Invalid beacon content type!"),
+        let value: Value = serde_yaml::from_str(&file).unwrap();
+        let content_key: BeaconContentKey =
+            serde_yaml::from_value(value["content_key"].clone()).unwrap();
+        let raw_content_value = Bytes::from_str(value["content_value"].as_str().unwrap()).unwrap();
+        let content_value = BeaconContentValue::decode(&content_key, raw_content_value.as_ref())
+            .expect("unable to decode content value");
+
+        assert_str_roundtrip(content_key, content_value.clone());
+
+        match content_value {
+            BeaconContentValue::LightClientBootstrap(value) => {
+                assert_eq!(expected_slot, value.get_slot());
             }
-
-            assert_eq!(content_bytes, beacon_content.encode());
-
-            assert_str_roundtrip(content_key, beacon_content);
+            _ => panic!("Invalid beacon content type!"),
         }
     }
 
-    #[test]
-    fn light_client_updates_by_range_encode_decode() {
-        let file = fs::read_to_string(
-            "../../test_assets/portalnet/content/beacon/light_client_updates_by_range.json",
-        )
+    #[rstest::rstest]
+    #[case("capella", 6684738)]
+    #[case("deneb", 10240088)]
+    fn light_client_updates_by_range_encode_decode(
+        #[case] fork_name: &str,
+        #[case] expected_slot: u64,
+    ) {
+        let file = fs::read_to_string(format!(
+            "./../../portal-spec-tests/tests/mainnet/beacon_chain/light_client/{fork_name}/updates.yaml",
+        ))
         .unwrap();
-        let json: serde_json::Value = serde_json::from_str(&file).unwrap();
-        let json = json.as_object().unwrap();
-        for (slot_num, obj) in json {
-            let slot_num: u64 = slot_num.parse().unwrap();
-            let content_key = BeaconContentKey::deserialize(&obj["content_key"]).unwrap();
-            let content_bytes = RawContentValue::deserialize(&obj["content_value"]).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_key, &content_bytes).unwrap();
 
-            match &beacon_content {
-                BeaconContentValue::LightClientUpdatesByRange(updates) => {
-                    assert_eq!(
-                        slot_num,
-                        updates[0]
-                            .update
-                            .attested_header_capella()
-                            .unwrap()
-                            .beacon
-                            .slot
-                    );
-                    assert_eq!(updates.len(), 4)
-                }
-                _ => panic!("Invalid beacon content type!"),
-            }
+        let value: Value = serde_yaml::from_str(&file).unwrap();
+        let content_key: BeaconContentKey =
+            serde_yaml::from_value(value["content_key"].clone()).unwrap();
+        let raw_content_value = Bytes::from_str(value["content_value"].as_str().unwrap()).unwrap();
+        let content_value = BeaconContentValue::decode(&content_key, raw_content_value.as_ref())
+            .expect("unable to decode content value");
 
-            assert_eq!(content_bytes, beacon_content.encode());
+        assert_str_roundtrip(content_key, content_value.clone());
 
-            assert_str_roundtrip(content_key, beacon_content);
-        }
+        let update = match content_value {
+            BeaconContentValue::LightClientUpdatesByRange(value) => value[0].update.clone(),
+            _ => panic!("Invalid beacon content type!"),
+        };
+        let actual_slot = match fork_name {
+            "capella" => update.attested_header_capella().unwrap().beacon.slot,
+            "deneb" => update.attested_header_deneb().unwrap().beacon.slot,
+            _ => panic!("Invalid fork name!"),
+        };
+        assert_eq!(actual_slot, expected_slot);
+    }
+
+    #[rstest::rstest]
+    #[case("capella", 6718463)]
+    #[case("deneb", 10248457)]
+    fn light_client_optimistic_update_encode_decode(
+        #[case] fork_name: &str,
+        #[case] expected_slot: u64,
+    ) {
+        let file = fs::read_to_string(format!(
+            "./../../portal-spec-tests/tests/mainnet/beacon_chain/light_client/{fork_name}/optimistic_update.yaml",
+        ))
+        .unwrap();
+
+        let value: Value = serde_yaml::from_str(&file).unwrap();
+        let content_key: BeaconContentKey =
+            serde_yaml::from_value(value["content_key"].clone()).unwrap();
+        let raw_content_value = Bytes::from_str(value["content_value"].as_str().unwrap()).unwrap();
+        let content_value = BeaconContentValue::decode(&content_key, raw_content_value.as_ref())
+            .expect("unable to decode content value");
+
+        assert_str_roundtrip(content_key, content_value.clone());
+
+        let update = match content_value {
+            BeaconContentValue::LightClientOptimisticUpdate(value) => value.update,
+            _ => panic!("Invalid beacon content type!"),
+        };
+        let actual_slot = match fork_name {
+            "capella" => update.attested_header_capella().unwrap().beacon.slot,
+            "deneb" => update.attested_header_deneb().unwrap().beacon.slot,
+            _ => panic!("Invalid fork name!"),
+        };
+        assert_eq!(actual_slot, expected_slot);
+    }
+
+    #[rstest::rstest]
+    #[case("capella", 6718463)]
+    #[case("deneb", 10248453)]
+    fn light_client_finality_update_encode_decode(
+        #[case] fork_name: &str,
+        #[case] expected_slot: u64,
+    ) {
+        let file = fs::read_to_string(format!(
+            "./../../portal-spec-tests/tests/mainnet/beacon_chain/light_client/{fork_name}/finality_update.yaml"
+        ))
+        .unwrap();
+
+        let value: Value = serde_yaml::from_str(&file).unwrap();
+        let content_key: BeaconContentKey =
+            serde_yaml::from_value(value["content_key"].clone()).unwrap();
+        let raw_content_value = Bytes::from_str(value["content_value"].as_str().unwrap()).unwrap();
+        let content_value = BeaconContentValue::decode(&content_key, raw_content_value.as_ref())
+            .expect("unable to decode content value");
+
+        assert_str_roundtrip(content_key, content_value.clone());
+
+        let update = match content_value {
+            BeaconContentValue::LightClientFinalityUpdate(value) => value.update,
+            _ => panic!("Invalid beacon content type!"),
+        };
+        let actual_slot = match fork_name {
+            "capella" => update.attested_header_capella().unwrap().beacon.slot,
+            "deneb" => update.attested_header_deneb().unwrap().beacon.slot,
+            _ => panic!("Invalid fork name!"),
+        };
+        assert_eq!(actual_slot, expected_slot);
     }
 
     #[test]
-    fn light_client_optimistic_update_encode_decode() {
-        let file = fs::read_to_string(
-            "../../test_assets/portalnet/content/beacon/light_client_optimistic_update.json",
-        )
-        .unwrap();
-        let json: serde_json::Value = serde_json::from_str(&file).unwrap();
-        let json = json.as_object().unwrap();
-        for (slot_num, obj) in json {
-            let slot_num: u64 = slot_num.parse().unwrap();
-            let content_key = BeaconContentKey::deserialize(&obj["content_key"]).unwrap();
-            let content_bytes = RawContentValue::deserialize(&obj["content_value"]).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_key, &content_bytes).unwrap();
-
-            match &beacon_content {
-                BeaconContentValue::LightClientOptimisticUpdate(value) => {
-                    assert_eq!(
-                        slot_num,
-                        value.update.attested_header_capella().unwrap().beacon.slot
-                    );
-                }
-                _ => panic!("Invalid beacon content type!"),
-            }
-
-            assert_eq!(content_bytes, beacon_content.encode());
-
-            assert_str_roundtrip(content_key, beacon_content);
-        }
-    }
-
-    #[test]
-    fn light_client_finality_update_encode_decode() {
-        let file = fs::read_to_string(
-            "../../test_assets/portalnet/content/beacon/light_client_finality_update.json",
-        )
-        .unwrap();
-        let json: serde_json::Value = serde_json::from_str(&file).unwrap();
-        let json = json.as_object().unwrap();
-        for (slot_num, obj) in json {
-            let slot_num: u64 = slot_num.parse().unwrap();
-            let content_key = BeaconContentKey::deserialize(&obj["content_key"]).unwrap();
-            let content_bytes = RawContentValue::deserialize(&obj["content_value"]).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_key, &content_bytes).unwrap();
-
-            match &beacon_content {
-                BeaconContentValue::LightClientFinalityUpdate(value) => {
-                    assert_eq!(
-                        slot_num,
-                        value.update.attested_header_capella().unwrap().beacon.slot
-                    );
-                }
-                _ => panic!("Invalid beacon content type!"),
-            }
-
-            assert_eq!(content_bytes, beacon_content.encode());
-
-            assert_str_roundtrip(content_key, beacon_content);
-        }
-    }
-
-    #[test]
-    fn historical_summaries_with_proof_encode_decode() {
+    fn deneb_historical_summaries_with_proof_encode_decode() {
         let file = fs::read_to_string("./../../portal-spec-tests/tests/mainnet/beacon_chain/historical_summaries_with_proof/deneb/historical_summaries_with_proof.yaml").unwrap();
         let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let content_key = BeaconContentKey::deserialize(&value["content_key"]).unwrap();
