@@ -116,20 +116,21 @@ fn read_fixture(file_name: &str) -> (HistoryContentKey, HistoryContentValue) {
 /// History HeaderWithProof content key & value
 /// Block #1000010
 pub fn fixture_header_by_hash_1000010() -> (HistoryContentKey, HistoryContentValue) {
-    read_fixture("portal-spec-tests/tests/mainnet/history/headers_with_proof/1000010.yaml")
+    read_fixture("../../portal-spec-tests/tests/mainnet/history/headers_with_proof/1000010.yaml")
 }
 
 /// History HeaderByHash content key & value
 /// Block #14764013 (pre-merge)
 pub fn fixture_header_by_hash() -> (HistoryContentKey, HistoryContentValue) {
-    read_fixture("portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.yaml")
+    read_fixture("../../portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.yaml")
 }
 
 /// History HeaderByNumber content key & value
 /// Block #14764013 (pre-merge)
 pub fn fixture_header_by_number() -> (HistoryContentKey, HistoryContentValue) {
-    let (_, content_value) =
-        read_fixture("portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.yaml");
+    let (_, content_value) = read_fixture(
+        "../../portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.yaml",
+    );
 
     // Create a content key from the block number
     let HistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value.clone() else {
@@ -144,13 +145,13 @@ pub fn fixture_header_by_number() -> (HistoryContentKey, HistoryContentValue) {
 /// History BlockBody content key & value
 /// Block #14764013 (pre-merge)
 pub fn fixture_block_body() -> (HistoryContentKey, HistoryContentValue) {
-    read_fixture("portal-spec-tests/tests/mainnet/history/bodies/14764013.yaml")
+    read_fixture("../../portal-spec-tests/tests/mainnet/history/bodies/14764013.yaml")
 }
 
 /// History Receipts content key & value
 /// Block #14764013 (pre-merge)
 pub fn fixture_receipts() -> (HistoryContentKey, HistoryContentValue) {
-    read_fixture("portal-spec-tests/tests/mainnet/history/receipts/14764013.yaml")
+    read_fixture("../../portal-spec-tests/tests/mainnet/history/receipts/14764013.yaml")
 }
 
 enum DependentType {
@@ -208,7 +209,7 @@ fn read_binary_history_fixture(
     dependent: Option<DependentType>,
 ) -> (HistoryContentKey, HistoryContentValue) {
     let header_value = std::fs::read(format!(
-        "test_assets/mainnet/large_content/{block_number}/header.bin"
+        "../../test_assets/mainnet/large_content/{block_number}/header.bin"
     ))
     .unwrap();
     let header_content_value: HeaderWithProof =
@@ -217,7 +218,7 @@ fn read_binary_history_fixture(
     match dependent {
         Some(dependent_type) => {
             let dependent_value = std::fs::read(format!(
-                "test_assets/mainnet/large_content/{block_number}/{dependent_type}.bin"
+                "../../test_assets/mainnet/large_content/{block_number}/{dependent_type}.bin"
             ))
             .unwrap();
             match dependent_type {
@@ -296,15 +297,19 @@ fn read_state_fixture(file_name: &str) -> Vec<StateFixture> {
 }
 
 pub fn fixtures_state_account_trie_node() -> Vec<StateFixture> {
-    read_state_fixture("portal-spec-tests/tests/mainnet/state/validation/account_trie_node.yaml")
+    read_state_fixture(
+        "../../portal-spec-tests/tests/mainnet/state/validation/account_trie_node.yaml",
+    )
 }
 
 pub fn fixtures_state_contract_storage_trie_node() -> Vec<StateFixture> {
     read_state_fixture(
-        "portal-spec-tests/tests/mainnet/state/validation/contract_storage_trie_node.yaml",
+        "../../portal-spec-tests/tests/mainnet/state/validation/contract_storage_trie_node.yaml",
     )
 }
 
 pub fn fixtures_state_contract_bytecode() -> Vec<StateFixture> {
-    read_state_fixture("portal-spec-tests/tests/mainnet/state/validation/contract_bytecode.yaml")
+    read_state_fixture(
+        "../../portal-spec-tests/tests/mainnet/state/validation/contract_bytecode.yaml",
+    )
 }

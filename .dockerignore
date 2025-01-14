@@ -6,7 +6,6 @@
 !Cargo.toml
 !/bin
 !/crates
-!/ethportal-peertest
 !/portal-bridge
 !/testing
 !/trin-execution

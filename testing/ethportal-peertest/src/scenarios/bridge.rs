@@ -22,7 +22,7 @@ use crate::{
 pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient) {
     let header_oracle = HeaderOracle::default();
     let epoch_acc_path = "validation_assets/epoch_acc.bin".into();
-    let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());
+    let mode = BridgeMode::Test("./../../test_assets/portalnet/bridge_data.json".into());
     // url doesn't matter, we're not making any requests
     let client_url = Url::parse("http://www.null.com").unwrap();
     let execution_api = ExecutionApi::new(
@@ -54,7 +54,7 @@ pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient
 }
 
 pub async fn test_beacon_bridge(peertest: &Peertest, portal_client: &HttpClient) {
-    let mode = BridgeMode::Test("./test_assets/portalnet/beacon_bridge_data.yaml".into());
+    let mode = BridgeMode::Test("./../../test_assets/portalnet/beacon_bridge_data.yaml".into());
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
     // url doesn't matter, we're not making any requests
@@ -69,7 +69,7 @@ pub async fn test_beacon_bridge(peertest: &Peertest, portal_client: &HttpClient)
     let bridge = BeaconBridge::new(consensus_api, mode, portal_client.clone());
     bridge.launch().await;
 
-    let value = std::fs::read_to_string("./test_assets/portalnet/beacon_bridge_data.yaml")
+    let value = std::fs::read_to_string("./../../test_assets/portalnet/beacon_bridge_data.yaml")
         .expect("cannot find test asset");
     let value: Value = serde_yaml::from_str(&value).unwrap();
     let content_key = BeaconContentKey::deserialize(&value[0]["content_key"]).unwrap();
