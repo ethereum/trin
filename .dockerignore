@@ -6,7 +6,6 @@
 !Cargo.toml
 !/bin
 !/crates
-!/portal-bridge
 !/testing
 !/trin-execution
 
