@@ -6,11 +6,9 @@
 !Cargo.toml
 !/bin
 !/crates
-!/ethportal-peertest
 !/portal-bridge
 !/testing
 !/trin-execution
-!/utp-testing
 
 # include for vergen constants
 !/.git

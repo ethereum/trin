@@ -6,6 +6,7 @@ members = [
     "crates/evm",
     "crates/light-client",
     "crates/metrics",
+    "crates/portalnet",
     "crates/rpc",
     "crates/storage",
     "crates/subnetworks/beacon",
@@ -13,11 +14,11 @@ members = [
     "crates/subnetworks/state",
     "crates/utils",
     "crates/validation",    
-    "ethportal-peertest",
     "portal-bridge",
     "testing/ef-tests",
+    "testing/ethportal-peertest",
+    "testing/utp",
     "trin-execution",
-    "utp-testing",
 ]
 
 default-members = ["bin/trin"]

@@ -4,16 +4,15 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
-use ethportal_api::types::{
-    cli::{TrinConfig, DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH},
-    network::{Network, Subnetwork},
-};
+use ethportal_api::types::network::{Network, Subnetwork};
 use ethportal_peertest as peertest;
 use ethportal_peertest::Peertest;
 use jsonrpsee::{async_client::Client, http_client::HttpClient};
+use portalnet::constants::{DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
 use rpc::RpcServerHandle;
 use serial_test::serial;
 use tokio::time::{sleep, Duration};
+use trin::cli::TrinConfig;
 
 mod utils;
 
