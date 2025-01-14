@@ -7,7 +7,6 @@
 !/bin
 !/crates
 !/testing
-!/trin-execution
 
 # include for vergen constants
 !/.git

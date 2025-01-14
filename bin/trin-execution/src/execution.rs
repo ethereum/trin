@@ -176,7 +176,7 @@ mod tests {
         let mut trin_execution = TrinExecution::new(temp_directory.path(), StateConfig::default())
             .await
             .unwrap();
-        let raw_era1 = fs::read("../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
+        let raw_era1 = fs::read("../../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
         let processed_era = process_era1_file(raw_era1, 0).unwrap();
         for block in processed_era.blocks {
             trin_execution.process_next_block().await.unwrap();
