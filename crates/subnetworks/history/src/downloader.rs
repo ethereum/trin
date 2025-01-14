@@ -11,7 +11,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Error};
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
     types::{
@@ -23,17 +23,23 @@ use ethportal_api::{
     BlockBodyKey, BlockReceiptsKey, ContentValue, HistoryContentKey, HistoryContentValue,
     OverlayContentKey,
 };
-use futures::future::join_all;
+use futures::{channel::oneshot, future::join_all};
 use portal_bridge::census::Census;
-use portalnet::{constants::DEFAULT_WEB3_HTTP_ADDRESS, overlay::protocol::OverlayProtocol};
+use portalnet::{
+    constants::DEFAULT_WEB3_HTTP_ADDRESS,
+    overlay::{command::OverlayCommand, protocol::OverlayProtocol},
+};
 use ssz_types::BitList;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use trin_metrics::downloader::DownloaderMetricsReporter;
 
 use crate::{storage::HistoryStorage, validation::ChainHistoryValidator};
 
 /// The number of blocks to download in a single batch.
-const BATCH_SIZE: usize = 100;
+const BATCH_SIZE: usize = 30;
+/// Enable census  with full view of the network and peer scoring to find peers to download content
+/// from.
+const CENSUS: bool = true;
 /// The max number of ENRs to send FindContent queries to.
 const CENSUS_ENR_LIMIT: usize = 4;
 /// The path to the CSV file with block numbers and block hashes.
@@ -55,7 +61,7 @@ impl Display for ContentType {
 
 #[derive(Clone)]
 pub struct Downloader {
-    pub census: Census,
+    pub census: Option<Census>,
     pub overlay_arc:
         Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, HistoryStorage>>,
     pub metrics: DownloaderMetricsReporter,
@@ -78,7 +84,15 @@ impl Downloader {
 
         let metrics = DownloaderMetricsReporter::new();
 
-        let census = Census::new(http_client, CENSUS_ENR_LIMIT, vec![]);
+        let mut census = None;
+
+        if CENSUS {
+            info!("Census enabled");
+            census = Some(Census::new(http_client, CENSUS_ENR_LIMIT, vec![]));
+        } else {
+            info!("Census disabled");
+        }
+
         Self {
             overlay_arc,
             census,
@@ -86,7 +100,7 @@ impl Downloader {
         }
     }
 
-    pub async fn start(mut self) -> io::Result<()> {
+    pub async fn start(self) -> io::Result<()> {
         // set the csv path to a file in the root trin-history directory
         info!("Opening CSV file");
         let csv_path = Path::new(CSV_PATH);
@@ -98,13 +112,15 @@ impl Downloader {
         // skip the header of the csv file
         let lines = &lines[1..];
         let blocks: Vec<(u64, String)> = lines.iter().map(|line| parse_line(line)).collect();
-        // Initialize the census with the history subnetwork
-        let _ = Some(
-            self.census
-                .init([Subnetwork::History])
-                .await
-                .expect("Failed to initialize Census"),
-        );
+        // Initialize the census with the history subnetwork if enabled
+        if let Some(mut census) = self.census.clone() {
+            let _ = Some(
+                census
+                    .init([Subnetwork::History])
+                    .await
+                    .expect("Failed to initialize Census"),
+            );
+        }
 
         info!("Processing blocks");
         let batches = blocks.chunks(BATCH_SIZE);
@@ -147,9 +163,25 @@ impl Downloader {
         block_number: u64,
         content_type: ContentType,
     ) -> anyhow::Result<()> {
+        if CENSUS {
+            self.find_content_census(&content_key, block_number, content_type)
+                .await
+        } else {
+            self.recursive_find_content(content_key, block_number, content_type)
+                .await
+        }
+    }
+
+    /// Send FindContent queries to the interested peers in the census, includes peers scoring
+    async fn find_content_census(
+        &self,
+        content_key: &HistoryContentKey,
+        block_number: u64,
+        content_type: ContentType,
+    ) -> Result<(), Error> {
+        let census = self.census.clone().expect("census should be enabled");
         // Select interested peers from the census
-        let enrs = self
-            .census
+        let enrs = census
             .select_peers(Subnetwork::History, &content_key.content_id())
             .expect("Failed to select peers");
         // Send FindContent query to the interested peers
@@ -184,7 +216,7 @@ impl Downloader {
                         content_type = %content_type,
                         "Received ConnectionId content"
                     );
-                    self.census.record_offer_result(
+                    census.record_offer_result(
                         Subnetwork::History,
                         enr.node_id(),
                         0,
@@ -194,7 +226,7 @@ impl Downloader {
                     continue;
                 }
                 Content::Content(content_bytes) => {
-                    let content = HistoryContentValue::decode(&content_key, &content_bytes);
+                    let content = HistoryContentValue::decode(content_key, &content_bytes);
 
                     match content {
                         Ok(_) => {
@@ -203,7 +235,7 @@ impl Downloader {
                                 content_type = %content_type,
                                 "Received content from peer"
                             );
-                            self.census.record_offer_result(
+                            census.record_offer_result(
                                 Subnetwork::History,
                                 enr.node_id(),
                                 content_bytes.len(),
@@ -220,7 +252,7 @@ impl Downloader {
                                 content_type = %content_type,
                                 "Failed to parse content from peer, invalid content"
                             );
-                            self.census.record_offer_result(
+                            census.record_offer_result(
                                 Subnetwork::History,
                                 enr.node_id(),
                                 0,
@@ -238,7 +270,7 @@ impl Downloader {
                         content_type = %content_type,
                         "Received Enrs content, content not found from peer"
                     );
-                    self.census.record_offer_result(
+                    census.record_offer_result(
                         Subnetwork::History,
                         enr.node_id(),
                         0,
@@ -255,6 +287,58 @@ impl Downloader {
             "Failed to find content for block"
         );
         Err(anyhow!("Failed to find content for block"))
+    }
+
+    /// Send recursive FindContent queries to the overlay service
+    async fn recursive_find_content(
+        &self,
+        content_key: HistoryContentKey,
+        block_number: u64,
+        content_type: ContentType,
+    ) -> anyhow::Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        let overlay_command = OverlayCommand::FindContentQuery {
+            target: content_key.clone(),
+            callback: tx,
+            config: Default::default(),
+        };
+
+        if let Err(err) = self.overlay_arc.command_tx.send(overlay_command) {
+            warn!(
+                error = %err,
+                block_number = block_number,
+                content_type = %content_type,
+                "Error submitting FindContent query to service"
+            );
+        }
+        match rx.await {
+            Ok(result) => match result {
+                Ok(result) => {
+                    HistoryContentValue::decode(&content_key, &result.0)?;
+                    info!(block_number = block_number, "Downloaded content for block");
+                    Ok(())
+                }
+                Err(err) => {
+                    error!(
+                        block_number = block_number,
+                        content_type = %content_type,
+                        error = %err,
+                        "Error in FindContent query"
+                    );
+                    Err(anyhow!("Error in FindContent query: {:?}", err))
+                }
+            },
+            Err(err) => {
+                error!(
+                    block_number = block_number,
+                    content_type = %content_type,
+                    error = %err,
+                    "Error receiving FindContent query response"
+                );
+                Err(err.into())
+            }
+        }
     }
 }
 
