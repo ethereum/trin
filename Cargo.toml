@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "bin/portal-bridge",
     "bin/trin", 
     "crates/ethportal-api",
     "crates/e2store",
@@ -14,7 +15,6 @@ members = [
     "crates/subnetworks/state",
     "crates/utils",
     "crates/validation",    
-    "portal-bridge",
     "testing/ef-tests",
     "testing/ethportal-peertest",
     "testing/utp",
@@ -101,7 +101,7 @@ utp-rs = { tag = "v0.1.0-alpha.14", git = "https://github.com/ethereum/utp" }
 e2store = { path = "crates/e2store" }
 ethportal-api = { path = "crates/ethportal-api" }
 light-client = { path = "crates/light-client" }
-portal-bridge = { path = "portal-bridge" }
+portal-bridge = { path = "bin/portal-bridge" }
 portalnet = { path = "crates/portalnet" }
 rpc = { path = "crates/rpc"}
 trin = { path = "bin/trin"}

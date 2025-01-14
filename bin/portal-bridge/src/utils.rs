@@ -228,10 +228,11 @@ mod tests {
 
     #[test]
     fn test_read_test_assets_from_file_json() {
-        let assets: HistoryTestAssets =
-            read_test_assets_from_file(PathBuf::from("../test_assets/portalnet/bridge_data.json"))
-                .into_history_assets()
-                .unwrap();
+        let assets: HistoryTestAssets = read_test_assets_from_file(PathBuf::from(
+            "../../test_assets/portalnet/bridge_data.json",
+        ))
+        .into_history_assets()
+        .unwrap();
         let content_key =
             HistoryContentKey::deserialize(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
         let content_value =
@@ -243,10 +244,11 @@ mod tests {
 
     #[test]
     fn test_read_test_assets_from_file_yaml() {
-        let assets: HistoryTestAssets =
-            read_test_assets_from_file(PathBuf::from("../test_assets/portalnet/bridge_data.yaml"))
-                .into_history_assets()
-                .unwrap();
+        let assets: HistoryTestAssets = read_test_assets_from_file(PathBuf::from(
+            "../../test_assets/portalnet/bridge_data.yaml",
+        ))
+        .into_history_assets()
+        .unwrap();
         let content_key =
             HistoryContentKey::deserialize(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
         let content_value =
