@@ -35,7 +35,7 @@ WORKDIR /app
 
 # copy build artifacts from build stage
 COPY --from=builder /app/target/release/trin /usr/bin/
-COPY --from=builder /app/trin-execution/resources /resources
+COPY --from=builder /app/bin/trin-execution/resources /resources
 COPY --from=builder /app/target/release/portal-bridge /usr/bin/
 
 RUN apt-get update && apt-get install libcurl4 -y

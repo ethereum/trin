@@ -2,6 +2,7 @@
 members = [
     "bin/portal-bridge",
     "bin/trin", 
+    "bin/trin-execution",
     "crates/ethportal-api",
     "crates/e2store",
     "crates/evm",
@@ -18,7 +19,6 @@ members = [
     "testing/ef-tests",
     "testing/ethportal-peertest",
     "testing/utp",
-    "trin-execution",
 ]
 
 default-members = ["bin/trin"]
@@ -107,7 +107,7 @@ rpc = { path = "crates/rpc"}
 trin = { path = "bin/trin"}
 trin-beacon = { path = "crates/subnetworks/beacon" }
 trin-evm = { path = "crates/evm" }
-trin-execution = { path = "trin-execution" }
+trin-execution = { path = "bin/trin-execution" }
 trin-history = { path = "crates/subnetworks/history" }
 trin-metrics = { path = "crates/metrics" }
 trin-state = { path = "crates/subnetworks/state" }

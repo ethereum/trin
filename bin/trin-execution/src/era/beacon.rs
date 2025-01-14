@@ -206,7 +206,7 @@ mod tests {
     #[tokio::test]
     async fn process_beacon_block() {
         let signed_beacon_block_for_execution_block_15537397 =
-            std::fs::read("../test_assets/beacon/bellatrix/ValidSignedBeaconBlock/signed_beacon_block_15537397.ssz").unwrap();
+            std::fs::read("../../test_assets/beacon/bellatrix/ValidSignedBeaconBlock/signed_beacon_block_15537397.ssz").unwrap();
         let signed_beacon_block = SignedBeaconBlock::from_ssz_bytes(
             &signed_beacon_block_for_execution_block_15537397,
             ForkName::Bellatrix,
