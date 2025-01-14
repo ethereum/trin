@@ -284,14 +284,14 @@ jobs:
           command: cargo build --workspace --release
       - run:
           name: Move docker artifacts
-          command: mv -t utp-testing/docker/circleci/ target/release/utp-test-app utp-testing/docker/run_endpoint.sh utp-testing/docker/setup.sh
+          command: mv -t testing/utp/docker/circleci/ target/release/utp-test-app testing/utp/docker/run_endpoint.sh testing/utp/docker/setup.sh
       - run:
           name: Build uTP Test App container
-          command: docker build -t test-utp --no-cache utp-testing/docker/circleci/
+          command: docker build -t test-utp --no-cache testing/utp/docker/circleci/
       - run:
           name: Run Test App with network simulator
           # Dropping packets from both sides of the stream to test dealing with lost packets
-          command: SCENARIO="droplist --delay=15ms --bandwidth=10Mbps --queue=25 --drops_to_server=3,5,7 --drops_to_client=6,8" docker-compose -f utp-testing/docker/docker-compose.yml up -d
+          command: SCENARIO="droplist --delay=15ms --bandwidth=10Mbps --queue=25 --drops_to_server=3,5,7 --drops_to_client=6,8" docker-compose -f testing/utp/docker/docker-compose.yml up -d
       - run:
           name: Wait all containers to start
           command: sleep 5
@@ -303,7 +303,7 @@ jobs:
           command: RUST_LOG=debug ./target/release/utp-test-suite
       - run:
           name: Stop containers
-          command: docker-compose -f utp-testing/docker/docker-compose.yml down
+          command: docker-compose -f testing/utp/docker/docker-compose.yml down
 workflows:
   merge-test:
     jobs:

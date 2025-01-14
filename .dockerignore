@@ -9,7 +9,6 @@
 !/portal-bridge
 !/testing
 !/trin-execution
-!/utp-testing
 
 # include for vergen constants
 !/.git
