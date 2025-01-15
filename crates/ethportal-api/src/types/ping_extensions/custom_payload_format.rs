@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{
@@ -33,7 +34,7 @@ impl TryFrom<CustomPayload> for CustomPayloadExtensionsFormat {
 
     fn try_from(value: CustomPayload) -> Result<Self, Self::Error> {
         CustomPayloadExtensionsFormat::from_ssz_bytes(&value.payload)
-            .map_err(|e| anyhow::anyhow!("Failed to decode CustomPayloadExtensionsFormat: {:?}", e))
+            .map_err(|err| anyhow!("Failed to decode CustomPayloadExtensionsFormat: {err:?}"))
     }
 }
 

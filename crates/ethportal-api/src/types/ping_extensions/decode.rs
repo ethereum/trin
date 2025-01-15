@@ -1,4 +1,4 @@
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use ssz::Decode;
 
 use super::{
@@ -48,25 +48,23 @@ impl TryFrom<CustomPayload> for DecodedExtension {
                 let capabilities =
                     ClientInfoRadiusCapabilities::from_ssz_bytes(&ping_custom_payload.payload)
                         .map_err(|err| {
-                            anyhow::anyhow!(
-                                "Failed to decode ClientInfoRadiusCapabilities: {err:?}"
-                            )
+                            anyhow!("Failed to decode ClientInfoRadiusCapabilities: {err:?}")
                         })?;
                 Ok(DecodedExtension::Capabilities(capabilities))
             }
             Extensions::BasicRadius => {
                 let basic_radius = BasicRadius::from_ssz_bytes(&ping_custom_payload.payload)
-                    .map_err(|err| anyhow::anyhow!("Failed to decode BasicRadius: {err:?}"))?;
+                    .map_err(|err| anyhow!("Failed to decode BasicRadius: {err:?}"))?;
                 Ok(DecodedExtension::BasicRadius(basic_radius))
             }
             Extensions::HistoryRadius => {
                 let history_radius = HistoryRadius::from_ssz_bytes(&ping_custom_payload.payload)
-                    .map_err(|err| anyhow::anyhow!("Failed to decode HistoryRadius: {err:?}"))?;
+                    .map_err(|err| anyhow!("Failed to decode HistoryRadius: {err:?}"))?;
                 Ok(DecodedExtension::HistoryRadius(history_radius))
             }
             Extensions::Error => {
                 let error = PingError::from_ssz_bytes(&ping_custom_payload.payload)
-                    .map_err(|err| anyhow::anyhow!("Failed to decode PingError: {err:?}"))?;
+                    .map_err(|err| anyhow!("Failed to decode PingError: {err:?}"))?;
                 Ok(DecodedExtension::Error(error))
             }
         }

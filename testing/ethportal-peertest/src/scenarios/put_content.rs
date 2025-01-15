@@ -1,7 +1,8 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use ethportal_api::{
-    jsonrpsee::async_client::Client, ContentValue, Discv5ApiClient, HistoryNetworkApiClient,
+    jsonrpsee::async_client::Client, version::APP_NAME, ContentValue, Discv5ApiClient,
+    HistoryNetworkApiClient,
 };
 use tracing::info;
 use trin::cli::TrinConfig;
@@ -350,7 +351,7 @@ fn fresh_node_config() -> (String, TrinConfig) {
     let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
     let fresh_ipc_path = format!("/tmp/trin-jsonrpc-{test_discovery_port}.ipc");
     let trin_config = TrinConfig::new_from([
-        "trin",
+        APP_NAME,
         "--portal-subnetworks",
         "history",
         "--external-address",

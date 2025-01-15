@@ -1,3 +1,5 @@
+pub mod handlers;
+
 use std::marker::Sync;
 
 use discv5::{enr::NodeId, rpc::RequestId};
@@ -19,6 +21,7 @@ use ethportal_api::{
     },
     OverlayContentKey,
 };
+use handlers::{handle_basic_radius, handle_capabilities, handle_history_radius};
 use tracing::{trace, warn};
 use trin_storage::ContentStore;
 use trin_validation::validator::Validator;
@@ -33,7 +36,7 @@ use crate::{
     types::node::Node,
 };
 
-/// Implementation of the `OverlayService` for handing Ping and Pong Extension's.
+/// Implementation of the `OverlayService` for handling Ping and Pong Extensions.
 impl<
         TContentKey: 'static + OverlayContentKey + Send + Sync,
         TMetric: Metric + Send + Sync,
@@ -117,7 +120,7 @@ impl<
                     protocol = %self.protocol,
                     request.source = %source,
                     request.discv5.id = %request_id,
-                    "Received invalid Ping message, Error's should only be received from pong",
+                    "Received invalid Ping message, Errors should only be received from pong",
                 );
                 PingError::new(ErrorCodes::SystemError).into()
             }
@@ -163,13 +166,13 @@ impl<
 
             let node = match extension {
                 DecodedExtension::Capabilities(radius_capabilities) => {
-                    self.handle_capabilities(radius_capabilities, node)
+                    handle_capabilities(radius_capabilities, node, self.protocol)
                 }
                 DecodedExtension::BasicRadius(basic_radius) => {
-                    self.handle_basic_radius(basic_radius, node)
+                    handle_basic_radius(basic_radius, node)
                 }
                 DecodedExtension::HistoryRadius(history_radius) => {
-                    self.handle_history_radius(history_radius, node)
+                    handle_history_radius(history_radius, node)
                 }
                 DecodedExtension::Error(ping_error) => {
                     warn!(
@@ -230,13 +233,13 @@ impl<
 
             let node = match extension {
                 DecodedExtension::Capabilities(radius_capabilities) => {
-                    self.handle_capabilities(radius_capabilities, node)
+                    handle_capabilities(radius_capabilities, node, self.protocol)
                 }
                 DecodedExtension::BasicRadius(basic_radius) => {
-                    self.handle_basic_radius(basic_radius, node)
+                    handle_basic_radius(basic_radius, node)
                 }
                 DecodedExtension::HistoryRadius(history_radius) => {
-                    self.handle_history_radius(history_radius, node)
+                    handle_history_radius(history_radius, node)
                 }
                 DecodedExtension::Error(ping_error) => {
                     warn!(
@@ -273,7 +276,7 @@ impl<
                 warn!(
                     protocol = %self.protocol,
                     request.dest = %node_id,
-                    "Base extension wasn't implemented: {extension:?}, sending Capabilities instead this is a bug",
+                    "Base extension wasn't implemented: {extension:?}, sending Capabilities instead. This is a bug!",
                 );
                 self.create_capabilities().into()
             }
@@ -312,50 +315,5 @@ impl<
             None,
         );
         let _ = self.command_tx.send(OverlayCommand::Request(request));
-    }
-
-    fn handle_capabilities(
-        &self,
-        radius_capabilities: ClientInfoRadiusCapabilities,
-        mut node: Node,
-    ) -> Option<Node> {
-        let Ok(capabilities) = radius_capabilities.capabilities() else {
-            warn!(
-                protocol = %self.protocol,
-                request.source = %node.enr.node_id(),
-                "Capabilities weren't decoded correctly",
-            );
-            return None;
-        };
-        if node.data_radius != radius_capabilities.data_radius
-            || node.compare_capabilities(&capabilities)
-        {
-            node.set_data_radius(radius_capabilities.data_radius);
-            node.set_capabilities(capabilities);
-            return Some(node);
-        }
-        None
-    }
-
-    fn handle_basic_radius(&self, basic_radius: BasicRadius, mut node: Node) -> Option<Node> {
-        let data_radius = basic_radius.data_radius;
-        if node.data_radius != data_radius {
-            node.set_data_radius(data_radius);
-            return Some(node);
-        }
-        None
-    }
-
-    fn handle_history_radius(&self, history_radius: HistoryRadius, mut node: Node) -> Option<Node> {
-        let data_radius = history_radius.data_radius;
-        let ephemeral_header_count = history_radius.ephemeral_header_count;
-        if node.data_radius != data_radius
-            || node.ephemeral_header_count != Some(ephemeral_header_count)
-        {
-            node.set_data_radius(data_radius);
-            node.set_ephemeral_header_count(ephemeral_header_count);
-            return Some(node);
-        }
-        None
     }
 }

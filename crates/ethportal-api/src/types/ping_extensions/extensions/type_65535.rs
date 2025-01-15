@@ -7,9 +7,8 @@ use crate::types::{
     portal_wire::CustomPayload,
 };
 
-/// Used to response to pings which the node can't handle
+/// Used to respond to pings which the node can't handle
 #[derive(PartialEq, Debug, Clone, Encode, Decode)]
-
 pub struct PingError {
     pub error_code: u16,
     pub message: VariableList<u8, U300>,

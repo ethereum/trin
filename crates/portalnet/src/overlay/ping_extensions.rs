@@ -11,7 +11,7 @@ pub trait PingExtension {
         extensions: &[Extensions],
     ) -> Option<Extensions>;
 
-    /// Returns the extensions by there u16 type id that are supported by the clients subnetwork.
+    /// Returns the extensions by their u16 type id that are supported by the clients subnetwork.
     fn raw_extensions(&self) -> Vec<u16>;
 }
 

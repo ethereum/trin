@@ -16,6 +16,7 @@ use alloy::{
 use ethportal_api::{
     types::execution::{block_body::BlockBody, header_with_proof::HeaderWithProof},
     utils::bytes::{hex_decode, hex_encode},
+    version::APP_NAME,
     ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use jsonrpsee::async_client::Client;
@@ -40,7 +41,7 @@ async fn setup_web3_server() -> (RpcServerHandle, RootProvider<PubSubFrontend>, 
 
     // Run a client, to be tested
     let trin_config = TrinConfig::new_from([
-        "trin",
+        APP_NAME,
         "--external-address",
         external_addr.as_str(),
         "--web3-ipc-path",
