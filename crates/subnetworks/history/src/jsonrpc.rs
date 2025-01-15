@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use alloy::primitives::Bytes;
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
@@ -8,7 +7,6 @@ use ethportal_api::{
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
         portal::{AcceptInfo, FindNodesInfo, GetContentInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
-        query_trace::QueryTrace,
     },
     utils::bytes::hex_encode,
     ContentValue, HistoryContentKey, HistoryContentValue, OverlayContentKey,
@@ -91,86 +89,59 @@ async fn get_content(
     content_key: HistoryContentKey,
     is_trace: bool,
 ) -> Result<Value, String> {
-    // Check whether we have the data locally.
-    let local_content: Option<Bytes> = match network.overlay.store.read().get(&content_key) {
-        Ok(Some(data)) => Some(data),
-        Ok(None) => None,
-        Err(err) => {
-            error!(
-                error = %err,
-                content.key = %content_key,
-                "Error checking data store for content",
-            );
-            None
-        }
-    };
-    let (content_bytes, utp_transfer, trace) = match local_content {
-        Some(val) => {
-            let local_enr = network.overlay.local_enr();
-            let mut trace = QueryTrace::new(
-                &network.overlay.local_enr(),
-                content_key.content_id().into(),
-            );
-            trace.node_responded_with_content(&local_enr);
-            trace.content_validated(local_enr.into());
-            (val, false, if is_trace { Some(trace) } else { None })
-        }
-        // data is not available locally, make network request
-        None => match network
-            .overlay
-            .lookup_content(
-                content_key.clone(),
-                FindContentConfig {
-                    is_trace,
-                    ..Default::default()
-                },
-            )
-            .await
-            .map_err(|err| err.to_string())?
-        {
-            Ok((content_bytes, utp_transfer, trace)) => (content_bytes, utp_transfer, trace),
-            Err(err) => match err.clone() {
-                OverlayRequestError::ContentNotFound {
-                    message,
-                    utp,
-                    trace,
-                } => {
-                    let err = json!({
-                        "message": format!("{message}: utp: {utp}"),
-                        "trace": trace
-                    });
-                    return Err(err.to_string());
-                }
-                _ => {
-                    error!(
-                        error = %err,
-                        content.key = %content_key,
-                        "Error looking up content",
-                    );
-                    return Err(err.to_string());
-                }
+    // local store data lookups are handled at the overlay service level
+    let (content_bytes, utp_transfer, trace) = match network
+        .overlay
+        .lookup_content(
+            content_key.clone(),
+            FindContentConfig {
+                is_trace,
+                ..Default::default()
             },
+        )
+        .await
+        .map_err(|err| err.to_string())?
+    {
+        Ok((content_bytes, utp_transfer, trace)) => (content_bytes, utp_transfer, trace),
+        Err(err) => match err.clone() {
+            OverlayRequestError::ContentNotFound {
+                message,
+                utp,
+                trace,
+            } => {
+                let err = json!({
+                    "message": format!("{message}: utp: {utp}"),
+                    "trace": trace
+                });
+                return Err(err.to_string());
+            }
+            _ => {
+                error!(
+                    error = %err,
+                    content.key = %content_key,
+                    "Error looking up content",
+                );
+                return Err(err.to_string());
+            }
         },
     };
 
     // Format as string.
     let content_response_string = Value::String(hex_encode(content_bytes));
+    let content = serde_json::from_value(content_response_string).map_err(|e| e.to_string())?;
 
-    // If tracing is not required, return content.
-    if !is_trace {
-        return Ok(json!(GetContentInfo {
-            content: serde_json::from_value(content_response_string).map_err(|e| e.to_string())?,
-            utp_transfer,
-        }));
-    }
-    if let Some(trace) = trace {
+    // Return the content info, including the trace if requested.
+    if is_trace {
         Ok(json!(TraceContentInfo {
-            content: serde_json::from_value(content_response_string).map_err(|e| e.to_string())?,
+            content,
             utp_transfer,
-            trace,
+            trace: trace.ok_or("Content query trace requested but none provided.".to_string())?,
         }))
     } else {
-        Err("Content query trace requested but none provided.".to_owned())
+        Ok(json!(GetContentInfo {
+            content,
+            utp_transfer
+        }))
     }
 }
 

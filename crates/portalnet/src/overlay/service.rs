@@ -344,23 +344,10 @@ impl<
                         OverlayCommand::Request(request) => self.process_request(request),
                         OverlayCommand::Event(event) => self.process_event(event),
                         OverlayCommand::FindContentQuery { target, callback, config } => {
-                            if let Some(query_id) = self.init_find_content_query(target.clone(), Some(callback), config) {
-                                trace!(
-                                    query.id = %query_id,
-                                    content.id = %hex_encode_compact(target.content_id()),
-                                    content.key = %target,
-                                    "FindContent query initialized"
-                                );
-                            }
+                            self.init_find_content_query(target.clone(), Some(callback), config);
                         }
                         OverlayCommand::FindNodeQuery { target, callback } => {
-                            if let Some(query_id) = self.init_find_nodes_query(&target, Some(callback)) {
-                                trace!(
-                                    query.id = %query_id,
-                                    node.id = %hex_encode_compact(target),
-                                    "FindNode query initialized"
-                                );
-                            }
+                            self.init_find_nodes_query(&target, Some(callback));
                         }
                         OverlayCommand::RequestEventStream(callback) => {
                             if callback.send(self.event_stream.subscribe()).is_err() {
@@ -1017,7 +1004,6 @@ impl<
             request.discv5.id = %request_id,
             "Handling FindContent message",
         );
-
         let content_key = match TContentKey::try_from_bytes(&request.content_key) {
             Ok(key) => key,
             Err(_) => {
@@ -2314,7 +2300,7 @@ impl<
         &mut self,
         target: &NodeId,
         callback: Option<oneshot::Sender<Vec<Enr>>>,
-    ) -> Option<QueryId> {
+    ) {
         let closest_enrs = self
             .kbuckets
             .closest_to_node_id(*target, self.query_num_results);
@@ -2324,7 +2310,7 @@ impl<
             if let Some(callback) = callback {
                 let _ = callback.send(vec![]);
             }
-            return None;
+            return;
         }
 
         let query_config = QueryConfig {
@@ -2352,14 +2338,17 @@ impl<
 
         if known_closest_peers.is_empty() {
             warn!("Cannot initialize FindNode query (no known close peers)");
-            None
         } else {
             let find_nodes_query =
                 FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
-            Some(
-                self.find_node_query_pool
-                    .add_query(query_info, find_nodes_query),
-            )
+            let query_id = self
+                .find_node_query_pool
+                .add_query(query_info, find_nodes_query);
+            trace!(
+                query.id = %query_id,
+                node.id = %hex_encode_compact(target),
+                "FindNode query initialized"
+            );
         }
     }
 
@@ -2369,8 +2358,26 @@ impl<
         target: TContentKey,
         callback: Option<oneshot::Sender<RecursiveFindContentResult>>,
         config: FindContentConfig,
-    ) -> Option<QueryId> {
+    ) {
         debug!("Starting query for content key: {}", target);
+
+        // Lookup content locally before querying the network.
+        if let Ok(Some(content)) = self.store.read().get(&target) {
+            let local_enr = self.local_enr();
+            let mut query_trace = QueryTrace::new(&local_enr, target.content_id().into());
+            query_trace.node_responded_with_content(&local_enr);
+            query_trace.content_validated(local_enr.into());
+            if let Some(callback) = callback {
+                let _ = callback.send(Ok((
+                    RawContentValue::from(content),
+                    false,
+                    Some(query_trace),
+                )));
+                return;
+            } else {
+                warn!("Local content found but no callback to return it to overlay protocol, continuing with network query & ignoring local content.");
+            }
+        }
 
         // Represent the target content ID with a node ID.
         let target_node_id = NodeId::new(&target.content_id());
@@ -2397,7 +2404,7 @@ impl<
                     trace: None,
                 }));
             }
-            return None;
+            return;
         }
 
         // Convert ENRs into k-bucket keys.
@@ -2418,13 +2425,22 @@ impl<
         };
 
         let query_info = QueryInfo {
-            query_type: QueryType::FindContent { target, callback },
+            query_type: QueryType::FindContent {
+                target: target.clone(),
+                callback,
+            },
             untrusted_enrs: SmallVec::from_vec(closest_enrs),
             trace,
         };
 
         let query = FindContentQuery::with_config(query_config, target_key, closest_nodes);
-        Some(self.find_content_query_pool.add_query(query_info, query))
+        let query_id = self.find_content_query_pool.add_query(query_info, query);
+        trace!(
+            query.id = %query_id,
+            content.id = %hex_encode_compact(target.content_id()),
+            content.key = %target,
+            "FindContent query initialized"
+        );
     }
 
     /// Returns an ENR if one is known for the given NodeId.
@@ -3563,12 +3579,12 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service.init_find_content_query(
+        service.init_find_content_query(
             target_content_key.clone(),
             None,
             FindContentConfig::default(),
         );
-        let query_id = query_id.expect("Query ID for new find content query is `None`");
+        let query_id = QueryId(0); // default query id for all initial queries
 
         let pool = &mut service.find_content_query_pool;
         let (query_info, query) = pool
@@ -3600,13 +3616,14 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
         let (tx, rx) = oneshot::channel();
-        let query_id = service.init_find_content_query(
+        service.init_find_content_query(
             target_content_key.clone(),
             Some(tx),
             FindContentConfig::default(),
         );
 
-        assert!(query_id.is_none());
+        let query = service.find_content_query_pool.iter().next();
+        assert!(query.is_none());
         assert!(rx.await.unwrap().is_err());
     }
 
@@ -3633,9 +3650,8 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id =
-            service.init_find_content_query(target_content_key, None, FindContentConfig::default());
-        let query_id = query_id.expect("Query ID for new find content query is `None`");
+        service.init_find_content_query(target_content_key, None, FindContentConfig::default());
+        let query_id = QueryId(0); // default query id for all initial queries
 
         // update query in own span so mut ref is dropped after poll
         {
@@ -3694,9 +3710,8 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id =
-            service.init_find_content_query(target_content_key, None, FindContentConfig::default());
-        let query_id = query_id.expect("Query ID for new find content query is `None`");
+        service.init_find_content_query(target_content_key, None, FindContentConfig::default());
+        let query_id = QueryId(0); // default query id for all initial queries
 
         // update query in own span so mut ref is dropped after poll
         {
@@ -3757,9 +3772,8 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id =
-            service.init_find_content_query(target_content_key, None, FindContentConfig::default());
-        let query_id = query_id.expect("Query ID for new find content query is `None`");
+        service.init_find_content_query(target_content_key, None, FindContentConfig::default());
+        let query_id = QueryId(0); // default query id for all initial queries
 
         // update query in own span so mut ref is dropped after poll
         {
@@ -3823,12 +3837,12 @@ mod tests {
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
         let (callback_tx, callback_rx) = oneshot::channel();
-        let query_id = service.init_find_content_query(
+        service.init_find_content_query(
             target_content_key.clone(),
             Some(callback_tx),
             FindContentConfig::default(),
         );
-        let query_id = query_id.expect("Query ID for new find content query is `None`");
+        let query_id = QueryId(0); // default query id for all initial queries
 
         let query_event =
             OverlayService::<_, XorMetric, MockValidator, MemoryContentStore>::query_event_poll(
