@@ -163,13 +163,16 @@ impl Downloader {
         block_number: u64,
         content_type: ContentType,
     ) -> anyhow::Result<()> {
-        if CENSUS {
+        let timer = self.metrics.start_find_content_timer();
+        let result = if CENSUS {
             self.find_content_census(&content_key, block_number, content_type)
                 .await
         } else {
             self.recursive_find_content(content_key, block_number, content_type)
                 .await
-        }
+        };
+        self.metrics.stop_find_content_timer(timer);
+        result
     }
 
     /// Send FindContent queries to the interested peers in the census, includes peers scoring

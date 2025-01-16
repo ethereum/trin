@@ -1,5 +1,6 @@
 use prometheus_exporter::prometheus::{
-    opts, register_int_gauge_vec_with_registry, IntGaugeVec, Registry,
+    histogram_opts, opts, register_histogram_vec_with_registry,
+    register_int_gauge_vec_with_registry, HistogramTimer, HistogramVec, IntGaugeVec, Registry,
 };
 
 use crate::portalnet::PORTALNET_METRICS;
@@ -8,6 +9,7 @@ use crate::portalnet::PORTALNET_METRICS;
 #[derive(Clone, Debug)]
 pub struct DownloaderMetrics {
     pub current_block: IntGaugeVec,
+    pub find_content_timer: HistogramVec,
 }
 
 impl DownloaderMetrics {
@@ -20,7 +22,18 @@ impl DownloaderMetrics {
             &["downloader"],
             registry
         )?;
-        Ok(Self { current_block })
+        let find_content_timer = register_histogram_vec_with_registry!(
+            histogram_opts!(
+                "downloader_find_content_timer",
+                "the time it takes for find content query to complete"
+            ),
+            &["downloader"],
+            registry
+        )?;
+        Ok(Self {
+            current_block,
+            find_content_timer,
+        })
     }
 }
 
@@ -47,5 +60,16 @@ impl DownloaderMetricsReporter {
             .current_block
             .with_label_values(&["downloader"])
             .set(block_number as i64);
+    }
+
+    pub fn start_find_content_timer(&self) -> HistogramTimer {
+        self.metrics
+            .find_content_timer
+            .with_label_values(&["downloader"])
+            .start_timer()
+    }
+
+    pub fn stop_find_content_timer(&self, timer: HistogramTimer) {
+        timer.observe_duration()
     }
 }
