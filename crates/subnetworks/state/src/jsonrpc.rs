@@ -8,7 +8,6 @@ use ethportal_api::{
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
         portal::{AcceptInfo, FindNodesInfo, GetContentInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
-        query_trace::QueryTrace,
     },
     utils::bytes::hex_encode,
     ContentValue, OverlayContentKey, RawContentValue, StateContentKey, StateContentValue,
@@ -216,73 +215,52 @@ async fn get_content(
     content_key: StateContentKey,
     is_trace: bool,
 ) -> Result<Value, String> {
-    let local_content = match local_storage_lookup(&network, &content_key) {
-        Ok(data) => data,
-        Err(err) => {
-            error!(
-                error = %err,
-                content.key = %content_key,
-                "Error checking local store for content",
-            );
-            None
-        }
-    };
-    let (content_bytes, utp_transfer, trace) = match local_content {
-        Some(value) => {
-            let trace = if is_trace {
-                let local_enr = network.overlay.local_enr();
-                let mut trace = QueryTrace::new(&local_enr, content_key.content_id().into());
-                trace.node_responded_with_content(&local_enr);
-                trace.content_validated(local_enr.into());
-                Some(trace)
-            } else {
-                None
-            };
-            (value, false, trace)
-        }
-        None => network
-            .overlay
-            .lookup_content(
-                content_key.clone(),
-                FindContentConfig {
-                    is_trace,
-                    ..Default::default()
-                },
-            )
-            .await
-            .map_err(|err| err.to_string())?
-            .map_err(|err| match err {
-                OverlayRequestError::ContentNotFound {
-                    message,
-                    utp,
-                    trace,
-                } => {
-                    let err = json!({
-                        "message": format!("{message}: utp: {utp}"),
-                        "trace": trace
-                    });
-                    err.to_string()
-                }
-                _ => {
-                    error!(
-                        error = %err,
-                        content.key = %content_key,
-                        "Error looking up content",
-                    );
-                    err.to_string()
-                }
-            })?,
-    };
+    let (content_bytes, utp_transfer, trace) = network
+        .overlay
+        .lookup_content(
+            content_key.clone(),
+            FindContentConfig {
+                is_trace,
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(|err| err.to_string())?
+        .map_err(|err| match err {
+            OverlayRequestError::ContentNotFound {
+                message,
+                utp,
+                trace,
+            } => {
+                let err = json!({
+                    "message": format!("{message}: utp: {utp}"),
+                    "trace": trace
+                });
+                err.to_string()
+            }
+            _ => {
+                error!(
+                    error = %err,
+                    content.key = %content_key,
+                    "Error looking up content",
+                );
+                err.to_string()
+            }
+        })?;
 
+    // Format as string.
+    let content = RawContentValue::from(content_bytes);
+
+    // Return the content info, including the trace if requested.
     if is_trace {
         Ok(json!(TraceContentInfo {
-            content: RawContentValue::from(content_bytes),
+            content,
             utp_transfer,
             trace: trace.ok_or("Content query trace requested but none provided.".to_string())?,
         }))
     } else {
         Ok(json!(GetContentInfo {
-            content: RawContentValue::from(content_bytes),
+            content,
             utp_transfer
         }))
     }
