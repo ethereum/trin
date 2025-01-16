@@ -6,10 +6,10 @@ use std::{
 };
 
 use alloy::primitives::U256;
+use alloy_rlp::Decodable;
 use anyhow::anyhow;
 use bimap::BiHashMap;
 use once_cell::sync::Lazy;
-use rlp::Encodable;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ssz::{Decode, DecodeError, Encode};
@@ -419,11 +419,7 @@ impl From<&Nodes> for NodesHelper {
     fn from(nodes: &Nodes) -> Self {
         Self {
             total: nodes.total,
-            enrs: nodes
-                .enrs
-                .iter()
-                .map(|enr| enr.rlp_bytes().to_vec())
-                .collect(),
+            enrs: nodes.enrs.iter().map(alloy_rlp::encode).collect(),
         }
     }
 }
@@ -436,7 +432,7 @@ impl TryFrom<NodesHelper> for Nodes {
             .enrs
             .into_iter()
             .map(|bytes| {
-                rlp::decode(&bytes)
+                Decodable::decode(&mut bytes.as_slice())
                     .map_err(|e| DecodeError::BytesInvalid(format!("rlp decoding failed: {e}")))
             })
             .collect::<Result<_, _>>()?;

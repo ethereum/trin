@@ -267,8 +267,8 @@ impl FromStr for ClientType {
 impl From<&Enr> for ClientType {
     fn from(enr: &Enr) -> Self {
         let client_id = enr
-            .get(ENR_PORTAL_CLIENT_KEY)
-            .and_then(|v| String::from_utf8(v.to_vec()).ok());
+            .get_decodable::<String>(ENR_PORTAL_CLIENT_KEY)
+            .and_then(|v| v.ok());
         if let Some(client_id) = client_id {
             if client_id.starts_with("t") {
                 ClientType::Trin
