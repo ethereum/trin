@@ -20,7 +20,7 @@ ethereum_ssz.workspace = true
 ethportal-api.workspace = true
 futures.workspace = true
 hex.workspace = true
-jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"]}
+jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"] }
 portalnet.workspace = true
 portal-bridge.workspace = true
 rand.workspace = true

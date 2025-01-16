@@ -7,7 +7,10 @@ use alloy::{
     primitives::U256,
     providers::{IpcConnect, Provider, ProviderBuilder, RootProvider},
     pubsub::PubSubFrontend,
-    rpc::types::{BlockNumberOrTag, BlockTransactions, BlockTransactionsKind, Header as RpcHeader},
+    rpc::{
+        client::ClientBuilder,
+        types::{BlockNumberOrTag, BlockTransactions, BlockTransactionsKind, Header as RpcHeader},
+    },
     transports::RpcError,
 };
 use ethportal_api::{
@@ -16,7 +19,7 @@ use ethportal_api::{
     ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use jsonrpsee::async_client::Client;
-use portalnet::constants::DEFAULT_WEB3_IPC_PATH;
+use portalnet::constants::{DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
 use rpc::RpcServerHandle;
 use serde_yaml::Value;
 use serial_test::serial;
@@ -24,6 +27,7 @@ use ssz::Decode;
 
 mod utils;
 use trin::cli::TrinConfig;
+use url::Url;
 use utils::init_tracing;
 
 async fn setup_web3_server() -> (RpcServerHandle, RootProvider<PubSubFrontend>, Client) {
@@ -60,6 +64,55 @@ async fn setup_web3_server() -> (RpcServerHandle, RootProvider<PubSubFrontend>, 
         .await
         .unwrap();
     (web3_server, web3_client, native_client)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn test_batch_call() {
+    init_tracing();
+
+    let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    // Use an uncommon port for the peertest to avoid clashes.
+    let test_discovery_port = 8999;
+    let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
+
+    // Run a client, to be tested
+    let trin_config = TrinConfig::new_from([
+        "trin",
+        "--external-address",
+        external_addr.as_str(),
+        "--web3-transport",
+        "http",
+        "--ephemeral",
+        "--discovery-port",
+        &test_discovery_port.to_string(),
+        "--bootnodes",
+        "none",
+    ])
+    .unwrap();
+
+    let web3_server = trin::run_trin(trin_config).await.unwrap();
+
+    let url = Url::parse(DEFAULT_WEB3_HTTP_ADDRESS).unwrap();
+    let client = ClientBuilder::default().http(url);
+
+    let mut batch = client.new_batch();
+
+    let node_info = batch
+        .add_call::<(), serde_json::Value>("discv5_nodeInfo", &())
+        .unwrap();
+    let chain_id = batch
+        .add_call::<(), serde_json::Value>("eth_chainId", &())
+        .unwrap();
+    let routing_table_info = batch
+        .add_call::<(), serde_json::Value>("portal_historyRoutingTableInfo", &())
+        .unwrap();
+    batch.send().await.unwrap();
+    let _ = node_info.await.unwrap();
+    let _ = chain_id.await.unwrap();
+    let _ = routing_table_info.await.unwrap();
+
+    web3_server.stop().unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
