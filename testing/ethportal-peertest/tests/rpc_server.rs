@@ -98,19 +98,16 @@ async fn test_batch_call() {
 
     let mut batch = client.new_batch();
 
+    let client_version = batch
+        .add_call::<(), serde_json::Value>("web3_clientVersion", &())
+        .unwrap();
     let node_info = batch
         .add_call::<(), serde_json::Value>("discv5_nodeInfo", &())
         .unwrap();
-    let chain_id = batch
-        .add_call::<(), serde_json::Value>("eth_chainId", &())
-        .unwrap();
-    let routing_table_info = batch
-        .add_call::<(), serde_json::Value>("portal_historyRoutingTableInfo", &())
-        .unwrap();
+
     batch.send().await.unwrap();
+    let _ = client_version.await.unwrap();
     let _ = node_info.await.unwrap();
-    let _ = chain_id.await.unwrap();
-    let _ = routing_table_info.await.unwrap();
 
     web3_server.stop().unwrap();
 }
