@@ -344,7 +344,7 @@ impl<
                         OverlayCommand::Request(request) => self.process_request(request),
                         OverlayCommand::Event(event) => self.process_event(event),
                         OverlayCommand::FindContentQuery { target, callback, config } => {
-                            self.init_find_content_query(target.clone(), Some(callback), config);
+                            self.init_find_content_query(target.clone(), callback, config);
                         }
                         OverlayCommand::FindNodeQuery { target, callback } => {
                             self.init_find_nodes_query(&target, Some(callback));
@@ -739,40 +739,36 @@ impl<
                 };
                 match query.into_result() {
                     FindContentQueryResult::ValidContent(valid_content, cancelled_peers) => {
-                        if let Some(responder) = callback {
-                            let ValidatedContent {
-                                content,
-                                was_utp_transfer,
-                                sending_peer,
-                            } = valid_content;
+                        let ValidatedContent {
+                            content,
+                            was_utp_transfer,
+                            sending_peer,
+                        } = valid_content;
 
-                            let trace = if let Some(mut trace) = query_info.trace {
-                                trace.content_validated(sending_peer);
-                                trace.cancelled = cancelled_peers;
-                                Some(trace)
-                            } else {
-                                None
-                            };
+                        let trace = if let Some(mut trace) = query_info.trace {
+                            trace.content_validated(sending_peer);
+                            trace.cancelled = cancelled_peers;
+                            Some(trace)
+                        } else {
+                            None
+                        };
 
-                            if responder
-                                .send(Ok((content, was_utp_transfer, trace)))
-                                .is_err()
-                            {
-                                error!(
-                                    "Failed to send RecursiveFindContent result to the initiator of the query"
-                                );
-                            }
+                        if callback
+                            .send(Ok((content, was_utp_transfer, trace)))
+                            .is_err()
+                        {
+                            error!(
+                                "Failed to send RecursiveFindContent result to the initiator of the query"
+                            );
                         }
                     }
                     FindContentQueryResult::NoneFound => {
-                        if let Some(responder) = callback {
-                            let _ = responder.send(Err(OverlayRequestError::ContentNotFound {
-                                message: "Unable to locate content on the network before timeout"
-                                    .to_string(),
-                                utp: false,
-                                trace: query_info.trace,
-                            }));
-                        }
+                        let _ = callback.send(Err(OverlayRequestError::ContentNotFound {
+                            message: "Unable to locate content on the network before timeout"
+                                .to_string(),
+                            utp: false,
+                            trace: query_info.trace,
+                        }));
                     }
                 }
             }
@@ -2356,7 +2352,7 @@ impl<
     fn init_find_content_query(
         &mut self,
         target: TContentKey,
-        callback: Option<oneshot::Sender<RecursiveFindContentResult>>,
+        callback: oneshot::Sender<RecursiveFindContentResult>,
         config: FindContentConfig,
     ) {
         debug!("Starting query for content key: {}", target);
@@ -2367,16 +2363,12 @@ impl<
             let mut query_trace = QueryTrace::new(&local_enr, target.content_id().into());
             query_trace.node_responded_with_content(&local_enr);
             query_trace.content_validated(local_enr.into());
-            if let Some(callback) = callback {
-                let _ = callback.send(Ok((
-                    RawContentValue::from(content),
-                    false,
-                    Some(query_trace),
-                )));
-                return;
-            } else {
-                warn!("Local content found but no callback to return it to overlay protocol, continuing with network query & ignoring local content.");
-            }
+            let _ = callback.send(Ok((
+                RawContentValue::from(content),
+                false,
+                Some(query_trace),
+            )));
+            return;
         }
 
         // Represent the target content ID with a node ID.
@@ -2396,14 +2388,12 @@ impl<
         if closest_enrs.is_empty() {
             // If there are no connected nodes in the routing table the query cannot proceed.
             warn!("No connected nodes in routing table, find content query cannot proceed.");
-            if let Some(callback) = callback {
-                let _ = callback.send(Err(OverlayRequestError::ContentNotFound {
-                    message: "Unable to locate content on the network: no connected nodes in the routing table"
-                        .to_string(),
-                    utp: false,
-                    trace: None,
-                }));
-            }
+            let _ = callback.send(Err(OverlayRequestError::ContentNotFound {
+                message: "Unable to locate content on the network: no connected nodes in the routing table"
+                    .to_string(),
+                utp: false,
+                trace: None,
+            }));
             return;
         }
 
@@ -3579,9 +3569,10 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
+        let (tx, _rx) = oneshot::channel();
         service.init_find_content_query(
             target_content_key.clone(),
-            None,
+            tx,
             FindContentConfig::default(),
         );
         let query_id = QueryId(0); // default query id for all initial queries
@@ -3596,7 +3587,7 @@ mod tests {
             &query_info.query_type,
             QueryType::FindContent {
                 target: _target_content_key,
-                callback: None,
+                callback: _callback,
             }
         ));
 
@@ -3618,7 +3609,7 @@ mod tests {
         let (tx, rx) = oneshot::channel();
         service.init_find_content_query(
             target_content_key.clone(),
-            Some(tx),
+            tx,
             FindContentConfig::default(),
         );
 
@@ -3650,7 +3641,8 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        service.init_find_content_query(target_content_key, None, FindContentConfig::default());
+        let (tx, _rx) = oneshot::channel();
+        service.init_find_content_query(target_content_key, tx, FindContentConfig::default());
         let query_id = QueryId(0); // default query id for all initial queries
 
         // update query in own span so mut ref is dropped after poll
@@ -3710,7 +3702,8 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        service.init_find_content_query(target_content_key, None, FindContentConfig::default());
+        let (tx, _rx) = oneshot::channel();
+        service.init_find_content_query(target_content_key, tx, FindContentConfig::default());
         let query_id = QueryId(0); // default query id for all initial queries
 
         // update query in own span so mut ref is dropped after poll
@@ -3772,7 +3765,8 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        service.init_find_content_query(target_content_key, None, FindContentConfig::default());
+        let (tx, _rx) = oneshot::channel();
+        service.init_find_content_query(target_content_key, tx, FindContentConfig::default());
         let query_id = QueryId(0); // default query id for all initial queries
 
         // update query in own span so mut ref is dropped after poll
@@ -3839,7 +3833,7 @@ mod tests {
         let (callback_tx, callback_rx) = oneshot::channel();
         service.init_find_content_query(
             target_content_key.clone(),
-            Some(callback_tx),
+            callback_tx,
             FindContentConfig::default(),
         );
         let query_id = QueryId(0); // default query id for all initial queries
