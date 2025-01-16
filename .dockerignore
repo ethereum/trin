@@ -6,9 +6,7 @@
 !Cargo.toml
 !/bin
 !/crates
-!/portal-bridge
 !/testing
-!/trin-execution
 
 # include for vergen constants
 !/.git

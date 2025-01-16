@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn full_header_from_get_block_response() {
         let body =
-            std::fs::read_to_string("../test_assets/mainnet/block_14764013_value.json").unwrap();
+            std::fs::read_to_string("../../test_assets/mainnet/block_14764013_value.json").unwrap();
         let body: Value = serde_json::from_str(&body).unwrap();
         let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
         let header: Header = serde_json::from_value(body["result"].clone()).unwrap();
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn full_header_with_withdrawals() {
         let body =
-            std::fs::read_to_string("../test_assets/mainnet/block_17034871_value.json").unwrap();
+            std::fs::read_to_string("../../test_assets/mainnet/block_17034871_value.json").unwrap();
         let body: Value = serde_json::from_str(&body).unwrap();
         let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
         let block_body = BlockBody::Shanghai(BlockBodyShanghai {
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn full_header_with_empty_withdrawals() {
         let body =
-            std::fs::read_to_string("../test_assets/mainnet/block_17034873_value.json").unwrap();
+            std::fs::read_to_string("../../test_assets/mainnet/block_17034873_value.json").unwrap();
         let body: Value = serde_json::from_str(&body).unwrap();
         let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
         let block_body = BlockBody::Shanghai(BlockBodyShanghai {
@@ -167,7 +167,7 @@ mod tests {
     #[case("19433903")]
     fn full_header_block_body_dencun(#[case] case: &str) {
         let body =
-            std::fs::read_to_string(format!("../test_assets/mainnet/block_{case}_value.json"))
+            std::fs::read_to_string(format!("../../test_assets/mainnet/block_{case}_value.json"))
                 .unwrap();
         let body: Value = serde_json::from_str(&body).unwrap();
         let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
@@ -188,7 +188,7 @@ mod tests {
         // this block (15573637) was chosen since it contains all tx types (legacy, access list,
         // eip1559) as well as contract creation txs
         let expected: String =
-            std::fs::read_to_string("../test_assets/geth_batch/headers.json").unwrap();
+            std::fs::read_to_string("../../test_assets/geth_batch/headers.json").unwrap();
         let full_headers: FullHeaderBatch = serde_json::from_str(&expected).unwrap();
         for full_header in full_headers.headers {
             let block_body = BlockBody::Legacy(BlockBodyLegacy {
