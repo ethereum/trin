@@ -96,16 +96,16 @@ async fn test_batch_call() {
 
     let mut batch = client.new_batch();
 
-    let client_version_fut = batch
+    let client_version_future = batch
         .add_call::<(), serde_json::Value>("web3_clientVersion", &())
         .unwrap();
-    let node_info_fut = batch
+    let node_info_future = batch
         .add_call::<(), serde_json::Value>("discv5_nodeInfo", &())
         .unwrap();
 
     batch.send().await.unwrap();
-    client_version_fut.await.unwrap();
-    node_info_fut.await.unwrap();
+    client_version_future.await.unwrap();
+    node_info_future.await.unwrap();
 
     web3_server.stop().unwrap();
 }
