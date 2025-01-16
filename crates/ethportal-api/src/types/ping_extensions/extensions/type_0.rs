@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::bail;
+use anyhow::{bail, ensure};
 use itertools::Itertools;
 use ssz::{Decode, Encode};
 use ssz_derive::{Decode, Encode};
@@ -112,6 +112,10 @@ impl FromStr for ClientInfo {
     type Err = anyhow::Error;
 
     fn from_str(string: &str) -> Result<Self, anyhow::Error> {
+        ensure!(
+            string.as_bytes().len() <= 200,
+            "Client info string is too long"
+        );
         let parts: Vec<&str> = string.split('/').collect();
 
         if parts.len() != 4 {
@@ -250,6 +254,8 @@ mod tests {
     #[case("trin/0.1.1/linux-x86_64/rustc1.81.0")]
     /// Fails because the CPU architecture is missing
     #[case("trin/0.1.1-2b00d730/linux/rustc1.81.0")]
+    /// Fails because client string is too long
+    #[case(&"t".repeat(201))]
     #[should_panic]
     fn test_client_info_from_str_invalid(#[case] string: &str) {
         ClientInfo::from_str(string).unwrap();

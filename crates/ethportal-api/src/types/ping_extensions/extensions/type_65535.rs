@@ -101,6 +101,18 @@ mod tests {
         assert_eq!(ping_error, decoded);
     }
 
+    #[rstest::rstest]
+    #[case(301, true)]
+    #[case(300, false)]
+    fn test_ping_error_message_too_long(#[case] message_length: usize, #[case] expected: bool) {
+        let error_code = ErrorCodes::FailedToDecodePayload;
+        let message = vec![0; message_length];
+        assert_eq!(
+            PingError::new_with_message(error_code, message).is_err(),
+            expected
+        );
+    }
+
     #[test]
     fn message_encoding_pong_basic_radius() {
         let error_code = ErrorCodes::FailedToDecodePayload;
