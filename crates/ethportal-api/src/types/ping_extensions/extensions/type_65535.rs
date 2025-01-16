@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use ssz::Encode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum::U300, VariableList};
@@ -20,6 +21,15 @@ impl PingError {
             error_code: error_code.into(),
             message: VariableList::empty(),
         }
+    }
+
+    pub fn new_with_message(error_code: ErrorCodes, message: Vec<u8>) -> anyhow::Result<Self> {
+        Ok(Self {
+            error_code: error_code.into(),
+            message: VariableList::new(message).map_err(|err| {
+                anyhow!("PingError can only handle messages up to 300 bytes, received {err:?}")
+            })?,
+        })
     }
 }
 
@@ -58,7 +68,13 @@ mod tests {
     use ssz::Decode;
 
     use super::*;
-    use crate::types::ping_extensions::decode::DecodedExtension;
+    use crate::{
+        types::{
+            ping_extensions::decode::DecodedExtension,
+            portal_wire::{Message, Pong},
+        },
+        utils::bytes::{hex_decode, hex_encode},
+    };
 
     #[test]
     fn test_ping_error() {
@@ -83,5 +99,28 @@ mod tests {
         let decoded = PingError::from_ssz_bytes(&bytes).unwrap();
         assert_eq!(bytes.len(), 6);
         assert_eq!(ping_error, decoded);
+    }
+
+    #[test]
+    fn message_encoding_pong_basic_radius() {
+        let error_code = ErrorCodes::FailedToDecodePayload;
+        let message = "hello world";
+        let basic_radius =
+            PingError::new_with_message(error_code, message.as_bytes().to_vec()).unwrap();
+        let custom_payload = CustomPayload::from(basic_radius);
+        let pong = Pong {
+            enr_seq: 1,
+            custom_payload,
+        };
+        let pong = Message::Pong(pong);
+
+        let encoded: Vec<u8> = pong.clone().into();
+        let encoded = hex_encode(encoded);
+        let expected_encoded =
+            "0x0101000000000000000c000000ffff0600000002000600000068656c6c6f20776f726c64";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
+        assert_eq!(decoded, pong);
     }
 }

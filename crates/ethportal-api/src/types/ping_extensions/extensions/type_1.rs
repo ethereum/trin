@@ -35,7 +35,14 @@ mod tests {
     use ssz::Decode;
 
     use super::*;
-    use crate::types::{distance::Distance, ping_extensions::decode::DecodedExtension};
+    use crate::{
+        types::{
+            distance::Distance,
+            ping_extensions::decode::DecodedExtension,
+            portal_wire::{Message, Ping, Pong},
+        },
+        utils::bytes::{hex_decode, hex_encode},
+    };
 
     #[test]
     fn test_basic_radius() {
@@ -60,5 +67,45 @@ mod tests {
         let decoded = BasicRadius::from_ssz_bytes(&bytes).unwrap();
         assert_eq!(bytes.len(), 32);
         assert_eq!(basic_radius, decoded);
+    }
+
+    #[test]
+    fn message_encoding_ping_basic_radius() {
+        let data_radius = Distance::from(U256::MAX - U256::from(1));
+        let basic_radius = BasicRadius::new(data_radius);
+        let custom_payload = CustomPayload::from(basic_radius);
+        let ping = Ping {
+            enr_seq: 1,
+            custom_payload,
+        };
+        let ping = Message::Ping(ping);
+
+        let encoded: Vec<u8> = ping.clone().into();
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x0001000000000000000c000000010006000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
+        assert_eq!(decoded, ping);
+    }
+
+    #[test]
+    fn message_encoding_pong_basic_radius() {
+        let data_radius = Distance::from(U256::MAX - U256::from(1));
+        let basic_radius = BasicRadius::new(data_radius);
+        let custom_payload = CustomPayload::from(basic_radius);
+        let pong = Pong {
+            enr_seq: 1,
+            custom_payload,
+        };
+        let pong = Message::Pong(pong);
+
+        let encoded: Vec<u8> = pong.clone().into();
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x0101000000000000000c000000010006000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
+        assert_eq!(decoded, pong);
     }
 }

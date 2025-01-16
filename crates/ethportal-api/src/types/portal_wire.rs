@@ -602,46 +602,6 @@ mod test {
         assert_eq!(hex, expected_hex);
     }
 
-    // Wire message test vectors available in Ethereum Portal Network specs repo:
-    // github.com/ethereum/portal-network-specs
-    #[test]
-    fn message_encoding_ping() {
-        let data_radius: U256 = U256::MAX - U256::from(1u8);
-        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
-        let ping = Ping {
-            enr_seq: 1,
-            custom_payload,
-        };
-        let ping = Message::Ping(ping);
-
-        let encoded: Vec<u8> = ping.clone().into();
-        let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-        assert_eq!(encoded, expected_encoded);
-
-        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
-        assert_eq!(decoded, ping);
-    }
-
-    #[test]
-    fn message_encoding_pong() {
-        let data_radius: U256 = U256::MAX / U256::from(2u8);
-        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
-        let pong = Pong {
-            enr_seq: 1,
-            custom_payload,
-        };
-        let pong = Message::Pong(pong);
-
-        let encoded: Vec<u8> = pong.clone().into();
-        let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f";
-        assert_eq!(encoded, expected_encoded);
-
-        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
-        assert_eq!(decoded, pong);
-    }
-
     #[test]
     fn message_encoding_find_nodes() {
         let distances = vec![256, 255];
