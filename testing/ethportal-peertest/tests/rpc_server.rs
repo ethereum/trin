@@ -72,11 +72,9 @@ async fn test_batch_call() {
     init_tracing();
 
     let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    // Use an uncommon port for the peertest to avoid clashes.
     let test_discovery_port = 8999;
     let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
 
-    // Run a client, to be tested
     let trin_config = TrinConfig::new_from([
         "trin",
         "--external-address",
@@ -98,16 +96,16 @@ async fn test_batch_call() {
 
     let mut batch = client.new_batch();
 
-    let client_version = batch
+    let client_version_fut = batch
         .add_call::<(), serde_json::Value>("web3_clientVersion", &())
         .unwrap();
-    let node_info = batch
+    let node_info_fut = batch
         .add_call::<(), serde_json::Value>("discv5_nodeInfo", &())
         .unwrap();
 
     batch.send().await.unwrap();
-    let _ = client_version.await.unwrap();
-    let _ = node_info.await.unwrap();
+    client_version_fut.await.unwrap();
+    node_info_fut.await.unwrap();
 
     web3_server.stop().unwrap();
 }
