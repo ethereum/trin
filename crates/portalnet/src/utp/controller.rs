@@ -173,6 +173,7 @@ impl UtpController {
         // report utp tx as successful, even if we go on to fail to process the payload
         self.metrics
             .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
+        self.metrics.report_bytes_inbound(data.len() as u64);
         Ok(Bytes::from(data))
     }
 
