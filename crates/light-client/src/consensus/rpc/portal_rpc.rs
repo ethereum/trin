@@ -19,9 +19,9 @@ use ethportal_api::{
     LightClientUpdatesByRangeKey,
 };
 use futures::channel::oneshot;
-use portalnet::overlay::command::OverlayCommand;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::warn;
+use trin_portalnet::overlay::command::OverlayCommand;
 
 use crate::consensus::rpc::ConsensusRpc;
 

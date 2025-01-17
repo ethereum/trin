@@ -7,13 +7,13 @@ use ethportal_api::{
 };
 use light_client::{consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client};
 use parking_lot::RwLock as PLRwLock;
-use portalnet::{
+use tokio::sync::{Mutex, RwLock};
+use tracing::{error, info};
+use trin_portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{config::OverlayConfig, protocol::OverlayProtocol},
 };
-use tokio::sync::{Mutex, RwLock};
-use tracing::{error, info};
 use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;

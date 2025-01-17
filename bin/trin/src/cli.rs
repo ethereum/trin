@@ -14,7 +14,7 @@ use ethportal_api::{
     },
     version::FULL_VERSION,
 };
-use portalnet::{
+use trin_portalnet::{
     bootnodes::Bootnodes,
     config::{PortalnetConfig, NODE_ADDR_CACHE_CAPACITY},
     constants::{
@@ -22,7 +22,7 @@ use portalnet::{
         DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_WS_PORT,
     },
 };
-use rpc::config::RpcConfig;
+use trin_rpc::config::RpcConfig;
 use trin_storage::config::StorageCapacityConfig;
 use trin_utils::cli::{
     check_private_key_length, network_parser, subnetwork_parser, Web3TransportType,
@@ -977,7 +977,7 @@ mod tests {
 
     mod bootnodes {
         use ethportal_api::{types::network::Network, Enr};
-        use portalnet::bootnodes::Bootnode;
+        use trin_portalnet::bootnodes::Bootnode;
 
         use super::*;
 

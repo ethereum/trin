@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use alloy::primitives::{keccak256, B256};
 use anyhow::bail;
 use clap::Parser;
-use e2store::era2::{self, AccountOrStorageEntry, Era2Reader};
 use tracing::info;
+use trin_e2store::era2::{self, AccountOrStorageEntry, Era2Reader};
 
 #[derive(Debug, Parser)]
 #[command(

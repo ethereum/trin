@@ -13,17 +13,17 @@ pub mod validation;
 use std::sync::Arc;
 
 use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
-use portalnet::{
-    config::PortalnetConfig,
-    discovery::{Discovery, UtpEnr},
-    events::{EventEnvelope, OverlayRequest},
-};
 use tokio::{
     sync::{broadcast, mpsc, RwLock},
     task::JoinHandle,
     time::{interval, Duration},
 };
 use tracing::info;
+use trin_portalnet::{
+    config::PortalnetConfig,
+    discovery::{Discovery, UtpEnr},
+    events::{EventEnvelope, OverlayRequest},
+};
 use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;

@@ -1,7 +1,6 @@
 use std::{fs, str::FromStr};
 
 use alloy::primitives::Bytes;
-use e2store::era1::Era1;
 use ethportal_api::{
     jsonrpsee::{async_client::Client, http_client::HttpClient},
     types::{enr::Enr, execution::accumulator::EpochAccumulator, portal_wire::OfferTrace},
@@ -9,9 +8,10 @@ use ethportal_api::{
     ContentValue, Discv5ApiClient, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use portal_bridge::api::execution::construct_proof;
-use portalnet::constants::DEFAULT_UTP_TRANSFER_LIMIT;
 use ssz::Decode;
 use tracing::info;
+use trin_e2store::era1::Era1;
+use trin_portalnet::constants::DEFAULT_UTP_TRANSFER_LIMIT;
 
 use crate::{
     utils::{

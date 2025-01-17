@@ -1,5 +1,5 @@
 [package]
-name = "portalnet"
+name = "trin-portalnet"
 description = "Core library for Trin."
 authors.workspace = true
 categories.workspace = true

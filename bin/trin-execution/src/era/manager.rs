@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
 use anyhow::{bail, ensure};
-use e2store::{
-    era1::Era1,
-    utils::{get_era1_files, get_era_files, ERA1_FILE_COUNT},
-};
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client,
 };
 use tokio::task::JoinHandle;
 use tracing::info;
+use trin_e2store::{
+    era1::Era1,
+    utils::{get_era1_files, get_era_files, ERA1_FILE_COUNT},
+};
 
 use super::{
     binary_search::EraBinarySearch,

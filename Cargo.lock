@@ -1938,28 +1938,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d6ef0072f8a535281e4876be788938b528e9a1d43900b82c2569af7da799125"
 
 [[package]]
-name = "e2store"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "alloy-rlp",
- "anyhow",
- "clap",
- "ethereum_ssz",
- "ethereum_ssz_derive",
- "ethportal-api",
- "rand",
- "reqwest",
- "rstest",
- "scraper",
- "snap",
- "tokio",
- "tracing",
- "trin-utils",
- "url",
-]
-
-[[package]]
 name = "ecdsa"
 version = "0.16.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2269,17 +2247,14 @@ dependencies = [
  "alloy",
  "anyhow",
  "discv5",
- "e2store",
  "ethereum_ssz",
  "ethportal-api",
  "futures",
  "hex",
  "jsonrpsee",
  "portal-bridge",
- "portalnet",
  "rand",
  "reth-ipc",
- "rpc",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -2290,7 +2265,10 @@ dependencies = [
  "tracing-subscriber 0.3.19",
  "tree_hash",
  "trin",
+ "trin-e2store",
  "trin-history",
+ "trin-portalnet",
+ "trin-rpc",
  "trin-state",
  "trin-utils",
  "trin-validation",
@@ -3631,37 +3609,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "light-client"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "anyhow",
- "async-trait",
- "chrono",
- "ethportal-api",
- "figment",
- "futures",
- "hex",
- "jsonrpsee",
- "log",
- "portalnet",
- "reqwest",
- "serde",
- "serde-this-or-that",
- "serde_json",
- "serde_yaml",
- "snowbridge-milagro-bls",
- "ssz-rs",
- "ssz_types",
- "strum",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.19",
- "tree_hash",
-]
-
-[[package]]
 name = "linux-raw-sys"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4385,7 +4332,6 @@ dependencies = [
  "clap",
  "delay_map 0.4.0",
  "discv5",
- "e2store",
  "env_logger 0.9.3",
  "eth_trie",
  "ethereum_ssz",
@@ -4394,7 +4340,6 @@ dependencies = [
  "humanize-duration",
  "itertools 0.13.0",
  "jsonrpsee",
- "portalnet",
  "prometheus_exporter",
  "rand",
  "reqwest",
@@ -4413,60 +4358,14 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-test",
+ "trin-e2store",
  "trin-evm",
  "trin-execution",
  "trin-metrics",
+ "trin-portalnet",
  "trin-utils",
  "trin-validation",
  "url",
-]
-
-[[package]]
-name = "portalnet"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "anyhow",
- "async-trait",
- "bytes",
- "crossbeam-channel",
- "delay_map 0.4.0",
- "discv5",
- "env_logger 0.9.3",
- "ethereum_ssz",
- "ethportal-api",
- "fnv",
- "futures",
- "hex",
- "igd-next",
- "itertools 0.13.0",
- "lazy_static",
- "leb128",
- "local-ip-address",
- "lru 0.7.8",
- "parking_lot 0.11.2",
- "quickcheck",
- "rand",
- "rstest",
- "serde",
- "serial_test",
- "smallvec",
- "ssz_types",
- "stunclient",
- "tempfile",
- "test-log",
- "thiserror 1.0.69",
- "tokio",
- "tokio-stream",
- "tokio-test",
- "tracing",
- "tracing-subscriber 0.3.19",
- "trin-metrics",
- "trin-storage",
- "trin-utils",
- "trin-validation",
- "uds_windows",
- "utp-rs",
 ]
 
 [[package]]
@@ -5063,31 +4962,6 @@ name = "route-recognizer"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "afab94fb28594581f62d981211a9a4d53cc8130bbcbbb89a0440d9b8e81a7746"
-
-[[package]]
-name = "rpc"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "discv5",
- "eth_trie",
- "ethportal-api",
- "http 1.2.0",
- "portalnet",
- "reth-ipc",
- "revm",
- "serde",
- "serde_json",
- "strum",
- "thiserror 1.0.69",
- "tokio",
- "tower 0.4.13",
- "tower-http",
- "tracing",
- "trin-evm",
- "trin-utils",
- "trin-validation",
-]
 
 [[package]]
 name = "rs_merkle"
@@ -6715,9 +6589,7 @@ dependencies = [
  "clap",
  "discv5",
  "ethportal-api",
- "portalnet",
  "prometheus_exporter",
- "rpc",
  "rstest",
  "test-log",
  "tokio",
@@ -6725,6 +6597,8 @@ dependencies = [
  "tree_hash",
  "trin-beacon",
  "trin-history",
+ "trin-portalnet",
+ "trin-rpc",
  "trin-state",
  "trin-storage",
  "trin-utils",
@@ -6743,9 +6617,7 @@ dependencies = [
  "discv5",
  "ethereum_ssz",
  "ethportal-api",
- "light-client",
  "parking_lot 0.11.2",
- "portalnet",
  "r2d2",
  "r2d2_sqlite",
  "rusqlite",
@@ -6756,10 +6628,34 @@ dependencies = [
  "tokio",
  "tracing",
  "tree_hash",
+ "trin-light-client",
  "trin-metrics",
+ "trin-portalnet",
  "trin-storage",
  "trin-validation",
  "utp-rs",
+]
+
+[[package]]
+name = "trin-e2store"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "alloy-rlp",
+ "anyhow",
+ "clap",
+ "ethereum_ssz",
+ "ethereum_ssz_derive",
+ "ethportal-api",
+ "rand",
+ "reqwest",
+ "rstest",
+ "scraper",
+ "snap",
+ "tokio",
+ "tracing",
+ "trin-utils",
+ "url",
 ]
 
 [[package]]
@@ -6782,7 +6678,6 @@ dependencies = [
  "alloy-rpc-types-engine",
  "anyhow",
  "clap",
- "e2store",
  "eth_trie",
  "ethportal-api",
  "futures-util",
@@ -6806,6 +6701,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-test",
+ "trin-e2store",
  "trin-evm",
  "trin-utils",
 ]
@@ -6821,7 +6717,6 @@ dependencies = [
  "ethereum_ssz",
  "ethportal-api",
  "parking_lot 0.11.2",
- "portalnet",
  "quickcheck",
  "rand",
  "rstest",
@@ -6834,10 +6729,42 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.19",
  "tree_hash",
+ "trin-portalnet",
  "trin-storage",
  "trin-validation",
  "ureq",
  "utp-rs",
+]
+
+[[package]]
+name = "trin-light-client"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "ethportal-api",
+ "figment",
+ "futures",
+ "hex",
+ "jsonrpsee",
+ "log",
+ "reqwest",
+ "serde",
+ "serde-this-or-that",
+ "serde_json",
+ "serde_yaml",
+ "snowbridge-milagro-bls",
+ "ssz-rs",
+ "ssz_types",
+ "strum",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+ "tree_hash",
+ "trin-portalnet",
 ]
 
 [[package]]
@@ -6848,6 +6775,79 @@ dependencies = [
  "ethportal-api",
  "lazy_static",
  "prometheus_exporter",
+]
+
+[[package]]
+name = "trin-portalnet"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "crossbeam-channel",
+ "delay_map 0.4.0",
+ "discv5",
+ "env_logger 0.9.3",
+ "ethereum_ssz",
+ "ethportal-api",
+ "fnv",
+ "futures",
+ "hex",
+ "igd-next",
+ "itertools 0.13.0",
+ "lazy_static",
+ "leb128",
+ "local-ip-address",
+ "lru 0.7.8",
+ "parking_lot 0.11.2",
+ "quickcheck",
+ "rand",
+ "rstest",
+ "serde",
+ "serial_test",
+ "smallvec",
+ "ssz_types",
+ "stunclient",
+ "tempfile",
+ "test-log",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-stream",
+ "tokio-test",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+ "trin-metrics",
+ "trin-storage",
+ "trin-utils",
+ "trin-validation",
+ "uds_windows",
+ "utp-rs",
+]
+
+[[package]]
+name = "trin-rpc"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "discv5",
+ "eth_trie",
+ "ethportal-api",
+ "http 1.2.0",
+ "reth-ipc",
+ "revm",
+ "serde",
+ "serde_json",
+ "strum",
+ "thiserror 1.0.69",
+ "tokio",
+ "tower 0.4.13",
+ "tower-http",
+ "tracing",
+ "trin-evm",
+ "trin-portalnet",
+ "trin-utils",
+ "trin-validation",
 ]
 
 [[package]]
@@ -6863,7 +6863,6 @@ dependencies = [
  "ethportal-api",
  "keccak-hash",
  "parking_lot 0.11.2",
- "portalnet",
  "rstest",
  "serde",
  "serde_json",
@@ -6874,6 +6873,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
+ "trin-portalnet",
  "trin-storage",
  "trin-utils",
  "trin-validation",
@@ -7137,11 +7137,11 @@ dependencies = [
  "discv5",
  "ethportal-api",
  "jsonrpsee",
- "portalnet",
  "rand",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
+ "trin-portalnet",
  "trin-utils",
  "trin-validation",
  "utp-rs",

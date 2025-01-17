@@ -11,10 +11,10 @@ use ethportal_api::{
     utils::bytes::hex_encode,
     ContentValue, HistoryContentKey, HistoryContentValue, OverlayContentKey,
 };
-use portalnet::overlay::{config::FindContentConfig, errors::OverlayRequestError};
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tracing::error;
+use trin_portalnet::overlay::{config::FindContentConfig, errors::OverlayRequestError};
 use trin_storage::ContentStore;
 
 use crate::network::HistoryNetwork;

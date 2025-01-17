@@ -15,9 +15,9 @@ use ethportal_api::{
 };
 use futures::future;
 use jsonrpsee::async_client::Client;
-use portalnet::constants::DEFAULT_DISCOVERY_PORT;
-use rpc::RpcServerHandle;
 use trin::cli::TrinConfig;
+use trin_portalnet::constants::DEFAULT_DISCOVERY_PORT;
+use trin_rpc::RpcServerHandle;
 
 pub struct PeertestNode {
     pub enr: Enr,

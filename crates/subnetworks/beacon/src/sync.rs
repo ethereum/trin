@@ -6,9 +6,9 @@ use light_client::{
     config::networks, consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client,
     ClientBuilder,
 };
-use portalnet::overlay::command::OverlayCommand;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{error, info};
+use trin_portalnet::overlay::command::OverlayCommand;
 
 #[derive(Clone, Debug)]
 pub struct BeaconSync {

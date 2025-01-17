@@ -1,4 +1,7 @@
 #![cfg(unix)]
+
+mod utils;
+
 /// Test that a 3rd-party web3 client can understand our JSON-RPC API
 use std::fs;
 use std::net::{IpAddr, Ipv4Addr};
@@ -19,14 +22,12 @@ use ethportal_api::{
     ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use jsonrpsee::async_client::Client;
-use portalnet::constants::{DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
-use rpc::RpcServerHandle;
 use serde_yaml::Value;
 use serial_test::serial;
 use ssz::Decode;
-
-mod utils;
 use trin::cli::TrinConfig;
+use trin_portalnet::constants::{DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
+use trin_rpc::RpcServerHandle;
 use url::Url;
 use utils::init_tracing;
 

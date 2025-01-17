@@ -1,10 +1,10 @@
-use e2store::{
+use reqwest::Client;
+use revm_primitives::SpecId;
+use trin_e2store::{
     e2store::types::{Entry, Header as E2StoreHeader},
     era::{get_beacon_fork, CompressedSignedBeaconBlock, Era, SLOTS_PER_HISTORICAL_ROOT},
     utils::get_era_files,
 };
-use reqwest::Client;
-use revm_primitives::SpecId;
 use trin_evm::spec_id::get_spec_block_number;
 
 use super::{

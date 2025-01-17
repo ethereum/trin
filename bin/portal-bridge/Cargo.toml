@@ -19,7 +19,6 @@ chrono.workspace = true
 clap.workspace = true
 delay_map.workspace = true
 discv5.workspace = true
-e2store.workspace = true
 eth_trie.workspace = true
 ethereum_ssz.workspace = true
 ethportal-api.workspace = true
@@ -32,7 +31,6 @@ jsonrpsee = { workspace = true, features = [
   "macros",
   "server",
 ] }
-portalnet.workspace = true
 prometheus_exporter.workspace = true
 rand.workspace = true
 reqwest.workspace = true
@@ -50,7 +48,9 @@ tokio.workspace = true
 tracing.workspace = true
 trin-evm.workspace = true
 trin-execution.workspace = true
+trin-e2store.workspace = true
 trin-metrics.workspace = true
+trin-portalnet.workspace = true
 trin-utils.workspace = true
 trin-validation.workspace = true
 url.workspace = true
