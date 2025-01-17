@@ -213,7 +213,7 @@ impl Discovery {
                         // TODO: this is a temporary fix to prevent caching of eth2 nodes
                         // and will be updated to a more stable solution as soon as it
                         // validates the theory of what is causing the issue on mainnet.
-                        if enr.get(ENR_PORTAL_CLIENT_KEY).is_none() {
+                        if enr.get_decodable::<String>(ENR_PORTAL_CLIENT_KEY).is_none() {
                             debug!(
                                 enr = ?enr,
                                 "discv5 session established with node that does not have a portal client key, not caching"
@@ -416,8 +416,8 @@ impl UtpEnr {
 
     pub fn client(&self) -> Option<String> {
         self.0
-            .get(ENR_PORTAL_CLIENT_KEY)
-            .and_then(|v| String::from_utf8(v.to_vec()).ok())
+            .get_decodable::<String>(ENR_PORTAL_CLIENT_KEY)
+            .and_then(|v| v.ok())
     }
 }
 

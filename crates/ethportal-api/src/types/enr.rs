@@ -4,9 +4,9 @@ use std::{
     str::FromStr,
 };
 
+use alloy_rlp::{Encodable, RlpDecodableWrapper, RlpEncodableWrapper};
 use discv5::enr::{CombinedKey, Enr as Discv5Enr};
 use rand::Rng;
-use rlp::Encodable;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ssz::DecodeError;
@@ -14,7 +14,9 @@ use validator::ValidationError;
 
 pub type Enr = Discv5Enr<CombinedKey>;
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, PartialEq, Clone, Serialize, Deserialize, RlpEncodableWrapper, RlpDecodableWrapper,
+)]
 pub struct SszEnr(pub Enr);
 
 impl SszEnr {
@@ -76,11 +78,13 @@ impl ssz::Encode for SszEnr {
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
-        buf.append(&mut self.rlp_bytes().to_vec());
+        self.encode(buf);
     }
 
     fn ssz_bytes_len(&self) -> usize {
-        self.rlp_bytes().to_vec().ssz_bytes_len()
+        let mut buf = vec![];
+        self.encode(&mut buf);
+        buf.ssz_bytes_len()
     }
 }
 

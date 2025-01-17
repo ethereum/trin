@@ -14,7 +14,7 @@ version.workspace = true
 [dependencies]
 alloy.workspace = true
 anyhow.workspace = true
-enr = "0.10.0"
+enr = "0.13.0"
 ethereum_hashing = "0.7.0"
 ethereum_ssz.workspace = true
 ethereum_ssz_derive.workspace = true
