@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
+use alloy::primitives::U256;
 use anyhow::{bail, ensure};
 use itertools::Itertools;
-use ssz::{Decode, Encode};
-use ssz_derive::{Decode, Encode};
+use ssz::{Decode, Encode, SszDecoderBuilder, SszEncoder};
 use ssz_types::{
     typenum::{U200, U400},
     VariableList,
@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-#[derive(PartialEq, Debug, Clone, Encode, Decode)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct ClientInfoRadiusCapabilities {
     pub client_info: Option<ClientInfo>,
     pub data_radius: Distance,
@@ -68,6 +68,67 @@ impl From<ClientInfoRadiusCapabilities> for CustomPayload {
             }
             .as_ssz_bytes(),
         )
+    }
+}
+
+impl Encode for ClientInfoRadiusCapabilities {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        let offset = <VariableList<u8, U200> as Encode>::ssz_fixed_len()
+            + <U256 as Encode>::ssz_fixed_len()
+            + <VariableList<u16, U400> as Encode>::ssz_fixed_len();
+        let mut encoder = SszEncoder::container(buf, offset);
+        let client_info = match &self.client_info {
+            Some(client_info) => client_info.string(),
+            None => "".to_string(),
+        };
+        let bytes: Vec<u8> = client_info.as_bytes().to_vec();
+        let client_info: VariableList<u8, U200> = VariableList::from(bytes);
+
+        encoder.append(&client_info);
+        encoder.append(&self.data_radius);
+        encoder.append(&self.capabilities);
+        encoder.finalize();
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        self.as_ssz_bytes().len()
+    }
+}
+
+impl Decode for ClientInfoRadiusCapabilities {
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+        let mut builder = SszDecoderBuilder::new(bytes);
+        builder.register_type::<VariableList<u8, U200>>()?;
+        builder.register_type::<U256>()?;
+        builder.register_type::<VariableList<u16, U400>>()?;
+        let mut decoder = builder.build()?;
+        let client_info: VariableList<u8, U200> = decoder.decode_next()?;
+        let data_radius: U256 = decoder.decode_next()?;
+        let capabilities: VariableList<u16, U400> = decoder.decode_next()?;
+
+        let string = String::from_utf8(client_info.to_vec()).map_err(|_| {
+            ssz::DecodeError::BytesInvalid(format!("Invalid utf8 string: {client_info:?}"))
+        })?;
+        let client_info = match string.as_str() {
+            "" => None,
+            _ => Some(ClientInfo::from_str(&string).map_err(|err| {
+                ssz::DecodeError::BytesInvalid(format!("Failed to parse client info: {err:?}"))
+            })?),
+        };
+
+        Ok(Self {
+            client_info,
+            data_radius: Distance::from(data_radius),
+            capabilities,
+        })
+    }
+
+    fn is_ssz_fixed_len() -> bool {
+        false
     }
 }
 
@@ -153,38 +214,6 @@ impl FromStr for ClientInfo {
     }
 }
 
-impl Encode for ClientInfo {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let bytes: Vec<u8> = self.string().as_bytes().to_vec();
-        let byte_list: VariableList<u8, U200> = VariableList::from(bytes);
-        buf.extend_from_slice(&byte_list);
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        self.as_ssz_bytes().len()
-    }
-}
-
-impl Decode for ClientInfo {
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let byte_list = VariableList::<u8, U200>::from_ssz_bytes(bytes)?;
-        let string = String::from_utf8(byte_list.to_vec()).map_err(|_| {
-            ssz::DecodeError::BytesInvalid(format!("Invalid utf8 string: {byte_list:?}"))
-        })?;
-        Self::from_str(&string).map_err(|err| {
-            ssz::DecodeError::BytesInvalid(format!("Failed to parse client info: {err:?}"))
-        })
-    }
-
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use alloy::primitives::U256;
@@ -219,22 +248,6 @@ mod tests {
         } else {
             panic!("Decoded extension is not ClientInfoRadiusCapabilities");
         }
-    }
-
-    #[test]
-    fn test_ssz_round_trip() {
-        let client_info = ClientInfo::trin_client_info();
-        let bytes = client_info.as_ssz_bytes();
-        let decoded = ClientInfo::from_ssz_bytes(&bytes).unwrap();
-        assert_eq!(client_info, decoded);
-    }
-
-    #[test]
-    fn test_client_info_round_trip() {
-        let client_info = ClientInfo::trin_client_info();
-        let bytes = client_info.as_ssz_bytes();
-        let decoded = ClientInfo::from_ssz_bytes(&bytes).unwrap();
-        assert_eq!(client_info, decoded);
     }
 
     #[test]
@@ -281,7 +294,7 @@ mod tests {
 
         let encoded: Vec<u8> = ping.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0001000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff56000000017472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff";
+        let expected_encoded = "0x0001000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff550000007472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -303,7 +316,7 @@ mod tests {
 
         let encoded: Vec<u8> = ping.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0001000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff290000000000000100ffff";
+        let expected_encoded = "0x0001000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2800000000000100ffff";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -330,7 +343,7 @@ mod tests {
 
         let encoded: Vec<u8> = pong.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0101000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff56000000017472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff";
+        let expected_encoded = "0x0101000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff550000007472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -352,7 +365,7 @@ mod tests {
 
         let encoded: Vec<u8> = pong.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0101000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff290000000000000100ffff";
+        let expected_encoded = "0x0101000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2800000000000100ffff";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
