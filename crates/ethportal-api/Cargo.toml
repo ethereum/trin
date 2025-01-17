@@ -20,7 +20,6 @@ base64 = "0.13.0"
 bimap = "0.6.3"
 bytes.workspace = true
 c-kzg = "1.0.0"
-const_format = {version = "0.2.0", features = ["rust_1_64"]}
 discv5.workspace = true
 eth_trie.workspace = true
 ethereum_hashing.workspace = true
