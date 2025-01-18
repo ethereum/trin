@@ -2,7 +2,7 @@
 
 Trin is a Rust implementation of a [Portal Network](https://github.com/ethereum/portal-network-specs) client.
 
-The Portal Network is still in the research phase, and this client is experimental.
+The Portal Network is still in the research pha1se, and this client is experimental.
 
 **Do not rely on Trin in a production setting.**
 
