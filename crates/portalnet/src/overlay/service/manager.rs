@@ -2600,7 +2600,8 @@ mod tests {
 
         let ping = Ping {
             enr_seq: source.seq() + 1,
-            custom_payload: ClientInfoRadiusCapabilities::new(
+            payload_type: 0,
+            payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
                 service.ping_extensions.raw_extensions(),
             )
@@ -2649,7 +2650,8 @@ mod tests {
 
         let ping = Ping {
             enr_seq: source.seq(),
-            custom_payload: ClientInfoRadiusCapabilities::new(
+            payload_type: 0,
+            payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
                 service.ping_extensions.raw_extensions(),
             )
@@ -2714,7 +2716,8 @@ mod tests {
 
         let pong = Pong {
             enr_seq: source.seq() + 1,
-            custom_payload: ClientInfoRadiusCapabilities::new(
+            payload_type: 0,
+            payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
                 service.ping_extensions.raw_extensions(),
             )
@@ -2762,7 +2765,8 @@ mod tests {
 
         let pong = Pong {
             enr_seq: source.seq(),
-            custom_payload: ClientInfoRadiusCapabilities::new(
+            payload_type: 0,
+            payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
                 service.ping_extensions.raw_extensions(),
             )

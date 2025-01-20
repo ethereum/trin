@@ -12,9 +12,7 @@ use ssz_types::{
 use crate::{
     types::{
         distance::Distance,
-        ping_extensions::custom_payload_format::{
-            CustomPayloadExtensionsFormat, ExtensionError, Extensions,
-        },
+        ping_extensions::extension_types::{ExtensionError, Extensions},
         portal_wire::CustomPayload,
     },
     version::{
@@ -61,13 +59,7 @@ impl ClientInfoRadiusCapabilities {
 
 impl From<ClientInfoRadiusCapabilities> for CustomPayload {
     fn from(client_info_radius_capacities: ClientInfoRadiusCapabilities) -> Self {
-        CustomPayload::from(
-            CustomPayloadExtensionsFormat {
-                r#type: 0,
-                payload: client_info_radius_capacities.as_ssz_bytes().into(),
-            }
-            .as_ssz_bytes(),
-        )
+        CustomPayload::from(client_info_radius_capacities.as_ssz_bytes())
     }
 }
 
@@ -236,7 +228,7 @@ mod tests {
             ClientInfoRadiusCapabilities::new(radius, capabilities);
         let custom_payload = CustomPayload::from(client_info_radius_capabilities.clone());
 
-        let decoded_extension = DecodedExtension::try_from(custom_payload).unwrap();
+        let decoded_extension = DecodedExtension::decode_extension(0, custom_payload).unwrap();
 
         if let DecodedExtension::Capabilities(decoded_client_info_radius_capabilities) =
             decoded_extension
@@ -285,16 +277,17 @@ mod tests {
             data_radius,
             capabilities,
         );
-        let custom_payload = CustomPayload::from(capabilities_payload);
+        let payload = CustomPayload::from(capabilities_payload);
         let ping = Ping {
             enr_seq: 1,
-            custom_payload,
+            payload_type: 0,
+            payload,
         };
         let ping = Message::Ping(ping);
 
         let encoded: Vec<u8> = ping.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0001000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff550000007472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff";
+        let expected_encoded = "0x00010000000000000000000e00000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff550000007472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -307,16 +300,17 @@ mod tests {
         let capabilities = vec![0, 1, 65535];
         let capabilities_payload =
             ClientInfoRadiusCapabilities::new_with_client_info(None, data_radius, capabilities);
-        let custom_payload = CustomPayload::from(capabilities_payload);
+        let payload = CustomPayload::from(capabilities_payload);
         let ping = Ping {
             enr_seq: 1,
-            custom_payload,
+            payload_type: 0,
+            payload,
         };
         let ping = Message::Ping(ping);
 
         let encoded: Vec<u8> = ping.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0001000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2800000000000100ffff";
+        let expected_encoded = "0x00010000000000000000000e00000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2800000000000100ffff";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -334,16 +328,17 @@ mod tests {
             data_radius,
             capabilities,
         );
-        let custom_payload = CustomPayload::from(capabilities_payload);
+        let payload = CustomPayload::from(capabilities_payload);
         let pong = Pong {
             enr_seq: 1,
-            custom_payload,
+            payload_type: 0,
+            payload,
         };
         let pong = Message::Pong(pong);
 
         let encoded: Vec<u8> = pong.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0101000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff550000007472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff";
+        let expected_encoded = "0x01010000000000000000000e00000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff550000007472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -356,16 +351,17 @@ mod tests {
         let capabilities = vec![0, 1, 65535];
         let capabilities_payload =
             ClientInfoRadiusCapabilities::new_with_client_info(None, data_radius, capabilities);
-        let custom_payload = CustomPayload::from(capabilities_payload);
+        let payload = CustomPayload::from(capabilities_payload);
         let pong = Pong {
             enr_seq: 1,
-            custom_payload,
+            payload_type: 0,
+            payload,
         };
         let pong = Message::Pong(pong);
 
         let encoded: Vec<u8> = pong.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0101000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2800000000000100ffff";
+        let expected_encoded = "0x01010000000000000000000e00000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2800000000000100ffff";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();

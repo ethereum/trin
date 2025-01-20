@@ -98,10 +98,11 @@ fn routing_table_info(network: Arc<StateNetwork>) -> Result<Value, String> {
 async fn ping(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
     let pong = match network.overlay.send_ping(enr.clone()).await {
         Ok(pong) => {
-            let data_radius = match DecodedExtension::try_from(pong.custom_payload) {
-                Ok(DecodedExtension::Capabilities(capabilities)) => *capabilities.data_radius,
-                err => return Err(format!("Failed to decode capabilities: {err:?}")),
-            };
+            let data_radius =
+                match DecodedExtension::decode_extension(pong.payload_type, pong.payload) {
+                    Ok(DecodedExtension::Capabilities(capabilities)) => *capabilities.data_radius,
+                    err => return Err(format!("Failed to decode capabilities: {err:?}")),
+                };
 
             Ok(PongInfo {
                 enr_seq: pong.enr_seq,

@@ -1,7 +1,7 @@
 use std::fmt;
 
 use ethportal_api::types::{
-    distance::Distance, enr::Enr, ping_extensions::custom_payload_format::Extensions,
+    distance::Distance, enr::Enr, ping_extensions::extension_types::Extensions,
 };
 
 /// A node in the overlay network routing table.

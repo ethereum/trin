@@ -375,12 +375,13 @@ impl<
         // Construct the request.
         let enr_seq = self.discovery.local_enr().seq();
         let data_radius = self.data_radius();
-        let custom_payload =
+        let payload =
             ClientInfoRadiusCapabilities::new(data_radius, self.ping_extensions.raw_extensions())
                 .into();
         let request = Ping {
             enr_seq,
-            custom_payload,
+            payload_type: 0,
+            payload,
         };
 
         let direction = RequestDirection::Outgoing { destination: enr };

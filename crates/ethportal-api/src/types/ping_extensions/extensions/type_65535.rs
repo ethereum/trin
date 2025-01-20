@@ -3,10 +3,7 @@ use ssz::Encode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum::U300, VariableList};
 
-use crate::types::{
-    ping_extensions::custom_payload_format::CustomPayloadExtensionsFormat,
-    portal_wire::CustomPayload,
-};
+use crate::types::portal_wire::CustomPayload;
 
 /// Used to respond to pings which the node can't handle
 #[derive(PartialEq, Debug, Clone, Encode, Decode)]
@@ -35,13 +32,7 @@ impl PingError {
 
 impl From<PingError> for CustomPayload {
     fn from(ping_error: PingError) -> Self {
-        CustomPayload::from(
-            CustomPayloadExtensionsFormat {
-                r#type: 65535,
-                payload: ping_error.as_ssz_bytes().into(),
-            }
-            .as_ssz_bytes(),
-        )
+        CustomPayload::from(ping_error.as_ssz_bytes())
     }
 }
 
@@ -82,7 +73,7 @@ mod tests {
         let ping_error = PingError::new(error_code);
         let custom_payload = CustomPayload::from(ping_error.clone());
 
-        let decoded_extension = DecodedExtension::try_from(custom_payload).unwrap();
+        let decoded_extension = DecodedExtension::decode_extension(65535, custom_payload).unwrap();
 
         if let DecodedExtension::Error(decoded_ping_error) = decoded_extension {
             assert_eq!(ping_error, decoded_ping_error);
@@ -119,17 +110,17 @@ mod tests {
         let message = "hello world";
         let basic_radius =
             PingError::new_with_message(error_code, message.as_bytes().to_vec()).unwrap();
-        let custom_payload = CustomPayload::from(basic_radius);
+        let payload = CustomPayload::from(basic_radius);
         let pong = Pong {
             enr_seq: 1,
-            custom_payload,
+            payload_type: 65535,
+            payload,
         };
         let pong = Message::Pong(pong);
 
         let encoded: Vec<u8> = pong.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded =
-            "0x0101000000000000000c000000ffff0600000002000600000068656c6c6f20776f726c64";
+        let expected_encoded = "0x010100000000000000ffff0e00000002000600000068656c6c6f20776f726c64";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();

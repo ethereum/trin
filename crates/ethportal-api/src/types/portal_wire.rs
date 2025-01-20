@@ -17,9 +17,9 @@ use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
+use super::bytes::ByteList1100;
 use crate::{
     types::{
-        bytes::ByteList2048,
         enr::{Enr, SszEnr},
         network::{Network, Subnetwork},
     },
@@ -72,7 +72,7 @@ pub const MAX_PORTAL_CONTENT_PAYLOAD_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_S
 /// Custom payload element of Ping and Pong overlay messages
 #[derive(Debug, PartialEq, Clone)]
 pub struct CustomPayload {
-    pub payload: ByteList2048,
+    pub payload: ByteList1100,
 }
 
 impl TryFrom<&Value> for CustomPayload {
@@ -89,7 +89,7 @@ impl TryFrom<&Value> for CustomPayload {
             ))?,
         };
         Ok(Self {
-            payload: ByteList2048::from(payload),
+            payload: ByteList1100::from(payload),
         })
     }
 }
@@ -97,7 +97,7 @@ impl TryFrom<&Value> for CustomPayload {
 impl From<Vec<u8>> for CustomPayload {
     fn from(ssz_bytes: Vec<u8>) -> Self {
         Self {
-            payload: ByteList2048::from(ssz_bytes),
+            payload: ByteList1100::from(ssz_bytes),
         }
     }
 }
@@ -109,7 +109,7 @@ impl ssz::Decode for CustomPayload {
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         Ok(Self {
-            payload: ByteList2048::from(bytes.to_vec()),
+            payload: ByteList1100::from(bytes.to_vec()),
         })
     }
 }
@@ -338,16 +338,18 @@ impl TryFrom<Message> for Response {
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Ping {
     pub enr_seq: u64,
-    pub custom_payload: CustomPayload,
+    pub payload_type: u16,
+    pub payload: CustomPayload,
 }
 
 impl fmt::Display for Ping {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Ping(enr_seq={}, radius={})",
+            "Ping(enr_seq={}, payload_type={}, payload={})",
             self.enr_seq,
-            hex_encode(self.custom_payload.as_ssz_bytes())
+            self.payload_type,
+            hex_encode(self.payload.as_ssz_bytes())
         )
     }
 }
@@ -355,16 +357,18 @@ impl fmt::Display for Ping {
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Pong {
     pub enr_seq: u64,
-    pub custom_payload: CustomPayload,
+    pub payload_type: u16,
+    pub payload: CustomPayload,
 }
 
 impl fmt::Display for Pong {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Pong(enr_seq={}, radius={})",
+            "Pong(enr_seq={}, payload_type={}, payload={})",
             self.enr_seq,
-            hex_encode(self.custom_payload.as_ssz_bytes())
+            self.payload_type,
+            hex_encode(self.payload.as_ssz_bytes())
         )
     }
 }
@@ -372,7 +376,7 @@ impl fmt::Display for Pong {
 /// Convert to JSON Value from Pong ssz bytes
 impl From<Pong> for Value {
     fn from(val: Pong) -> Self {
-        match U256::from_ssz_bytes(&val.custom_payload.payload.as_ssz_bytes()) {
+        match U256::from_ssz_bytes(&val.payload.payload.as_ssz_bytes()) {
             Ok(data_radius) => {
                 let mut result = Map::new();
                 result.insert("enrSeq".to_owned(), Value::String(val.enr_seq.to_string()));

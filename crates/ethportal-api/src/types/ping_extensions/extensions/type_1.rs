@@ -1,10 +1,7 @@
 use ssz::Encode;
 use ssz_derive::{Decode, Encode};
 
-use crate::types::{
-    distance::Distance, ping_extensions::custom_payload_format::CustomPayloadExtensionsFormat,
-    portal_wire::CustomPayload,
-};
+use crate::types::{distance::Distance, portal_wire::CustomPayload};
 
 #[derive(PartialEq, Debug, Clone, Encode, Decode)]
 pub struct BasicRadius {
@@ -19,13 +16,7 @@ impl BasicRadius {
 
 impl From<BasicRadius> for CustomPayload {
     fn from(basic_radius: BasicRadius) -> Self {
-        CustomPayload::from(
-            CustomPayloadExtensionsFormat {
-                r#type: 1,
-                payload: basic_radius.as_ssz_bytes().into(),
-            }
-            .as_ssz_bytes(),
-        )
+        CustomPayload::from(basic_radius.as_ssz_bytes())
     }
 }
 
@@ -50,7 +41,7 @@ mod tests {
         let basic_radius = BasicRadius::new(data_radius);
         let custom_payload = CustomPayload::from(basic_radius.clone());
 
-        let decoded_extension = DecodedExtension::try_from(custom_payload).unwrap();
+        let decoded_extension = DecodedExtension::decode_extension(1, custom_payload).unwrap();
 
         if let DecodedExtension::BasicRadius(decoded_basic_radius) = decoded_extension {
             assert_eq!(basic_radius, decoded_basic_radius);
@@ -73,16 +64,17 @@ mod tests {
     fn message_encoding_ping_basic_radius() {
         let data_radius = Distance::from(U256::MAX - U256::from(1));
         let basic_radius = BasicRadius::new(data_radius);
-        let custom_payload = CustomPayload::from(basic_radius);
+        let payload = CustomPayload::from(basic_radius);
         let ping = Ping {
             enr_seq: 1,
-            custom_payload,
+            payload_type: 1,
+            payload,
         };
         let ping = Message::Ping(ping);
 
         let encoded: Vec<u8> = ping.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0001000000000000000c000000010006000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        let expected_encoded = "0x00010000000000000001000e000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -93,16 +85,17 @@ mod tests {
     fn message_encoding_pong_basic_radius() {
         let data_radius = Distance::from(U256::MAX - U256::from(1));
         let basic_radius = BasicRadius::new(data_radius);
-        let custom_payload = CustomPayload::from(basic_radius);
+        let payload = CustomPayload::from(basic_radius);
         let pong = Pong {
             enr_seq: 1,
-            custom_payload,
+            payload_type: 1,
+            payload,
         };
         let pong = Message::Pong(pong);
 
         let encoded: Vec<u8> = pong.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0101000000000000000c000000010006000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        let expected_encoded = "0x01010000000000000001000e000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();

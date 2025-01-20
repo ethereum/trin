@@ -346,10 +346,11 @@ async fn ping(
 ) -> Result<Value, String> {
     match network.overlay.send_ping(enr).await {
         Ok(pong) => {
-            let data_radius = match DecodedExtension::try_from(pong.custom_payload) {
-                Ok(DecodedExtension::Capabilities(capabilities)) => *capabilities.data_radius,
-                err => return Err(format!("Failed to decode capabilities: {err:?}")),
-            };
+            let data_radius =
+                match DecodedExtension::decode_extension(pong.payload_type, pong.payload) {
+                    Ok(DecodedExtension::Capabilities(capabilities)) => *capabilities.data_radius,
+                    err => return Err(format!("Failed to decode capabilities: {err:?}")),
+                };
 
             Ok(json!(PongInfo {
                 enr_seq: pong.enr_seq,

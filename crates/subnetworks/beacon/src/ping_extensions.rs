@@ -1,4 +1,4 @@
-use ethportal_api::types::ping_extensions::custom_payload_format::Extensions;
+use ethportal_api::types::ping_extensions::extension_types::Extensions;
 use portalnet::overlay::ping_extensions::PingExtension;
 
 pub struct BeaconPingExtensions {}
