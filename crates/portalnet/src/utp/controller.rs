@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use anyhow::anyhow;
 use bytes::Bytes;
 use lazy_static::lazy_static;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::sync::Semaphore;
 use tracing::debug;
 use trin_metrics::{
     labels::{UtpDirectionLabel, UtpOutcomeLabel},
@@ -11,6 +11,7 @@ use trin_metrics::{
 };
 use utp_rs::{cid::ConnectionId, conn::ConnectionConfig, socket::UtpSocket};
 
+use super::timed_semaphore::OwnedTimedSemaphorePermit;
 use crate::discovery::UtpEnr;
 /// UtpController is meant to be a container which contains all code related to/for managing uTP
 /// streams We are implementing this because we want the utils of controlling uTP connection to be
@@ -65,29 +66,45 @@ impl UtpController {
     }
 
     /// Non-blocking method to try and acquire a permit for an outbound uTP transfer.
-    // `try_acquire_owned()` isn't blocking and will instantly return with
-    // `Some(TryAcquireError::NoPermits)` error if there isn't a permit available
-    pub fn get_outbound_semaphore(&self) -> Option<OwnedSemaphorePermit> {
+    /// `try_acquire_owned()` isn't blocking and will instantly return with
+    /// `Some(TryAcquireError::NoPermits)` error if there isn't a permit available
+    pub fn get_outbound_semaphore(&self) -> Option<OwnedTimedSemaphorePermit> {
         match self
             .outbound_utp_transfer_semaphore
             .clone()
             .try_acquire_owned()
         {
-            Ok(permit) => Some(permit),
+            Ok(permit) => {
+                let histogram_timer = self
+                    .metrics
+                    .start_utp_process_timer(UtpDirectionLabel::Outbound);
+                Some(OwnedTimedSemaphorePermit {
+                    permit,
+                    histogram_timer,
+                })
+            }
             Err(_) => None,
         }
     }
 
     /// Non-blocking method to try and acquire a permit for an inbound uTP transfer.
-    // `try_acquire_owned()` isn't blocking and will instantly return with
-    // `Some(TryAcquireError::NoPermits)` error if there isn't a permit available
-    pub fn get_inbound_semaphore(&self) -> Option<OwnedSemaphorePermit> {
+    /// `try_acquire_owned()` isn't blocking and will instantly return with
+    /// `Some(TryAcquireError::NoPermits)` error if there isn't a permit available
+    pub fn get_inbound_semaphore(&self) -> Option<OwnedTimedSemaphorePermit> {
         match self
             .inbound_utp_transfer_semaphore
             .clone()
             .try_acquire_owned()
         {
-            Ok(permit) => Some(permit),
+            Ok(permit) => {
+                let histogram_timer = self
+                    .metrics
+                    .start_utp_process_timer(UtpDirectionLabel::Inbound);
+                Some(OwnedTimedSemaphorePermit {
+                    permit,
+                    histogram_timer,
+                })
+            }
             Err(_) => None,
         }
     }

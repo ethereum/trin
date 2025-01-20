@@ -22,7 +22,7 @@ use crate::{
         request::{OverlayRequest, RequestDirection},
     },
     types::kbucket::SharedKBucketsTable,
-    utp_controller::UtpController,
+    utp::controller::UtpController,
 };
 
 /// Datatype to store the result of a put content request.

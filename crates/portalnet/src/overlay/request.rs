@@ -6,10 +6,9 @@ use ethportal_api::types::{
     portal_wire::{Request, Response},
 };
 use futures::channel::oneshot;
-use tokio::sync::OwnedSemaphorePermit;
 
 use super::errors::OverlayRequestError;
-use crate::find::query_pool::QueryId;
+use crate::{find::query_pool::QueryId, utp::timed_semaphore::OwnedTimedSemaphorePermit};
 
 /// An incoming or outgoing request.
 #[derive(Debug, PartialEq)]
@@ -44,7 +43,7 @@ pub struct OverlayRequest {
     /// Will be None for requests that are not associated with a query.
     pub query_id: Option<QueryId>,
     /// An optional permit to allow for transfer caps
-    pub request_permit: Option<OwnedSemaphorePermit>,
+    pub request_permit: Option<OwnedTimedSemaphorePermit>,
 }
 
 impl OverlayRequest {
@@ -54,7 +53,7 @@ impl OverlayRequest {
         direction: RequestDirection,
         responder: Option<OverlayResponder>,
         query_id: Option<QueryId>,
-        request_permit: Option<OwnedSemaphorePermit>,
+        request_permit: Option<OwnedTimedSemaphorePermit>,
     ) -> Self {
         OverlayRequest {
             id: rand::random(),
@@ -77,7 +76,7 @@ pub struct ActiveOutgoingRequest {
     /// An optional QueryID for the query that this request is associated with.
     pub query_id: Option<QueryId>,
     /// An optional permit to allow for transfer caps
-    pub request_permit: Option<OwnedSemaphorePermit>,
+    pub request_permit: Option<OwnedTimedSemaphorePermit>,
 }
 
 /// A response for a particular overlay request.
