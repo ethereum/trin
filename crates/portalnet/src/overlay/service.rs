@@ -44,7 +44,6 @@ use tokio::{
     sync::{
         broadcast,
         mpsc::{self, UnboundedReceiver, UnboundedSender},
-        OwnedSemaphorePermit,
     },
     task::JoinHandle,
 };
@@ -85,7 +84,7 @@ use crate::{
         node::Node,
     },
     utils::portal_wire,
-    utp_controller::UtpController,
+    utp::{controller::UtpController, timed_semaphore::OwnedTimedSemaphorePermit},
 };
 
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -1031,7 +1030,7 @@ impl<
                     let utp = Arc::clone(&self.utp_controller);
                     tokio::spawn(async move {
                         utp.accept_outbound_stream(cid, &content).await;
-                        drop(permit);
+                        permit.drop();
                     });
 
                     // Connection id is sent as BE because uTP header values are stored also as BE
@@ -1218,7 +1217,7 @@ impl<
                         })
                         .collect();
                     let _ = join_all(handles).await;
-                    drop(permit);
+                    permit.drop();
                     return;
                 }
             };
@@ -1242,7 +1241,7 @@ impl<
                         })
                         .collect();
                     let _ = join_all(handles).await;
-                    drop(permit);
+                    permit.drop();
                     return;
                 }
             };
@@ -1302,7 +1301,7 @@ impl<
                 Some(utp_processing.utp_controller),
             );
             // explicitly drop semaphore permit in thread so the permit is moved into the thread
-            drop(permit);
+            permit.drop();
         });
 
         let accept = Accept {
@@ -1433,7 +1432,7 @@ impl<
         source: Enr,
         request: Request,
         query_id: Option<QueryId>,
-        request_permit: Option<OwnedSemaphorePermit>,
+        request_permit: Option<OwnedTimedSemaphorePermit>,
     ) {
         // If the node is present in the routing table, but the node is not connected, then
         // use the existing entry's value and direction. Otherwise, build a new entry from
@@ -1493,7 +1492,7 @@ impl<
         response: Accept,
         enr: Enr,
         offer: Request,
-        request_permit: Option<OwnedSemaphorePermit>,
+        request_permit: Option<OwnedTimedSemaphorePermit>,
     ) -> anyhow::Result<Accept> {
         // Check that a valid triggering request was sent
         let mut gossip_result_tx = None;
@@ -1593,7 +1592,7 @@ impl<
             }
             // explicitly drop permit in the thread so the permit is included in the thread
             if let Some(permit) = request_permit {
-                drop(permit);
+                permit.drop();
             }
         });
 

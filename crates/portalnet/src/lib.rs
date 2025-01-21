@@ -13,4 +13,4 @@ pub mod put_content;
 pub mod socket;
 pub mod types;
 pub mod utils;
-pub mod utp_controller;
+pub mod utp;

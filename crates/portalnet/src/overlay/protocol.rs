@@ -59,7 +59,7 @@ use crate::{
         kbucket::{Entry, SharedKBucketsTable},
         node::Node,
     },
-    utp_controller::UtpController,
+    utp::controller::UtpController,
 };
 
 /// Overlay protocol is a layer on top of discv5 that handles all requests from the overlay networks

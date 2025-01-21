@@ -2,12 +2,16 @@ use ethportal_api::types::portal_wire::{Request, Response};
 use prometheus_exporter::{
     self,
     prometheus::{
-        opts, register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
+        histogram_opts, opts, register_histogram_vec_with_registry,
+        register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry, HistogramVec,
         IntCounterVec, IntGaugeVec, Registry,
     },
 };
 
-use crate::labels::{MessageDirectionLabel, MessageLabel, UtpDirectionLabel, UtpOutcomeLabel};
+use crate::{
+    labels::{MessageDirectionLabel, MessageLabel, UtpDirectionLabel, UtpOutcomeLabel},
+    timer::DiscardOnDropHistogramTimer,
+};
 
 /// Contains metrics reporters for use in the overlay network
 /// (eg. `portalnet/src/overlay.rs` & `portalnet/src/overlay_service.rs`).
@@ -18,6 +22,7 @@ pub struct OverlayMetrics {
     pub message_total: IntCounterVec,
     pub utp_outcome_total: IntCounterVec,
     pub utp_active_gauge: IntGaugeVec,
+    pub utp_connection_duration: HistogramVec,
     pub validation_total: IntCounterVec,
 }
 
@@ -47,6 +52,14 @@ impl OverlayMetrics {
             &["protocol", "direction"],
             registry
         )?;
+        let utp_connection_duration = register_histogram_vec_with_registry!(
+            histogram_opts!(
+                "trin_utp_connection_duration",
+                "the time taken to complete a utp transfer"
+            ),
+            &["protocol", "direction"],
+            registry
+        )?;
         let validation_total = register_int_counter_vec_with_registry!(
             opts!(
                 "trin_validation_total",
@@ -59,6 +72,7 @@ impl OverlayMetrics {
             message_total,
             utp_outcome_total,
             utp_active_gauge,
+            utp_connection_duration,
             validation_total,
         })
     }
@@ -155,6 +169,18 @@ impl OverlayMetricsReporter {
             .utp_active_gauge
             .with_label_values(&labels)
             .dec();
+    }
+
+    pub fn start_utp_process_timer(
+        &self,
+        direction: UtpDirectionLabel,
+    ) -> DiscardOnDropHistogramTimer {
+        DiscardOnDropHistogramTimer::new(
+            self.overlay_metrics
+                .utp_connection_duration
+                .with_label_values(&[&self.protocol, direction.into()])
+                .clone(),
+        )
     }
 
     //
