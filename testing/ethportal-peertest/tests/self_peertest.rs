@@ -339,6 +339,8 @@ async fn peertest_ping_cross_discv5_protocol_id() {
         test_discovery_port.to_string().as_ref(),
         "--bootnodes",
         "none",
+        "--max-radius",
+        "100",
     ])
     .unwrap();
     let mainnet_handle = trin::run_trin(trin_config).await.unwrap();
@@ -392,6 +394,8 @@ async fn setup_peertest(
         test_discovery_port.to_string().as_ref(),
         "--bootnodes",
         "none",
+        "--max-radius",
+        "100",
     ])
     .unwrap();
 
@@ -446,6 +450,8 @@ async fn setup_peertest_bridge(
         test_discovery_port.to_string().as_ref(),
         "--bootnodes",
         &peertest.bootnode.enr.to_base64(),
+        "--max-radius",
+        "100",
     ])
     .unwrap();
 

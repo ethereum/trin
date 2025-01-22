@@ -107,6 +107,8 @@ fn generate_trin_config(
         "--unsafe-private-key",
         private_key.as_str(),
         "--ephemeral",
+        "--max-radius",
+        "100",
     ];
     TrinConfig::new_from(trin_config_args).unwrap()
 }

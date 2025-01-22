@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use discv5::enr::NodeId;
-use ethportal_api::types::network::Subnetwork;
+use ethportal_api::types::{distance::Distance, network::Subnetwork};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 
@@ -19,6 +19,7 @@ pub struct IdIndexedV1StoreConfig {
     pub sql_connection_pool: Pool<SqliteConnectionManager>,
     pub distance_fn: DistanceFunction,
     pub pruning_config: PruningConfig,
+    pub max_radius: Distance,
 }
 
 impl IdIndexedV1StoreConfig {
@@ -37,6 +38,7 @@ impl IdIndexedV1StoreConfig {
             distance_fn: config.distance_fn,
             // consider making this a parameter if we start using non-default value
             pruning_config: PruningConfig::default(),
+            max_radius: config.max_radius,
         }
     }
 }

@@ -364,6 +364,8 @@ fn fresh_node_config() -> (String, TrinConfig) {
         test_discovery_port.to_string().as_ref(),
         "--bootnodes",
         "none",
+        "--max-radius",
+        "100",
         "--unsafe-private-key",
         // node id: 0x27128939ed60d6f4caef0374da15361a2c1cd6baa1a5bccebac1acd18f485900
         "0x9ca7889c09ef1162132251b6284bd48e64bd3e71d75ea33b959c37be0582a2fd",
