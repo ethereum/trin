@@ -181,7 +181,7 @@ impl FromStr for ClientInfo {
 
         let client_name = parts[0];
 
-        let Some((client_version, short_commit)) = parts[1].split('-').collect_tuple() else {
+        let Some((client_version, short_commit)) = parts[1].rsplit_once('-') else {
             bail!(
                 "Invalid client info string: should look like 0.1.1-2b00d730 got {}",
                 parts[1]
