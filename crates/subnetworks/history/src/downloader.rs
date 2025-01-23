@@ -278,7 +278,9 @@ impl Downloader {
                         enr.node_id(),
                         0,
                         Duration::from_secs(0),
-                        &OfferTrace::Failed,
+                        &OfferTrace::Success(
+                            BitList::with_capacity(1).expect("Failed to create bitlist"),
+                        ),
                     );
                     continue;
                 }
