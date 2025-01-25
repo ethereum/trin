@@ -17,10 +17,11 @@ use ethportal_api::{
             trie_traversal::{NodeTraversal, TraversalError, TraversalResult},
         },
     },
-    ContentValue, ContentValueError, Header, StateContentKey, StateContentValue,
+    ContentValue, ContentValueError, Header, OverlayContentKey, StateContentKey, StateContentValue,
 };
 use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
 use tokio::sync::mpsc;
+use tracing::debug;
 use trin_evm::async_db::AsyncDatabase;
 
 use crate::{errors::RpcServeError, fetch::proxy_to_subnet};
@@ -161,6 +162,10 @@ impl EvmBlockState {
             return Ok(value.clone());
         }
 
+        debug!(
+            content_id = ?Bytes::from(content_key.content_id()),
+            content_key = ?content_key.to_bytes(),
+            "Fetching state content");
         let endpoint = StateEndpoint::GetContent(content_key.clone());
         let GetContentInfo { content, .. } =
             proxy_to_subnet(&self.state_network, endpoint)

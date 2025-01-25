@@ -126,6 +126,13 @@ impl EthApiServer for EthApi {
         if transaction.gas.is_none() {
             transaction.gas = Some(evm_block_state.block_header().gas_limit.to());
         }
+        // If gas price is not set, set it to base fee
+        if transaction.gas_price.is_none() {
+            transaction.gas_price = evm_block_state
+                .block_header()
+                .base_fee_per_gas
+                .map(|base_fee| base_fee.to());
+        }
 
         let result_and_state = execute_transaction(
             create_block_env(evm_block_state.block_header()),
