@@ -1,12 +1,9 @@
 use std::{
     collections::HashMap,
-    fs::File,
-    io::BufReader,
-    path::Path,
     time::{Duration, Instant},
 };
 
-use anyhow::{bail, ensure};
+use anyhow::ensure;
 use eth_trie::{RootWithTrieDiff, Trie};
 use ethportal_api::{
     types::{execution::transaction::Transaction, state_trie::account_state::AccountState},
@@ -36,8 +33,6 @@ use crate::{
 };
 
 pub const BLOCKHASH_SERVE_WINDOW: u64 = 256;
-const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";
-const TEST_GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct AllocBalance {
@@ -132,14 +127,8 @@ impl<'a> BlockExecutor<'a> {
     }
 
     fn process_genesis(&mut self) -> anyhow::Result<()> {
-        let genesis_file = if Path::new(GENESIS_STATE_FILE).is_file() {
-            File::open(GENESIS_STATE_FILE)?
-        } else if Path::new(TEST_GENESIS_STATE_FILE).is_file() {
-            File::open(TEST_GENESIS_STATE_FILE)?
-        } else {
-            bail!("Genesis file not found")
-        };
-        let genesis: GenesisConfig = serde_json::from_reader(BufReader::new(genesis_file))?;
+        let genesis: GenesisConfig =
+            serde_json::from_str(include_str!("../../resources/genesis/mainnet.json"))?;
 
         for (address, alloc_balance) in genesis.alloc {
             let address_hash = keccak256(address);
