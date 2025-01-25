@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{cmp::min, marker::PhantomData};
 
 use ethportal_api::{types::distance::Distance, OverlayContentKey, RawContentValue};
 use r2d2::Pool;
@@ -437,7 +437,10 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 }
             }
             Some(farthest) => {
-                self.radius = self.distance_to_content_id(&farthest.content_id);
+                self.radius = min(
+                    self.distance_to_content_id(&farthest.content_id),
+                    self.config.max_radius,
+                );
             }
         }
         self.metrics.report_radius(self.radius);
