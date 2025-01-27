@@ -1,4 +1,4 @@
-use std::env;
+pub const APP_NAME: &str = "trin";
 
 /// The latest git commit hash of the build.
 pub const TRIN_FULL_COMMIT: &str = env!("VERGEN_GIT_SHA");

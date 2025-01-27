@@ -12,7 +12,7 @@ use ethportal_api::{
         network::Subnetwork,
         portal_wire::{NetworkSpec, MAINNET},
     },
-    version::FULL_VERSION,
+    version::{APP_NAME, FULL_VERSION},
 };
 use portalnet::{
     bootnodes::Bootnodes,
@@ -33,7 +33,6 @@ const DEFAULT_SUBNETWORKS: &str = "history";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
-const APP_NAME: &str = "trin";
 #[derive(Parser, Debug, PartialEq, Clone)]
 #[command(name = APP_NAME,
     author = "https://github.com/ethereum/trin/graphs/contributors",
@@ -442,7 +441,7 @@ mod tests {
     #[test_log::test]
     fn test_default_args() {
         let expected_config = TrinConfig::default();
-        let actual_config = TrinConfig::new_from(["trin"]).unwrap();
+        let actual_config = TrinConfig::new_from([APP_NAME]).unwrap();
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
         assert_eq!(
             actual_config.web3_http_address,
@@ -456,7 +455,7 @@ mod tests {
 
     #[test_log::test]
     fn test_help() {
-        TrinConfig::new_from(["trin", "-h"]).expect_err("Should be an error to exit early");
+        TrinConfig::new_from([APP_NAME, "-h"]).expect_err("Should be an error to exit early");
     }
 
     #[test_log::test]
@@ -467,7 +466,7 @@ mod tests {
             ..Default::default()
         };
         let actual_config = TrinConfig::new_from([
-            "trin",
+            APP_NAME,
             "--web3-transport",
             "http",
             "--web3-http-address",
@@ -499,7 +498,7 @@ mod tests {
     #[test_log::test]
     fn test_ipc_with_custom_path() {
         let actual_config =
-            TrinConfig::new_from(["trin", "--web3-ipc-path", "/path/test.ipc"]).unwrap();
+            TrinConfig::new_from([APP_NAME, "--web3-ipc-path", "/path/test.ipc"]).unwrap();
         let expected_config = TrinConfig {
             web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS).unwrap(),
             web3_ipc_path: PathBuf::from("/path/test.ipc"),
@@ -519,7 +518,7 @@ mod tests {
 
     fn test_http_protocol_rejects_custom_web3_ipc_path() {
         TrinConfig::new_from([
-            "trin",
+            APP_NAME,
             "--web3-transport",
             "http",
             "--web3-ipc-path",
@@ -531,7 +530,7 @@ mod tests {
     #[test_log::test]
     #[should_panic(expected = "Must not supply an http address when using ipc")]
     fn test_ipc_protocol_rejects_custom_web3_http_address() {
-        TrinConfig::new_from(["trin", "--web3-http-address", "http://127.0.0.1:1234/"]).unwrap();
+        TrinConfig::new_from([APP_NAME, "--web3-http-address", "http://127.0.0.1:1234/"]).unwrap();
     }
 
     #[test_log::test]
@@ -540,14 +539,14 @@ mod tests {
             discovery_port: 999,
             ..Default::default()
         };
-        let actual_config = TrinConfig::new_from(["trin", "--discovery-port", "999"]).unwrap();
+        let actual_config = TrinConfig::new_from([APP_NAME, "--discovery-port", "999"]).unwrap();
         assert_eq!(actual_config.discovery_port, expected_config.discovery_port);
     }
 
     #[test_log::test]
     fn test_manual_external_addr_v4() {
         let actual_config =
-            TrinConfig::new_from(["trin", "--external-address", "127.0.0.1:1234"]).unwrap();
+            TrinConfig::new_from([APP_NAME, "--external-address", "127.0.0.1:1234"]).unwrap();
         assert_eq!(
             actual_config.external_addr,
             Some(SocketAddr::from(([127, 0, 0, 1], 1234)))
@@ -557,7 +556,7 @@ mod tests {
     #[test_log::test]
     fn test_manual_external_addr_v6() {
         let actual_config =
-            TrinConfig::new_from(["trin", "--external-address", "[::1]:1234"]).unwrap();
+            TrinConfig::new_from([APP_NAME, "--external-address", "[::1]:1234"]).unwrap();
         assert_eq!(
             actual_config.external_addr,
             Some(SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 1234)))
@@ -571,7 +570,7 @@ mod tests {
             ..Default::default()
         };
         let actual_config = TrinConfig::new_from([
-            "trin",
+            APP_NAME,
             "--unsafe-private-key",
             "0x0101010101010101010101010101010101010101010101010101010101010101",
         ])
@@ -585,7 +584,7 @@ mod tests {
             ephemeral: true,
             ..Default::default()
         };
-        let actual_config = TrinConfig::new_from(["trin", "--ephemeral"]).unwrap();
+        let actual_config = TrinConfig::new_from([APP_NAME, "--ephemeral"]).unwrap();
         assert_eq!(actual_config.ephemeral, expected_config.ephemeral);
     }
 
@@ -599,7 +598,8 @@ mod tests {
             ..Default::default()
         };
         let actual_config =
-            TrinConfig::new_from(["trin", "--enable-metrics-with-url", "127.0.0.1:1234"]).unwrap();
+            TrinConfig::new_from([APP_NAME, "--enable-metrics-with-url", "127.0.0.1:1234"])
+                .unwrap();
         assert_eq!(
             actual_config.enable_metrics_with_url,
             expected_config.enable_metrics_with_url
@@ -612,7 +612,7 @@ mod tests {
     )]
     fn test_custom_private_key_odd_length() {
         TrinConfig::new_from([
-            "trin",
+            APP_NAME,
             "--unsafe-private-key",
             "0x010101010101010101010101010101010101010101010101010101010101010",
         ])
@@ -625,7 +625,7 @@ mod tests {
     )]
     fn test_custom_private_key_requires_32_bytes() {
         TrinConfig::new_from([
-            "trin",
+            APP_NAME,
             "--unsafe-private-key",
             "0x01010101010101010101010101010101010101010101010101010101010101",
         ])
@@ -638,7 +638,7 @@ mod tests {
     )]
     fn test_trusted_block_root_requires_32_bytes() {
         TrinConfig::new_from([
-            "trin",
+            APP_NAME,
             "--trusted-block-root",
             "0x01010101010101010101010101010101010101010101010101010101010101",
         ])
@@ -649,7 +649,7 @@ mod tests {
     #[should_panic(expected = "Trusted block root must be prefixed with 0x")]
     fn test_trusted_block_root_starts_with_0x() {
         TrinConfig::new_from([
-            "trin",
+            APP_NAME,
             "--trusted-block-root",
             "010101010101010101010101010101010101010101010101010101010101010101",
         ])
@@ -659,7 +659,7 @@ mod tests {
     #[test_log::test]
     #[should_panic(expected = "Invalid web3-transport arg. Expected either 'http' or 'ipc'")]
     fn test_invalid_web3_transport_argument() {
-        TrinConfig::new_from(["trin", "--web3-transport", "invalid"]).unwrap();
+        TrinConfig::new_from([APP_NAME, "--web3-transport", "invalid"]).unwrap();
     }
 
     mod storage_config {
@@ -667,7 +667,7 @@ mod tests {
 
         #[test_log::test]
         fn no_flags() {
-            let config = TrinConfig::new_from(["trin"]).unwrap();
+            let config = TrinConfig::new_from([APP_NAME]).unwrap();
             assert_eq!(
                 config.storage_capacity_config(),
                 StorageCapacityConfig::Combined {
@@ -680,7 +680,7 @@ mod tests {
         #[test_log::test]
         fn with_subnetworks() {
             let config =
-                TrinConfig::new_from(["trin", "--portal-subnetworks", "history,state"]).unwrap();
+                TrinConfig::new_from([APP_NAME, "--portal-subnetworks", "history,state"]).unwrap();
             assert_eq!(
                 config.storage_capacity_config(),
                 StorageCapacityConfig::Combined {
@@ -692,7 +692,7 @@ mod tests {
 
         #[test_log::test]
         fn with_total() {
-            let config = TrinConfig::new_from(["trin", "--storage.total", "200"]).unwrap();
+            let config = TrinConfig::new_from([APP_NAME, "--storage.total", "200"]).unwrap();
             assert_eq!(
                 config.storage_capacity_config(),
                 StorageCapacityConfig::Combined {
@@ -705,7 +705,7 @@ mod tests {
         #[test_log::test]
         fn with_total_and_subnetworks() {
             let config = TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--storage.total",
                 "200",
                 "--portal-subnetworks",
@@ -723,7 +723,7 @@ mod tests {
 
         #[test_log::test]
         fn with_mb() {
-            let config = TrinConfig::new_from(["trin", "--mb", "200"]).unwrap();
+            let config = TrinConfig::new_from([APP_NAME, "--mb", "200"]).unwrap();
             assert_eq!(
                 config.storage_capacity_config(),
                 StorageCapacityConfig::Combined {
@@ -736,7 +736,7 @@ mod tests {
         #[test_log::test]
         fn with_mb_and_subnetworks() {
             let config = TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--mb",
                 "200",
                 "--portal-subnetworks",
@@ -755,7 +755,7 @@ mod tests {
         #[test_log::test]
         fn with_total_and_all_subnetworks() {
             let config = TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--storage.total",
                 "200",
                 "--portal-subnetworks",
@@ -776,8 +776,14 @@ mod tests {
             expected = "--storage.total and --storage.beacon can't be set at the same time"
         )]
         fn with_total_and_beacon() {
-            TrinConfig::new_from(["trin", "--storage.total", "200", "--storage.beacon", "100"])
-                .unwrap();
+            TrinConfig::new_from([
+                APP_NAME,
+                "--storage.total",
+                "200",
+                "--storage.beacon",
+                "100",
+            ])
+            .unwrap();
         }
 
         #[test_log::test]
@@ -785,8 +791,14 @@ mod tests {
             expected = "--storage.total and --storage.history can't be set at the same time"
         )]
         fn with_total_and_history() {
-            TrinConfig::new_from(["trin", "--storage.total", "200", "--storage.history", "100"])
-                .unwrap();
+            TrinConfig::new_from([
+                APP_NAME,
+                "--storage.total",
+                "200",
+                "--storage.history",
+                "100",
+            ])
+            .unwrap();
         }
 
         #[test_log::test]
@@ -794,13 +806,13 @@ mod tests {
             expected = "--storage.total and --storage.state can't be set at the same time"
         )]
         fn with_total_and_state() {
-            TrinConfig::new_from(["trin", "--storage.total", "200", "--storage.state", "100"])
+            TrinConfig::new_from([APP_NAME, "--storage.total", "200", "--storage.state", "100"])
                 .unwrap();
         }
 
         #[test_log::test]
         fn with_history() {
-            let config = TrinConfig::new_from(["trin", "--storage.history", "200"]).unwrap();
+            let config = TrinConfig::new_from([APP_NAME, "--storage.history", "200"]).unwrap();
             assert_eq!(
                 config.storage_capacity_config(),
                 StorageCapacityConfig::Specific {
@@ -814,7 +826,7 @@ mod tests {
         #[test_log::test]
         fn with_history_and_state() {
             let config = TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--storage.history",
                 "200",
                 "--storage.state",
@@ -836,7 +848,7 @@ mod tests {
         #[test_log::test]
         fn with_history_and_state_and_beacon() {
             let config = TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--storage.history",
                 "200",
                 "--storage.state",
@@ -860,15 +872,21 @@ mod tests {
         #[test_log::test]
         #[should_panic(expected = "--storage.state is set but State subnetwork is not enabled")]
         fn with_history_and_state_without_subnetworks() {
-            TrinConfig::new_from(["trin", "--storage.history", "200", "--storage.state", "300"])
-                .unwrap();
+            TrinConfig::new_from([
+                APP_NAME,
+                "--storage.history",
+                "200",
+                "--storage.state",
+                "300",
+            ])
+            .unwrap();
         }
 
         #[test_log::test]
         #[should_panic(expected = "--storage.beacon is set but Beacon subnetwork is not enabled")]
         fn with_history_and_beacon_without_subnetworks() {
             TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--storage.history",
                 "200",
                 "--storage.beacon",
@@ -881,7 +899,7 @@ mod tests {
         #[should_panic(expected = "--storage.history is set but History subnetwork is not enabled")]
         fn with_history_and_beacon_without_history_subnetwork() {
             TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--storage.history",
                 "200",
                 "--storage.beacon",
@@ -896,7 +914,7 @@ mod tests {
         #[should_panic(expected = "History subnetwork enabled but --storage.history is not set")]
         fn specific_without_history_with_subnetwork() {
             TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--storage.state",
                 "200",
                 "--portal-subnetworks",
@@ -909,7 +927,7 @@ mod tests {
         #[should_panic(expected = "State subnetwork enabled but --storage.state is not set")]
         fn specific_without_state_with_subnetwork() {
             TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--storage.history",
                 "200",
                 "--portal-subnetworks",
@@ -922,7 +940,7 @@ mod tests {
         #[should_panic(expected = "Beacon subnetwork enabled but --storage.beacon is not set")]
         fn specific_without_beacon_with_subnetwork() {
             TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--storage.history",
                 "200",
                 "--portal-subnetworks",
@@ -934,7 +952,7 @@ mod tests {
         #[test_log::test]
         fn with_total_zero() {
             let config = TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--storage.total",
                 "0",
                 "--portal-subnetworks",
@@ -953,7 +971,7 @@ mod tests {
         #[test_log::test]
         fn with_zero_per_subnetwork() {
             let config = TrinConfig::new_from([
-                "trin",
+                APP_NAME,
                 "--storage.history",
                 "0",
                 "--storage.state",
@@ -983,7 +1001,7 @@ mod tests {
 
         #[test_log::test]
         fn test_bootnodes_default_with_default_bootnodes() {
-            let config = TrinConfig::new_from(["trin"]).unwrap();
+            let config = TrinConfig::new_from([APP_NAME]).unwrap();
             assert_eq!(config.bootnodes, Bootnodes::Default);
             let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
             assert_eq!(bootnodes.len(), 11);
@@ -991,7 +1009,7 @@ mod tests {
 
         #[test_log::test]
         fn test_bootnodes_default_with_explicit_default_bootnodes() {
-            let config = TrinConfig::new_from(["trin", "--bootnodes", "default"]).unwrap();
+            let config = TrinConfig::new_from([APP_NAME, "--bootnodes", "default"]).unwrap();
             assert_eq!(config.bootnodes, Bootnodes::Default);
             let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
             assert_eq!(bootnodes.len(), 11);
@@ -999,7 +1017,7 @@ mod tests {
 
         #[test_log::test]
         fn test_bootnodes_default_with_no_bootnodes() {
-            let config = TrinConfig::new_from(["trin", "--bootnodes", "none"]).unwrap();
+            let config = TrinConfig::new_from([APP_NAME, "--bootnodes", "none"]).unwrap();
             assert_eq!(config.bootnodes, Bootnodes::None);
             let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
             assert_eq!(bootnodes.len(), 0);
@@ -1010,7 +1028,7 @@ mod tests {
         #[case("enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg,invalid")]
         #[should_panic]
         fn test_bootnodes_invalid_enr(#[case] bootnode: &str) {
-            TrinConfig::new_from(["trin", "--bootnodes", bootnode]).unwrap();
+            TrinConfig::new_from([APP_NAME, "--bootnodes", bootnode]).unwrap();
         }
 
         #[rstest::rstest]
@@ -1020,7 +1038,7 @@ mod tests {
         fn test_bootnodes_valid_enrs(#[case] bootnode: &str, #[case] expected_length: usize) {
             use ethportal_api::types::network::Network;
 
-            let config = TrinConfig::new_from(["trin", "--bootnodes", bootnode]).unwrap();
+            let config = TrinConfig::new_from([APP_NAME, "--bootnodes", bootnode]).unwrap();
             match config.bootnodes.clone() {
                 Bootnodes::Custom(bootnodes) => {
                     assert_eq!(bootnodes.len(), expected_length);
@@ -1033,7 +1051,7 @@ mod tests {
 
         #[rstest::rstest]
         fn test_angelfood_network_defaults_to_correct_bootnodes() {
-            let config = TrinConfig::new_from(["trin", "--network", "angelfood"]).unwrap();
+            let config = TrinConfig::new_from([APP_NAME, "--network", "angelfood"]).unwrap();
             assert_eq!(config.bootnodes, Bootnodes::Default);
             let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Angelfood);
             assert_eq!(bootnodes.len(), 1);
@@ -1043,7 +1061,7 @@ mod tests {
         fn test_custom_bootnodes_override_angelfood_default() {
             let enr = "enr:-IS4QBISSFfBzsBrjq61iSIxPMfp5ShBTW6KQUglzH_tj8_SJaehXdlnZI-NAkTGeoclwnTB-pU544BQA44BiDZ2rkMBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg";
             let config =
-                TrinConfig::new_from(["trin", "--network", "angelfood", "--bootnodes", enr])
+                TrinConfig::new_from([APP_NAME, "--network", "angelfood", "--bootnodes", enr])
                     .unwrap();
             assert_eq!(
                 config.bootnodes,

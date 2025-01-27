@@ -129,7 +129,7 @@ pub async fn test_ping(subnetwork: Subnetwork, target: &Client, peertest: &Peert
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
-    .unwrap();
+    .unwrap_or_else(|_| panic!("Ping failed {subnetwork}"));
     assert_eq!(
         result.data_radius,
         U256::from_be_slice(Distance::MAX.as_ssz_bytes().as_slice())

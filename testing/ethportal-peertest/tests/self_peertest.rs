@@ -4,7 +4,10 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
-use ethportal_api::types::network::{Network, Subnetwork};
+use ethportal_api::{
+    types::network::{Network, Subnetwork},
+    version::APP_NAME,
+};
 use ethportal_peertest as peertest;
 use ethportal_peertest::Peertest;
 use jsonrpsee::{async_client::Client, http_client::HttpClient};
@@ -325,7 +328,7 @@ async fn peertest_ping_cross_discv5_protocol_id() {
     let external_addr = format!("{}:{test_discovery_port}", Ipv4Addr::new(127, 0, 0, 1));
 
     let trin_config = TrinConfig::new_from([
-        "trin",
+        APP_NAME,
         "--network",
         &Network::Mainnet.to_string(),
         "--portal-subnetworks",
@@ -374,7 +377,7 @@ async fn setup_peertest(
 
     // Run a client, to be tested
     let trin_config = TrinConfig::new_from([
-        "trin",
+        APP_NAME,
         "--network",
         &network.to_string(),
         "--portal-subnetworks",
@@ -429,7 +432,7 @@ async fn setup_peertest_bridge(
     env::set_var("PANDAOPS_CLIENT_SECRET", "xxx");
     // Run a client, to be tested
     let trin_config = TrinConfig::new_from([
-        "trin",
+        APP_NAME,
         "--network",
         &network.to_string(),
         "--portal-subnetworks",

@@ -4,8 +4,8 @@ use discv5::{enr::NodeId, Enr};
 use ethportal_api::{
     jsonrpsee::core::Serialize,
     types::{
-        distance::Distance,
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
+        ping_extensions::decode::DecodedExtension,
         portal::{AcceptInfo, FindNodesInfo, GetContentInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
     },
@@ -96,13 +96,22 @@ fn routing_table_info(network: Arc<StateNetwork>) -> Result<Value, String> {
 }
 
 async fn ping(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
-    to_json_result(
-        "Ping",
-        network.overlay.send_ping(enr).await.map(|pong| PongInfo {
-            enr_seq: pong.enr_seq,
-            data_radius: *Distance::from(pong.custom_payload),
-        }),
-    )
+    let pong = match network.overlay.send_ping(enr.clone()).await {
+        Ok(pong) => {
+            let data_radius =
+                match DecodedExtension::decode_extension(pong.payload_type, pong.payload) {
+                    Ok(DecodedExtension::Capabilities(capabilities)) => *capabilities.data_radius,
+                    err => return Err(format!("Failed to decode capabilities: {err:?}")),
+                };
+
+            Ok(PongInfo {
+                enr_seq: pong.enr_seq,
+                data_radius,
+            })
+        }
+        Err(msg) => Err(format!("Ping request timeout: {msg:?}")),
+    };
+    to_json_result("Ping", pong)
 }
 
 fn add_enr(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {

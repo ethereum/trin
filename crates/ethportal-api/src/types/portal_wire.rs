@@ -1,7 +1,6 @@
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
-    ops::Deref,
     sync::Arc,
 };
 
@@ -18,10 +17,9 @@ use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
+use super::bytes::ByteList1100;
 use crate::{
     types::{
-        bytes::ByteList2048,
-        distance::Distance,
         enr::{Enr, SszEnr},
         network::{Network, Subnetwork},
     },
@@ -74,7 +72,7 @@ pub const MAX_PORTAL_CONTENT_PAYLOAD_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_S
 /// Custom payload element of Ping and Pong overlay messages
 #[derive(Debug, PartialEq, Clone)]
 pub struct CustomPayload {
-    payload: ByteList2048,
+    pub payload: ByteList1100,
 }
 
 impl TryFrom<&Value> for CustomPayload {
@@ -91,7 +89,7 @@ impl TryFrom<&Value> for CustomPayload {
             ))?,
         };
         Ok(Self {
-            payload: ByteList2048::from(payload),
+            payload: ByteList1100::from(payload),
         })
     }
 }
@@ -99,15 +97,8 @@ impl TryFrom<&Value> for CustomPayload {
 impl From<Vec<u8>> for CustomPayload {
     fn from(ssz_bytes: Vec<u8>) -> Self {
         Self {
-            payload: ByteList2048::from(ssz_bytes),
+            payload: ByteList1100::from(ssz_bytes),
         }
-    }
-}
-
-impl From<CustomPayload> for Distance {
-    fn from(val: CustomPayload) -> Self {
-        let bytes = val.payload;
-        U256::from_le_slice(bytes.deref()).into()
     }
 }
 
@@ -118,7 +109,7 @@ impl ssz::Decode for CustomPayload {
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         Ok(Self {
-            payload: ByteList2048::from(bytes.to_vec()),
+            payload: ByteList1100::from(bytes.to_vec()),
         })
     }
 }
@@ -347,16 +338,18 @@ impl TryFrom<Message> for Response {
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Ping {
     pub enr_seq: u64,
-    pub custom_payload: CustomPayload,
+    pub payload_type: u16,
+    pub payload: CustomPayload,
 }
 
 impl fmt::Display for Ping {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Ping(enr_seq={}, radius={})",
+            "Ping(enr_seq={}, payload_type={}, payload={})",
             self.enr_seq,
-            hex_encode(self.custom_payload.as_ssz_bytes())
+            self.payload_type,
+            hex_encode(self.payload.as_ssz_bytes())
         )
     }
 }
@@ -364,16 +357,18 @@ impl fmt::Display for Ping {
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Pong {
     pub enr_seq: u64,
-    pub custom_payload: CustomPayload,
+    pub payload_type: u16,
+    pub payload: CustomPayload,
 }
 
 impl fmt::Display for Pong {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Pong(enr_seq={}, radius={})",
+            "Pong(enr_seq={}, payload_type={}, payload={})",
             self.enr_seq,
-            hex_encode(self.custom_payload.as_ssz_bytes())
+            self.payload_type,
+            hex_encode(self.payload.as_ssz_bytes())
         )
     }
 }
@@ -381,7 +376,7 @@ impl fmt::Display for Pong {
 /// Convert to JSON Value from Pong ssz bytes
 impl From<Pong> for Value {
     fn from(val: Pong) -> Self {
-        match U256::from_ssz_bytes(&val.custom_payload.payload.as_ssz_bytes()) {
+        match U256::from_ssz_bytes(&val.payload.payload.as_ssz_bytes()) {
             Ok(data_radius) => {
                 let mut result = Map::new();
                 result.insert("enrSeq".to_owned(), Value::String(val.enr_seq.to_string()));
@@ -609,46 +604,6 @@ mod test {
             .get_protocol_identifier_from_subnetwork(&protocol_id)
             .unwrap();
         assert_eq!(hex, expected_hex);
-    }
-
-    // Wire message test vectors available in Ethereum Portal Network specs repo:
-    // github.com/ethereum/portal-network-specs
-    #[test]
-    fn message_encoding_ping() {
-        let data_radius: U256 = U256::MAX - U256::from(1u8);
-        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
-        let ping = Ping {
-            enr_seq: 1,
-            custom_payload,
-        };
-        let ping = Message::Ping(ping);
-
-        let encoded: Vec<u8> = ping.clone().into();
-        let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-        assert_eq!(encoded, expected_encoded);
-
-        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
-        assert_eq!(decoded, ping);
-    }
-
-    #[test]
-    fn message_encoding_pong() {
-        let data_radius: U256 = U256::MAX / U256::from(2u8);
-        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
-        let pong = Pong {
-            enr_seq: 1,
-            custom_payload,
-        };
-        let pong = Message::Pong(pong);
-
-        let encoded: Vec<u8> = pong.clone().into();
-        let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f";
-        assert_eq!(encoded, expected_encoded);
-
-        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
-        assert_eq!(decoded, pong);
     }
 
     #[test]

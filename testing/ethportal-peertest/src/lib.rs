@@ -11,6 +11,7 @@ use ethportal_api::{
         network::{Network, Subnetwork},
     },
     utils::bytes::hex_encode,
+    version::APP_NAME,
     Discv5ApiClient,
 };
 use futures::future;
@@ -91,7 +92,7 @@ fn generate_trin_config(
     let network = network.to_string();
 
     let trin_config_args = [
-        "trin",
+        APP_NAME,
         "--network",
         &network,
         "--portal-subnetworks",
