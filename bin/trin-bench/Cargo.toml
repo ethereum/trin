@@ -1,0 +1,29 @@
+[package]
+name = "trin-bench"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+ethportal-api.workspace = true
+e2store.workspace = true
+futures.workspace = true
+humanize-duration.workspace = true
+jsonrpsee.workspace = true
+portal-bridge.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+trin-execution.workspace = true
+trin-utils.workspace = true
+trin-validation.workspace = true
+url.workspace = true

@@ -6707,6 +6707,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "trin-bench"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "e2store",
+ "ethportal-api",
+ "futures",
+ "humanize-duration",
+ "jsonrpsee",
+ "portal-bridge",
+ "reqwest",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+ "trin-execution",
+ "trin-utils",
+ "trin-validation",
+ "url",
+]
+
+[[package]]
 name = "trin-evm"
 version = "0.1.0"
 dependencies = [
