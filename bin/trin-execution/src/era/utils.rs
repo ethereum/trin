@@ -2,15 +2,15 @@ use std::time::Duration;
 
 use alloy::primitives::bytes::Bytes;
 use anyhow::anyhow;
-use e2store::{
-    era::Era,
-    era1::{BlockTuple, Era1, BLOCK_TUPLE_COUNT},
-};
 use ethportal_api::BlockBody;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use reqwest::Client;
 use tokio::time::sleep;
 use tracing::{info, warn};
+use trin_e2store::{
+    era::Era,
+    era1::{BlockTuple, Era1, BLOCK_TUPLE_COUNT},
+};
 
 use super::types::ProcessedEra;
 use crate::era::{

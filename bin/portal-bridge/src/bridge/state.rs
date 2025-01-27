@@ -6,7 +6,6 @@ use std::{
 
 use alloy::{consensus::EMPTY_ROOT_HASH, rlp::Decodable};
 use anyhow::ensure;
-use e2store::utils::get_era2_files;
 use eth_trie::{decode_node, node::Node, EthTrie, RootWithTrieDiff, Trie};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
@@ -28,6 +27,7 @@ use tokio::{
     time::timeout,
 };
 use tracing::{debug, enabled, error, info, warn, Level};
+use trin_e2store::utils::get_era2_files;
 use trin_evm::spec_id::get_spec_block_number;
 use trin_execution::{
     cli::{ImportStateConfig, APP_NAME},

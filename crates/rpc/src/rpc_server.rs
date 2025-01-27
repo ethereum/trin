@@ -4,11 +4,13 @@ use std::{
 };
 
 use ethportal_api::jsonrpsee::server::IdProvider;
-use portalnet::constants::{DEFAULT_WEB3_HTTP_PORT, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_WS_PORT};
 use reth_ipc::server::{Builder as IpcServerBuilder, IpcServer};
 use tower::layer::util::{Identity, Stack};
 use tower_http::cors::CorsLayer;
 use tracing::instrument;
+use trin_portalnet::constants::{
+    DEFAULT_WEB3_HTTP_PORT, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_WS_PORT,
+};
 
 use crate::{
     builder::TransportRpcModules,
@@ -622,7 +624,7 @@ mod tests {
     use std::{io, sync::Arc};
 
     use ethportal_api::types::portal_wire::MAINNET;
-    use portalnet::discovery::Discovery;
+    use trin_portalnet::discovery::Discovery;
 
     use super::*;
     use crate::{builder::RpcModuleSelection, PortalRpcModule, RpcModuleBuilder};

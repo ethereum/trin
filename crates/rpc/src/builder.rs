@@ -9,10 +9,10 @@ use ethportal_api::{
     BeaconNetworkApiServer, Discv5ApiServer, EthApiServer, HistoryNetworkApiServer,
     StateNetworkApiServer, Web3ApiServer,
 };
-use portalnet::discovery::Discovery;
 use serde::Deserialize;
 use strum::{AsRefStr, EnumString, VariantNames};
 use tokio::sync::mpsc;
+use trin_portalnet::discovery::Discovery;
 
 use crate::{
     errors::{RpcError, WsHttpSamePortError},

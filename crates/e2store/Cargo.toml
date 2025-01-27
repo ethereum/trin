@@ -1,5 +1,5 @@
 [package]
-name = "e2store"
+name = "trin-e2store"
 keywords = ["ethereum", "portal-network", "e2store", "era", "era1"]
 description = "E2store, era, and era1 implementations for Ethereum"
 authors.workspace = true

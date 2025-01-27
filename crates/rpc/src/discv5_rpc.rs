@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use discv5::enr::NodeId;
 use ethportal_api::{types::enr::Enr, Discv5ApiServer, NodeInfo, RoutingTableInfo};
-use portalnet::discovery::Discovery;
+use trin_portalnet::discovery::Discovery;
 
 use crate::{
     errors::RpcServeError,

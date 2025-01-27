@@ -9,17 +9,17 @@ use cli::TrinConfig;
 use ethportal_api::{
     types::network::Subnetwork, utils::bytes::hex_encode, version::get_trin_version,
 };
-use portalnet::{
-    discovery::{Discovery, Discv5UdpSocket},
-    events::PortalnetEvents,
-    utils::db::{configure_node_data_dir, configure_trin_data_dir},
-};
-use rpc::{launch_jsonrpc_server, RpcServerHandle};
 use tokio::sync::{mpsc, RwLock};
 use tracing::info;
 use tree_hash::TreeHash;
 use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
+use trin_portalnet::{
+    discovery::{Discovery, Discv5UdpSocket},
+    events::PortalnetEvents,
+    utils::db::{configure_node_data_dir, configure_trin_data_dir},
+};
+use trin_rpc::{launch_jsonrpc_server, RpcServerHandle};
 use trin_state::initialize_state_network;
 use trin_storage::PortalStorageConfigFactory;
 #[cfg(windows)]

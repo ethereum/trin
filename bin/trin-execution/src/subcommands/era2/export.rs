@@ -5,14 +5,14 @@ use std::{
 
 use alloy::{consensus::EMPTY_ROOT_HASH, rlp::Decodable};
 use anyhow::ensure;
-use e2store::era2::{
-    AccountEntry, AccountOrStorageEntry, Era2Writer, StorageEntry, StorageItem, MAX_STORAGE_ITEMS,
-};
 use eth_trie::{EthTrie, Trie};
 use ethportal_api::{types::state_trie::account_state::AccountState, Header};
 use parking_lot::Mutex;
 use revm_primitives::{B256, KECCAK_EMPTY, U256};
 use tracing::info;
+use trin_e2store::era2::{
+    AccountEntry, AccountOrStorageEntry, Era2Writer, StorageEntry, StorageItem, MAX_STORAGE_ITEMS,
+};
 
 use crate::{
     cli::ExportStateConfig,

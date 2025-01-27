@@ -1,7 +1,5 @@
 #![warn(clippy::uninlined_format_args)]
 
-extern crate core;
-
 pub mod cli;
 pub mod rpc;
 
@@ -17,13 +15,13 @@ use jsonrpsee::{
     proc_macros::rpc,
     server::{Server, ServerHandle},
 };
-use portalnet::{
-    config::PortalnetConfig,
-    discovery::{Discovery, UtpEnr},
-};
 use tokio::sync::{
     mpsc::{self, Receiver},
     RwLock,
+};
+use trin_portalnet::{
+    config::PortalnetConfig,
+    discovery::{Discovery, UtpEnr},
 };
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
@@ -176,7 +174,7 @@ pub async fn run_test_app(
     let header_oracle = HeaderOracle::default();
     let header_oracle = Arc::new(RwLock::new(header_oracle));
     let (utp_talk_req_tx, utp_talk_req_rx) = mpsc::unbounded_channel();
-    let discv5_utp_socket = portalnet::discovery::Discv5UdpSocket::new(
+    let discv5_utp_socket = trin_portalnet::discovery::Discv5UdpSocket::new(
         Arc::clone(&discovery),
         utp_talk_req_rx,
         header_oracle,

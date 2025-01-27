@@ -1,11 +1,11 @@
 use std::{path::Path, sync::Arc};
 
 use anyhow::{ensure, Error};
-use e2store::era2::{AccountEntry, AccountOrStorageEntry, Era2Reader, StorageItem};
 use eth_trie::{EthTrie, Trie};
 use ethportal_api::Header;
 use revm_primitives::{keccak256, B256, U256};
 use tracing::info;
+use trin_e2store::era2::{AccountEntry, AccountOrStorageEntry, Era2Reader, StorageItem};
 
 use crate::{
     cli::ImportStateConfig,

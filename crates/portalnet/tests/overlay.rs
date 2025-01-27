@@ -16,7 +16,11 @@ use ethportal_api::{
     OverlayContentKey,
 };
 use parking_lot::RwLock;
-use portalnet::{
+use tokio::{
+    sync::{mpsc, mpsc::unbounded_channel, RwLock as TokioRwLock},
+    time::{self, Duration},
+};
+use trin_portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
     overlay::{
@@ -24,10 +28,6 @@ use portalnet::{
         ping_extensions::MockPingExtension,
         protocol::OverlayProtocol,
     },
-};
-use tokio::{
-    sync::{mpsc, mpsc::unbounded_channel, RwLock as TokioRwLock},
-    time::{self, Duration},
 };
 use trin_storage::{ContentStore, DistanceFunction, MemoryContentStore};
 use trin_validation::{oracle::HeaderOracle, validator::MockValidator};

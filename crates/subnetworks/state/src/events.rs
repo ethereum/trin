@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use ethportal_api::types::portal_wire::Message;
-use portalnet::events::OverlayRequest;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{error, warn, Instrument};
+use trin_portalnet::events::OverlayRequest;
 
 use crate::network::StateNetwork;
 

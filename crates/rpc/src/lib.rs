@@ -35,10 +35,10 @@ use ethportal_api::{
     },
 };
 use history_rpc::HistoryNetworkApi;
-use portalnet::discovery::Discovery;
 use reth_ipc::server::Builder as IpcServerBuilder;
 use state_rpc::StateNetworkApi;
 use tokio::sync::mpsc;
+use trin_portalnet::discovery::Discovery;
 use trin_utils::cli::Web3TransportType;
 use web3_rpc::Web3Api;
 
