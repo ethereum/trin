@@ -56,7 +56,7 @@ use utp_rs::cid::ConnectionId;
 use super::OverlayService;
 use crate::{
     accept_queue::AcceptQueue,
-    discovery::{Discovery, UtpEnr},
+    discovery::{Discovery, UtpPeer},
     events::{EventEnvelope, OverlayEvent},
     find::{
         iterators::{
@@ -620,11 +620,11 @@ impl<
                             let cid = utp_rs::cid::ConnectionId {
                                 recv: connection_id,
                                 send: connection_id.wrapping_add(1),
-                                peer: UtpEnr(source),
+                                peer_id: source.node_id(),
                             };
                             let data = match utp_processing
                                 .utp_controller
-                                .connect_inbound_stream(cid)
+                                .connect_inbound_stream(cid, UtpPeer(source))
                                 .await
                             {
                                 Ok(data) => RawContentValue::from(data),
@@ -941,15 +941,15 @@ impl<
                             "handle_find_content: unable to find ENR for NodeId".to_string(),
                         )
                     })?;
-                    let enr = UtpEnr(enr);
-                    let cid = self.utp_controller.cid(enr, false);
+                    let cid = self.utp_controller.cid(enr.node_id(), false);
                     let cid_send = cid.send;
 
                     // Wait for an incoming connection with the given CID. Then, write the data
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_controller);
                     tokio::spawn(async move {
-                        utp.accept_outbound_stream(cid, &content).await;
+                        utp.accept_outbound_stream(cid, UtpPeer(enr), &content)
+                            .await;
                         permit.drop();
                     });
 
@@ -1079,13 +1079,12 @@ impl<
 
         // Generate a connection ID for the uTP connection if there is data we would like to
         // accept.
-        let enr = UtpEnr(enr);
         let enr_str = if enabled!(Level::TRACE) {
-            enr.0.to_base64()
+            enr.to_base64()
         } else {
             String::with_capacity(0)
         };
-        let cid: ConnectionId<UtpEnr> = self.utp_controller.cid(enr, false);
+        let cid: ConnectionId<NodeId> = self.utp_controller.cid(enr.node_id(), false);
         let cid_send = cid.send;
 
         let content_keys_string: Vec<String> = content_keys
@@ -1105,14 +1104,16 @@ impl<
 
         let utp_processing = UtpProcessing::from(self);
         tokio::spawn(async move {
+            let peer = UtpPeer(enr);
+            let peer_client = peer.client();
             let data = match utp_processing
                 .utp_controller
-                .accept_inbound_stream(cid.clone())
+                .accept_inbound_stream(cid, peer)
                 .await
             {
                 Ok(data) => data,
                 Err(err) => {
-                    debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to complete uTP transfer");
+                    debug!(%err, cid.send, cid.recv, peer = ?peer_client, content_keys = ?content_keys_string, "unable to complete uTP transfer");
                     // Spawn a fallback FINDCONTENT task for each content key
                     // in a payload that failed to be received.
                     //
@@ -1417,13 +1418,14 @@ impl<
         let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
             send: conn_id.wrapping_add(1),
-            peer: UtpEnr(enr),
+            peer_id: enr.node_id(),
         };
         let store = Arc::clone(&self.store);
         let response_clone = response.clone();
 
         let utp_controller = Arc::clone(&self.utp_controller);
         tokio::spawn(async move {
+            let peer = UtpPeer(enr);
             let content_items = match offer {
                 Request::Offer(offer) => {
                     Self::provide_requested_content(store, &response_clone, offer.content_keys)
@@ -1456,7 +1458,7 @@ impl<
                         %err,
                         cid.send,
                         cid.recv,
-                        peer = ?cid.peer.client(),
+                        peer = ?peer.client(),
                         "Error decoding previously offered content items"
                     );
                     if let Some(tx) = gossip_result_tx {
@@ -1477,7 +1479,7 @@ impl<
                 }
             };
             let result = utp_controller
-                .connect_outbound_stream(cid, &content_payload)
+                .connect_outbound_stream(cid, peer, &content_payload)
                 .await;
             if let Some(tx) = gossip_result_tx {
                 if result {
@@ -1640,11 +1642,11 @@ impl<
                         let cid = utp_rs::cid::ConnectionId {
                             recv: conn_id,
                             send: conn_id.wrapping_add(1),
-                            peer: UtpEnr(fallback_peer.clone()),
+                            peer_id: fallback_peer.node_id(),
                         };
                         utp_processing
                             .utp_controller
-                            .connect_inbound_stream(cid)
+                            .connect_inbound_stream(cid, UtpPeer(fallback_peer.clone()))
                             .await?
                             .into()
                     }

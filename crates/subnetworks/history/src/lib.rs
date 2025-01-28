@@ -14,7 +14,7 @@ use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use network::HistoryNetwork;
 use portalnet::{
     config::PortalnetConfig,
-    discovery::{Discovery, UtpEnr},
+    discovery::{Discovery, UtpPeer},
     events::{EventEnvelope, OverlayRequest},
 };
 use tokio::{
@@ -37,7 +37,7 @@ type HistoryEventStream = Option<broadcast::Receiver<EventEnvelope>>;
 
 pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
-    utp_socket: Arc<UtpSocket<UtpEnr>>,
+    utp_socket: Arc<UtpSocket<UtpPeer>>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,

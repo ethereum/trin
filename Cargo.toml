@@ -95,7 +95,7 @@ tree_hash_derive = "0.8.0"
 uds_windows = "1.0.1"
 ureq = { version = "2.5.0", features = ["json"] }
 url = "2.3.1"
-utp-rs = { tag = "v0.1.0-alpha.15", git = "https://github.com/ethereum/utp" }
+utp-rs = { git = "https://github.com/morph-dev/utp", rev= "da5ae3e46a3daa6489a98fd2c7d198e83eee86b4" }
 
 # Trin workspace crates
 e2store = { path = "crates/e2store" }

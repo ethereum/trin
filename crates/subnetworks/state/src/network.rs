@@ -7,7 +7,7 @@ use ethportal_api::{
 use parking_lot::RwLock as PLRwLock;
 use portalnet::{
     config::PortalnetConfig,
-    discovery::{Discovery, UtpEnr},
+    discovery::{Discovery, UtpPeer},
     overlay::{config::OverlayConfig, protocol::OverlayProtocol},
 };
 use tokio::sync::RwLock;
@@ -45,7 +45,7 @@ const GOSSIP_DROPPED: bool = false;
 impl StateNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
-        utp_socket: Arc<UtpSocket<UtpEnr>>,
+        utp_socket: Arc<UtpSocket<UtpPeer>>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
