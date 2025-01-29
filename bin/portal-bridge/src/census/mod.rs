@@ -11,7 +11,7 @@ use thiserror::Error;
 use tokio::task::JoinHandle;
 use tracing::{error, info, Instrument};
 
-use crate::cli::BridgeConfig;
+use crate::cli::ClientType;
 
 mod network;
 mod peer;
@@ -51,11 +51,30 @@ impl Census {
     const SUPPORTED_SUBNETWORKS: [Subnetwork; 3] =
         [Subnetwork::Beacon, Subnetwork::History, Subnetwork::State];
 
-    pub fn new(client: HttpClient, bridge_config: &BridgeConfig) -> Self {
+    pub fn new(
+        client: HttpClient,
+        enr_offer_limit: usize,
+        filter_clients: Vec<ClientType>,
+    ) -> Self {
         Self {
-            history: Network::new(client.clone(), Subnetwork::History, bridge_config),
-            state: Network::new(client.clone(), Subnetwork::State, bridge_config),
-            beacon: Network::new(client.clone(), Subnetwork::Beacon, bridge_config),
+            history: Network::new(
+                client.clone(),
+                Subnetwork::History,
+                enr_offer_limit,
+                filter_clients.clone(),
+            ),
+            state: Network::new(
+                client.clone(),
+                Subnetwork::State,
+                enr_offer_limit,
+                filter_clients.clone(),
+            ),
+            beacon: Network::new(
+                client.clone(),
+                Subnetwork::Beacon,
+                enr_offer_limit,
+                filter_clients,
+            ),
             initialized: false,
         }
     }

@@ -20,10 +20,7 @@ use super::{
     peers::Peers,
     scoring::{AdditiveWeight, PeerSelector},
 };
-use crate::{
-    census::CensusError,
-    cli::{BridgeConfig, ClientType},
-};
+use crate::{census::CensusError, cli::ClientType};
 
 /// The result of the liveness check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +75,12 @@ pub(super) struct Network {
 }
 
 impl Network {
-    pub fn new(client: HttpClient, subnetwork: Subnetwork, bridge_config: &BridgeConfig) -> Self {
+    pub fn new(
+        client: HttpClient,
+        subnetwork: Subnetwork,
+        enr_offer_limit: usize,
+        filter_clients: Vec<ClientType>,
+    ) -> Self {
         if !matches!(
             subnetwork,
             Subnetwork::History | Subnetwork::Beacon | Subnetwork::State
@@ -89,11 +91,11 @@ impl Network {
         Self {
             peers: Peers::new(PeerSelector::new(
                 AdditiveWeight::default(),
-                bridge_config.enr_offer_limit,
+                enr_offer_limit,
             )),
             client,
             subnetwork,
-            filter_clients: bridge_config.filter_clients.to_vec(),
+            filter_clients,
         }
     }
 

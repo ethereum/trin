@@ -20,9 +20,12 @@ use crate::{
 #[derive(Clone)]
 pub struct OverlayMetrics {
     pub message_total: IntCounterVec,
+    pub failed_message_sent: IntCounterVec,
     pub utp_outcome_total: IntCounterVec,
     pub utp_active_gauge: IntGaugeVec,
     pub utp_connection_duration: HistogramVec,
+    /// Total bytes transferred inbound
+    pub bytes_inbound_total: IntCounterVec,
     pub validation_total: IntCounterVec,
 }
 
@@ -32,6 +35,14 @@ impl OverlayMetrics {
             opts!(
                 "trin_message_total",
                 "count all network messages sent and received"
+            ),
+            &["protocol", "direction", "type"],
+            registry
+        )?;
+        let failed_message_sent = register_int_counter_vec_with_registry!(
+            opts!(
+                "trin_failed_message_sent",
+                "count all network messages sent"
             ),
             &["protocol", "direction", "type"],
             registry
@@ -60,6 +71,14 @@ impl OverlayMetrics {
             &["protocol", "direction"],
             registry
         )?;
+        let bytes_inbound_total = register_int_counter_vec_with_registry!(
+            opts!(
+                "trin_bytes_inbound_total",
+                "count all bytes transferred inbound"
+            ),
+            &["protocol"],
+            registry
+        )?;
         let validation_total = register_int_counter_vec_with_registry!(
             opts!(
                 "trin_validation_total",
@@ -70,9 +89,11 @@ impl OverlayMetrics {
         )?;
         Ok(Self {
             message_total,
+            failed_message_sent,
             utp_outcome_total,
             utp_active_gauge,
             utp_connection_duration,
+            bytes_inbound_total,
             validation_total,
         })
     }
@@ -118,12 +139,36 @@ impl OverlayMetricsReporter {
         self.increment_message_total(MessageDirectionLabel::Received, response.into());
     }
 
+    pub fn report_failed_outbound_request(&self, request: &Request) {
+        self.increment_failed_message_sent(MessageDirectionLabel::Sent, request.into());
+    }
+
     fn increment_message_total(&self, direction: MessageDirectionLabel, message: MessageLabel) {
         let labels: [&str; 3] = [&self.protocol, direction.into(), message.into()];
         self.overlay_metrics
             .message_total
             .with_label_values(&labels)
             .inc();
+    }
+    /// Increment the failed message sent metric
+    fn increment_failed_message_sent(
+        &self,
+        direction: MessageDirectionLabel,
+        message: MessageLabel,
+    ) {
+        let labels: [&str; 3] = [&self.protocol, direction.into(), message.into()];
+        self.overlay_metrics
+            .failed_message_sent
+            .with_label_values(&labels)
+            .inc();
+    }
+    /// Increase the total bytes inbound metric by the given length.
+    pub fn report_bytes_inbound(&self, bytes_len: u64) {
+        let labels: [&str; 1] = [&self.protocol];
+        self.overlay_metrics
+            .bytes_inbound_total
+            .with_label_values(&labels)
+            .inc_by(bytes_len)
     }
 
     //

@@ -49,7 +49,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .contains(&Subnetwork::State)
     {
         // Create and initialize the census to acquire critical view of network before gossiping
-        let mut census = Census::new(portal_client.clone(), &bridge_config);
+        let mut census = Census::new(
+            portal_client.clone(),
+            bridge_config.enr_offer_limit,
+            bridge_config.filter_clients,
+        );
         census_handle = Some(census.init([Subnetwork::State]).await?);
 
         let state_bridge = StateBridge::new(

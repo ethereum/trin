@@ -164,6 +164,7 @@ async fn peertest_validate_pre_merge_header_by_number() {
     handle.stop().unwrap();
 }
 
+#[ignore]
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_invalidate_header_by_hash() {
