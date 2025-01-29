@@ -26,10 +26,7 @@ pub fn build_trin(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
         .args(["--network", &bridge_config.network.network().to_string()])
         .args(["--portal-subnetworks", &subnetworks_flag(bridge_config)])
         .args(["--unsafe-private-key", &private_key])
-        .args([
-            "--web3-http-address",
-            &format!("http://127.0.0.1:{rpc_port}"),
-        ])
+        .args(["--web3-http-address", &format!("http://0.0.0.0:{rpc_port}")])
         .args(["--discovery-port", &format!("{udp_port}")])
         .args(["--bootnodes", &bridge_config.bootnodes]);
     if let Some(ip) = bridge_config.external_ip.clone() {
