@@ -33,7 +33,10 @@ use ssz_types::BitList;
 use tracing::{error, info, warn};
 use trin_metrics::downloader::DownloaderMetricsReporter;
 
-use crate::{storage::HistoryStorage, validation::ChainHistoryValidator};
+use crate::{
+    ping_extensions::HistoryPingExtensions, storage::HistoryStorage,
+    validation::ChainHistoryValidator,
+};
 
 /// The number of blocks to download in a single batch.
 const BATCH_SIZE: usize = 30;
@@ -62,15 +65,28 @@ impl Display for ContentType {
 #[derive(Clone)]
 pub struct Downloader {
     pub census: Option<Census>,
-    pub overlay_arc:
-        Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, HistoryStorage>>,
+    pub overlay_arc: Arc<
+        OverlayProtocol<
+            HistoryContentKey,
+            XorMetric,
+            ChainHistoryValidator,
+            HistoryStorage,
+            HistoryPingExtensions,
+        >,
+    >,
     pub metrics: DownloaderMetricsReporter,
 }
 
 impl Downloader {
     pub fn new(
         overlay_arc: Arc<
-            OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, HistoryStorage>,
+            OverlayProtocol<
+                HistoryContentKey,
+                XorMetric,
+                ChainHistoryValidator,
+                HistoryStorage,
+                HistoryPingExtensions,
+            >,
         >,
     ) -> Self {
         // Build hhtp client bound to the current node web3rpc
