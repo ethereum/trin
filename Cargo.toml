@@ -45,7 +45,7 @@ chrono = "0.4.38"
 clap = { version = "4.2.1", features = ["derive"] }
 delay_map = "0.4.0"
 directories = "3.0"
-discv5 = { git = "https://github.com/kolbyml/discv5", rev = "7dcd74031aa98c220c2984bbc2274c414b6f709f", features = ["serde"] }
+discv5 = { version = "0.9.1", features = ["serde"] }
 env_logger = "0.9.0"
 eth_trie = "0.5.0"
 ethereum_hashing = "0.7.0"
