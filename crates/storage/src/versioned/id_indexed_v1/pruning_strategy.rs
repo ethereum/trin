@@ -196,7 +196,7 @@ mod tests {
     use std::path::PathBuf;
 
     use discv5::enr::NodeId;
-    use ethportal_api::types::network::Subnetwork;
+    use ethportal_api::types::{distance::Distance, network::Subnetwork};
     use r2d2::Pool;
     use r2d2_sqlite::SqliteConnectionManager;
     use rstest::rstest;
@@ -220,6 +220,7 @@ mod tests {
             sql_connection_pool: Pool::new(SqliteConnectionManager::memory()).unwrap(),
             distance_fn: DistanceFunction::Xor,
             pruning_config: PruningConfig::default(),
+            max_radius: Distance::MAX,
         };
         PruningStrategy::new(config)
     }

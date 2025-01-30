@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use discv5::enr::NodeId;
-use ethportal_api::types::network::Subnetwork;
+use ethportal_api::types::{distance::Distance, network::Subnetwork};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 
@@ -54,6 +54,7 @@ impl PortalStorageConfigFactory {
     pub fn create(
         &self,
         subnetwork: &Subnetwork,
+        max_radius: Distance,
     ) -> Result<PortalStorageConfig, ContentStoreError> {
         let capacity_bytes = match &self.capacity_config {
             StorageCapacityConfig::Combined {
@@ -104,6 +105,7 @@ impl PortalStorageConfigFactory {
             node_data_dir: self.node_data_dir.clone(),
             distance_fn: DistanceFunction::Xor,
             sql_connection_pool: self.sql_connection_pool.clone(),
+            max_radius,
         })
     }
 
@@ -124,6 +126,7 @@ pub struct PortalStorageConfig {
     pub node_data_dir: PathBuf,
     pub distance_fn: DistanceFunction,
     pub sql_connection_pool: Pool<SqliteConnectionManager>,
+    pub max_radius: Distance,
 }
 
 #[cfg(test)]
@@ -167,11 +170,11 @@ mod tests {
         .unwrap();
         match expected_capacity_bytes {
             Some(expected_capacity_bytes) => {
-                let config = factory.create(&subnetwork).unwrap();
+                let config = factory.create(&subnetwork, Distance::MAX).unwrap();
                 assert_eq!(config.storage_capacity_bytes, expected_capacity_bytes);
             }
             None => assert!(
-                factory.create(&subnetwork).is_err(),
+                factory.create(&subnetwork, Distance::MAX).is_err(),
                 "Storage config is expected to fail"
             ),
         }
@@ -193,21 +196,21 @@ mod tests {
         .unwrap();
         assert_eq!(
             factory
-                .create(&Subnetwork::Beacon)
+                .create(&Subnetwork::Beacon, Distance::MAX)
                 .unwrap()
                 .storage_capacity_bytes,
             100_000_000,
         );
         assert_eq!(
             factory
-                .create(&Subnetwork::History)
+                .create(&Subnetwork::History, Distance::MAX)
                 .unwrap()
                 .storage_capacity_bytes,
             200_000_000,
         );
         assert_eq!(
             factory
-                .create(&Subnetwork::State)
+                .create(&Subnetwork::State, Distance::MAX)
                 .unwrap()
                 .storage_capacity_bytes,
             300_000_000,
@@ -230,17 +233,17 @@ mod tests {
         .unwrap();
         assert_eq!(
             factory
-                .create(&Subnetwork::History)
+                .create(&Subnetwork::History, Distance::MAX)
                 .unwrap()
                 .storage_capacity_bytes,
             100_000_000,
         );
         assert!(
-            factory.create(&Subnetwork::Beacon).is_err(),
+            factory.create(&Subnetwork::Beacon, Distance::MAX).is_err(),
             "Creating for Beacon should fail"
         );
         assert!(
-            factory.create(&Subnetwork::State).is_err(),
+            factory.create(&Subnetwork::State, Distance::MAX).is_err(),
             "Creating for State should fail"
         );
         temp_dir.close().unwrap();
@@ -261,19 +264,19 @@ mod tests {
         .unwrap();
         assert_eq!(
             factory
-                .create(&Subnetwork::Beacon)
+                .create(&Subnetwork::Beacon, Distance::MAX)
                 .unwrap()
                 .storage_capacity_bytes,
             0,
         );
         assert_eq!(
             factory
-                .create(&Subnetwork::History)
+                .create(&Subnetwork::History, Distance::MAX)
                 .unwrap()
                 .storage_capacity_bytes,
             100_000_000,
         );
-        assert!(factory.create(&Subnetwork::State).is_err());
+        assert!(factory.create(&Subnetwork::State, Distance::MAX).is_err());
         temp_dir.close().unwrap();
     }
 }

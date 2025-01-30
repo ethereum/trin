@@ -51,6 +51,8 @@ async fn setup_web3_server() -> (RpcServerHandle, RootProvider<PubSubFrontend>, 
         &test_discovery_port.to_string(),
         "--bootnodes",
         "none",
+        "--max-radius",
+        "100",
     ])
     .unwrap();
 
@@ -87,6 +89,8 @@ async fn test_batch_call() {
         &test_discovery_port.to_string(),
         "--bootnodes",
         "none",
+        "--max-radius",
+        "100",
     ])
     .unwrap();
 

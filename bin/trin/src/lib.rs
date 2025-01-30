@@ -7,7 +7,9 @@ use std::sync::Arc;
 
 use cli::TrinConfig;
 use ethportal_api::{
-    types::network::Subnetwork, utils::bytes::hex_encode, version::get_trin_version,
+    types::{distance::Distance, network::Subnetwork},
+    utils::bytes::hex_encode,
+    version::get_trin_version,
 };
 use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
@@ -103,7 +105,7 @@ pub async fn run_trin(
                 &discovery,
                 utp_socket.clone(),
                 portalnet_config.clone(),
-                storage_config_factory.create(&Subnetwork::State)?,
+                storage_config_factory.create(&Subnetwork::State, trin_config.max_radius)?,
                 header_oracle.clone(),
             )
             .await?
@@ -123,7 +125,7 @@ pub async fn run_trin(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config_factory.create(&Subnetwork::Beacon)?,
+            storage_config_factory.create(&Subnetwork::Beacon, Distance::MAX)?,
             header_oracle.clone(),
         )
         .await?
@@ -146,7 +148,7 @@ pub async fn run_trin(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config_factory.create(&Subnetwork::History)?,
+            storage_config_factory.create(&Subnetwork::History, trin_config.max_radius)?,
             header_oracle.clone(),
         )
         .await?
