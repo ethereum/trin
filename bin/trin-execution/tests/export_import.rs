@@ -4,16 +4,16 @@ use trin_execution::{
     cli::{ExportStateConfig, ImportStateConfig},
     config::StateConfig,
     execution::TrinExecution,
-    subcommands::era2::{export::StateExporter, import::StateImporter},
+    subcommands::e2ss::{export::StateExporter, import::StateImporter},
 };
 use trin_utils::dir::create_temp_test_dir;
 
-/// Tests that exporting/importing to/from era2 files works.
+/// Tests that exporting/importing to/from e2ss files works.
 ///
 /// This test does the following:
 /// 1. executes first `blocks` blocks
-/// 2. exports state to the era2
-/// 3. imports state from era2 file into new directory
+/// 2. exports state to the e2ss
+/// 3. imports state from e2ss file into new directory
 /// 4. executes another `blocks` blocks
 ///
 /// Following command can be used to run the test for different number of blocks (e.g. 10000):
@@ -32,7 +32,7 @@ async fn execute_export_import_execute() -> anyhow::Result<()> {
     info!("Running test for {blocks} blocks");
 
     let temp_directory = create_temp_test_dir()?;
-    let era2_dir = temp_directory.path().join("era");
+    let e2ss_dir = temp_directory.path().join("era");
     let dir_1 = temp_directory.path().join("dir_1");
     let dir_2 = temp_directory.path().join("dir_2");
 
@@ -44,21 +44,21 @@ async fn execute_export_import_execute() -> anyhow::Result<()> {
     assert_eq!(trin_execution.next_block_number(), blocks + 1);
     drop(trin_execution);
 
-    // 2. export from dir_1 into era2
+    // 2. export from dir_1 into e2ss
     let exporter = StateExporter::new(
         ExportStateConfig {
-            path_to_era2: era2_dir,
+            path_to_e2ss: e2ss_dir,
         },
         &dir_1,
     )
     .await?;
-    let era2_file = exporter.export()?;
+    let e2ss_file = exporter.export()?;
     drop(exporter);
 
-    // 3. import from era2 into dir_2
+    // 3. import from e2ss into dir_2
     let importer = StateImporter::new(
         ImportStateConfig {
-            path_to_era2: era2_file,
+            path_to_e2ss: e2ss_file,
         },
         &dir_2,
     )

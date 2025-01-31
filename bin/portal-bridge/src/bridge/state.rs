@@ -6,7 +6,7 @@ use std::{
 
 use alloy::{consensus::EMPTY_ROOT_HASH, rlp::Decodable};
 use anyhow::ensure;
-use e2store::utils::get_era2_files;
+use e2store::utils::get_e2ss_files;
 use eth_trie::{decode_node, node::Node, EthTrie, RootWithTrieDiff, Trie};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
@@ -41,7 +41,7 @@ use trin_execution::{
         account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
         utils::setup_rocksdb,
     },
-    subcommands::era2::{
+    subcommands::e2ss::{
         import::StateImporter,
         utils::{download_with_progress, percentage_from_address_hash},
     },
@@ -177,7 +177,7 @@ impl StateBridge {
     async fn launch_snapshot(&self, snapshot_block: u64) -> anyhow::Result<()> {
         ensure!(snapshot_block > 0, "Snapshot block must be greater than 0");
 
-        // 1. Download the era2 file and import the state snapshot
+        // 1. Download the e2ss file and import the state snapshot
         let data_dir = setup_data_dir(APP_NAME, self.data_dir.clone(), false)?;
         let next_block_number = {
             let rocks_db = Arc::new(setup_rocksdb(&data_dir)?);
@@ -201,36 +201,36 @@ impl StateBridge {
                 )]))
                 .build()?;
 
-            let era2_files = get_era2_files(&http_client).await?;
-            let era2_blocks = era2_files.keys().cloned().collect::<Vec<_>>();
+            let e2ss_files = get_e2ss_files(&http_client).await?;
+            let e2ss_blocks = e2ss_files.keys().cloned().collect::<Vec<_>>();
 
             ensure!(
-                era2_files.contains_key(&snapshot_block),
-                "Era2 file doesn't exist for requested snapshot block: try these {era2_blocks:?}"
+                e2ss_files.contains_key(&snapshot_block),
+                "E2ss file doesn't exist for requested snapshot block: try these {e2ss_blocks:?}"
             );
 
             info!(
-                "Downloading era2 file for snapshot block: {}",
+                "Downloading e2ss file for snapshot block: {}",
                 snapshot_block
             );
 
-            let path_to_era2 = data_dir.join(format!("era2-{snapshot_block}.bin"));
+            let path_to_e2ss = data_dir.join(format!("e2ss-{snapshot_block}.bin"));
             if let Err(e) = download_with_progress(
                 &http_client,
-                &era2_files[&snapshot_block],
-                path_to_era2.clone(),
+                &e2ss_files[&snapshot_block],
+                path_to_e2ss.clone(),
             )
             .await
             {
-                return Err(anyhow::anyhow!("Failed to download era2 file: {e}"));
+                return Err(anyhow::anyhow!("Failed to download e2ss file: {e}"));
             };
 
-            let import_state_config = ImportStateConfig { path_to_era2 };
+            let import_state_config = ImportStateConfig { path_to_e2ss };
 
             let state_importer = StateImporter::new(import_state_config, &data_dir).await?;
             let header = state_importer.import().await?;
             info!(
-                "Imported state from era2: {} {}",
+                "Imported state from e2ss: {} {}",
                 header.number, header.state_root,
             );
         }

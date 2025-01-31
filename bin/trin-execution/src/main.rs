@@ -3,7 +3,7 @@ use tracing::info;
 use trin_execution::{
     cli::{TrinExecutionConfig, TrinExecutionSubCommands, APP_NAME},
     execution::TrinExecution,
-    subcommands::era2::{export::StateExporter, import::StateImporter},
+    subcommands::e2ss::{export::StateExporter, import::StateImporter},
 };
 use trin_utils::{dir::setup_data_dir, log::init_tracing_logger};
 
@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
                 let state_importer = StateImporter::new(import_state_config, &data_dir).await?;
                 let header = state_importer.import().await?;
                 info!(
-                    "Imported state from era2: {} {}",
+                    "Imported state from e2ss: {} {}",
                     header.number, header.state_root,
                 );
                 return Ok(());
@@ -41,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
                 let state_exporter = StateExporter::new(export_state_config, &data_dir).await?;
                 state_exporter.export()?;
                 info!(
-                    "Exported state into era2: {} {}",
+                    "Exported state into e2ss: {} {}",
                     state_exporter.header().number,
                     state_exporter.header().state_root,
                 );
