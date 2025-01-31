@@ -5,8 +5,8 @@ use std::{
 
 use alloy::{consensus::EMPTY_ROOT_HASH, rlp::Decodable};
 use anyhow::ensure;
-use e2store::era2::{
-    AccountEntry, AccountOrStorageEntry, Era2Writer, StorageEntry, StorageItem, MAX_STORAGE_ITEMS,
+use e2store::e2ss::{
+    AccountEntry, AccountOrStorageEntry, E2ssWriter, StorageEntry, StorageItem, MAX_STORAGE_ITEMS,
 };
 use eth_trie::{EthTrie, Trie};
 use ethportal_api::{types::state_trie::account_state::AccountState, Header};
@@ -22,7 +22,7 @@ use crate::{
         account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
         utils::setup_rocksdb,
     },
-    subcommands::era2::utils::percentage_from_address_hash,
+    subcommands::e2ss::utils::percentage_from_address_hash,
 };
 
 pub struct StateExporter {
@@ -69,8 +69,8 @@ impl StateExporter {
             "Exporting state from block number: {} with state root: {}",
             self.header.number, self.header.state_root
         );
-        let mut era2 = Era2Writer::create(&self.config.path_to_era2, self.header.clone())?;
-        info!("Era2 initiated");
+        let mut e2ss = E2ssWriter::create(&self.config.path_to_e2ss, self.header.clone())?;
+        info!("E2ss initiated");
         info!("Trie leaf iterator initiated");
         let mut accounts_exported = 0;
         for key_hash_and_leaf_value in self.evm_db.trie.lock().iter() {
@@ -109,7 +109,7 @@ impl StateExporter {
             // Get the rounded up storage count
             let storage_count = storage.len().div_ceil(MAX_STORAGE_ITEMS);
 
-            era2.append_entry(&AccountOrStorageEntry::Account(AccountEntry {
+            e2ss.append_entry(&AccountOrStorageEntry::Account(AccountEntry {
                 address_hash: account_hash,
                 account_state,
                 bytecode,
@@ -117,7 +117,7 @@ impl StateExporter {
             }))?;
 
             for storage_chunk in storage.chunks(MAX_STORAGE_ITEMS) {
-                era2.append_entry(&AccountOrStorageEntry::Storage(StorageEntry(
+                e2ss.append_entry(&AccountOrStorageEntry::Storage(StorageEntry(
                     storage_chunk.to_vec(),
                 )))?;
             }
@@ -128,11 +128,11 @@ impl StateExporter {
             }
         }
 
-        era2.flush()?;
+        e2ss.flush()?;
 
-        info!("Era2 snapshot exported");
+        info!("E2ss snapshot exported");
 
-        Ok(era2.path().to_path_buf())
+        Ok(e2ss.path().to_path_buf())
     }
 
     pub fn header(&self) -> &Header {
