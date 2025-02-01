@@ -90,9 +90,11 @@ impl ssz::Encode for SszEnr {
 
 pub fn generate_random_remote_enr() -> (CombinedKey, Enr) {
     let key = CombinedKey::generate_secp256k1();
-
     let mut rng = rand::thread_rng();
-    let ip = Ipv4Addr::from(rng.gen::<u32>());
+
+    // Generate an IP between 1.0.0.0 and 223.255.255.255
+    // We don't want to generate a multicast address (224.0.0.0 - 239.255.255.255)
+    let ip = Ipv4Addr::from(rng.gen_range(0x1000000..=0xDFFFFFFF)); // 0xDFFFFFFF == 223.255.255.255
 
     let enr = Discv5Enr::builder()
         .ip(ip.into())
