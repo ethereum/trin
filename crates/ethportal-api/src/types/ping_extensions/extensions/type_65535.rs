@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{borrow::Cow, fmt::Debug, ops::Deref, str};
 
 use anyhow::anyhow;
 use ssz::Encode;
@@ -34,8 +34,14 @@ impl PingError {
 
 impl Debug for PingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let message = String::from_utf8(self.message.to_vec())
-            .unwrap_or_else(|_| format!("Invalid utf8 string: {}", hex_encode(&*self.message)));
+        let message = str::from_utf8(self.message.deref())
+            .map(Cow::Borrowed)
+            .unwrap_or_else(|_| {
+                Cow::Owned(format!(
+                    "Invalid utf8 string: {}",
+                    hex_encode(self.message.deref())
+                ))
+            });
 
         f.debug_struct("PingError")
             .field("error_code", &self.error_code)
