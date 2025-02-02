@@ -90,8 +90,8 @@ pub fn max_radius_parser(max_radius_str: &str) -> Result<Distance, String> {
         ));
     }
 
-    // If the max radius is 100%, return the maximum distance as without it we will be 35 less than
-    // the maximum distance.
+    // If the max radius is 100% return it, as arithmetic multiplication loses precision and will be
+    // off by 5.
     if max_radius_percentage == U256::from(100) {
         return Ok(Distance::MAX);
     }
