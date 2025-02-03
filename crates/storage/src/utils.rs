@@ -22,6 +22,10 @@ pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, 
     let manager = SqliteConnectionManager::file(sql_path);
     let pool = Pool::new(manager)?;
     let conn = pool.get()?;
+    // Set WAL mode for better performance, it makes R/W operations faster as they don't block each
+    // other 3.8x's Trin performance
+    conn.execute_batch("PRAGMA journal_mode = WAL;")?;
+    conn.execute_batch("PRAGMA synchronous = NORMAL;")?;
     conn.execute_batch(LC_BOOTSTRAP_CREATE_TABLE)?;
     conn.execute_batch(LC_UPDATE_CREATE_TABLE)?;
     conn.execute_batch(HISTORICAL_SUMMARIES_CREATE_TABLE)?;
