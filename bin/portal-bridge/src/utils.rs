@@ -16,12 +16,12 @@ use serde::{Deserialize, Serialize};
 
 /// Generates a set of N private keys, with node ids that are equally spaced
 /// around the 256-bit keys space.
-// count as u8 is used as a safety precaution against foot-gunning, since it could
+// count as u16 is used as a safety precaution against foot-gunning, since it could
 // take a long time with a bigger input. Separately, a value larger than 256
 // stops getting evenly spread, because of how the code spreads the data by
 // inspecting the first byte from the node ID. Also, values between 16 to
 // 256 would be spread, but less and less evenly.
-pub fn generate_spaced_private_keys(count: u8, root_private_key: Option<B256>) -> Vec<String> {
+pub fn generate_spaced_private_keys(count: u16, root_private_key: Option<B256>) -> Vec<String> {
     let mut private_keys = vec![];
     let (root_node_id, root_private_key) = match root_private_key {
         Some(mut key) => {
@@ -33,18 +33,18 @@ pub fn generate_spaced_private_keys(count: u8, root_private_key: Option<B256>) -
         None => random_node_id(),
     };
     private_keys.push(hex_encode(root_private_key.encode()));
-    let mut root_prefix = root_node_id.raw()[0];
+    let mut root_prefix = top_u16(&root_node_id);
 
-    let mut prefixes: Vec<u8> = vec![];
+    let mut prefixes: Vec<u16> = vec![];
     for _ in 1..count {
-        let prefix = root_prefix.wrapping_add(u8::MAX / count);
+        let prefix = root_prefix.wrapping_add(u16::MAX / count);
         prefixes.push(prefix);
         root_prefix = prefix;
     }
 
     for prefix in prefixes {
         let (mut node_id, mut private_key) = random_node_id();
-        while node_id.raw()[0] != prefix {
+        while top_u16(&node_id) != prefix {
             (node_id, private_key) = random_node_id();
         }
         private_keys.push(hex_encode(private_key.encode()));
@@ -56,6 +56,11 @@ fn random_node_id() -> (NodeId, CombinedKey) {
     let random_private_key = CombinedKey::generate_secp256k1();
     let enr = Enr::empty(&random_private_key).expect("to be able to generate a random node id");
     (enr.node_id(), random_private_key)
+}
+
+fn top_u16(&node_id: &NodeId) -> u16 {
+    let raw: [u8; 32] = node_id.raw();
+    u16::from_be_bytes([raw[0], raw[1]])
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,11 +208,11 @@ mod tests {
     #[case(2)]
     #[case(4)]
     #[case(16)]
-    fn test_generate_spaced_private_keys(#[case] count: u8) {
+    fn test_generate_spaced_private_keys(#[case] count: u16) {
         use alloy::primitives::U256;
 
         let private_keys = generate_spaced_private_keys(count, None);
-        assert_eq!(private_keys.len() as u8, count);
+        assert_eq!(private_keys.len() as u16, count);
         let one = Enr::empty(
             &CombinedKey::secp256k1_from_bytes(&mut hex_decode(&private_keys[0]).unwrap()).unwrap(),
         )
