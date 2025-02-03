@@ -7076,7 +7076,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utp-rs"
 version = "0.1.0-alpha.8"
-source = "git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.14#d894487d80a650bffd9e511fd9071b05c1ddb40d"
+source = "git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.15#ef62dd992cf67662319ee69d6fe8caa2af15aeae"
 dependencies = [
  "async-trait",
  "delay_map 0.3.0",
