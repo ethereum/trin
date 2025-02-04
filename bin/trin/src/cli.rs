@@ -9,6 +9,7 @@ use clap::{
 };
 use ethportal_api::{
     types::{
+        distance::Distance,
         network::Subnetwork,
         portal_wire::{NetworkSpec, MAINNET},
     },
@@ -25,11 +26,14 @@ use portalnet::{
 use rpc::config::RpcConfig;
 use trin_storage::config::StorageCapacityConfig;
 use trin_utils::cli::{
-    check_private_key_length, network_parser, subnetwork_parser, Web3TransportType,
+    check_private_key_length, max_radius_parser, network_parser, subnetwork_parser,
+    Web3TransportType,
 };
 use url::Url;
 
 const DEFAULT_SUBNETWORKS: &str = "history";
+/// Default max radius value percentage out of 100.
+const DEFAULT_MAX_RADIUS: &str = "5";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
@@ -204,6 +208,14 @@ pub struct TrinConfig {
         default_value_t = DEFAULT_UTP_TRANSFER_LIMIT,
     )]
     pub utp_transfer_limit: usize,
+
+    #[arg(
+        long,
+        help = "The maximum radius our node will use. The default is 5% of the network size. The max is 100%",
+        default_value = DEFAULT_MAX_RADIUS,
+        value_parser = max_radius_parser,
+    )]
+    pub max_radius: Distance,
 }
 
 impl Default for TrinConfig {
@@ -235,6 +247,8 @@ impl Default for TrinConfig {
             ws_port: DEFAULT_WEB3_WS_PORT,
             utp_transfer_limit: DEFAULT_UTP_TRANSFER_LIMIT,
             network: MAINNET.clone(),
+            max_radius: max_radius_parser(DEFAULT_MAX_RADIUS)
+                .expect("Parsing static DEFAULT_MAX_RADIUS to work"),
         }
     }
 }

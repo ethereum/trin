@@ -1,8 +1,9 @@
 use core::fmt;
 use std::{str::FromStr, sync::Arc};
 
-use alloy::primitives::B256;
+use alloy::primitives::{B256, U256};
 use ethportal_api::types::{
+    distance::Distance,
     network::Subnetwork,
     portal_wire::{NetworkSpec, ANGELFOOD, MAINNET},
 };
@@ -71,4 +72,31 @@ pub fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>
     }
 
     Ok(Arc::new(subnetworks))
+}
+
+pub fn max_radius_parser(max_radius_str: &str) -> Result<Distance, String> {
+    let max_radius_percentage = match max_radius_str.parse::<U256>() {
+        Ok(val) => val,
+        Err(err) => {
+            return Err(format!(
+                "Invalid max radius percentage, expected a number, received: {err}"
+            ))
+        }
+    };
+
+    if max_radius_percentage > U256::from(100) {
+        return Err(format!(
+            "Invalid max radius percentage, expected 0 to 100, received: {max_radius_percentage}"
+        ));
+    }
+
+    // If the max radius is 100% return it, as arithmetic multiplication loses precision and will be
+    // off by 5.
+    if max_radius_percentage == U256::from(100) {
+        return Ok(Distance::MAX);
+    }
+
+    Ok(Distance::from(
+        U256::MAX / U256::from(100) * max_radius_percentage,
+    ))
 }

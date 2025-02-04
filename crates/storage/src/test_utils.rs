@@ -1,5 +1,5 @@
 use discv5::enr::NodeId;
-use ethportal_api::types::network::Subnetwork;
+use ethportal_api::types::{distance::Distance, network::Subnetwork};
 use tempfile::TempDir;
 
 use crate::{
@@ -21,7 +21,7 @@ pub fn create_test_portal_storage_config_with_capacity(
         temp_dir.path().to_path_buf(),
     )
     .unwrap()
-    .create(&Subnetwork::History)
+    .create(&Subnetwork::History, Distance::MAX)
     .unwrap();
     Ok((temp_dir, config))
 }

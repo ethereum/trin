@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{cmp::min, marker::PhantomData};
 
 use ethportal_api::{types::distance::Distance, OverlayContentKey, RawContentValue};
 use r2d2::Pool;
@@ -84,12 +84,12 @@ impl<TContentKey: OverlayContentKey> VersionedContentStore for IdIndexedV1Store<
         let pruning_strategy = PruningStrategy::new(config.clone());
 
         let mut store = Self {
-            config,
-            radius: Distance::MAX,
+            radius: config.max_radius,
             pruning_strategy,
             usage_stats: UsageStats::default(),
             metrics: StorageMetricsReporter::new(subnetwork),
             _phantom_content_key: PhantomData,
+            config,
         };
         store.init()?;
         Ok(store)
@@ -133,11 +133,12 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
         } else {
             debug!(
                 Db = %self.config.content_type,
-                "Used capacity ({}) is below target capacity ({}) -> Using MAX radius",
+                "Used capacity ({}) is below target capacity ({}) -> Using MAX radius ({})",
                 self.usage_stats.total_entry_size_bytes,
-                self.pruning_strategy.target_capacity_bytes()
+                self.pruning_strategy.target_capacity_bytes(),
+                self.config.max_radius,
             );
-            self.radius = Distance::MAX;
+            self.radius = self.config.max_radius;
             self.metrics.report_radius(self.radius);
         }
 
@@ -420,7 +421,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
 
     /// Sets `self.radius` to the distance to the farthest stored content.
     ///
-    /// If no content is found, it sets radius to `Distance::MAX`.
+    /// If no content is found, it sets radius to `config.max_radius`.
     fn set_radius_to_farthest(&mut self) -> Result<(), ContentStoreError> {
         match self.lookup_farthest()? {
             None => {
@@ -432,11 +433,14 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                     self.radius = Distance::ZERO;
                 } else {
                     error!(Db = %self.config.content_type, "Farthest not found!");
-                    self.radius = Distance::MAX;
+                    self.radius = self.config.max_radius;
                 }
             }
             Some(farthest) => {
-                self.radius = self.distance_to_content_id(&farthest.content_id);
+                self.radius = min(
+                    self.distance_to_content_id(&farthest.content_id),
+                    self.config.max_radius,
+                );
             }
         }
         self.metrics.report_radius(self.radius);
@@ -572,6 +576,7 @@ mod tests {
             sql_connection_pool: setup_sql(temp_dir.path()).unwrap(),
             storage_capacity_bytes,
             pruning_config: PruningConfig::default(),
+            max_radius: Distance::MAX,
         }
     }
 
