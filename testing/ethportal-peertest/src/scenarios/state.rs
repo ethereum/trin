@@ -1,6 +1,9 @@
+use alloy::primitives::B256;
 use ethportal_api::{
     jsonrpsee::async_client::Client,
-    types::execution::header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
+    types::execution::header_with_proof::{
+        BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof,
+    },
     ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
     StateNetworkApiClient,
 };
@@ -50,7 +53,10 @@ async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &Peerte
         HistoryContentKey::new_block_header_by_hash(fixture.block_header.hash());
     let history_content_value = HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
         header: fixture.block_header.clone(),
-        proof: BlockHeaderProof::None(SszNone::default()),
+        // todo: issue#1666 - add valid proofs for all blocks
+        proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof {
+            proof: [B256::new([0; 32]); 15],
+        }),
     });
     HistoryNetworkApiClient::store(
         &peer.ipc_client,

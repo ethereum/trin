@@ -64,14 +64,6 @@ impl HeaderValidator {
                     )),
                 }
             }
-            BlockHeaderProof::None(_) => {
-                if hwp.header.number <= MERGE_BLOCK_NUMBER {
-                    Err(anyhow!("Missing accumulator proof for pre-merge header."))
-                } else {
-                    // Skip validation for post-merge headers until proof format is finalized
-                    Ok(())
-                }
-            }
             BlockHeaderProof::HistoricalRootsBlockProof(proof) => self
                 .verify_post_merge_pre_capella_header(hwp.header.number, hwp.header.hash(), proof),
             BlockHeaderProof::HistoricalSummariesBlockProof(_) => {
@@ -230,9 +222,7 @@ mod test {
     use ethportal_api::{
         types::execution::{
             accumulator::EpochAccumulator,
-            header_with_proof::{
-                BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof, SszNone,
-            },
+            header_with_proof::{BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof},
         },
         utils::bytes::{hex_decode, hex_encode},
         HistoryContentKey, OverlayContentKey,
@@ -352,32 +342,6 @@ mod test {
             .unwrap_err()
             .to_string()
             .contains("Merkle proof validation failed"));
-    }
-
-    #[tokio::test]
-    #[should_panic(expected = "Missing accumulator proof for pre-merge header.")]
-    async fn header_validator_cannot_validate_merge_header_missing_proof() {
-        let header_validator = get_mainnet_header_validator();
-        let header = get_header(1_000_001);
-        let hwp = HeaderWithProof {
-            header,
-            proof: BlockHeaderProof::None(SszNone::default()),
-        };
-        header_validator.validate_header_with_proof(&hwp).unwrap();
-    }
-
-    #[tokio::test]
-    async fn header_validator_validates_post_merge_header_without_proof() {
-        let header_validator = get_mainnet_header_validator();
-        let future_height = MERGE_BLOCK_NUMBER + 1;
-        let future_header = generate_random_header(&future_height);
-        let future_hwp = HeaderWithProof {
-            header: future_header,
-            proof: BlockHeaderProof::None(SszNone::default()),
-        };
-        header_validator
-            .validate_header_with_proof(&future_hwp)
-            .unwrap();
     }
 
     #[tokio::test]

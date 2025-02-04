@@ -10,9 +10,7 @@ use ethportal_api::{
                 BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
                 SHANGHAI_TIMESTAMP,
             },
-            header_with_proof::{
-                BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof, SszNone,
-            },
+            header_with_proof::{BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof},
         },
         jsonrpc::{params::Params, request::JsonRequest},
     },
@@ -127,7 +125,9 @@ impl ExecutionApi {
             None => {
                 let header_with_proof = HeaderWithProof {
                     header: full_header.header.clone(),
-                    proof: BlockHeaderProof::None(SszNone { value: None }),
+                    proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof {
+                        proof: [B256::new([0; 32]); 15],
+                    }),
                 };
                 HistoryContentValue::BlockHeaderWithProof(header_with_proof)
             }
