@@ -19,6 +19,9 @@ use super::{
     trie::{validate_account_state, validate_node_trie_proof},
 };
 
+// todo: remove this constant once the history network implements full chain header validation
+const DISABLE_HISTORY_HEADER_CHECK: bool = true;
+
 pub struct StateValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
 }
@@ -58,7 +61,10 @@ impl StateValidator {
                 Ok(ValidationResult::new(/* valid_for_storing= */ false))
             }
             StateContentValue::AccountTrieNodeWithProof(value) => {
-                let state_root = self.get_state_root(value.block_hash).await?;
+                let state_root = match DISABLE_HISTORY_HEADER_CHECK {
+                    true => None,
+                    false => Some(self.get_state_root(value.block_hash).await?),
+                };
                 validate_node_trie_proof(state_root, key.node_hash, &key.path, &value.proof)?;
 
                 Ok(ValidationResult::new(/* valid_for_storing= */ true))
@@ -80,11 +86,14 @@ impl StateValidator {
                 Ok(ValidationResult::new(/* valid_for_storing= */ false))
             }
             StateContentValue::ContractStorageTrieNodeWithProof(value) => {
-                let state_root = self.get_state_root(value.block_hash).await?;
+                let state_root = match DISABLE_HISTORY_HEADER_CHECK {
+                    true => None,
+                    false => Some(self.get_state_root(value.block_hash).await?),
+                };
                 let account_state =
                     validate_account_state(state_root, &key.address_hash, &value.account_proof)?;
                 validate_node_trie_proof(
-                    account_state.storage_root,
+                    Some(account_state.storage_root),
                     key.node_hash,
                     &key.path,
                     &value.storage_proof,
@@ -124,7 +133,10 @@ impl StateValidator {
                     });
                 }
 
-                let state_root = self.get_state_root(value.block_hash).await?;
+                let state_root = match DISABLE_HISTORY_HEADER_CHECK {
+                    true => None,
+                    false => Some(self.get_state_root(value.block_hash).await?),
+                };
                 let account_state =
                     validate_account_state(state_root, &key.address_hash, &value.account_proof)?;
                 if account_state.code_hash == key.code_hash {
