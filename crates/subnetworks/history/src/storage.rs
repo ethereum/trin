@@ -38,7 +38,9 @@ impl ContentStore for HistoryStorage {
         let content_id = ContentId::from(key.content_id());
         // temporarily disable storing all block headers
         if self.disable_storing_headers {
-            if let HistoryContentKey::BlockHeaderByHash(_) = key {
+            if let HistoryContentKey::BlockHeaderByHash(_)
+            | HistoryContentKey::BlockHeaderByNumber(_) = key
+            {
                 return Ok(ShouldWeStoreContent::NotWithinRadius);
             }
         }
