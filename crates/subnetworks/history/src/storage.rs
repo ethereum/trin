@@ -12,6 +12,7 @@ use trin_storage::{
 #[derive(Debug)]
 pub struct HistoryStorage {
     store: IdIndexedV1Store<HistoryContentKey>,
+    disable_storing_headers: bool,
 }
 
 impl ContentStore for HistoryStorage {
@@ -35,6 +36,12 @@ impl ContentStore for HistoryStorage {
         key: &HistoryContentKey,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_id = ContentId::from(key.content_id());
+        // temporarily disable storing all block headers
+        if self.disable_storing_headers {
+            if let HistoryContentKey::BlockHeaderByHash(_) = key {
+                return Ok(ShouldWeStoreContent::NotWithinRadius);
+            }
+        }
         if self.store.distance_to_content_id(&content_id) > self.store.radius() {
             Ok(ShouldWeStoreContent::NotWithinRadius)
         } else if self.store.has_content(&content_id)? {
@@ -52,9 +59,11 @@ impl ContentStore for HistoryStorage {
 impl HistoryStorage {
     pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
         let sql_connection_pool = config.sql_connection_pool.clone();
+        let disable_storing_headers = config.disable_storing_headers;
         let config = IdIndexedV1StoreConfig::new(ContentType::History, Subnetwork::History, config);
         Ok(Self {
             store: create_store(ContentType::History, config, sql_connection_pool)?,
+            disable_storing_headers,
         })
     }
 

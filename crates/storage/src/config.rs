@@ -55,6 +55,7 @@ impl PortalStorageConfigFactory {
         &self,
         subnetwork: &Subnetwork,
         max_radius: Distance,
+        disable_storing_headers: bool,
     ) -> Result<PortalStorageConfig, ContentStoreError> {
         let capacity_bytes = match &self.capacity_config {
             StorageCapacityConfig::Combined {
@@ -106,6 +107,7 @@ impl PortalStorageConfigFactory {
             distance_fn: DistanceFunction::Xor,
             sql_connection_pool: self.sql_connection_pool.clone(),
             max_radius,
+            disable_storing_headers,
         })
     }
 
@@ -127,6 +129,7 @@ pub struct PortalStorageConfig {
     pub distance_fn: DistanceFunction,
     pub sql_connection_pool: Pool<SqliteConnectionManager>,
     pub max_radius: Distance,
+    pub disable_storing_headers: bool,
 }
 
 #[cfg(test)]
@@ -170,11 +173,11 @@ mod tests {
         .unwrap();
         match expected_capacity_bytes {
             Some(expected_capacity_bytes) => {
-                let config = factory.create(&subnetwork, Distance::MAX).unwrap();
+                let config = factory.create(&subnetwork, Distance::MAX, false).unwrap();
                 assert_eq!(config.storage_capacity_bytes, expected_capacity_bytes);
             }
             None => assert!(
-                factory.create(&subnetwork, Distance::MAX).is_err(),
+                factory.create(&subnetwork, Distance::MAX, false).is_err(),
                 "Storage config is expected to fail"
             ),
         }
@@ -196,21 +199,21 @@ mod tests {
         .unwrap();
         assert_eq!(
             factory
-                .create(&Subnetwork::Beacon, Distance::MAX)
+                .create(&Subnetwork::Beacon, Distance::MAX, false)
                 .unwrap()
                 .storage_capacity_bytes,
             100_000_000,
         );
         assert_eq!(
             factory
-                .create(&Subnetwork::History, Distance::MAX)
+                .create(&Subnetwork::History, Distance::MAX, false)
                 .unwrap()
                 .storage_capacity_bytes,
             200_000_000,
         );
         assert_eq!(
             factory
-                .create(&Subnetwork::State, Distance::MAX)
+                .create(&Subnetwork::State, Distance::MAX, false)
                 .unwrap()
                 .storage_capacity_bytes,
             300_000_000,
@@ -233,17 +236,21 @@ mod tests {
         .unwrap();
         assert_eq!(
             factory
-                .create(&Subnetwork::History, Distance::MAX)
+                .create(&Subnetwork::History, Distance::MAX, false)
                 .unwrap()
                 .storage_capacity_bytes,
             100_000_000,
         );
         assert!(
-            factory.create(&Subnetwork::Beacon, Distance::MAX).is_err(),
+            factory
+                .create(&Subnetwork::Beacon, Distance::MAX, false)
+                .is_err(),
             "Creating for Beacon should fail"
         );
         assert!(
-            factory.create(&Subnetwork::State, Distance::MAX).is_err(),
+            factory
+                .create(&Subnetwork::State, Distance::MAX, false)
+                .is_err(),
             "Creating for State should fail"
         );
         temp_dir.close().unwrap();
@@ -264,19 +271,21 @@ mod tests {
         .unwrap();
         assert_eq!(
             factory
-                .create(&Subnetwork::Beacon, Distance::MAX)
+                .create(&Subnetwork::Beacon, Distance::MAX, false)
                 .unwrap()
                 .storage_capacity_bytes,
             0,
         );
         assert_eq!(
             factory
-                .create(&Subnetwork::History, Distance::MAX)
+                .create(&Subnetwork::History, Distance::MAX, false)
                 .unwrap()
                 .storage_capacity_bytes,
             100_000_000,
         );
-        assert!(factory.create(&Subnetwork::State, Distance::MAX).is_err());
+        assert!(factory
+            .create(&Subnetwork::State, Distance::MAX, false)
+            .is_err());
         temp_dir.close().unwrap();
     }
 }

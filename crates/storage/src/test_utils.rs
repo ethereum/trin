@@ -21,7 +21,7 @@ pub fn create_test_portal_storage_config_with_capacity(
         temp_dir.path().to_path_buf(),
     )
     .unwrap()
-    .create(&Subnetwork::History, Distance::MAX)
+    .create(&Subnetwork::History, Distance::MAX, false)
     .unwrap();
     Ok((temp_dir, config))
 }
