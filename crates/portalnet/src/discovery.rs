@@ -383,7 +383,7 @@ impl UtpPeer {
 impl std::fmt::Debug for UtpPeer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let peer_client_type = self.client().unwrap_or_else(|| "Unknown".to_string());
-        f.debug_struct("EnrPeer")
+        f.debug_struct("UtpPeer")
             .field("enr", &self.0)
             .field("Peer Client Type", &peer_client_type)
             .finish()
