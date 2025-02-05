@@ -105,7 +105,7 @@ pub async fn run_trin(
                 &discovery,
                 utp_socket.clone(),
                 portalnet_config.clone(),
-                storage_config_factory.create(&Subnetwork::State, trin_config.max_radius, false)?,
+                storage_config_factory.create(&Subnetwork::State, trin_config.max_radius)?,
                 header_oracle.clone(),
             )
             .await?
@@ -125,7 +125,7 @@ pub async fn run_trin(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config_factory.create(&Subnetwork::Beacon, Distance::MAX, false)?,
+            storage_config_factory.create(&Subnetwork::Beacon, Distance::MAX)?,
             header_oracle.clone(),
         )
         .await?
@@ -148,12 +148,9 @@ pub async fn run_trin(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config_factory.create(
-                &Subnetwork::History,
-                trin_config.max_radius,
-                trin_config.disable_storing_headers,
-            )?,
+            storage_config_factory.create(&Subnetwork::History, trin_config.max_radius)?,
             header_oracle.clone(),
+            trin_config.disable_history_storage,
         )
         .await?
     } else {

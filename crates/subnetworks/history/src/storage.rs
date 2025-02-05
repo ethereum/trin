@@ -12,7 +12,7 @@ use trin_storage::{
 #[derive(Debug)]
 pub struct HistoryStorage {
     store: IdIndexedV1Store<HistoryContentKey>,
-    disable_storing_headers: bool,
+    disable_history_storage: bool,
 }
 
 impl ContentStore for HistoryStorage {
@@ -36,13 +36,9 @@ impl ContentStore for HistoryStorage {
         key: &HistoryContentKey,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_id = ContentId::from(key.content_id());
-        // temporarily disable storing all block headers
-        if self.disable_storing_headers {
-            if let HistoryContentKey::BlockHeaderByHash(_)
-            | HistoryContentKey::BlockHeaderByNumber(_) = key
-            {
-                return Ok(ShouldWeStoreContent::NotWithinRadius);
-            }
+        // temporarily disable storing all history network
+        if self.disable_history_storage {
+            return Ok(ShouldWeStoreContent::NotWithinRadius);
         }
         if self.store.distance_to_content_id(&content_id) > self.store.radius() {
             Ok(ShouldWeStoreContent::NotWithinRadius)
@@ -59,13 +55,15 @@ impl ContentStore for HistoryStorage {
 }
 
 impl HistoryStorage {
-    pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
+    pub fn new(
+        config: PortalStorageConfig,
+        disable_history_storage: bool,
+    ) -> Result<Self, ContentStoreError> {
         let sql_connection_pool = config.sql_connection_pool.clone();
-        let disable_storing_headers = config.disable_storing_headers;
         let config = IdIndexedV1StoreConfig::new(ContentType::History, Subnetwork::History, config);
         Ok(Self {
             store: create_store(ContentType::History, config, sql_connection_pool)?,
-            disable_storing_headers,
+            disable_history_storage,
         })
     }
 
@@ -108,7 +106,7 @@ pub mod test {
         fn test_store_random_bytes() -> TestResult {
             let (temp_dir, storage_config) =
                 create_test_portal_storage_config_with_capacity(CAPACITY_MB).unwrap();
-            let mut storage = HistoryStorage::new(storage_config).unwrap();
+            let mut storage = HistoryStorage::new(storage_config, false).unwrap();
             let content_key = HistoryContentKey::random().unwrap();
             let mut value = [0u8; 32];
             rand::thread_rng().fill_bytes(&mut value);
@@ -129,7 +127,7 @@ pub mod test {
     async fn test_get_data() -> Result<(), ContentStoreError> {
         let (temp_dir, storage_config) =
             create_test_portal_storage_config_with_capacity(CAPACITY_MB).unwrap();
-        let mut storage = HistoryStorage::new(storage_config)?;
+        let mut storage = HistoryStorage::new(storage_config, false)?;
         let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey::default());
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.put(content_key.clone(), &value)?;
