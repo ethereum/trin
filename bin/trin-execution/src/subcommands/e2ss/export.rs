@@ -6,7 +6,7 @@ use std::{
 use alloy::{consensus::EMPTY_ROOT_HASH, rlp::Decodable};
 use anyhow::ensure;
 use e2store::e2ss::{
-    AccountEntry, AccountOrStorageEntry, E2ssWriter, StorageEntry, StorageItem, MAX_STORAGE_ITEMS,
+    AccountEntry, AccountOrStorageEntry, E2SSWriter, StorageEntry, StorageItem, MAX_STORAGE_ITEMS,
 };
 use eth_trie::{EthTrie, Trie};
 use ethportal_api::{types::state_trie::account_state::AccountState, Header};
@@ -69,8 +69,8 @@ impl StateExporter {
             "Exporting state from block number: {} with state root: {}",
             self.header.number, self.header.state_root
         );
-        let mut e2ss = E2ssWriter::create(&self.config.path_to_e2ss, self.header.clone())?;
-        info!("E2ss initiated");
+        let mut e2ss = E2SSWriter::create(&self.config.path_to_e2ss, self.header.clone())?;
+        info!("E2SS initiated");
         info!("Trie leaf iterator initiated");
         let mut accounts_exported = 0;
         for key_hash_and_leaf_value in self.evm_db.trie.lock().iter() {
@@ -130,7 +130,7 @@ impl StateExporter {
 
         e2ss.flush()?;
 
-        info!("E2ss snapshot exported");
+        info!("E2SS snapshot exported");
 
         Ok(e2ss.path().to_path_buf())
     }

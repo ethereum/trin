@@ -206,7 +206,7 @@ impl StateBridge {
 
             ensure!(
                 e2ss_files.contains_key(&snapshot_block),
-                "E2ss file doesn't exist for requested snapshot block: try these {e2ss_blocks:?}"
+                "E2SS file doesn't exist for requested snapshot block: try these {e2ss_blocks:?}"
             );
 
             info!(

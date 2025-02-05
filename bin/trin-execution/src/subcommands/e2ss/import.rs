@@ -1,7 +1,7 @@
 use std::{path::Path, sync::Arc};
 
 use anyhow::{ensure, Error};
-use e2store::e2ss::{AccountEntry, AccountOrStorageEntry, E2ssReader, StorageItem};
+use e2store::e2ss::{AccountEntry, AccountOrStorageEntry, E2SSReader, StorageItem};
 use eth_trie::{EthTrie, Trie};
 use ethportal_api::Header;
 use revm_primitives::{keccak256, B256, U256};
@@ -57,8 +57,8 @@ impl StateImporter {
     fn import_state(&self) -> anyhow::Result<Header> {
         info!("Importing state from .e2ss file");
 
-        let mut e2ss = E2ssReader::open(&self.config.path_to_e2ss)?;
-        info!("E2ss reader initiated");
+        let mut e2ss = E2SSReader::open(&self.config.path_to_e2ss)?;
+        info!("E2SS reader initiated");
         let mut accounts_imported = 0;
         while let Some(account) = e2ss.next() {
             let AccountOrStorageEntry::Account(account) = account else {

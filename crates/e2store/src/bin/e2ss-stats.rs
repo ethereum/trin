@@ -3,12 +3,12 @@ use std::path::PathBuf;
 use alloy::primitives::{keccak256, B256};
 use anyhow::bail;
 use clap::Parser;
-use e2store::e2ss::{self, AccountOrStorageEntry, E2ssReader};
+use e2store::e2ss::{self, AccountOrStorageEntry, E2SSReader};
 use tracing::info;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "E2ss stats",
+    name = "E2SS stats",
     about = "Reads the e2ss file, validates the format, and prints stats about it."
 )]
 struct Config {
@@ -35,7 +35,7 @@ fn main() -> anyhow::Result<()> {
     trin_utils::log::init_tracing_logger();
 
     let config = Config::parse();
-    let mut reader = E2ssReader::open(&config.path)?;
+    let mut reader = E2SSReader::open(&config.path)?;
 
     info!(
         "Processing e2ss file for block: {}",

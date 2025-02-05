@@ -50,11 +50,11 @@ use crate::{
 
 pub const MAX_STORAGE_ITEMS: usize = 10_000_000;
 
-/// The `E2ss` streaming writer.
+/// The `E2SS` streaming writer.
 ///
-/// Unlike [crate::era::Era] and [crate::era1::Era1], the `E2ss` files are too big to be held in
+/// Unlike [crate::era::Era] and [crate::era1::Era1], the `E2SS` files are too big to be held in
 /// memory.
-pub struct E2ssWriter {
+pub struct E2SSWriter {
     pub version: VersionEntry,
     pub header: HeaderEntry,
 
@@ -63,7 +63,7 @@ pub struct E2ssWriter {
     path: PathBuf,
 }
 
-impl E2ssWriter {
+impl E2SSWriter {
     pub fn create(path: &Path, header: Header) -> anyhow::Result<Self> {
         fs::create_dir_all(path)?;
         ensure!(path.is_dir(), "e2ss path is not a directory: {:?}", path);
@@ -134,11 +134,11 @@ impl E2ssWriter {
     }
 }
 
-/// The `E2ss` streaming reader.
+/// The `E2SS` streaming reader.
 ///
-/// Unlike [crate::era::Era] and [crate::era1::Era1], the `E2ss` files are too big to be held in
+/// Unlike [crate::era::Era] and [crate::era1::Era1], the `E2SS` files are too big to be held in
 /// memory.
-pub struct E2ssReader {
+pub struct E2SSReader {
     pub version: VersionEntry,
     pub header: HeaderEntry,
 
@@ -147,7 +147,7 @@ pub struct E2ssReader {
     path: PathBuf,
 }
 
-impl E2ssReader {
+impl E2SSReader {
     pub fn open(path: &Path) -> anyhow::Result<Self> {
         let mut reader = E2StoreStreamReader::open(path)?;
 
@@ -168,7 +168,7 @@ impl E2ssReader {
     }
 }
 
-impl Iterator for E2ssReader {
+impl Iterator for E2SSReader {
     type Item = AccountOrStorageEntry;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -352,7 +352,7 @@ mod tests {
         };
 
         // create a new e2store file and write some data to it
-        let mut e2ss_writer = E2ssWriter::create(tmp_dir.path(), header.clone())?;
+        let mut e2ss_writer = E2SSWriter::create(tmp_dir.path(), header.clone())?;
 
         let e2ss_path = tmp_dir.path().join(format!(
             "mainnet-{:010}-{}.e2ss",
@@ -385,7 +385,7 @@ mod tests {
         drop(e2ss_writer);
 
         // read results and see if they match
-        let mut e2ss_reader = E2ssReader::open(&e2ss_path)?;
+        let mut e2ss_reader = E2SSReader::open(&e2ss_path)?;
         assert_eq!(e2ss_reader.path(), &e2ss_path);
 
         let default_version_entry = VersionEntry::default();
