@@ -150,6 +150,7 @@ pub async fn run_trin(
             portalnet_config.clone(),
             storage_config_factory.create(&Subnetwork::History, trin_config.max_radius)?,
             header_oracle.clone(),
+            trin_config.disable_history_storage,
         )
         .await?
     } else {
