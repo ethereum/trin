@@ -3,16 +3,16 @@ use std::path::PathBuf;
 use alloy::primitives::{keccak256, B256};
 use anyhow::bail;
 use clap::Parser;
-use e2store::era2::{self, AccountOrStorageEntry, Era2Reader};
+use e2store::e2ss::{self, AccountOrStorageEntry, E2SSReader};
 use tracing::info;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "Era2 stats",
-    about = "Reads the era2 file, validates the format, and prints stats about it."
+    name = "E2SS stats",
+    about = "Reads the e2ss file, validates the format, and prints stats about it."
 )]
 struct Config {
-    #[arg(help = "The path to the era2 file.")]
+    #[arg(help = "The path to the e2ss file.")]
     path: PathBuf,
 }
 
@@ -24,21 +24,21 @@ struct Stats {
     storage_item_count: usize,
 }
 
-/// Reads the era2 file, validates the format, and prints stats about it.
+/// Reads the e2ss file, validates the format, and prints stats about it.
 ///
 /// It can be run with following command:
 ///
 /// ```bash
-/// cargo run --release -p e2store --bin era2-stats --features era2-stats-binary -- <path>
+/// cargo run --release -p e2store --bin e2ss-stats --features e2ss-stats-binary -- <path>
 /// ```
 fn main() -> anyhow::Result<()> {
     trin_utils::log::init_tracing_logger();
 
     let config = Config::parse();
-    let mut reader = Era2Reader::open(&config.path)?;
+    let mut reader = E2SSReader::open(&config.path)?;
 
     info!(
-        "Processing era2 file for block: {}",
+        "Processing e2ss file for block: {}",
         reader.header.header.number
     );
 
@@ -83,7 +83,7 @@ fn main() -> anyhow::Result<()> {
             if index + 1 < account.storage_count {
                 assert_eq!(
                     storage.len(),
-                    era2::MAX_STORAGE_ITEMS,
+                    e2ss::MAX_STORAGE_ITEMS,
                     "Non-final storage entry (address_hash: {}, index: {index}/{}) should be full, but has {} items instead",
                     account.address_hash,
                     account.storage_count,

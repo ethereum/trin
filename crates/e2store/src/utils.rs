@@ -8,7 +8,7 @@ use url::Url;
 
 const ERA_DIR_URL: &str = "https://mainnet.era.nimbus.team/";
 const ERA1_DIR_URL: &str = "https://era1.ethportal.net/";
-const ERA2_DIR_URL: &str = "https://era2.ethportal.net/index.html";
+const E2SS_DIR_URL: &str = "https://e2ss.ethportal.net/index.html";
 pub const ERA1_FILE_COUNT: usize = 1897;
 
 pub fn underlying_io_error_kind(error: &Error) -> Option<io::ErrorKind> {
@@ -84,9 +84,9 @@ pub async fn get_era1_files(http_client: &Client) -> anyhow::Result<HashMap<u64,
     Ok(era1_files)
 }
 
-pub async fn get_era2_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
-    let era2_files = download_era_links(http_client, ERA2_DIR_URL).await?;
-    Ok(era2_files)
+pub async fn get_e2ss_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
+    let e2ss_files = download_era_links(http_client, E2SS_DIR_URL).await?;
+    Ok(e2ss_files)
 }
 
 /// Fetches era1 files hosted on era1.ethportal.net and shuffles them

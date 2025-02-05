@@ -1,7 +1,7 @@
 use std::{path::Path, sync::Arc};
 
 use anyhow::{ensure, Error};
-use e2store::era2::{AccountEntry, AccountOrStorageEntry, Era2Reader, StorageItem};
+use e2store::e2ss::{AccountEntry, AccountOrStorageEntry, E2SSReader, StorageItem};
 use eth_trie::{EthTrie, Trie};
 use ethportal_api::Header;
 use revm_primitives::{keccak256, B256, U256};
@@ -16,7 +16,7 @@ use crate::{
         account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
         utils::setup_rocksdb,
     },
-    subcommands::era2::utils::percentage_from_address_hash,
+    subcommands::e2ss::utils::percentage_from_address_hash,
 };
 
 pub struct StateImporter {
@@ -31,7 +31,7 @@ impl StateImporter {
         let execution_position = ExecutionPosition::initialize_from_db(rocks_db.clone())?;
         ensure!(
             execution_position.next_block_number() == 0,
-            "Cannot import state from .era2, database is not empty",
+            "Cannot import state from .e2ss, database is not empty",
         );
 
         let evm_db = EvmDB::new(StateConfig::default(), rocks_db, &execution_position)
@@ -41,7 +41,7 @@ impl StateImporter {
     }
 
     pub async fn import(&self) -> anyhow::Result<Header> {
-        // Import state from era2 file
+        // Import state from e2ss file
         let header = self.import_state()?;
 
         // Save execution position
@@ -55,12 +55,12 @@ impl StateImporter {
     }
 
     fn import_state(&self) -> anyhow::Result<Header> {
-        info!("Importing state from .era2 file");
+        info!("Importing state from .e2ss file");
 
-        let mut era2 = Era2Reader::open(&self.config.path_to_era2)?;
-        info!("Era2 reader initiated");
+        let mut e2ss = E2SSReader::open(&self.config.path_to_e2ss)?;
+        info!("E2SS reader initiated");
         let mut accounts_imported = 0;
-        while let Some(account) = era2.next() {
+        while let Some(account) = e2ss.next() {
             let AccountOrStorageEntry::Account(account) = account else {
                 return Err(Error::msg("Expected account, got storage entry"));
             };
@@ -75,7 +75,7 @@ impl StateImporter {
             let account_db = AccountDB::new(address_hash, self.evm_db.db.clone());
             let mut storage_trie = EthTrie::new(Arc::new(account_db));
             for _ in 0..storage_count {
-                let Some(AccountOrStorageEntry::Storage(storage_entry)) = era2.next() else {
+                let Some(AccountOrStorageEntry::Storage(storage_entry)) = e2ss.next() else {
                     return Err(Error::msg("Expected storage, got account entry"));
                 };
                 for StorageItem {
@@ -92,13 +92,13 @@ impl StateImporter {
             }
 
             if storage_trie.root_hash()? != account_state.storage_root {
-                return Err(Error::msg("Failed importing account storage trie: storage roots don't match expect value, .era2 import failed"));
+                return Err(Error::msg("Failed importing account storage trie: storage roots don't match expect value, .e2ss import failed"));
             }
 
             // Insert contract if available
             ensure!(
                 account_state.code_hash == keccak256(&bytecode),
-                "Code hash mismatch, .era2 import failed"
+                "Code hash mismatch, .e2ss import failed"
             );
             if !bytecode.is_empty() {
                 self.evm_db.db.put(keccak256(&bytecode), bytecode.clone())?;
@@ -125,15 +125,15 @@ impl StateImporter {
             }
         }
 
-        // Check if the state root matches, if this fails it means either the .era2 is wrong or we
+        // Check if the state root matches, if this fails it means either the .e2ss is wrong or we
         // imported the state wrong
-        if era2.header.header.state_root != self.evm_db.trie.lock().root_hash()? {
-            return Err(Error::msg("State root mismatch, .era2 import failed"));
+        if e2ss.header.header.state_root != self.evm_db.trie.lock().root_hash()? {
+            return Err(Error::msg("State root mismatch, .e2ss import failed"));
         }
 
-        info!("Done importing State from .era2 file");
+        info!("Done importing State from .e2ss file");
 
-        Ok(era2.header.header)
+        Ok(e2ss.header.header)
     }
 
     /// insert the last 256 block hashes into the database

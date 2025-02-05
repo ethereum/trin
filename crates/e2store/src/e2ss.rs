@@ -3,13 +3,13 @@
 //! Filename:
 //!
 //! ```text
-//! <network-name>-<block-number>-<short-state-root>.era2
+//! <network-name>-<block-number>-<short-state-root>.e2ss
 //! ```
 //!
 //! Type definitions:
 //!
 //! ```text
-//! era2 := Version | CompressedHeader | account*
+//! e2ss := Version | CompressedHeader | account*
 //! account :=  CompressedAccount | CompressedStorage*
 //!
 //! Version             = { type: 0x3265, data: nil }
@@ -50,11 +50,11 @@ use crate::{
 
 pub const MAX_STORAGE_ITEMS: usize = 10_000_000;
 
-/// The `Era2` streaming writer.
+/// The `E2SS` streaming writer.
 ///
-/// Unlike [crate::era::Era] and [crate::era1::Era1], the `Era2` files are too big to be held in
+/// Unlike [crate::era::Era] and [crate::era1::Era1], the `E2SS` files are too big to be held in
 /// memory.
-pub struct Era2Writer {
+pub struct E2SSWriter {
     pub version: VersionEntry,
     pub header: HeaderEntry,
 
@@ -63,16 +63,16 @@ pub struct Era2Writer {
     path: PathBuf,
 }
 
-impl Era2Writer {
+impl E2SSWriter {
     pub fn create(path: &Path, header: Header) -> anyhow::Result<Self> {
         fs::create_dir_all(path)?;
-        ensure!(path.is_dir(), "era2 path is not a directory: {:?}", path);
+        ensure!(path.is_dir(), "e2ss path is not a directory: {:?}", path);
         let path = path.join(format!(
-            "mainnet-{:010}-{}.era2",
+            "mainnet-{:010}-{}.e2ss",
             header.number,
             hex::encode(&header.state_root.as_slice()[..4])
         ));
-        ensure!(!path.exists(), "era2 file already exists: {:?}", path);
+        ensure!(!path.exists(), "e2ss file already exists: {:?}", path);
         let mut writer = E2StoreStreamWriter::create(&path)?;
 
         let version = VersionEntry::default();
@@ -134,11 +134,11 @@ impl Era2Writer {
     }
 }
 
-/// The `Era2` streaming reader.
+/// The `E2SS` streaming reader.
 ///
-/// Unlike [crate::era::Era] and [crate::era1::Era1], the `Era2` files are too big to be held in
+/// Unlike [crate::era::Era] and [crate::era1::Era1], the `E2SS` files are too big to be held in
 /// memory.
-pub struct Era2Reader {
+pub struct E2SSReader {
     pub version: VersionEntry,
     pub header: HeaderEntry,
 
@@ -147,7 +147,7 @@ pub struct Era2Reader {
     path: PathBuf,
 }
 
-impl Era2Reader {
+impl E2SSReader {
     pub fn open(path: &Path) -> anyhow::Result<Self> {
         let mut reader = E2StoreStreamReader::open(path)?;
 
@@ -168,7 +168,7 @@ impl Era2Reader {
     }
 }
 
-impl Iterator for Era2Reader {
+impl Iterator for E2SSReader {
     type Item = AccountOrStorageEntry;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -323,7 +323,7 @@ mod tests {
     use crate::e2store::types::VersionEntry;
 
     #[test]
-    fn test_era2_stream_write_and_read() -> anyhow::Result<()> {
+    fn test_e2ss_stream_write_and_read() -> anyhow::Result<()> {
         // setup
         let tmp_dir = create_temp_test_dir()?;
 
@@ -352,14 +352,14 @@ mod tests {
         };
 
         // create a new e2store file and write some data to it
-        let mut era2_writer = Era2Writer::create(tmp_dir.path(), header.clone())?;
+        let mut e2ss_writer = E2SSWriter::create(tmp_dir.path(), header.clone())?;
 
-        let era2_path = tmp_dir.path().join(format!(
-            "mainnet-{:010}-{}.era2",
+        let e2ss_path = tmp_dir.path().join(format!(
+            "mainnet-{:010}-{}.e2ss",
             header.number,
             hex::encode(&header.state_root.as_slice()[..4])
         ));
-        assert_eq!(era2_writer.path(), era2_path);
+        assert_eq!(e2ss_writer.path(), e2ss_path);
 
         let account = AccountOrStorageEntry::Account(AccountEntry {
             address_hash: B256::default(),
@@ -368,37 +368,37 @@ mod tests {
             storage_count: 1,
         });
 
-        assert_eq!(era2_writer.pending_storage_entries, 0);
-        let size = era2_writer.append_entry(&account)?;
+        assert_eq!(e2ss_writer.pending_storage_entries, 0);
+        let size = e2ss_writer.append_entry(&account)?;
         assert_eq!(size, 101);
-        assert_eq!(era2_writer.pending_storage_entries, 1);
+        assert_eq!(e2ss_writer.pending_storage_entries, 1);
 
         let storage = AccountOrStorageEntry::Storage(StorageEntry(vec![StorageItem {
             storage_index_hash: B256::default(),
             value: U256::default(),
         }]));
 
-        let size = era2_writer.append_entry(&storage)?;
+        let size = e2ss_writer.append_entry(&storage)?;
         assert_eq!(size, 29);
-        assert_eq!(era2_writer.pending_storage_entries, 0);
-        era2_writer.flush()?;
-        drop(era2_writer);
+        assert_eq!(e2ss_writer.pending_storage_entries, 0);
+        e2ss_writer.flush()?;
+        drop(e2ss_writer);
 
         // read results and see if they match
-        let mut era2_reader = Era2Reader::open(&era2_path)?;
-        assert_eq!(era2_reader.path(), &era2_path);
+        let mut e2ss_reader = E2SSReader::open(&e2ss_path)?;
+        assert_eq!(e2ss_reader.path(), &e2ss_path);
 
         let default_version_entry = VersionEntry::default();
-        assert_eq!(era2_reader.version, default_version_entry);
-        assert_eq!(era2_reader.header, HeaderEntry { header });
-        assert_eq!(era2_reader.pending_storage_entries, 0);
-        let read_account_tuple = era2_reader.next().unwrap();
+        assert_eq!(e2ss_reader.version, default_version_entry);
+        assert_eq!(e2ss_reader.header, HeaderEntry { header });
+        assert_eq!(e2ss_reader.pending_storage_entries, 0);
+        let read_account_tuple = e2ss_reader.next().unwrap();
         assert_eq!(account, read_account_tuple);
-        assert_eq!(era2_reader.pending_storage_entries, 1);
+        assert_eq!(e2ss_reader.pending_storage_entries, 1);
 
-        let read_storage_tuple = era2_reader.next().unwrap();
+        let read_storage_tuple = e2ss_reader.next().unwrap();
         assert_eq!(storage, read_storage_tuple);
-        assert_eq!(era2_reader.pending_storage_entries, 0);
+        assert_eq!(e2ss_reader.pending_storage_entries, 0);
 
         // cleanup
         tmp_dir.close()?;
