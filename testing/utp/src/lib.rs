@@ -19,21 +19,21 @@ use jsonrpsee::{
 };
 use portalnet::{
     config::PortalnetConfig,
-    discovery::{Discovery, UtpEnr},
+    discovery::{Discovery, UtpPeer},
 };
 use tokio::sync::{
     mpsc::{self, Receiver},
     RwLock,
 };
 use trin_validation::oracle::HeaderOracle;
-use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
+use utp_rs::{conn::ConnectionConfig, peer::Peer, socket::UtpSocket};
 
 use crate::rpc::RpcServer;
 
 /// uTP test app
 pub struct TestApp {
     pub discovery: Arc<Discovery>,
-    pub utp_socket: Arc<UtpSocket<UtpEnr>>,
+    pub utp_socket: Arc<UtpSocket<UtpPeer>>,
     pub utp_talk_req_tx: mpsc::UnboundedSender<TalkRequest>,
     pub utp_payload: Arc<RwLock<Vec<Vec<u8>>>>,
 }
@@ -64,9 +64,9 @@ impl RpcServer for TestApp {
         let cid = utp_rs::cid::ConnectionId {
             send: cid_send,
             recv: cid_recv,
-            peer: UtpEnr(src_enr.clone()),
+            peer_id: src_enr.node_id(),
         };
-        self.discovery.add_enr(src_enr).unwrap();
+        self.discovery.add_enr(src_enr.clone()).unwrap();
 
         let utp = Arc::clone(&self.utp_socket);
         let payload_store = Arc::clone(&self.utp_payload);
@@ -78,7 +78,10 @@ impl RpcServer for TestApp {
                 initial_timeout: Duration::from_millis(1250),
                 ..Default::default()
             };
-            let mut conn = utp.accept_with_cid(cid, utp_config).await.unwrap();
+            let mut conn = utp
+                .accept_with_cid(cid, Peer::new(UtpPeer(src_enr)), utp_config)
+                .await
+                .unwrap();
             let mut data = vec![];
             let n = conn.read_to_eof(&mut data).await.unwrap();
 
@@ -112,9 +115,9 @@ impl RpcServer for TestApp {
         let cid = utp_rs::cid::ConnectionId {
             send: cid_send,
             recv: cid_recv,
-            peer: UtpEnr(dst_enr.clone()),
+            peer_id: dst_enr.node_id(),
         };
-        self.discovery.add_enr(dst_enr).unwrap();
+        self.discovery.add_enr(dst_enr.clone()).unwrap();
 
         let utp = Arc::clone(&self.utp_socket);
         let utp_config = ConnectionConfig {
@@ -125,7 +128,10 @@ impl RpcServer for TestApp {
             ..Default::default()
         };
         tokio::spawn(async move {
-            let mut conn = utp.connect_with_cid(cid, utp_config).await.unwrap();
+            let mut conn = utp
+                .connect_with_cid(cid, Peer::new(UtpPeer(dst_enr)), utp_config)
+                .await
+                .unwrap();
 
             conn.write(&payload).await.unwrap();
 

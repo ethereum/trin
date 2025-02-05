@@ -42,7 +42,7 @@ use utp_rs::socket::UtpSocket;
 use super::{ping_extensions::PingExtension, service::OverlayService};
 use crate::{
     bootnodes::Bootnode,
-    discovery::{Discovery, UtpEnr},
+    discovery::{Discovery, UtpPeer},
     events::EventEnvelope,
     find::query_info::{FindContentResult, RecursiveFindContentResult},
     overlay::{
@@ -105,7 +105,7 @@ impl<
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
-        utp_socket: Arc<UtpSocket<UtpEnr>>,
+        utp_socket: Arc<UtpSocket<UtpPeer>>,
         store: Arc<RwLock<TStore>>,
         protocol: Subnetwork,
         validator: Arc<TValidator>,
@@ -498,10 +498,10 @@ impl<
         let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
             send: conn_id.wrapping_add(1),
-            peer: UtpEnr(enr),
+            peer_id: enr.node_id(),
         };
         self.utp_controller
-            .connect_inbound_stream(cid)
+            .connect_inbound_stream(cid, UtpPeer(enr))
             .await
             .map_err(|err| OverlayRequestError::ContentNotFound {
                 message: format!("Unable to locate content on the network: {err:?}"),

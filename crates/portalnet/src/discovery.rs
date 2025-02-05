@@ -1,8 +1,7 @@
 use std::{
-    fmt,
-    hash::{Hash, Hasher},
-    io,
+    fmt, io,
     net::{Ipv4Addr, SocketAddr},
+    ops::Deref,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -26,7 +25,10 @@ use parking_lot::RwLock;
 use tokio::sync::{mpsc, RwLock as TokioRwLock};
 use tracing::{debug, info, warn};
 use trin_validation::oracle::HeaderOracle;
-use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
+use utp_rs::{
+    peer::{ConnectionPeer, Peer},
+    udp::AsyncUdpSocket,
+};
 
 use super::config::PortalnetConfig;
 use crate::socket;
@@ -357,113 +359,75 @@ impl Discv5UdpSocket {
             header_oracle,
         }
     }
-
-    async fn find_enr(&mut self, node_id: &NodeId) -> io::Result<UtpEnr> {
-        if let Some(cached_enr) = self.enr_cache.write().await.get(node_id).cloned() {
-            return Ok(UtpEnr(cached_enr));
-        }
-
-        if let Some(enr) = self.discv5.find_enr(node_id) {
-            self.enr_cache.write().await.put(*node_id, enr.clone());
-            return Ok(UtpEnr(enr));
-        }
-
-        if let Some(enr) = self.discv5.cached_node_addr(node_id) {
-            self.enr_cache.write().await.put(*node_id, enr.enr.clone());
-            return Ok(UtpEnr(enr.enr));
-        }
-
-        let history_jsonrpc_tx = self.header_oracle.read().await.history_jsonrpc_tx();
-        if let Ok(history_jsonrpc_tx) = history_jsonrpc_tx {
-            if let Ok(enr) = HeaderOracle::history_get_enr(node_id, history_jsonrpc_tx).await {
-                self.enr_cache.write().await.put(*node_id, enr.clone());
-                return Ok(UtpEnr(enr));
-            }
-        }
-
-        let state_jsonrpc_tx = self.header_oracle.read().await.state_jsonrpc_tx();
-        if let Ok(state_jsonrpc_tx) = state_jsonrpc_tx {
-            if let Ok(enr) = HeaderOracle::state_get_enr(node_id, state_jsonrpc_tx).await {
-                self.enr_cache.write().await.put(*node_id, enr.clone());
-                return Ok(UtpEnr(enr));
-            }
-        }
-
-        let beacon_jsonrpc_tx = self.header_oracle.read().await.beacon_jsonrpc_tx();
-        if let Ok(beacon_jsonrpc_tx) = beacon_jsonrpc_tx {
-            if let Ok(enr) = HeaderOracle::beacon_get_enr(node_id, beacon_jsonrpc_tx).await {
-                self.enr_cache.write().await.put(*node_id, enr.clone());
-                return Ok(UtpEnr(enr));
-            }
-        }
-
-        debug!(node_id = %node_id, "uTP packet from unknown source");
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            "ENR not found for talk req destination",
-        ))
-    }
 }
 
 /// A wrapper around `Enr` that implements `ConnectionPeer`.
 #[derive(Clone)]
-pub struct UtpEnr(pub Enr);
+pub struct UtpPeer(pub Enr);
 
-impl UtpEnr {
-    pub fn node_id(&self) -> NodeId {
-        self.0.node_id()
+impl Deref for UtpPeer {
+    type Target = Enr;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
+}
 
+impl UtpPeer {
     pub fn client(&self) -> Option<String> {
-        self.0
-            .get_decodable::<String>(ENR_PORTAL_CLIENT_KEY)
+        self.get_decodable::<String>(ENR_PORTAL_CLIENT_KEY)
             .and_then(|v| v.ok())
     }
 }
 
-impl std::fmt::Debug for UtpEnr {
+impl std::fmt::Debug for UtpPeer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let peer_client_type = self.client().unwrap_or_else(|| "Unknown".to_string());
-        f.debug_struct("UtpEnr")
+        f.debug_struct("UtpPeer")
             .field("enr", &self.0)
             .field("Peer Client Type", &peer_client_type)
             .finish()
     }
 }
 
-// Why are we implementing Hash, PartialEq, Eq for UtpEnr?
-// UtpEnr is used as an element of the key for a Connections HashTable in our uTP library.
-// Enr's can change and are not stable, so if we initiate a ``connect_with_cid`` we are inserting
-// our known Enr for the peer, but if the peer has a more upto date Enr, values will be different
-// and the Hash for the old Enr and New Enr will be different, along with equating the two structs
-// will return false. This leads us to a situation where our peer sends us a uTP messages back and
-// our code thinks the same peer is instead 2 different peers causing uTP to ignore the messages. We
-// fixed this by implementing Eq and Hash only using the NodeId of the Enr as it is the only stable
-// non-updatable field in the Enr.
-impl Hash for UtpEnr {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.node_id().hash(state);
+impl ConnectionPeer for UtpPeer {
+    type Id = NodeId;
+
+    fn id(&self) -> Self::Id {
+        self.node_id()
+    }
+
+    fn consolidate(a: Self, b: Self) -> Self {
+        assert!(a.id() == b.id());
+        if a.seq() >= b.seq() {
+            a
+        } else {
+            b
+        }
     }
 }
-
-impl PartialEq for UtpEnr {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.node_id() == other.0.node_id()
-    }
-}
-
-impl Eq for UtpEnr {}
-
-impl ConnectionPeer for UtpEnr {}
 
 #[async_trait]
-impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
-    async fn send_to(&mut self, buf: &[u8], target: &UtpEnr) -> io::Result<usize> {
+impl AsyncUdpSocket<UtpPeer> for Discv5UdpSocket {
+    async fn send_to(&mut self, buf: &[u8], peer: &Peer<UtpPeer>) -> io::Result<usize> {
+        let peer_id = *peer.id();
+        let peer_enr = peer.peer().cloned();
         let discv5 = Arc::clone(&self.discv5);
-        let target = target.0.clone();
+        let enr_cache = Arc::clone(&self.enr_cache);
+        let header_oracle = Arc::clone(&self.header_oracle);
         let data = buf.to_vec();
         tokio::spawn(async move {
-            match discv5.send_talk_req(target, Subnetwork::Utp, data).await {
+            let enr = match peer_enr {
+                Some(enr) => enr.0,
+                None => match find_enr(&peer_id, &discv5, enr_cache, header_oracle).await {
+                    Ok(enr) => enr,
+                    Err(err) => {
+                        warn!(%err, "unable to send uTP talk request, ENR not found");
+                        return;
+                    }
+                },
+            };
+            match discv5.send_talk_req(enr, Subnetwork::Utp, data).await {
                 // We drop the talk response because it is ignored in the uTP protocol.
                 Ok(..) => {}
                 Err(err) => match err {
@@ -476,11 +440,10 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
         Ok(buf.len())
     }
 
-    async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, UtpEnr)> {
+    async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, Peer<UtpPeer>)> {
         match self.talk_request_receiver.recv().await {
             Some(talk_req) => {
-                let src_node_id = talk_req.node_id();
-                let enr = self.find_enr(src_node_id).await?;
+                let node_id = *talk_req.node_id();
                 let packet = talk_req.body();
                 let n = std::cmp::min(buf.len(), packet.len());
                 buf[..n].copy_from_slice(&packet[..n]);
@@ -490,9 +453,60 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
                     warn!(%err, "failed to respond to uTP talk request");
                 }
 
-                Ok((n, enr))
+                Ok((n, Peer::new_id(node_id)))
             }
             None => Err(io::Error::from(io::ErrorKind::NotConnected)),
         }
     }
+}
+
+async fn find_enr(
+    node_id: &NodeId,
+    discv5: &Arc<Discovery>,
+    enr_cache: Arc<TokioRwLock<LruCache<NodeId, Enr>>>,
+    header_oracle: Arc<TokioRwLock<HeaderOracle>>,
+) -> io::Result<Enr> {
+    if let Some(cached_enr) = enr_cache.write().await.get(node_id).cloned() {
+        return Ok(cached_enr);
+    }
+
+    if let Some(enr) = discv5.find_enr(node_id) {
+        enr_cache.write().await.put(*node_id, enr.clone());
+        return Ok(enr);
+    }
+
+    if let Some(enr) = discv5.cached_node_addr(node_id) {
+        enr_cache.write().await.put(*node_id, enr.enr.clone());
+        return Ok(enr.enr);
+    }
+
+    let history_jsonrpc_tx = header_oracle.read().await.history_jsonrpc_tx();
+    if let Ok(history_jsonrpc_tx) = history_jsonrpc_tx {
+        if let Ok(enr) = HeaderOracle::history_get_enr(node_id, history_jsonrpc_tx).await {
+            enr_cache.write().await.put(*node_id, enr.clone());
+            return Ok(enr);
+        }
+    }
+
+    let state_jsonrpc_tx = header_oracle.read().await.state_jsonrpc_tx();
+    if let Ok(state_jsonrpc_tx) = state_jsonrpc_tx {
+        if let Ok(enr) = HeaderOracle::state_get_enr(node_id, state_jsonrpc_tx).await {
+            enr_cache.write().await.put(*node_id, enr.clone());
+            return Ok(enr);
+        }
+    }
+
+    let beacon_jsonrpc_tx = header_oracle.read().await.beacon_jsonrpc_tx();
+    if let Ok(beacon_jsonrpc_tx) = beacon_jsonrpc_tx {
+        if let Ok(enr) = HeaderOracle::beacon_get_enr(node_id, beacon_jsonrpc_tx).await {
+            enr_cache.write().await.put(*node_id, enr.clone());
+            return Ok(enr);
+        }
+    }
+
+    debug!(node_id = %node_id, "uTP packet to unknown target");
+    Err(io::Error::new(
+        io::ErrorKind::Other,
+        "ENR not found for talk req destination",
+    ))
 }

@@ -16,7 +16,7 @@ use std::sync::Arc;
 use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use portalnet::{
     config::PortalnetConfig,
-    discovery::{Discovery, UtpEnr},
+    discovery::{Discovery, UtpPeer},
     events::{EventEnvelope, OverlayRequest},
 };
 use tokio::{
@@ -39,7 +39,7 @@ type BeaconEventStream = Option<broadcast::Receiver<EventEnvelope>>;
 
 pub async fn initialize_beacon_network(
     discovery: &Arc<Discovery>,
-    utp_socket: Arc<UtpSocket<UtpEnr>>,
+    utp_socket: Arc<UtpSocket<UtpPeer>>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
