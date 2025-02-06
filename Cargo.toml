@@ -97,9 +97,6 @@ ureq = { version = "2.5.0", features = ["json"] }
 url = "2.3.1"
 utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.16" }
 
-# todo: remove this when our other dependencies update to getrandom 0.3 as it is a breaking change
-uuid = { version = "=1.12.1" }
-
 # Trin workspace crates
 e2store = { path = "crates/e2store" }
 ethportal-api = { path = "crates/ethportal-api" }
@@ -123,3 +120,7 @@ trin-validation = { path = "crates/validation" }
 #
 # See: https://github.com/eira-fransham/crunchy/issues/13
 crunchy = "=0.2.2"
+
+# todo: remove this when our other dependencies update to getrandom 0.3 as it is a breaking change
+[patch.crates-io]
+uuid = { git = "https://github.com/uuid-rs/uuid", tag = "1.12.1" }
