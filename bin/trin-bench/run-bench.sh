@@ -147,7 +147,7 @@ cleanup() {
     fi
 
     echo "All processes stopped."
-    sudo rm -rf "$LOG_DIR/$DATA_DIR_SENDER" "$LOG_DIR/$DATA_DIR_RECEIVER" "$LOG_DIR/$DATA_DIR_SENDER.perf" "$LOG_DIR/$DATA_DIR_RECEIVER.perf"
+    rm -rf "$LOG_DIR/$DATA_DIR_SENDER" "$LOG_DIR/$DATA_DIR_RECEIVER" "$LOG_DIR/$DATA_DIR_SENDER.perf" "$LOG_DIR/$DATA_DIR_RECEIVER.perf"
 
     # Generate timestamp-based folder name
     TIMESTAMP=$(date +%s)
