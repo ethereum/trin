@@ -6077,8 +6077,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 [[package]]
 name = "tempfile"
 version = "3.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a8a559c81686f576e8cd0290cd2a24a2a9ad80c98b3478856500fcbd7acd704"
+source = "git+https://github.com/Stebalien/tempfile?tag=v3.15.0#e7a40e3731c609a06fe959c88e8f681e31f17079"
 dependencies = [
  "cfg-if",
  "fastrand",

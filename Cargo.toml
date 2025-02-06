@@ -82,7 +82,7 @@ sha3 = "0.9.1"
 snap = "1.1.1"
 ssz_types = "0.8.0"
 strum = { version = "0.26.1", features = ["derive"] }
-tempfile = "=3.15.0"
+tempfile = "3.3.0"
 test-log = { version = "0.2.11", features = ["trace"] }
 thiserror = "1.0.57"
 tokio = { version = "1.14.0", features = ["full"] }
@@ -123,4 +123,5 @@ crunchy = "=0.2.2"
 
 # todo: remove this when our other dependencies update to getrandom 0.3 as it is a breaking change
 [patch.crates-io]
+tempfile = { git = "https://github.com/Stebalien/tempfile", tag = "v3.15.0" }
 uuid = { git = "https://github.com/uuid-rs/uuid", tag = "1.12.1" }
