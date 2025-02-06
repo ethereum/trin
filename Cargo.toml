@@ -98,7 +98,7 @@ url = "2.3.1"
 utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.16" }
 
 # todo: remove this when our other dependencies update to getrandom 0.3 as it is a breaking change
-getrandom = { version = "=0.2.15" }
+uuid = { version = "=1.12.1" }
 
 # Trin workspace crates
 e2store = { path = "crates/e2store" }
