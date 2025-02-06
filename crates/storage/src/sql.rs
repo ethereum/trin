@@ -77,3 +77,6 @@ pub const HISTORICAL_SUMMARIES_EPOCH_LOOKUP_QUERY: &str =
 
 // todo: remove this in the future
 pub const DROP_USAGE_STATS_DB: &str = "DROP TABLE IF EXISTS usage_stats;";
+
+/// Benchmarking with WAL mode enabled 1.4 to 1.9x's Trin performance
+pub const ENABLE_WAL_MODE: &str = "PRAGMA journal_mode = WAL;PRAGMA synchronous = NORMAL;";

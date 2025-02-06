@@ -7,8 +7,8 @@ use tracing::info;
 use crate::{
     error::ContentStoreError,
     sql::{
-        DROP_USAGE_STATS_DB, HISTORICAL_SUMMARIES_CREATE_TABLE, LC_BOOTSTRAP_CREATE_TABLE,
-        LC_UPDATE_CREATE_TABLE,
+        DROP_USAGE_STATS_DB, ENABLE_WAL_MODE, HISTORICAL_SUMMARIES_CREATE_TABLE,
+        LC_BOOTSTRAP_CREATE_TABLE, LC_UPDATE_CREATE_TABLE,
     },
     versioned::sql::STORE_INFO_CREATE_TABLE,
     DATABASE_NAME,
@@ -22,6 +22,7 @@ pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, 
     let manager = SqliteConnectionManager::file(sql_path);
     let pool = Pool::new(manager)?;
     let conn = pool.get()?;
+    conn.execute_batch(ENABLE_WAL_MODE)?;
     conn.execute_batch(LC_BOOTSTRAP_CREATE_TABLE)?;
     conn.execute_batch(LC_UPDATE_CREATE_TABLE)?;
     conn.execute_batch(HISTORICAL_SUMMARIES_CREATE_TABLE)?;
