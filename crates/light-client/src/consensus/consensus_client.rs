@@ -19,7 +19,6 @@ use ethportal_api::{
     utils::bytes::hex_encode,
 };
 use milagro_bls::PublicKey;
-use ssz_rs::prelude::*;
 use ssz_types::{typenum, BitVector, FixedVector};
 use tracing::{debug, info, warn};
 use tree_hash::TreeHash;
@@ -583,12 +582,12 @@ fn compute_committee_sign_root(
     genesis_root: &[u8],
     header: Bytes32,
     fork_version: &[u8],
-) -> Result<Node> {
+) -> Result<B256> {
     let genesis_root = genesis_root.to_vec().try_into()?;
     let domain_type = &hex::decode("07000000")?[..];
-    let fork_version = Vector::from_iter(fork_version.to_vec());
+    let fork_version = FixedVector::from(fork_version.to_vec());
     let domain = compute_domain(domain_type, fork_version, genesis_root)?;
-    compute_signing_root(header, domain)
+    Ok(compute_signing_root(header, domain))
 }
 
 fn get_participating_keys(
@@ -632,7 +631,7 @@ fn verify_sync_committee_signature(
 
         Ok(is_aggregate_valid(
             signature,
-            signing_root.r#as_bytes(),
+            signing_root.as_slice(),
             &public_keys,
         ))
     })();

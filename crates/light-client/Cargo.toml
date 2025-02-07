@@ -17,6 +17,8 @@ anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 ethportal-api.workspace = true
+trin-validation.workspace = true
+ethereum_ssz.workspace = true
 figment = { version = "0.10.7", features = ["toml", "env"] }
 futures.workspace = true
 hex.workspace = true
@@ -29,7 +31,6 @@ serde.workspace = true
 serde-this-or-that.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
-ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "d09f55b4f8554491e3431e01af1c32347a8781cd" }
 ssz_types.workspace = true
 strum.workspace = true
 thiserror.workspace = true
@@ -37,6 +38,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tree_hash.workspace = true
+tree_hash_derive.workspace = true
 
 [lib]
 name = "light_client"
