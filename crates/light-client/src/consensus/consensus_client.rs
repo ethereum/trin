@@ -583,7 +583,7 @@ fn compute_committee_sign_root(
     header: Bytes32,
     fork_version: &[u8],
 ) -> Result<B256> {
-    let genesis_root = genesis_root.to_vec().try_into()?;
+    let genesis_root = genesis_root.to_vec().into();
     let domain_type = &hex::decode("07000000")?[..];
     let fork_version = FixedVector::from(fork_version.to_vec());
     let domain = compute_domain(domain_type, fork_version, genesis_root)?;

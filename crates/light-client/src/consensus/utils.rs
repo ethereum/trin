@@ -32,18 +32,12 @@ pub fn is_proof_valid<L: TreeHash>(
 ) -> bool {
     let res: Result<bool> = (move || {
         let leaf_hash = leaf_object.tree_hash_root();
-        let state_root = bytes32_to_node(
-            &Bytes32::try_from(attested_header.state_root.0.to_vec())
-                .expect("Unable to convert state root to bytes"),
-        )?;
+        let state_root = bytes32_to_node(&Bytes32::from(attested_header.state_root.0.to_vec()))?;
         let branches = branch_to_nodes(branch.to_vec())?;
 
         leaf_hash.ssz_append(&mut branches.as_ssz_bytes());
 
         let root = merkle_root_from_branch(leaf_hash, &branches, depth, index);
-
-        println!("state root >>> {:?}", state_root);
-        println!("calculated root >>> {:?}", root);
 
         Ok(root == state_root)
     })();
@@ -80,7 +74,7 @@ pub fn compute_domain(
     let start = domain_type;
     let end = &fork_data_root.as_slice()[..28];
     let d = [start, end].concat();
-    Ok(d.to_vec().try_into()?)
+    Ok(d.to_vec().into())
 }
 
 fn compute_fork_data_root(
