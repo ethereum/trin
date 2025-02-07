@@ -2,7 +2,6 @@ use alloy::primitives::B256;
 use anyhow::Result;
 use ethportal_api::consensus::{header::BeaconBlockHeader, signature::BlsSignature};
 use milagro_bls::{AggregateSignature, PublicKey};
-use ssz::Encode;
 use ssz_types::{typenum::U4, FixedVector};
 use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
@@ -33,11 +32,9 @@ pub fn is_proof_valid<L: TreeHash>(
     let res: Result<bool> = (move || {
         let leaf_hash = leaf_object.tree_hash_root();
         let state_root = bytes32_to_node(&Bytes32::from(attested_header.state_root.0.to_vec()))?;
-        let branches = branch_to_nodes(branch.to_vec())?;
+        let branch = branch_to_nodes(branch.to_vec())?;
 
-        leaf_hash.ssz_append(&mut branches.as_ssz_bytes());
-
-        let root = merkle_root_from_branch(leaf_hash, &branches, depth, index);
+        let root = merkle_root_from_branch(leaf_hash, &branch, depth, index);
 
         Ok(root == state_root)
     })();
