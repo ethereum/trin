@@ -10,7 +10,7 @@ use ethportal_api::{
                 BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
                 SHANGHAI_TIMESTAMP,
             },
-            header_with_proof::{BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof},
+            header_with_proof::{BlockHeaderProof, HeaderWithProof},
         },
         jsonrpc::{params::Params, request::JsonRequest},
     },
@@ -123,11 +123,12 @@ impl ExecutionApi {
                 HistoryContentValue::BlockHeaderWithProof(header_with_proof)
             }
             None => {
+                // todo: issue#1666 - add valid proofs for all blocks
                 let header_with_proof = HeaderWithProof {
                     header: full_header.header.clone(),
-                    proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof {
-                        proof: [B256::new([0; 32]); 15],
-                    }),
+                    proof: BlockHeaderProof::HistoricalHashesAccumulatorProof(
+                        [B256::new([0; 32]); 15].into(),
+                    ),
                 };
                 HistoryContentValue::BlockHeaderWithProof(header_with_proof)
             }
@@ -401,7 +402,7 @@ pub async fn construct_proof(
     epoch_acc: &EpochAccumulator,
 ) -> anyhow::Result<HeaderWithProof> {
     let proof = PreMergeAccumulator::construct_proof(&header, epoch_acc)?;
-    let proof = BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof { proof });
+    let proof = BlockHeaderProof::HistoricalHashesAccumulatorProof(proof.into());
     Ok(HeaderWithProof { header, proof })
 }
 

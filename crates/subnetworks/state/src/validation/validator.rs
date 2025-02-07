@@ -171,9 +171,7 @@ mod tests {
     use anyhow::Result;
     use ethportal_api::{
         types::{
-            execution::header_with_proof::{
-                BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof,
-            },
+            execution::header_with_proof::{BlockHeaderProof, HeaderWithProof},
             jsonrpc::{endpoints::HistoryEndpoint, json_rpc_mock::MockJsonRpcBuilder},
             portal::GetContentInfo,
         },
@@ -196,9 +194,9 @@ mod tests {
         // todo: issue#1666 - add valid proofs for all blocks
         let history_content_value = HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
             header: header.clone(),
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof {
-                proof: [B256::new([0; 32]); 15],
-            }),
+            proof: BlockHeaderProof::HistoricalHashesAccumulatorProof(
+                [B256::new([0; 32]); 15].into(),
+            ),
         });
         let history_jsonrpc_tx = MockJsonRpcBuilder::new()
             .with_response(

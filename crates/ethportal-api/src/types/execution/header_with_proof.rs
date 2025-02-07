@@ -50,15 +50,20 @@ impl ssz::Encode for HeaderWithProof {
 // Ignore clippy here, since "box"-ing the accumulator proof breaks the Decode trait
 #[allow(clippy::large_enum_variant)]
 pub enum BlockHeaderProof {
-    // xxx: we need to update these names to match the spec...
-    PreMergeAccumulatorProof(PreMergeAccumulatorProof),
+    HistoricalHashesAccumulatorProof(HistoricalHashesAccumulatorProof),
     HistoricalRootsBlockProof(HistoricalRootsBlockProof),
     HistoricalSummariesBlockProof(HistoricalSummariesBlockProof),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PreMergeAccumulatorProof {
+pub struct HistoricalHashesAccumulatorProof {
     pub proof: [B256; 15],
+}
+
+impl From<[B256; 15]> for HistoricalHashesAccumulatorProof {
+    fn from(proof: [B256; 15]) -> Self {
+        Self { proof }
+    }
 }
 
 impl ssz::Decode for HeaderWithProof {
@@ -79,11 +84,11 @@ impl ssz::Decode for HeaderWithProof {
         let header: Header = Decodable::decode(&mut header_rlp.as_slice()).map_err(|_| {
             ssz::DecodeError::BytesInvalid("Unable to decode bytes into header.".to_string())
         })?;
-        let proof = if header.timestamp < MERGE_TIMESTAMP {
-            BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof::from_ssz_bytes(
-                &proof,
-            )?)
-        } else if header.number < SHANGHAI_TIMESTAMP {
+        let proof = if header.timestamp <= MERGE_TIMESTAMP {
+            BlockHeaderProof::HistoricalHashesAccumulatorProof(
+                HistoricalHashesAccumulatorProof::from_ssz_bytes(&proof)?,
+            )
+        } else if header.number <= SHANGHAI_TIMESTAMP {
             BlockHeaderProof::HistoricalRootsBlockProof(HistoricalRootsBlockProof::from_ssz_bytes(
                 &proof,
             )?)
@@ -96,7 +101,7 @@ impl ssz::Decode for HeaderWithProof {
     }
 }
 
-impl ssz::Decode for PreMergeAccumulatorProof {
+impl ssz::Decode for HistoricalHashesAccumulatorProof {
     fn is_ssz_fixed_len() -> bool {
         true
     }
@@ -114,7 +119,7 @@ impl ssz::Decode for PreMergeAccumulatorProof {
     }
 }
 
-impl ssz::Encode for PreMergeAccumulatorProof {
+impl ssz::Encode for HistoricalHashesAccumulatorProof {
     fn is_ssz_fixed_len() -> bool {
         true
     }

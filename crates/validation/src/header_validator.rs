@@ -41,7 +41,7 @@ impl HeaderValidator {
 
     pub fn validate_header_with_proof(&self, hwp: &HeaderWithProof) -> anyhow::Result<()> {
         match &hwp.proof {
-            BlockHeaderProof::PreMergeAccumulatorProof(proof) => {
+            BlockHeaderProof::HistoricalHashesAccumulatorProof(proof) => {
                 if hwp.header.number > MERGE_BLOCK_NUMBER {
                     return Err(anyhow!("Invalid proof type found for post-merge header."));
                 }
@@ -222,7 +222,7 @@ mod test {
     use ethportal_api::{
         types::execution::{
             accumulator::EpochAccumulator,
-            header_with_proof::{BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof},
+            header_with_proof::{BlockHeaderProof, HeaderWithProof},
         },
         utils::bytes::{hex_decode, hex_encode},
         HistoryContentKey, OverlayContentKey,
@@ -279,15 +279,13 @@ mod test {
         let epoch_accumulator = read_epoch_accumulator_122();
         let trin_proof = PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
         let fluffy_proof = match fluffy_hwp.proof {
-            BlockHeaderProof::PreMergeAccumulatorProof(val) => val,
+            BlockHeaderProof::HistoricalHashesAccumulatorProof(val) => val,
             _ => panic!("test reached invalid state"),
         };
         assert_eq!(trin_proof, fluffy_proof.proof);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof {
-                proof: trin_proof,
-            }),
+            proof: BlockHeaderProof::HistoricalHashesAccumulatorProof(trin_proof.into()),
         };
         header_validator.validate_header_with_proof(&hwp).unwrap();
     }
@@ -308,7 +306,7 @@ mod test {
         assert_eq!(proof.len(), 15);
         let header_with_proof = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof { proof }),
+            proof: BlockHeaderProof::HistoricalHashesAccumulatorProof(proof.into()),
         };
         HeaderValidator::new()
             .validate_header_with_proof(&header_with_proof)
@@ -335,7 +333,7 @@ mod test {
         proof.swap(0, 1);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof { proof }),
+            proof: BlockHeaderProof::HistoricalHashesAccumulatorProof(proof.into()),
         };
         assert!(header_validator
             .validate_header_with_proof(&hwp)
@@ -352,9 +350,7 @@ mod test {
         let future_header = generate_random_header(&future_height);
         let future_hwp = HeaderWithProof {
             header: future_header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof {
-                proof: [B256::ZERO; 15],
-            }),
+            proof: BlockHeaderProof::HistoricalHashesAccumulatorProof([B256::ZERO; 15].into()),
         };
         header_validator
             .validate_header_with_proof(&future_hwp)
