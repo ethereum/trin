@@ -6882,6 +6882,7 @@ dependencies = [
  "tokio",
  "tree_hash",
  "tree_hash_derive",
+ "trin-utils",
 ]
 
 [[package]]
