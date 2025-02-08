@@ -122,22 +122,23 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use std::fs;
-
     use alloy::primitives::U256;
     use ethportal_api::utils::bytes::hex_decode;
     use serde_json::Value;
     use ssz::Encode;
+    use trin_utils::submodules::read_portal_spec_tests_file;
 
     use super::*;
 
     fn get_header_with_proof_ssz() -> Vec<u8> {
-        let file = fs::read_to_string("../../validation/src/assets/fluffy/header_with_proofs.json")
-            .unwrap();
+        let file = read_portal_spec_tests_file(
+            "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
+        )
+        .unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
         let raw_header = json.get("1000001").unwrap().as_object().unwrap();
-        let raw_header = raw_header.get("value").unwrap().as_str().unwrap();
+        let raw_header = raw_header.get("content_value").unwrap().as_str().unwrap();
         hex_decode(raw_header).unwrap()
     }
 

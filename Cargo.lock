@@ -6779,6 +6779,7 @@ dependencies = [
  "tracing-subscriber 0.3.19",
  "tree_hash",
  "trin-storage",
+ "trin-utils",
  "trin-validation",
  "ureq",
  "utp-rs",
