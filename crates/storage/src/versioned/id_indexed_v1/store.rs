@@ -7,10 +7,7 @@ use rusqlite::{named_params, types::Type, OptionalExtension};
 use tracing::{debug, error, warn};
 use trin_metrics::storage::StorageMetricsReporter;
 
-use super::{
-    migration::migrate_legacy_history_store, pruning_strategy::PruningStrategy, sql,
-    IdIndexedV1StoreConfig,
-};
+use super::{pruning_strategy::PruningStrategy, sql, IdIndexedV1StoreConfig};
 use crate::{
     error::ContentStoreError,
     utils::get_total_size_of_directory_in_bytes,
@@ -63,13 +60,10 @@ impl<TContentKey: OverlayContentKey> VersionedContentStore for IdIndexedV1Store<
     }
 
     fn migrate_from(
-        content_type: &ContentType,
+        _content_type: &ContentType,
         old_version: StoreVersion,
-        config: &Self::Config,
+        _config: &Self::Config,
     ) -> Result<(), ContentStoreError> {
-        if content_type == &ContentType::History && old_version == StoreVersion::LegacyHistory {
-            return migrate_legacy_history_store(config);
-        }
         Err(ContentStoreError::UnsupportedStoreMigration {
             old_version,
             new_version: Self::version(),

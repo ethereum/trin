@@ -32,12 +32,13 @@ pub enum ContentType {
 #[derive(Clone, Debug, Display, Eq, PartialEq, EnumString, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 pub enum StoreVersion {
+    /// The mock content store that can be used for tests. Implementation:
+    /// [utils::MockContentStore].
+    MockContentStore,
     /// The store designed for content-id, content-key and content-value objects.
     /// The content from different subnetwork (expressed with `ContentType`)
-    /// uses different table. NOTE: implementation is in progress.
+    /// uses different table. Implementation: [IdIndexedV1Store].
     IdIndexedV1,
-    /// The original SQLite version of the history storage store.
-    LegacyHistory,
 }
 
 impl FromSql for StoreVersion {
