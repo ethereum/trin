@@ -17,7 +17,6 @@ anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 ethportal-api.workspace = true
-trin-validation.workspace = true
 ethereum_ssz.workspace = true
 figment = { version = "0.10.7", features = ["toml", "env"] }
 futures.workspace = true
@@ -39,6 +38,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tree_hash.workspace = true
 tree_hash_derive.workspace = true
+trin-validation.workspace = true
 
 [lib]
 name = "light_client"
