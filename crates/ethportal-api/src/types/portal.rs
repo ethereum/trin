@@ -46,7 +46,6 @@ pub type RawContentKey = Bytes;
 pub type RawContentValue = Bytes;
 
 pub type DataRadius = U256;
-pub type Distance = U256;
 
 /// Response for Ping endpoint
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
