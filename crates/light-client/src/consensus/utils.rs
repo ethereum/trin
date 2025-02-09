@@ -27,16 +27,12 @@ pub fn is_proof_valid<L: TreeHash>(
     depth: usize,
     index: usize,
 ) -> bool {
-    let res: Result<bool> = (move || {
-        let leaf_hash = leaf_object.tree_hash_root();
-        let state_root = attested_header.state_root;
+    let leaf_hash = leaf_object.tree_hash_root();
+    let state_root = attested_header.state_root;
 
-        let root = merkle_root_from_branch(leaf_hash, &branch, depth, index);
+    let root = merkle_root_from_branch(leaf_hash, branch, depth, index);
 
-        Ok(root == state_root)
-    })();
-
-    res.unwrap_or_default()
+    root == state_root
 }
 
 #[derive(Default, Debug, TreeHash)]

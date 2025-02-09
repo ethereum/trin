@@ -642,7 +642,7 @@ fn is_finality_proof_valid(
     finality_header: &mut BeaconBlockHeader,
     finality_branch: &FixedVector<B256, FinalizedRootProofLen>,
 ) -> bool {
-    is_proof_valid(attested_header, finality_header, &finality_branch, 6, 41)
+    is_proof_valid(attested_header, finality_header, finality_branch, 6, 41)
 }
 
 fn is_next_committee_proof_valid(
@@ -653,7 +653,7 @@ fn is_next_committee_proof_valid(
     is_proof_valid(
         attested_header,
         next_committee,
-        &next_committee_branch,
+        next_committee_branch,
         5,
         23,
     )
@@ -667,7 +667,7 @@ fn is_current_committee_proof_valid(
     is_proof_valid(
         attested_header,
         current_committee,
-        &current_committee_branch,
+        current_committee_branch,
         5,
         22,
     )
