@@ -80,7 +80,11 @@ impl<TContentKey: OverlayContentKey> VersionedContentStore for IdIndexedV1Store<
         let mut store = Self {
             radius: config.max_radius,
             pruning_strategy,
-            usage_stats: UsageStats::default(),
+            usage_stats: UsageStats::new(
+                /* entry_count= */ 0,
+                /* total_entry_size_bytes= */ 0,
+                extra_disk_usage_per_content_bytes(&config.content_type),
+            ),
             metrics: StorageMetricsReporter::new(subnetwork),
             _phantom_content_key: PhantomData,
             config,
@@ -102,7 +106,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             debug!(
                 Db = %self.config.content_type,
                 "High storage usage ({}) -> Pruning",
-                self.usage_stats.total_entry_size_bytes,
+                self.usage_stats.estimated_disk_usage_bytes(),
             );
             // ignore dropped content...
             self.prune()?;
@@ -113,8 +117,8 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             debug!(
                 Db = %self.config.content_type,
                 "Used capacity ({}) is above target capacity ({}) -> Using distance to farthest for radius",
-                self.usage_stats.total_entry_size_bytes,
-                self.pruning_strategy.target_capacity_bytes()
+                self.usage_stats.estimated_disk_usage_bytes(),
+                self.pruning_strategy.target_capacity_bytes(),
             );
             self.set_radius_to_farthest()?;
         } else if self.config.storage_capacity_bytes == 0 {
@@ -128,7 +132,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             debug!(
                 Db = %self.config.content_type,
                 "Used capacity ({}) is below target capacity ({}) -> Using MAX radius ({})",
-                self.usage_stats.total_entry_size_bytes,
+                self.usage_stats.estimated_disk_usage_bytes(),
                 self.pruning_strategy.target_capacity_bytes(),
                 self.config.max_radius,
             );
@@ -252,7 +256,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
 
         let content_id = content_id.to_vec();
         let content_key = content_key.to_bytes().to_vec();
-        let content_size = content_id.len() + content_key.len() + content_value.len();
+        let content_size = Self::calculate_content_size(&content_id, &content_key, &content_value);
 
         let insert_timer = self.metrics.start_process_timer("insert");
         self.config.sql_connection_pool.get()?.execute(
@@ -267,8 +271,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
         )?;
         self.metrics.stop_process_timer(insert_timer);
 
-        self.usage_stats.entry_count += 1;
-        self.usage_stats.total_entry_size_bytes += content_size as u64;
+        self.usage_stats.on_store(content_size);
         self.usage_stats.report_metrics(&self.metrics);
 
         let dropped_content = if self.pruning_strategy.should_prune(&self.usage_stats) {
@@ -298,8 +301,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
 
         match content_size {
             Some(content_size) => {
-                self.usage_stats.entry_count -= 1;
-                self.usage_stats.total_entry_size_bytes -= content_size;
+                self.usage_stats.on_delete(content_size);
                 self.usage_stats.report_metrics(&self.metrics);
             }
             None => {
@@ -342,7 +344,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
         self.metrics.stop_process_timer(timer);
         Ok(PaginateResult {
             content_keys,
-            entry_count: self.usage_stats.entry_count,
+            entry_count: self.usage_stats.entry_count(),
         })
     }
 
@@ -381,7 +383,11 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
             |row| {
                 let entry_count = row.get("count")?;
                 let used_capacity: f64 = row.get("used_capacity")?;
-                Ok(UsageStats::new(entry_count, used_capacity.round() as u64))
+                Ok(UsageStats::new(
+                    entry_count,
+                    used_capacity.round() as u64,
+                    extra_disk_usage_per_content_bytes(&self.config.content_type),
+                ))
             },
         )?;
         self.usage_stats.report_metrics(&self.metrics);
@@ -453,9 +459,10 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
 
         let pruning_timer = self.metrics.start_process_timer("prune");
         debug!(Db = %self.config.content_type,
-            "Pruning start: count={} capacity={}",
-            self.usage_stats.entry_count,
-            self.usage_stats.total_entry_size_bytes,
+            "Pruning start: count={} disk_usage={} capacity={}",
+            self.usage_stats.entry_count(),
+            self.usage_stats.estimated_disk_usage_bytes(),
+            self.pruning_strategy.target_capacity_bytes(),
         );
 
         let conn = self.config.sql_connection_pool.get()?;
@@ -506,8 +513,8 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
                 .iter()
                 .map(|(_, _, size)| size)
                 .sum::<u64>();
-            self.usage_stats.entry_count -= to_delete;
-            self.usage_stats.total_entry_size_bytes -= deleted_content_size;
+            self.usage_stats
+                .on_multi_delete(to_delete, deleted_content_size);
             self.usage_stats.report_metrics(&self.metrics);
             deleted_content.extend(deleted_content_values);
         }
@@ -519,12 +526,30 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
         self.set_radius_to_farthest()?;
 
         debug!(Db = %self.config.content_type,
-            "Pruning end: count={} capacity={}",
-            self.usage_stats.entry_count,
-            self.usage_stats.total_entry_size_bytes,
+            "Pruning end: count={} disk_usage={} capacity={}",
+            self.usage_stats.entry_count(),
+            self.usage_stats.estimated_disk_usage_bytes(),
+            self.pruning_strategy.target_capacity_bytes(),
         );
         self.metrics.stop_process_timer(pruning_timer);
         Ok(deleted_content)
+    }
+
+    fn calculate_content_size(
+        raw_content_id: &[u8],
+        raw_content_key: &[u8],
+        raw_content_value: &[u8],
+    ) -> u64 {
+        (raw_content_id.len() + raw_content_key.len() + raw_content_value.len()) as u64
+    }
+}
+
+/// Returns estimated additional disk usage per content.
+/// See https://github.com/ethereum/trin/issues/1653 for details.
+const fn extra_disk_usage_per_content_bytes(content_type: &ContentType) -> u64 {
+    match content_type {
+        ContentType::History => 750,
+        ContentType::State => 500,
     }
 }
 
@@ -554,11 +579,17 @@ mod tests {
 
     const CONTENT_DEFAULT_SIZE_BYTES: u64 = 100;
 
+    const EXTRA_DISK_USAGE_PER_CONTENT_BYTES: u64 =
+        extra_disk_usage_per_content_bytes(&ContentType::State);
+
+    const DISK_USAGE_PER_CONTENT_BYTES: u64 =
+        CONTENT_DEFAULT_SIZE_BYTES + EXTRA_DISK_USAGE_PER_CONTENT_BYTES;
+
     // Storage capacity that stores 100 items of default size
-    const STORAGE_CAPACITY_100_ITEMS: u64 = 100 * CONTENT_DEFAULT_SIZE_BYTES;
+    const STORAGE_CAPACITY_100_ITEMS: u64 = 100 * DISK_USAGE_PER_CONTENT_BYTES;
 
     // Storage capacity that stores 10000 items of default size
-    const STORAGE_CAPACITY_10000_ITEMS: u64 = 10000 * CONTENT_DEFAULT_SIZE_BYTES;
+    const STORAGE_CAPACITY_10000_ITEMS: u64 = 10000 * DISK_USAGE_PER_CONTENT_BYTES;
 
     fn create_config(temp_dir: &TempDir, storage_capacity_bytes: u64) -> IdIndexedV1StoreConfig {
         IdIndexedV1StoreConfig {
@@ -604,7 +635,11 @@ mod tests {
         for _ in 0..count {
             let (key, value) = generate_key_value(config, 0x80);
             let id = key.content_id();
-            let content_size = id.len() + key.to_bytes().len() + value.len();
+            let content_size = IdIndexedV1Store::<IdentityContentKey>::calculate_content_size(
+                &id,
+                &key.to_bytes(),
+                &value,
+            );
             config
                 .sql_connection_pool
                 .get()?
@@ -625,8 +660,8 @@ mod tests {
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
         let store =
             IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
-        assert_eq!(store.usage_stats.entry_count, 0);
-        assert_eq!(store.usage_stats.total_entry_size_bytes, 0);
+        assert_eq!(store.usage_stats.entry_count(), 0);
+        assert_eq!(store.usage_stats.estimated_disk_usage_bytes(), 0);
         assert_eq!(store.radius(), Distance::MAX);
         Ok(())
     }
@@ -642,10 +677,10 @@ mod tests {
         let store =
             IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
-        assert_eq!(store.usage_stats.entry_count, item_count);
+        assert_eq!(store.usage_stats.entry_count(), item_count);
         assert_eq!(
-            store.usage_stats.total_entry_size_bytes,
-            item_count * CONTENT_DEFAULT_SIZE_BYTES
+            store.usage_stats.estimated_disk_usage_bytes(),
+            item_count * DISK_USAGE_PER_CONTENT_BYTES
         );
         assert_eq!(store.radius(), Distance::MAX);
         Ok(())
@@ -662,10 +697,10 @@ mod tests {
         let store =
             IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
-        assert_eq!(store.usage_stats.entry_count, item_count);
+        assert_eq!(store.usage_stats.entry_count(), item_count);
         assert_eq!(
-            store.usage_stats.total_entry_size_bytes,
-            item_count * CONTENT_DEFAULT_SIZE_BYTES
+            store.usage_stats.estimated_disk_usage_bytes(),
+            item_count * DISK_USAGE_PER_CONTENT_BYTES
         );
         assert_eq!(store.radius(), Distance::MAX);
         Ok(())
@@ -677,15 +712,15 @@ mod tests {
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
 
         let target_capacity_bytes = PruningStrategy::new(config.clone()).target_capacity_bytes();
-        let target_capacity_count = target_capacity_bytes / CONTENT_DEFAULT_SIZE_BYTES;
+        let target_capacity_count = target_capacity_bytes / DISK_USAGE_PER_CONTENT_BYTES;
         create_and_populate_table(&config, target_capacity_count)?;
 
         let store =
             IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
-        assert_eq!(store.usage_stats.entry_count, target_capacity_count);
+        assert_eq!(store.usage_stats.entry_count(), target_capacity_count);
         assert_eq!(
-            store.usage_stats.total_entry_size_bytes,
-            target_capacity_count * CONTENT_DEFAULT_SIZE_BYTES
+            store.usage_stats.estimated_disk_usage_bytes(),
+            target_capacity_count * DISK_USAGE_PER_CONTENT_BYTES
         );
         assert_eq!(store.radius(), Distance::MAX);
         Ok(())
@@ -697,7 +732,7 @@ mod tests {
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
 
         let target_capacity_bytes = PruningStrategy::new(config.clone()).target_capacity_bytes();
-        let above_target_capacity_count = 1 + target_capacity_bytes / CONTENT_DEFAULT_SIZE_BYTES;
+        let above_target_capacity_count = 1 + target_capacity_bytes / DISK_USAGE_PER_CONTENT_BYTES;
 
         create_and_populate_table(&config, above_target_capacity_count)?;
 
@@ -705,10 +740,10 @@ mod tests {
             IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         // Should not prune
-        assert_eq!(store.usage_stats.entry_count, above_target_capacity_count);
+        assert_eq!(store.usage_stats.entry_count(), above_target_capacity_count);
         assert_eq!(
-            store.usage_stats.total_entry_size_bytes,
-            above_target_capacity_count * CONTENT_DEFAULT_SIZE_BYTES
+            store.usage_stats.estimated_disk_usage_bytes(),
+            above_target_capacity_count * DISK_USAGE_PER_CONTENT_BYTES
         );
 
         // Radius should not be MAX
@@ -721,7 +756,7 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
 
-        let full_capacity_count = config.storage_capacity_bytes / CONTENT_DEFAULT_SIZE_BYTES;
+        let full_capacity_count = config.storage_capacity_bytes / DISK_USAGE_PER_CONTENT_BYTES;
 
         create_and_populate_table(&config, full_capacity_count)?;
 
@@ -729,10 +764,10 @@ mod tests {
             IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         // Should not prune
-        assert_eq!(store.usage_stats.entry_count, full_capacity_count);
+        assert_eq!(store.usage_stats.entry_count(), full_capacity_count);
         assert_eq!(
-            store.usage_stats.total_entry_size_bytes,
-            config.storage_capacity_bytes
+            store.usage_stats.estimated_disk_usage_bytes(),
+            config.storage_capacity_bytes,
         );
 
         // Radius should not be MAX
@@ -746,7 +781,7 @@ mod tests {
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
 
         let above_full_capacity_count =
-            10 + config.storage_capacity_bytes / CONTENT_DEFAULT_SIZE_BYTES;
+            10 + config.storage_capacity_bytes / DISK_USAGE_PER_CONTENT_BYTES;
 
         create_and_populate_table(&config, above_full_capacity_count)?;
 
@@ -755,11 +790,11 @@ mod tests {
 
         // should prune until target capacity
         assert_eq!(
-            store.usage_stats.entry_count,
-            store.pruning_strategy.target_capacity_bytes() / CONTENT_DEFAULT_SIZE_BYTES
+            store.usage_stats.entry_count(),
+            store.pruning_strategy.target_capacity_bytes() / DISK_USAGE_PER_CONTENT_BYTES
         );
         assert_eq!(
-            store.usage_stats.total_entry_size_bytes,
+            store.usage_stats.estimated_disk_usage_bytes(),
             store.pruning_strategy.target_capacity_bytes()
         );
         assert!(store.radius() < Distance::MAX);
@@ -773,7 +808,9 @@ mod tests {
 
         let store = IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config)?;
 
-        assert_eq!(store.usage_stats, UsageStats::default());
+        // Check that db is empty and radius is ZERO.
+        assert_eq!(store.usage_stats.entry_count(), 0);
+        assert_eq!(store.usage_stats.estimated_disk_usage_bytes(), 0);
         assert_eq!(store.radius(), Distance::ZERO);
         Ok(())
     }
@@ -787,8 +824,9 @@ mod tests {
         create_and_populate_table(&config, 1_000)?;
         let store = IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config)?;
 
-        // Check that db is empty and distance is ZERO.
-        assert_eq!(store.usage_stats, UsageStats::default());
+        // Check that db is empty and radius is ZERO.
+        assert_eq!(store.usage_stats.entry_count(), 0);
+        assert_eq!(store.usage_stats.estimated_disk_usage_bytes(), 0);
         assert_eq!(store.radius(), Distance::ZERO);
         Ok(())
     }
@@ -821,8 +859,14 @@ mod tests {
         );
 
         // Check that usage stats are updated
-        assert_eq!(store.usage_stats.entry_count, usage_stats.entry_count + 1);
-        assert!(store.usage_stats.total_entry_size_bytes > usage_stats.total_entry_size_bytes);
+        assert_eq!(
+            store.usage_stats.entry_count(),
+            usage_stats.entry_count() + 1
+        );
+        assert!(
+            store.usage_stats.estimated_disk_usage_bytes()
+                > usage_stats.estimated_disk_usage_bytes()
+        );
 
         Ok(())
     }
@@ -847,8 +891,14 @@ mod tests {
         store.insert(&key, value)?;
         // Check that content is stored and usage stats are updated.
         assert!(store.has_content(&id)?);
-        assert_eq!(store.usage_stats.entry_count, usage_stats.entry_count + 1);
-        assert!(store.usage_stats.total_entry_size_bytes > usage_stats.total_entry_size_bytes);
+        assert_eq!(
+            store.usage_stats.entry_count(),
+            usage_stats.entry_count() + 1
+        );
+        assert!(
+            store.usage_stats.estimated_disk_usage_bytes()
+                > usage_stats.estimated_disk_usage_bytes()
+        );
 
         store.delete(&id)?;
         // Check that content is deleted and usage stats are same as before insert.
@@ -880,16 +930,16 @@ mod tests {
             let (key, value) = generate_key_value(&config, 0xFF);
             store.insert(&key, value)?;
         }
-        assert_eq!(store.usage_stats.entry_count, 100);
+        assert_eq!(store.usage_stats.entry_count(), 100);
 
         // Insert 1 more and check that:
         // - we pruned down to 95 elements (target capacity)
         // - radius is no longer MAX
         let (key, value) = generate_key_value(&config, 0xFF);
         store.insert(&key, value)?;
-        assert_eq!(store.usage_stats.entry_count, 95);
+        assert_eq!(store.usage_stats.entry_count(), 95);
         assert_eq!(
-            store.usage_stats.total_entry_size_bytes,
+            store.usage_stats.estimated_disk_usage_bytes(),
             store.pruning_strategy.target_capacity_bytes()
         );
         assert!(store.radius() < Distance::MAX);
@@ -904,7 +954,9 @@ mod tests {
             // (radius will decrease over time)
             let (key, value) = generate_key_value(&config, 0xFF - i);
             store.insert(&key, value)?;
-            assert!(store.usage_stats.total_entry_size_bytes <= config.storage_capacity_bytes);
+            assert!(
+                store.usage_stats.estimated_disk_usage_bytes() <= config.storage_capacity_bytes
+            );
 
             assert!(store.radius() <= last_radius);
             last_radius = store.radius();
@@ -959,7 +1011,9 @@ mod tests {
                 rng.gen_range((CONTENT_DEFAULT_SIZE_BYTES)..(3 * CONTENT_DEFAULT_SIZE_BYTES)),
             );
             store.insert(&key, value)?;
-            assert!(store.usage_stats.total_entry_size_bytes <= config.storage_capacity_bytes);
+            assert!(
+                store.usage_stats.estimated_disk_usage_bytes() <= config.storage_capacity_bytes
+            );
 
             assert!(store.radius() <= last_radius);
             last_radius = store.radius();
@@ -983,7 +1037,7 @@ mod tests {
         create_and_populate_table(&config, 50)?;
         let mut store =
             IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
-        assert_eq!(store.usage_stats.entry_count, 50);
+        assert_eq!(store.usage_stats.entry_count(), 50);
 
         // Insert key/value such that:
         // - key shouldn't be pruned (close distance)
@@ -992,12 +1046,12 @@ mod tests {
         let (big_value_key, value) = generate_key_value_with_content_size(
             &config,
             /* distance = */ 0,
-            store.config.storage_capacity_bytes / 2,
+            store.config.storage_capacity_bytes / 2 - EXTRA_DISK_USAGE_PER_CONTENT_BYTES,
         );
         store.insert(&big_value_key, value)?;
-        assert_eq!(store.usage_stats.entry_count, 51);
+        assert_eq!(store.usage_stats.entry_count(), 51);
         assert_eq!(
-            store.usage_stats.total_entry_size_bytes,
+            store.usage_stats.estimated_disk_usage_bytes(),
             store.config.storage_capacity_bytes
         );
 
@@ -1008,10 +1062,12 @@ mod tests {
 
         // Prune should deleted 6% (rounded to 4 elements),
         // leaving us with 48 elements and between target and full capacity.
-        assert_eq!(store.usage_stats.entry_count, 48);
-        assert!(store.usage_stats.total_entry_size_bytes <= store.config.storage_capacity_bytes);
+        assert_eq!(store.usage_stats.entry_count(), 48);
         assert!(
-            store.usage_stats.total_entry_size_bytes
+            store.usage_stats.estimated_disk_usage_bytes() <= store.config.storage_capacity_bytes
+        );
+        assert!(
+            store.usage_stats.estimated_disk_usage_bytes()
                 > store.pruning_strategy.target_capacity_bytes()
         );
 
@@ -1035,9 +1091,9 @@ mod tests {
             store.insert(&key, value)?;
         }
         assert_eq!(store.radius(), Distance::MAX);
-        assert_eq!(store.usage_stats.entry_count, 10_000);
+        assert_eq!(store.usage_stats.entry_count(), 10_000);
         assert_eq!(
-            store.usage_stats.total_entry_size_bytes,
+            store.usage_stats.estimated_disk_usage_bytes(),
             STORAGE_CAPACITY_10000_ITEMS
         );
 
@@ -1050,13 +1106,16 @@ mod tests {
 
         // we should have deleted exactly MAX_TO_PRUNE_PER_QUERY entries
         assert_eq!(
-            store.usage_stats.entry_count,
+            store.usage_stats.entry_count(),
             10_001 - PruningStrategy::STARTING_MAX_PRUNING_COUNT
         );
 
         // used capacity should be below storage capacity but above 99%
-        assert!(store.usage_stats.total_entry_size_bytes < STORAGE_CAPACITY_10000_ITEMS);
-        assert!(store.usage_stats.total_entry_size_bytes > STORAGE_CAPACITY_10000_ITEMS * 99 / 100);
+        assert!(store.usage_stats.estimated_disk_usage_bytes() < STORAGE_CAPACITY_10000_ITEMS);
+        assert!(
+            store.usage_stats.estimated_disk_usage_bytes()
+                > STORAGE_CAPACITY_10000_ITEMS * 99 / 100
+        );
 
         Ok(())
     }
@@ -1075,9 +1134,9 @@ mod tests {
             store.insert(&key, value)?;
         }
         assert_eq!(store.radius(), Distance::MAX);
-        assert_eq!(store.usage_stats.entry_count, 10_000);
+        assert_eq!(store.usage_stats.entry_count(), 10_000);
         assert_eq!(
-            store.usage_stats.total_entry_size_bytes,
+            store.usage_stats.estimated_disk_usage_bytes(),
             STORAGE_CAPACITY_10000_ITEMS
         );
 
@@ -1100,11 +1159,11 @@ mod tests {
 
         // we should have deleted more than MAX_TO_PRUNE_PER_QUERY entries
         assert!(
-            store.usage_stats.entry_count < 10_001 - PruningStrategy::STARTING_MAX_PRUNING_COUNT
+            store.usage_stats.entry_count() < 10_001 - PruningStrategy::STARTING_MAX_PRUNING_COUNT
         );
 
         // used capacity should not be above storage capacity
-        assert!(store.usage_stats.total_entry_size_bytes <= STORAGE_CAPACITY_10000_ITEMS);
+        assert!(store.usage_stats.estimated_disk_usage_bytes() <= STORAGE_CAPACITY_10000_ITEMS);
 
         Ok(())
     }
