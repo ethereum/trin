@@ -3,7 +3,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{named_params, OptionalExtension};
 
 use super::{sql, store::VersionedContentStore, ContentType, StoreVersion};
-use crate::error::ContentStoreError;
+use crate::{error::ContentStoreError, PortalStorageConfig};
 
 /// Ensures that the correct version of the content store is used (by migrating the content if
 /// that's not the case).
@@ -41,30 +41,7 @@ fn get_store_version(
             |row| row.get::<&str, StoreVersion>("version"),
         )
         .optional()?;
-
-    match version {
-        Some(_) => Ok(version),
-        None => get_default_store_version(content_type, conn),
-    }
-}
-
-fn get_default_store_version(
-    content_type: &ContentType,
-    conn: &PooledConnection<SqliteConnectionManager>,
-) -> Result<Option<StoreVersion>, ContentStoreError> {
-    match content_type {
-        ContentType::History => {
-            let exists = conn
-                .prepare(sql::TABLE_EXISTS)?
-                .exists(named_params! {":table_name": "history"})?;
-            if exists {
-                Ok(Some(StoreVersion::LegacyHistory))
-            } else {
-                Ok(None)
-            }
-        }
-        _ => Ok(None),
-    }
+    Ok(version)
 }
 
 fn update_store_info(
@@ -82,12 +59,41 @@ fn update_store_info(
     Ok(())
 }
 
+/// The mock content store, to be used in tests.
+pub struct MockContentStore;
+
+impl VersionedContentStore for MockContentStore {
+    type Config = PortalStorageConfig;
+
+    fn version() -> StoreVersion {
+        StoreVersion::MockContentStore
+    }
+
+    fn migrate_from(
+        _content_type: &ContentType,
+        old_version: StoreVersion,
+        _config: &PortalStorageConfig,
+    ) -> Result<(), ContentStoreError> {
+        Err(ContentStoreError::UnsupportedStoreMigration {
+            old_version,
+            new_version: Self::version(),
+        })
+    }
+
+    fn create(
+        _content_type: ContentType,
+        _config: PortalStorageConfig,
+    ) -> Result<Self, ContentStoreError> {
+        Ok(Self {})
+    }
+}
+
 #[cfg(test)]
 pub mod test {
     use anyhow::Result;
 
     use super::*;
-    use crate::{test_utils::create_test_portal_storage_config_with_capacity, PortalStorageConfig};
+    use crate::test_utils::create_test_portal_storage_config_with_capacity;
 
     const STORAGE_CAPACITY_MB: u32 = 10;
 
@@ -98,22 +104,6 @@ pub mod test {
         let conn = config.sql_connection_pool.get()?;
 
         assert_eq!(get_store_version(&ContentType::History, &conn)?, None);
-        Ok(())
-    }
-
-    #[test]
-    fn get_store_version_default_history() -> Result<()> {
-        let (_temp_dir, config) =
-            create_test_portal_storage_config_with_capacity(STORAGE_CAPACITY_MB)?;
-        let conn = config.sql_connection_pool.get()?;
-
-        let create_dummy_history_table_sql = "CREATE TABLE history (content_id blob PRIMARY KEY);";
-        conn.execute(create_dummy_history_table_sql, [])?;
-
-        assert_eq!(
-            get_store_version(&ContentType::History, &conn)?,
-            Some(StoreVersion::LegacyHistory)
-        );
         Ok(())
     }
 
@@ -139,10 +129,10 @@ pub mod test {
         let conn = config.sql_connection_pool.get()?;
 
         // Set store version
-        update_store_info(&ContentType::State, StoreVersion::LegacyHistory, &conn)?;
+        update_store_info(&ContentType::State, StoreVersion::MockContentStore, &conn)?;
         assert_eq!(
             get_store_version(&ContentType::State, &conn)?,
-            Some(StoreVersion::LegacyHistory)
+            Some(StoreVersion::MockContentStore)
         );
 
         // Update store version
@@ -170,7 +160,7 @@ pub mod test {
 
         assert_eq!(
             get_store_version(&ContentType::State, &sql_connection_pool.get()?)?,
-            Some(StoreVersion::IdIndexedV1)
+            Some(StoreVersion::MockContentStore)
         );
 
         Ok(())
@@ -184,7 +174,7 @@ pub mod test {
 
         update_store_info(
             &ContentType::State,
-            StoreVersion::IdIndexedV1,
+            StoreVersion::MockContentStore,
             &sql_connection_pool.get()?,
         )?;
 
@@ -193,7 +183,7 @@ pub mod test {
 
         assert_eq!(
             get_store_version(&ContentType::State, &config.sql_connection_pool.get()?)?,
-            Some(StoreVersion::IdIndexedV1)
+            Some(StoreVersion::MockContentStore)
         );
 
         Ok(())
@@ -208,7 +198,7 @@ pub mod test {
 
         update_store_info(
             &ContentType::History,
-            StoreVersion::LegacyHistory,
+            StoreVersion::IdIndexedV1,
             &sql_connection_pool.get().unwrap(),
         )
         .unwrap();
@@ -216,33 +206,5 @@ pub mod test {
         // Should panic - MockContentStore doesn't support migration.
         create_store::<MockContentStore>(ContentType::History, config, sql_connection_pool)
             .unwrap();
-    }
-
-    pub struct MockContentStore;
-
-    impl VersionedContentStore for MockContentStore {
-        type Config = PortalStorageConfig;
-
-        fn version() -> StoreVersion {
-            StoreVersion::IdIndexedV1
-        }
-
-        fn migrate_from(
-            _content_type: &ContentType,
-            old_version: StoreVersion,
-            _config: &PortalStorageConfig,
-        ) -> Result<(), ContentStoreError> {
-            Err(ContentStoreError::UnsupportedStoreMigration {
-                old_version,
-                new_version: Self::version(),
-            })
-        }
-
-        fn create(
-            _content_type: ContentType,
-            _config: PortalStorageConfig,
-        ) -> Result<Self, ContentStoreError> {
-            Ok(Self {})
-        }
     }
 }
