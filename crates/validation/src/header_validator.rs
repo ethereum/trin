@@ -41,7 +41,7 @@ impl HeaderValidator {
 
     pub fn validate_header_with_proof(&self, hwp: &HeaderWithProof) -> anyhow::Result<()> {
         match &hwp.proof {
-            BlockHeaderProof::HistoricalHashesAccumulatorProof(proof) => {
+            BlockHeaderProof::PreMergeAccumulatorProof(proof) => {
                 if hwp.header.number > MERGE_BLOCK_NUMBER {
                     return Err(anyhow!("Invalid proof type found for post-merge header."));
                 }
@@ -74,6 +74,14 @@ impl HeaderValidator {
                 }
                 // TODO: Validation for post-Capella headers is not implemented
                 Ok(())
+            }
+            BlockHeaderProof::None(_) => {
+                if hwp.header.number <= MERGE_BLOCK_NUMBER {
+                    Err(anyhow!("Missing accumulator proof for pre-merge header."))
+                } else {
+                    // Skip validation for post-merge headers until proof format is finalized
+                    Ok(())
+                }
             }
         }
     }
@@ -222,7 +230,7 @@ mod test {
     use ethportal_api::{
         types::execution::{
             accumulator::EpochAccumulator,
-            header_with_proof::{BlockHeaderProof, HeaderWithProof},
+            header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
         },
         utils::bytes::{hex_decode, hex_encode},
         HistoryContentKey, OverlayContentKey,
@@ -279,13 +287,13 @@ mod test {
         let epoch_accumulator = read_epoch_accumulator_122();
         let trin_proof = PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
         let fluffy_proof = match fluffy_hwp.proof {
-            BlockHeaderProof::HistoricalHashesAccumulatorProof(val) => val,
+            BlockHeaderProof::PreMergeAccumulatorProof(val) => val,
             _ => panic!("test reached invalid state"),
         };
         assert_eq!(trin_proof, fluffy_proof.proof);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::HistoricalHashesAccumulatorProof(trin_proof.into()),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(trin_proof.into()),
         };
         header_validator.validate_header_with_proof(&hwp).unwrap();
     }
@@ -306,7 +314,7 @@ mod test {
         assert_eq!(proof.len(), 15);
         let header_with_proof = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::HistoricalHashesAccumulatorProof(proof.into()),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(proof.into()),
         };
         HeaderValidator::new()
             .validate_header_with_proof(&header_with_proof)
@@ -333,13 +341,39 @@ mod test {
         proof.swap(0, 1);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::HistoricalHashesAccumulatorProof(proof.into()),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(proof.into()),
         };
         assert!(header_validator
             .validate_header_with_proof(&hwp)
             .unwrap_err()
             .to_string()
             .contains("Merkle proof validation failed"));
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Missing accumulator proof for pre-merge header.")]
+    async fn header_validator_cannot_validate_merge_header_missing_proof() {
+        let header_validator = get_mainnet_header_validator();
+        let header = get_header(1_000_001);
+        let hwp = HeaderWithProof {
+            header,
+            proof: BlockHeaderProof::None(SszNone::default()),
+        };
+        header_validator.validate_header_with_proof(&hwp).unwrap();
+    }
+
+    #[tokio::test]
+    async fn header_validator_validates_post_merge_header_without_proof() {
+        let header_validator = get_mainnet_header_validator();
+        let future_height = MERGE_BLOCK_NUMBER + 1;
+        let future_header = generate_random_header(&future_height);
+        let future_hwp = HeaderWithProof {
+            header: future_header,
+            proof: BlockHeaderProof::None(SszNone::default()),
+        };
+        header_validator
+            .validate_header_with_proof(&future_hwp)
+            .unwrap();
     }
 
     #[tokio::test]
@@ -350,7 +384,7 @@ mod test {
         let future_header = generate_random_header(&future_height);
         let future_hwp = HeaderWithProof {
             header: future_header,
-            proof: BlockHeaderProof::HistoricalHashesAccumulatorProof([B256::ZERO; 15].into()),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof([B256::ZERO; 15].into()),
         };
         header_validator
             .validate_header_with_proof(&future_hwp)

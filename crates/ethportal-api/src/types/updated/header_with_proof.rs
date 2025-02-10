@@ -5,8 +5,13 @@ use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector};
 
-use crate::{types::bytes::ByteList2048, Header};
-
+use crate::{
+    types::{
+        bytes::{ByteList1024, ByteList2048},
+        execution::block_body::{MERGE_TIMESTAMP, SHANGHAI_TIMESTAMP},
+    },
+    Header,
+};
 /// A block header with accumulator proof.
 /// Type definition:
 /// https://github.com/status-im/nimbus-eth1/blob/master/fluffy/network/history/history_content.nim#L136
@@ -24,11 +29,12 @@ impl ssz::Encode for HeaderWithProof {
     fn ssz_append(&self, buf: &mut Vec<u8>) {
         let header = alloy::rlp::encode(&self.header);
         let header = ByteList2048::from(header);
-        let offset = <ByteList2048 as Encode>::ssz_fixed_len()
-            + <PreMergeAccumulatorProof as Encode>::ssz_fixed_len();
+        let proof = ByteList1024::from(self.proof.as_ssz_bytes());
+        let offset =
+            <ByteList2048 as Encode>::ssz_fixed_len() + <ByteList1024 as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
         encoder.append(&header);
-        encoder.append(&self.proof);
+        encoder.append(&proof);
         encoder.finalize();
     }
 
@@ -40,26 +46,16 @@ impl ssz::Encode for HeaderWithProof {
 }
 
 #[derive(Debug, Clone, PartialEq, Decode, Encode, Deserialize)]
-#[ssz(enum_behaviour = "union")]
+#[ssz(enum_behaviour = "transparent")]
 // Ignore clippy here, since "box"-ing the accumulator proof breaks the Decode trait
 #[allow(clippy::large_enum_variant)]
 pub enum BlockHeaderProof {
-    None(SszNone),
-    PreMergeAccumulatorProof(PreMergeAccumulatorProof),
+    HistoricalHashesAccumulatorProof(HistoricalHashesAccumulatorProof),
     HistoricalRootsBlockProof(HistoricalRootsBlockProof),
     HistoricalSummariesBlockProof(HistoricalSummariesBlockProof),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PreMergeAccumulatorProof {
-    pub proof: [B256; 15],
-}
-
-impl From<[B256; 15]> for PreMergeAccumulatorProof {
-    fn from(proof: [B256; 15]) -> Self {
-        Self { proof }
-    }
-}
+pub type HistoricalHashesAccumulatorProof = FixedVector<B256, typenum::U15>;
 
 impl ssz::Decode for HeaderWithProof {
     fn is_ssz_fixed_len() -> bool {
@@ -70,55 +66,29 @@ impl ssz::Decode for HeaderWithProof {
         let mut builder = SszDecoderBuilder::new(bytes);
 
         builder.register_type::<ByteList2048>()?;
-        builder.register_type::<BlockHeaderProof>()?;
+        builder.register_type::<ByteList1024>()?;
 
         let mut decoder = builder.build()?;
 
         let header_rlp: Vec<u8> = decoder.decode_next()?;
-        let proof = decoder.decode_next()?;
+        let proof: Vec<u8> = decoder.decode_next()?;
         let header: Header = Decodable::decode(&mut header_rlp.as_slice()).map_err(|_| {
             ssz::DecodeError::BytesInvalid("Unable to decode bytes into header.".to_string())
         })?;
-
+        let proof = if header.timestamp <= MERGE_TIMESTAMP {
+            BlockHeaderProof::HistoricalHashesAccumulatorProof(
+                HistoricalHashesAccumulatorProof::from_ssz_bytes(&proof)?,
+            )
+        } else if header.number <= SHANGHAI_TIMESTAMP {
+            BlockHeaderProof::HistoricalRootsBlockProof(HistoricalRootsBlockProof::from_ssz_bytes(
+                &proof,
+            )?)
+        } else {
+            BlockHeaderProof::HistoricalSummariesBlockProof(
+                HistoricalSummariesBlockProof::from_ssz_bytes(&proof)?,
+            )
+        };
         Ok(Self { header, proof })
-    }
-}
-
-impl ssz::Decode for PreMergeAccumulatorProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let vec: Vec<[u8; 32]> = Vec::from_ssz_bytes(bytes)?;
-        let mut proof: [B256; 15] = [B256::ZERO; 15];
-        let raw_proof: [[u8; 32]; 15] = vec
-            .try_into()
-            .map_err(|_| ssz::DecodeError::BytesInvalid("Invalid proof length".to_string()))?;
-        for (idx, val) in raw_proof.iter().enumerate() {
-            proof[idx] = B256::from_slice(val);
-        }
-        Ok(Self { proof })
-    }
-}
-
-impl ssz::Encode for PreMergeAccumulatorProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let offset = self.ssz_bytes_len();
-        let mut encoder = SszEncoder::container(buf, offset);
-
-        for proof in self.proof {
-            encoder.append(&proof);
-        }
-        encoder.finalize();
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        <B256 as Encode>::ssz_fixed_len() * 15
     }
 }
 
@@ -152,70 +122,46 @@ pub struct HistoricalSummariesBlockProof {
     pub slot: u64,
 }
 
-/// Struct to represent encodable/decodable None value for an SSZ enum
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
-pub struct SszNone {
-    // In rust, None is a variant not a type,
-    // so we must use Option here to represent a None value
-    pub value: Option<()>,
-}
-
-impl ssz::Decode for SszNone {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        match bytes.len() {
-            0 => Ok(Self { value: None }),
-            _ => Err(ssz::DecodeError::BytesInvalid(
-                "Expected None value to be empty, found bytes.".to_string(),
-            )),
-        }
-    }
-}
-
-impl ssz::Encode for SszNone {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn ssz_append(&self, _buf: &mut Vec<u8>) {}
-
-    fn ssz_bytes_len(&self) -> usize {
-        0
-    }
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use std::fs;
 
     use serde_json::Value;
     use ssz::Decode;
 
     use super::*;
-    use crate::{
-        test_utils::read_file_from_tests_submodule,
-        utils::bytes::{hex_decode, hex_encode},
-    };
+    use crate::utils::bytes::{hex_decode, hex_encode};
 
     #[test_log::test]
-    fn decode_encode_header_with_proofs() {
-        let file = read_file_from_tests_submodule(
-            "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
-        )
-        .unwrap();
+    fn decode_encode_headers_with_proof() {
+        let file =
+            fs::read_to_string("../validation/src/assets/fluffy/1000001-1000010.json").unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let hwps = json.as_object().unwrap();
         for (block_number, obj) in hwps {
-            let _content_key = obj.get("content_key").unwrap();
             let block_number: u64 = block_number.parse().unwrap();
-            let proof = obj.get("value").unwrap().as_str().unwrap();
-            let hwp = HeaderWithProof::from_ssz_bytes(&hex_decode(proof).unwrap()).unwrap();
+            let actual_hwp = obj.get("content_value").unwrap().as_str().unwrap();
+            let hwp = HeaderWithProof::from_ssz_bytes(&hex_decode(actual_hwp).unwrap()).unwrap();
             assert_eq!(block_number, hwp.header.number);
             let encoded = hex_encode(hwp.as_ssz_bytes());
-            assert_eq!(encoded, proof);
+            assert_eq!(encoded, actual_hwp);
         }
+    }
+
+    #[rstest::rstest]
+    #[case("1000010")]
+    #[case("14764013")]
+    #[case("15537392")]
+    #[case("15537393")]
+    fn decode_encode_more_headers_with_proofs(#[case] filename: &str) {
+        let file = fs::read_to_string(format!("../validation/src/assets/fluffy/{filename}.yaml",))
+            .unwrap();
+        let yaml: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
+        let actual_hwp = yaml.get("content_value").unwrap().as_str().unwrap();
+        let hwp = HeaderWithProof::from_ssz_bytes(&hex_decode(actual_hwp).unwrap()).unwrap();
+        assert_eq!(hwp.header.number, filename.parse::<u64>().unwrap());
+        let encoded = hex_encode(hwp.as_ssz_bytes());
+        assert_eq!(encoded, actual_hwp);
     }
 }
