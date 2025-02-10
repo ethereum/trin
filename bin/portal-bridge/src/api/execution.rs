@@ -399,7 +399,7 @@ pub async fn construct_proof(
     epoch_acc: &EpochAccumulator,
 ) -> anyhow::Result<HeaderWithProof> {
     let proof = PreMergeAccumulator::construct_proof(&header, epoch_acc)?;
-    let proof = BlockHeaderProof::PreMergeAccumulatorProof(proof.into());
+    let proof = BlockHeaderProof::PreMergeAccumulatorProof(proof);
     Ok(HeaderWithProof { header, proof })
 }
 

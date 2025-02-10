@@ -2,7 +2,9 @@ use std::path::PathBuf;
 
 use alloy::primitives::{B256, U256};
 use anyhow::anyhow;
-use ethportal_api::types::execution::{accumulator::EpochAccumulator, header::Header};
+use ethportal_api::types::execution::{
+    accumulator::EpochAccumulator, header::Header, header_with_proof::PreMergeAccumulatorProof,
+};
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
@@ -59,7 +61,7 @@ impl PreMergeAccumulator {
     pub fn construct_proof(
         header: &Header,
         epoch_acc: &EpochAccumulator,
-    ) -> anyhow::Result<[B256; 15]> {
+    ) -> anyhow::Result<PreMergeAccumulatorProof> {
         // Validate header hash matches historical hash from epoch accumulator
         let hr_index = (header.number % EPOCH_SIZE) as usize;
         let header_record = epoch_acc[hr_index];
@@ -118,6 +120,6 @@ impl PreMergeAccumulator {
         let final_proof: [B256; 15] = proof
             .try_into()
             .map_err(|_| anyhow!("Invalid proof length."))?;
-        Ok(final_proof)
+        Ok(final_proof.into())
     }
 }

@@ -290,10 +290,10 @@ mod test {
             BlockHeaderProof::PreMergeAccumulatorProof(val) => val,
             _ => panic!("test reached invalid state"),
         };
-        assert_eq!(trin_proof, fluffy_proof.proof);
+        assert_eq!(trin_proof, fluffy_proof);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(trin_proof.into()),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(trin_proof),
         };
         header_validator.validate_header_with_proof(&hwp).unwrap();
     }
@@ -311,10 +311,10 @@ mod test {
         let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc_bytes).unwrap();
         assert_eq!(epoch_acc.len(), 5362);
         let proof = PreMergeAccumulator::construct_proof(&header, &epoch_acc).unwrap();
-        assert_eq!(proof.len(), 15);
+        assert_eq!(proof.proof.len(), 15);
         let header_with_proof = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(proof.into()),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(proof),
         };
         HeaderValidator::new()
             .validate_header_with_proof(&header_with_proof)
@@ -338,10 +338,10 @@ mod test {
         let header = get_header(1_000_001);
         let epoch_accumulator = read_epoch_accumulator_122();
         let mut proof = PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
-        proof.swap(0, 1);
+        proof.proof.swap(0, 1);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(proof.into()),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(proof),
         };
         assert!(header_validator
             .validate_header_with_proof(&hwp)
