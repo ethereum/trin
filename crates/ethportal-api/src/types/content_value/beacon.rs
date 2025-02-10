@@ -548,20 +548,21 @@ impl ContentValue for BeaconContentValue {
 
 #[cfg(test)]
 mod test {
-    use std::{fs, str::FromStr};
+    use std::str::FromStr;
 
     use alloy::primitives::Bytes;
     use serde::Deserialize;
     use serde_yaml::Value;
 
     use super::*;
+    use crate::test_utils::read_file_from_tests_submodule;
 
     #[rstest::rstest]
     #[case("capella", 6718368)]
     #[case("deneb", 10248000)]
     fn light_client_bootstrap_encode_decode(#[case] fork_name: &str, #[case] expected_slot: u64) {
-        let file = fs::read_to_string(format!(
-            "./../../portal-spec-tests/tests/mainnet/beacon_chain/light_client/{fork_name}/bootstrap.yaml",
+        let file = read_file_from_tests_submodule(format!(
+            "tests/mainnet/beacon_chain/light_client/{fork_name}/bootstrap.yaml",
         ))
         .unwrap();
 
@@ -589,8 +590,8 @@ mod test {
         #[case] fork_name: &str,
         #[case] expected_slot: u64,
     ) {
-        let file = fs::read_to_string(format!(
-            "./../../portal-spec-tests/tests/mainnet/beacon_chain/light_client/{fork_name}/updates.yaml",
+        let file = read_file_from_tests_submodule(format!(
+            "tests/mainnet/beacon_chain/light_client/{fork_name}/updates.yaml",
         ))
         .unwrap();
 
@@ -622,8 +623,8 @@ mod test {
         #[case] fork_name: &str,
         #[case] expected_slot: u64,
     ) {
-        let file = fs::read_to_string(format!(
-            "./../../portal-spec-tests/tests/mainnet/beacon_chain/light_client/{fork_name}/optimistic_update.yaml",
+        let file = read_file_from_tests_submodule(format!(
+            "tests/mainnet/beacon_chain/light_client/{fork_name}/optimistic_update.yaml",
         ))
         .unwrap();
 
@@ -655,8 +656,8 @@ mod test {
         #[case] fork_name: &str,
         #[case] expected_slot: u64,
     ) {
-        let file = fs::read_to_string(format!(
-            "./../../portal-spec-tests/tests/mainnet/beacon_chain/light_client/{fork_name}/finality_update.yaml"
+        let file = read_file_from_tests_submodule(format!(
+            "tests/mainnet/beacon_chain/light_client/{fork_name}/finality_update.yaml"
         ))
         .unwrap();
 
@@ -683,7 +684,9 @@ mod test {
 
     #[test]
     fn deneb_historical_summaries_with_proof_encode_decode() {
-        let file = fs::read_to_string("./../../portal-spec-tests/tests/mainnet/beacon_chain/historical_summaries_with_proof/deneb/historical_summaries_with_proof.yaml").unwrap();
+        let file = read_file_from_tests_submodule(
+            "tests/mainnet/beacon_chain/historical_summaries_with_proof/deneb/historical_summaries_with_proof.yaml",
+        ).unwrap();
         let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let content_key = BeaconContentKey::deserialize(&value["content_key"]).unwrap();
         let content_bytes = RawContentValue::deserialize(&value["content_value"]).unwrap();

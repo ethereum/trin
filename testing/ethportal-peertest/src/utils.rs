@@ -1,6 +1,7 @@
 use std::{
     fmt::{self, Display, Formatter},
     fs,
+    path::{Path, PathBuf},
 };
 
 use alloy::{primitives::Bytes, rlp::Decodable};
@@ -19,6 +20,7 @@ use serde::Deserializer;
 use serde_yaml::Value;
 use ssz::Decode;
 use tracing::error;
+use trin_utils::submodules::portal_spec_tests_file_path;
 use ureq::serde::Deserialize;
 
 pub async fn wait_for_successful_result<Fut, O>(f: impl Fn() -> Fut) -> O
@@ -93,10 +95,8 @@ pub async fn wait_for_state_content<P: StateNetworkApiClient + std::marker::Sync
     .await
 }
 
-fn read_history_content_key_value(
-    file_name: &str,
-) -> Result<(HistoryContentKey, HistoryContentValue)> {
-    let yaml_content = fs::read_to_string(file_name)?;
+fn read_history_fixture_from_file(path: &Path) -> Result<(HistoryContentKey, HistoryContentValue)> {
+    let yaml_content = fs::read_to_string(path)?;
 
     let value: Value = serde_yaml::from_str(&yaml_content)?;
 
@@ -108,29 +108,28 @@ fn read_history_content_key_value(
 }
 
 /// Wrapper function for fixtures that directly returns the tuple.
-fn read_fixture(file_name: &str) -> (HistoryContentKey, HistoryContentValue) {
-    read_history_content_key_value(file_name)
-        .unwrap_or_else(|err| panic!("Error reading fixture in {file_name}: {err}"))
+fn read_history_fixture(path: &str) -> (HistoryContentKey, HistoryContentValue) {
+    let path = portal_spec_tests_file_path(PathBuf::from("tests/mainnet/history").join(path));
+    read_history_fixture_from_file(&path)
+        .unwrap_or_else(|err| panic!("Error reading fixture in {path:?}: {err}"))
 }
 
 /// History HeaderWithProof content key & value
 /// Block #1000010
 pub fn fixture_header_by_hash_1000010() -> (HistoryContentKey, HistoryContentValue) {
-    read_fixture("../../portal-spec-tests/tests/mainnet/history/headers_with_proof/1000010.yaml")
+    read_history_fixture("headers_with_proof/1000010.yaml")
 }
 
 /// History HeaderByHash content key & value
 /// Block #14764013 (pre-merge)
 pub fn fixture_header_by_hash() -> (HistoryContentKey, HistoryContentValue) {
-    read_fixture("../../portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.yaml")
+    read_history_fixture("headers_with_proof/14764013.yaml")
 }
 
 /// History HeaderByNumber content key & value
 /// Block #14764013 (pre-merge)
 pub fn fixture_header_by_number() -> (HistoryContentKey, HistoryContentValue) {
-    let (_, content_value) = read_fixture(
-        "../../portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.yaml",
-    );
+    let (_, content_value) = read_history_fixture("headers_with_proof/14764013.yaml");
 
     // Create a content key from the block number
     let HistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value.clone() else {
@@ -145,13 +144,13 @@ pub fn fixture_header_by_number() -> (HistoryContentKey, HistoryContentValue) {
 /// History BlockBody content key & value
 /// Block #14764013 (pre-merge)
 pub fn fixture_block_body() -> (HistoryContentKey, HistoryContentValue) {
-    read_fixture("../../portal-spec-tests/tests/mainnet/history/bodies/14764013.yaml")
+    read_history_fixture("bodies/14764013.yaml")
 }
 
 /// History Receipts content key & value
 /// Block #14764013 (pre-merge)
 pub fn fixture_receipts() -> (HistoryContentKey, HistoryContentValue) {
-    read_fixture("../../portal-spec-tests/tests/mainnet/history/receipts/14764013.yaml")
+    read_history_fixture("receipts/14764013.yaml")
 }
 
 enum DependentType {
@@ -283,33 +282,28 @@ where
         .map_err(|err| serde::de::Error::custom(format!("Error decoding header: {err}")))
 }
 
-fn read_state_fixture_from_file(file_name: &str) -> Result<Vec<StateFixture>> {
-    let yaml_content = fs::read_to_string(file_name)?;
+fn read_state_fixture_from_file(path: &Path) -> Result<Vec<StateFixture>> {
+    let yaml_content = fs::read_to_string(path)?;
     let value: Value = serde_yaml::from_str(&yaml_content)?;
 
     let result = Vec::<StateFixture>::deserialize(value)?;
     Ok(result)
 }
 
-fn read_state_fixture(file_name: &str) -> Vec<StateFixture> {
-    read_state_fixture_from_file(file_name)
-        .unwrap_or_else(|err| panic!("Error reading fixture: {err}"))
+fn read_state_fixture(path: &str) -> Vec<StateFixture> {
+    let path = portal_spec_tests_file_path(PathBuf::from("tests/mainnet/state").join(path));
+    read_state_fixture_from_file(&path)
+        .unwrap_or_else(|err| panic!("Error reading fixture in {path:?}: {err}"))
 }
 
 pub fn fixtures_state_account_trie_node() -> Vec<StateFixture> {
-    read_state_fixture(
-        "../../portal-spec-tests/tests/mainnet/state/validation/account_trie_node.yaml",
-    )
+    read_state_fixture("validation/account_trie_node.yaml")
 }
 
 pub fn fixtures_state_contract_storage_trie_node() -> Vec<StateFixture> {
-    read_state_fixture(
-        "../../portal-spec-tests/tests/mainnet/state/validation/contract_storage_trie_node.yaml",
-    )
+    read_state_fixture("validation/contract_storage_trie_node.yaml")
 }
 
 pub fn fixtures_state_contract_bytecode() -> Vec<StateFixture> {
-    read_state_fixture(
-        "../../portal-spec-tests/tests/mainnet/state/validation/contract_bytecode.yaml",
-    )
+    read_state_fixture("validation/contract_bytecode.yaml")
 }

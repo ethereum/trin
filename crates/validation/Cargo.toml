@@ -33,4 +33,4 @@ quickcheck.workspace = true
 quickcheck_macros = "1.0.0"
 rstest.workspace = true
 serde_yaml.workspace = true
-
+trin-utils.workspace = true

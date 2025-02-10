@@ -221,7 +221,7 @@ fn calculate_generalized_index(header: &Header) -> u64 {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use std::{fs, str::FromStr};
+    use std::{fs, path::PathBuf, str::FromStr};
 
     use alloy::{
         primitives::{Address, Bloom, B256, U256},
@@ -241,9 +241,14 @@ mod test {
     use serde_json::Value;
     use ssz::{Decode, Encode};
     use tree_hash::TreeHash;
+    use trin_utils::submodules::{
+        read_portal_spec_tests_file, read_portal_spec_tests_file_as_bytes,
+    };
 
     use super::*;
     use crate::constants::DEFAULT_PRE_MERGE_ACC_HASH;
+
+    const SPEC_TESTS_DIR: &str = "tests/mainnet/history";
 
     #[rstest]
     #[case(1_000_001)]
@@ -262,7 +267,10 @@ mod test {
         // - generates proofs which match fluffy's
         // - validates hwps
 
-        let file = fs::read_to_string("./src/assets/fluffy/header_with_proofs.json").unwrap();
+        let file = read_portal_spec_tests_file(
+            "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
+        )
+        .unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let hwps = json.as_object().unwrap();
         let header_validator = get_mainnet_header_validator();
@@ -274,7 +282,7 @@ mod test {
             HistoryContentKey::BlockHeaderByHash(_) => (),
             _ => panic!("Invalid test, content key decoded improperly"),
         }
-        let raw_fluffy_hwp = obj.get("value").unwrap().as_str().unwrap();
+        let raw_fluffy_hwp = obj.get("content_value").unwrap().as_str().unwrap();
         let fluffy_hwp =
             HeaderWithProof::from_ssz_bytes(&hex_decode(raw_fluffy_hwp).unwrap()).unwrap();
         let header = get_header(block_number);
@@ -295,11 +303,10 @@ mod test {
     }
 
     #[rstest]
-    #[case(HEADER_RLP_15_537_392, HWP_TEST_VECTOR_15_537_392, 15_537_392)]
-    #[case(HEADER_RLP_15_537_393, HWP_TEST_VECTOR_15_537_393, 15_537_393)]
+    #[case(HEADER_RLP_15_537_392, 15_537_392)]
+    #[case(HEADER_RLP_15_537_393, 15_537_393)]
     fn generate_and_verify_header_with_proofs_from_partial_epoch(
         #[case] header_rlp: &str,
-        #[case] test_vector: &str,
         #[case] block_number: u64,
     ) {
         let header = Header::decode(&mut hex_decode(header_rlp).unwrap().as_slice()).unwrap();
@@ -317,7 +324,16 @@ mod test {
             .validate_header_with_proof(&header_with_proof)
             .unwrap();
         let encoded_hwp = hex_encode(header_with_proof.as_ssz_bytes());
-        assert_eq!(encoded_hwp, test_vector);
+
+        let hwp_test_vector = serde_yaml::from_str::<serde_yaml::Value>(
+            &read_portal_spec_tests_file(format!(
+                "tests/mainnet/history/headers_with_proof/{block_number}.yaml",
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let expected_hwp = hwp_test_vector["content_value"].as_str().unwrap();
+        assert_eq!(encoded_hwp, expected_hwp);
     }
 
     #[tokio::test]
@@ -385,7 +401,10 @@ mod test {
         let header_validator = get_mainnet_header_validator();
 
         // Read the historical roots block proof from a test file
-        let file = fs::read_to_string("./../../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_bellatrix/beacon_block_proof-15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01.yaml").unwrap();
+        let file = read_portal_spec_tests_file(PathBuf::from(SPEC_TESTS_DIR).join(
+            "headers_with_proof/block_proofs_bellatrix/beacon_block_proof-15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01.yaml",
+        ))
+        .unwrap();
         let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let block_number: u64 = 15539558;
         let header_hash = value
@@ -430,7 +449,10 @@ mod test {
         let header_validator = get_mainnet_header_validator();
 
         // Read the historical roots block proof from a test file
-        let file = fs::read_to_string(format!("./../../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/beacon_block_proof-{block_number}.yaml")).unwrap();
+        let file = read_portal_spec_tests_file(PathBuf::from(SPEC_TESTS_DIR).join(format!(
+            "headers_with_proof/block_proofs_capella/beacon_block_proof-{block_number}.yaml"
+        )))
+        .unwrap();
         let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let header_hash = value
             .get("execution_block_header")
@@ -442,8 +464,11 @@ mod test {
             serde_yaml::from_value(value).unwrap();
 
         // Load historical summaries from ssz file
-        let historical_summaries_bytes = std::fs::read("./../../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/historical_summaries_at_slot_8953856.ssz"
-        ).expect("cannot load HistoricalSummaries bytes from test file");
+        let historical_summaries_bytes =
+            read_portal_spec_tests_file_as_bytes(PathBuf::from(SPEC_TESTS_DIR).join(
+                "headers_with_proof/block_proofs_capella/historical_summaries_at_slot_8953856.ssz",
+            ))
+            .expect("cannot load HistoricalSummaries bytes from test file");
         let historical_summaries = HistoricalSummaries::from_ssz_bytes(&historical_summaries_bytes)
             .expect("cannot decode HistoricalSummaries bytes");
 
@@ -512,8 +537,8 @@ mod test {
     }
 
     fn read_epoch_accumulator_122() -> EpochAccumulator {
-        let epoch_acc_bytes = fs::read(
-            "../../portal-spec-tests/tests/mainnet/history/accumulator/epoch-record-00122.ssz",
+        let epoch_acc_bytes = read_portal_spec_tests_file_as_bytes(
+            PathBuf::from(SPEC_TESTS_DIR).join("accumulator/epoch-record-00122.ssz"),
         )
         .unwrap();
         EpochAccumulator::from_ssz_bytes(&epoch_acc_bytes).unwrap()
@@ -521,9 +546,4 @@ mod test {
 
     const HEADER_RLP_15_537_392: &str = "0xf90218a02f1dc309c7cc0a5a2e3b3dd9315fea0ffbc53c56f9237f3ca11b20de0232f153a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794ea674fdde714fd979de3edf0f56aa9716b898ec8a0fee48a40a2765ab31fcd06ab6956341d13dc2c4b9762f2447aa425bb1c089b30a082864b3a65d1ac1917c426d48915dca0fc966fbf3f30fd051659f35dc3fd9be1a013c10513b52358022f800e2f9f1c50328798427b1b4a1ebbbd20b7417fb9719db90100ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff872741c5e4f6c39283ed14f08401c9c3808401c9a028846322c95c8f617369612d65617374322d31763932a02df332ffb74ecd15c9873d3f6153b878e1c514495dfb6e89ad88e574582b02a488232b0043952c93d98508fb17c6ee";
     const HEADER_RLP_15_537_393: &str = "0xf9021ba02b3ea3cd4befcab070812443affb08bf17a91ce382c714a536ca3cacab82278ba01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794829bd824b016326a401d083b33d092293333a830a04919dafa6ac8becfbbd0c2808f6c9511a057c21e42839caff5dfb6d3ef514951a0dd5eec02b019ff76e359b09bfa19395a2a0e97bc01e70d8d5491e640167c96a8a0baa842cfd552321a9c2450576126311e071680a1258032219c6490b663c1dab8b90100000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000000000080000000000000000000000000000000000000000000000000200000000000000000008000000000040000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000084000000000010020000000000000000000000000000000000020000000200000000200000000000000000000000000000000000000000400000000000000000000000008727472e1db3626a83ed14f18401c9c3808401c9a205846322c96292e4b883e5bda9e7a59ee4bb99e9b1bc460021a04cbec03dddd4b939730a7fe6048729604d4266e82426d472a2b2024f3cc4043f8862a3ee77461d4fc9850a1a4e5f06";
-
-    // Test vector for ssz encoded header with proof: BlockNumber 15537392
-    const HWP_TEST_VECTOR_15_537_392: &str = "0x0800000023020000f90218a02f1dc309c7cc0a5a2e3b3dd9315fea0ffbc53c56f9237f3ca11b20de0232f153a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794ea674fdde714fd979de3edf0f56aa9716b898ec8a0fee48a40a2765ab31fcd06ab6956341d13dc2c4b9762f2447aa425bb1c089b30a082864b3a65d1ac1917c426d48915dca0fc966fbf3f30fd051659f35dc3fd9be1a013c10513b52358022f800e2f9f1c50328798427b1b4a1ebbbd20b7417fb9719db90100ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff872741c5e4f6c39283ed14f08401c9c3808401c9a028846322c95c8f617369612d65617374322d31763932a02df332ffb74ecd15c9873d3f6153b878e1c514495dfb6e89ad88e574582b02a488232b0043952c93d98508fb17c6ee01eb461cb6348eeed7700c00000000000000000000000000000000000000000000db21cba827f968eeadeee502025f01cbcfcf20e0fafee4ecb5a877bb7ae218f3f5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4bdb56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d71c78009fdf07fc56a11f122370658a353aaa542ed63e44c4bc15ff4cd105ab33c50cb3e7542c17fa65faecc0fd911b9069cddb9e52114cfff2b06d3411267c78e774ec19c2ab8f61bac6da8835c6c00c74a7c07f3804b626d34563458952c589929776e586fafb3d3f001a11c9aaa3986752d147fa90faea0f463261f2ed9b8711529aacd1c137bffadc6bdf388b668118d469207288ca3681c895855c930f10b26846476fd5fc54a5d43385167c95144f2643f533cc85bb9d16b782f8d7db193506d86582d252405b840018792cad2bf1259f1ef5aa5f887e13cb2f0094f51e189cc2a1734369d3d379aa5cedb69c2709ec75233c63f3b84bf9aa3ae048bd8cd6cf04127db05441cd833107a52be852868890e4317e6a02ab47683aa75964220f1f11deb5763b3c38cb34c1344a6a02b6ccb1079b746545b7318057a8a5dbd2ff214000000000000000000000000000000000000000000000000000000000000";
-    // Test vector for ssz encoded header with proof: BlockNumber 15537393
-    const HWP_TEST_VECTOR_15_537_393: &str = "0x0800000026020000f9021ba02b3ea3cd4befcab070812443affb08bf17a91ce382c714a536ca3cacab82278ba01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794829bd824b016326a401d083b33d092293333a830a04919dafa6ac8becfbbd0c2808f6c9511a057c21e42839caff5dfb6d3ef514951a0dd5eec02b019ff76e359b09bfa19395a2a0e97bc01e70d8d5491e640167c96a8a0baa842cfd552321a9c2450576126311e071680a1258032219c6490b663c1dab8b90100000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000000000080000000000000000000000000000000000000000000000000200000000000000000008000000000040000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000084000000000010020000000000000000000000000000000000020000000200000000200000000000000000000000000000000000000000400000000000000000000000008727472e1db3626a83ed14f18401c9c3808401c9a205846322c96292e4b883e5bda9e7a59ee4bb99e9b1bc460021a04cbec03dddd4b939730a7fe6048729604d4266e82426d472a2b2024f3cc4043f8862a3ee77461d4fc9850a1a4e5f060155a9cfd362d515d8700c00000000000000000000000000000000000000000000aabfef675d3157c2cf8964505418cf314ab0ce8f4a8e742ae33fb067d449db39f5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4bdb56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d71c78009fdf07fc56a11f122370658a353aaa542ed63e44c4bc15ff4cd105ab33c50cb3e7542c17fa65faecc0fd911b9069cddb9e52114cfff2b06d3411267c78e774ec19c2ab8f61bac6da8835c6c00c74a7c07f3804b626d34563458952c589929776e586fafb3d3f001a11c9aaa3986752d147fa90faea0f463261f2ed9b8711529aacd1c137bffadc6bdf388b668118d469207288ca3681c895855c930f10b26846476fd5fc54a5d43385167c95144f2643f533cc85bb9d16b782f8d7db193506d86582d252405b840018792cad2bf1259f1ef5aa5f887e13cb2f0094f51e189cc2a1734369d3d379aa5cedb69c2709ec75233c63f3b84bf9aa3ae048bd8cd6cf04127db05441cd833107a52be852868890e4317e6a02ab47683aa75964220f1f11deb5763b3c38cb34c1344a6a02b6ccb1079b746545b7318057a8a5dbd2ff214000000000000000000000000000000000000000000000000000000000000";
 }
