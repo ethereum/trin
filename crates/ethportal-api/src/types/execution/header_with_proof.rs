@@ -211,7 +211,7 @@ mod tests {
         for (block_number, obj) in hwps {
             let _content_key = obj.get("content_key").unwrap();
             let block_number: u64 = block_number.parse().unwrap();
-            let proof = obj.get("value").unwrap().as_str().unwrap();
+            let proof = obj.get("content_value").unwrap().as_str().unwrap();
             let hwp = HeaderWithProof::from_ssz_bytes(&hex_decode(proof).unwrap()).unwrap();
             assert_eq!(block_number, hwp.header.number);
             let encoded = hex_encode(hwp.as_ssz_bytes());

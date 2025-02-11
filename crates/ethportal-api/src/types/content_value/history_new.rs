@@ -2,8 +2,8 @@ use ssz::{Decode, Encode};
 
 use crate::{
     types::{
-        content_value::ContentValue, network::Subnetwork,
-        updated::header_with_proof::HeaderWithProof,
+        content_value::ContentValue, execution::header_with_proof_new::HeaderWithProof,
+        network::Subnetwork,
     },
     utils::bytes::hex_encode,
     BlockBody, ContentValueError, HistoryContentKey, RawContentValue, Receipts,
