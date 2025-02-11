@@ -13,17 +13,21 @@ use crate::{
     Header,
 };
 
-/// The accumulator proof for the pre-merge blocks.
-pub type HistoricalHashesAccumulatorProof = FixedVector<B256, typenum::U15>;
+/// The accumulator proof for EL BlockHeader for the pre-merge blocks.
+pub type BlockProofHistoricalHashesAccumulator = FixedVector<B256, typenum::U15>;
 
-/// Proof that execution header root is part of BeaconBlock, post-Merge and pre-Capella
-pub type BeaconBlockProofPreCapella = FixedVector<B256, typenum::U11>;
-/// Proof that execution header root is part of BeaconBlock, post-Capella
-pub type BeaconBlockProof = VariableList<B256, typenum::U12>;
-/// Proof that BeaconBlockHeader root is part of HistoricalRoots
-pub type HistoricalRootsProof = FixedVector<B256, typenum::U14>;
-/// Proof that BeaconBlockHeader root is part of HistoricalSummaries
-pub type HistoricalSummariesProof = FixedVector<B256, typenum::U13>;
+/// Proof that EL block_hash is in BeaconBlock -> BeaconBlockBody -> ExecutionPayload
+/// for TheMerge until Capella
+pub type ExecutionBlockProof = FixedVector<B256, typenum::U11>;
+/// Proof that EL block_hash is in BeaconBlock -> BeaconBlockBody -> ExecutionPayload
+/// for Post-Capella
+pub type ExecutionBlockProofCapella = VariableList<B256, typenum::U12>;
+/// Proof that BeaconBlock root is part of historical_summaries and thus canonical
+/// for Capella and onwards
+pub type BeaconBlockProofHistoricalSummaries = FixedVector<B256, typenum::U13>;
+/// Proof that BeaconBlock root is part of historical_roots and thus canonical
+/// from TheMerge until Capella -> Bellatrix fork.
+pub type BeaconBlockProofHistoricalRoots = FixedVector<B256, typenum::U14>;
 
 /// A block header with accumulator proof.
 /// Type definition:
@@ -37,9 +41,12 @@ pub struct HeaderWithProof {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub enum BlockHeaderProof {
-    HistoricalHashesAccumulatorProof(HistoricalHashesAccumulatorProof),
-    HistoricalRootsBlockProof(HistoricalRootsBlockProof),
-    HistoricalSummariesBlockProof(HistoricalSummariesBlockProof),
+    // Pre-Merge
+    HistoricalHashes(BlockProofHistoricalHashesAccumulator),
+    // Merge -> Capella
+    HistoricalRoots(BlockProofHistoricalRoots),
+    // Post-Capella
+    HistoricalSummaries(BlockProofHistoricalSummaries),
 }
 
 impl ssz::Decode for HeaderWithProof {
@@ -59,17 +66,15 @@ impl ssz::Decode for HeaderWithProof {
 
         let proof = decoder.decode_next::<ByteList1024>()?;
         let proof = if header.timestamp <= MERGE_TIMESTAMP {
-            BlockHeaderProof::HistoricalHashesAccumulatorProof(
-                HistoricalHashesAccumulatorProof::from_ssz_bytes(&proof)?,
+            BlockHeaderProof::HistoricalHashes(
+                BlockProofHistoricalHashesAccumulator::from_ssz_bytes(&proof)?,
             )
         } else if header.number <= SHANGHAI_TIMESTAMP {
-            BlockHeaderProof::HistoricalRootsBlockProof(HistoricalRootsBlockProof::from_ssz_bytes(
+            BlockHeaderProof::HistoricalRoots(BlockProofHistoricalRoots::from_ssz_bytes(&proof)?)
+        } else {
+            BlockHeaderProof::HistoricalSummaries(BlockProofHistoricalSummaries::from_ssz_bytes(
                 &proof,
             )?)
-        } else {
-            BlockHeaderProof::HistoricalSummariesBlockProof(
-                HistoricalSummariesBlockProof::from_ssz_bytes(&proof)?,
-            )
         };
         Ok(Self { header, proof })
     }
@@ -82,13 +87,13 @@ impl ssz::Encode for BlockHeaderProof {
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
         match self {
-            BlockHeaderProof::HistoricalHashesAccumulatorProof(proof) => {
+            BlockHeaderProof::HistoricalHashes(proof) => {
                 proof.ssz_append(buf);
             }
-            BlockHeaderProof::HistoricalRootsBlockProof(proof) => {
+            BlockHeaderProof::HistoricalRoots(proof) => {
                 proof.ssz_append(buf);
             }
-            BlockHeaderProof::HistoricalSummariesBlockProof(proof) => {
+            BlockHeaderProof::HistoricalSummaries(proof) => {
                 proof.ssz_append(buf);
             }
         }
@@ -96,9 +101,9 @@ impl ssz::Encode for BlockHeaderProof {
 
     fn ssz_bytes_len(&self) -> usize {
         match self {
-            BlockHeaderProof::HistoricalHashesAccumulatorProof(proof) => proof.ssz_bytes_len(),
-            BlockHeaderProof::HistoricalRootsBlockProof(proof) => proof.ssz_bytes_len(),
-            BlockHeaderProof::HistoricalSummariesBlockProof(proof) => proof.ssz_bytes_len(),
+            BlockHeaderProof::HistoricalHashes(proof) => proof.ssz_bytes_len(),
+            BlockHeaderProof::HistoricalRoots(proof) => proof.ssz_bytes_len(),
+            BlockHeaderProof::HistoricalSummaries(proof) => proof.ssz_bytes_len(),
         }
     }
 }
@@ -106,23 +111,36 @@ impl ssz::Encode for BlockHeaderProof {
 /// The struct holds a chain of proofs. This chain of proofs allows for verifying that an EL
 /// `BlockHeader` is part of the canonical chain. The only requirement is having access to the
 /// beacon chain `historical_roots`.
-// Total size (8 + 1 + 3 + 1 + 14) * 32 bytes + 4 bytes = 868 bytes
+///
+/// Proof for EL BlockHeader from TheMerge until Capella
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
-pub struct HistoricalRootsBlockProof {
-    pub beacon_block_proof: BeaconBlockProofPreCapella,
+pub struct BlockProofHistoricalRoots {
+    /// Proof that the BeaconBlock is part of the historical roots
+    /// and thus part of the canonical chain.
+    pub beacon_block_proof: BeaconBlockProofHistoricalRoots,
+    /// hash_tree_root of BeaconBlock used to verify the proofs
     pub beacon_block_root: B256,
-    pub historical_roots_proof: HistoricalRootsProof,
+    /// Proof that EL BlockHash is part of the BeaconBlock
+    pub execution_block_proof: ExecutionBlockProof,
+    /// Slot of BeaconBlock, used to calculate the historical_roots index
     pub slot: u64,
 }
 
 /// The struct holds a chain of proofs. This chain of proofs allows for verifying that an EL
 /// `BlockHeader` is part of the canonical chain. The only requirement is having access to the
 /// beacon chain `historical_summaries`.
+///
+/// Proof for EL BlockHeader for Capella and onwards
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
-pub struct HistoricalSummariesBlockProof {
-    pub beacon_block_proof: BeaconBlockProof,
+pub struct BlockProofHistoricalSummaries {
+    /// Proof that the BeaconBlock is part of the historical_summaries
+    /// and thus part of the canonical chain.
+    pub beacon_block_proof: BeaconBlockProofHistoricalSummaries,
+    /// hash_tree_root of BeaconBlock used to verify the proofs
     pub beacon_block_root: B256,
-    pub historical_summaries_proof: HistoricalSummariesProof,
+    /// Proof that EL BlockHash is part of the BeaconBlock
+    pub execution_block_proof: ExecutionBlockProofCapella,
+    /// Slot of BeaconBlock, used to calculate the historical_summaries index
     pub slot: u64,
 }
 
