@@ -55,6 +55,12 @@ pub struct PreMergeAccumulatorProof {
     pub proof: [B256; 15],
 }
 
+impl From<[B256; 15]> for PreMergeAccumulatorProof {
+    fn from(proof: [B256; 15]) -> Self {
+        Self { proof }
+    }
+}
+
 impl ssz::Decode for HeaderWithProof {
     fn is_ssz_fixed_len() -> bool {
         false

@@ -64,14 +64,6 @@ impl HeaderValidator {
                     )),
                 }
             }
-            BlockHeaderProof::None(_) => {
-                if hwp.header.number <= MERGE_BLOCK_NUMBER {
-                    Err(anyhow!("Missing accumulator proof for pre-merge header."))
-                } else {
-                    // Skip validation for post-merge headers until proof format is finalized
-                    Ok(())
-                }
-            }
             BlockHeaderProof::HistoricalRootsBlockProof(proof) => self
                 .verify_post_merge_pre_capella_header(hwp.header.number, hwp.header.hash(), proof),
             BlockHeaderProof::HistoricalSummariesBlockProof(_) => {
@@ -82,6 +74,14 @@ impl HeaderValidator {
                 }
                 // TODO: Validation for post-Capella headers is not implemented
                 Ok(())
+            }
+            BlockHeaderProof::None(_) => {
+                if hwp.header.number <= MERGE_BLOCK_NUMBER {
+                    Err(anyhow!("Missing accumulator proof for pre-merge header."))
+                } else {
+                    // Skip validation for post-merge headers until proof format is finalized
+                    Ok(())
+                }
             }
         }
     }
@@ -230,9 +230,7 @@ mod test {
     use ethportal_api::{
         types::execution::{
             accumulator::EpochAccumulator,
-            header_with_proof::{
-                BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof, SszNone,
-            },
+            header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
         },
         utils::bytes::{hex_decode, hex_encode},
         HistoryContentKey, OverlayContentKey,
@@ -292,12 +290,10 @@ mod test {
             BlockHeaderProof::PreMergeAccumulatorProof(val) => val,
             _ => panic!("test reached invalid state"),
         };
-        assert_eq!(trin_proof, fluffy_proof.proof);
+        assert_eq!(trin_proof, fluffy_proof);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof {
-                proof: trin_proof,
-            }),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(trin_proof),
         };
         header_validator.validate_header_with_proof(&hwp).unwrap();
     }
@@ -315,10 +311,10 @@ mod test {
         let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc_bytes).unwrap();
         assert_eq!(epoch_acc.len(), 5362);
         let proof = PreMergeAccumulator::construct_proof(&header, &epoch_acc).unwrap();
-        assert_eq!(proof.len(), 15);
+        assert_eq!(proof.proof.len(), 15);
         let header_with_proof = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof { proof }),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(proof),
         };
         HeaderValidator::new()
             .validate_header_with_proof(&header_with_proof)
@@ -342,10 +338,10 @@ mod test {
         let header = get_header(1_000_001);
         let epoch_accumulator = read_epoch_accumulator_122();
         let mut proof = PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
-        proof.swap(0, 1);
+        proof.proof.swap(0, 1);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof { proof }),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(proof),
         };
         assert!(header_validator
             .validate_header_with_proof(&hwp)
@@ -388,9 +384,7 @@ mod test {
         let future_header = generate_random_header(&future_height);
         let future_hwp = HeaderWithProof {
             header: future_header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof {
-                proof: [B256::ZERO; 15],
-            }),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof([B256::ZERO; 15].into()),
         };
         header_validator
             .validate_header_with_proof(&future_hwp)
