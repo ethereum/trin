@@ -37,7 +37,7 @@ rust-version = "1.81.0"
 version = "0.1.0"
 
 [workspace.dependencies]
-alloy = { version = "0.4.2", default-features = false, features = ["std"] }
+alloy = { version = "0.11.1", default-features = false, features = ["std"] }
 alloy-rlp = { version = "0.3.8", default-features = false, features = ["derive"] }
 anyhow = "1.0.68"
 async-trait = "0.1.68"

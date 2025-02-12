@@ -2,14 +2,14 @@ use alloy::{
     primitives::bytes::Bytes,
     rpc::types::{
         engine::{
-            ExecutionPayloadBodiesV1, ExecutionPayloadBodiesV2, ExecutionPayloadInputV2,
-            ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ExecutionPayloadV4,
-            ForkchoiceState, ForkchoiceUpdated, PayloadAttributes, PayloadId, PayloadStatus,
-            TransitionConfiguration,
+            ExecutionPayloadBodiesV1, ExecutionPayloadInputV2, ExecutionPayloadV1,
+            ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated,
+            PayloadAttributes, PayloadId, PayloadStatus, TransitionConfiguration,
         },
         Block, BlockId, Filter, Log, SyncStatus, TransactionRequest,
     },
 };
+use alloy_rpc_types_engine::{ExecutionPayloadBodiesV2, ExecutionPayloadV4};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 use revm_primitives::{Address, B256, U256};
 
