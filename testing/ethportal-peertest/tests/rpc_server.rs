@@ -5,8 +5,7 @@ use std::net::{IpAddr, Ipv4Addr};
 
 use alloy::{
     primitives::U256,
-    providers::{IpcConnect, Provider, ProviderBuilder, RootProvider},
-    pubsub::PubSubFrontend,
+    providers::{DynProvider, IpcConnect, Provider, ProviderBuilder},
     rpc::{
         client::ClientBuilder,
         types::{BlockNumberOrTag, BlockTransactions, BlockTransactionsKind, Header as RpcHeader},
@@ -31,7 +30,7 @@ use trin::cli::TrinConfig;
 use url::Url;
 use utils::init_tracing;
 
-async fn setup_web3_server() -> (RpcServerHandle, RootProvider<PubSubFrontend>, Client) {
+async fn setup_web3_server() -> (RpcServerHandle, DynProvider, Client) {
     init_tracing();
 
     let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
@@ -58,7 +57,7 @@ async fn setup_web3_server() -> (RpcServerHandle, RootProvider<PubSubFrontend>, 
 
     let web3_server = trin::run_trin(trin_config).await.unwrap();
     let ipc = IpcConnect::new(DEFAULT_WEB3_IPC_PATH.to_string());
-    let web3_client = ProviderBuilder::new().on_ipc(ipc).await.unwrap();
+    let web3_client = DynProvider::new(ProviderBuilder::new().on_ipc(ipc).await.unwrap());
 
     // Tests that use native client belong in tests/self_peertest.rs, but it is convenient to use
     // the native client to populate content in the server's database.
@@ -155,13 +154,13 @@ async fn test_eth_get_block_by_number() {
     // The meat of the test is here:
     // Retrieve block over json-rpc
     let block = web3_client
-        .get_block_by_number(block_number.into(), /* hydrate= */ false)
+        .get_block_by_number(block_number.into(), BlockTransactionsKind::Hashes)
         .await
         .expect("request to get block failed")
         .expect("specified block not found");
 
     assert_header(&block.header, &hwp.header);
-    assert_eq!(block.size, Some(U256::from(37890)));
+    assert_eq!(block.header.size, Some(U256::from(37890)));
     assert_eq!(block.transactions.len(), body.transactions().len());
     assert!(block.uncles.is_empty());
     assert_eq!(
@@ -210,7 +209,7 @@ async fn test_eth_get_block_by_number_hydrated() {
         .unwrap());
 
     let response = web3_client
-        .get_block_by_number(block_number.into(), /* hydrate= */ true)
+        .get_block_by_number(block_number.into(), BlockTransactionsKind::Full)
         .await;
 
     let err = match response {
@@ -231,7 +230,7 @@ async fn test_eth_get_block_by_tag() {
     let (web3_server, web3_client, _native_client) = setup_web3_server().await;
 
     let response = web3_client
-        .get_block_by_number(BlockNumberOrTag::Latest, /* hydrate= */ false)
+        .get_block_by_number(BlockNumberOrTag::Latest, BlockTransactionsKind::Hashes)
         .await;
 
     let err = match response {
@@ -281,7 +280,7 @@ async fn test_eth_get_block_by_hash() {
         .expect("specified block not found");
 
     assert_header(&block.header, &hwp.header);
-    assert_eq!(block.size, Some(U256::from(37890)));
+    assert_eq!(block.header.size, Some(U256::from(37890)));
     assert_eq!(block.transactions.len(), body.transactions().len());
     assert!(block.uncles.is_empty());
     assert_eq!(
@@ -349,15 +348,15 @@ fn assert_header(actual: &RpcHeader, expected: &Header) {
     assert_eq!(actual.number, expected.number);
     assert_eq!(actual.hash, expected.hash());
     assert_eq!(actual.parent_hash, expected.parent_hash);
-    assert_eq!(actual.nonce, expected.nonce);
-    assert_eq!(actual.uncles_hash, expected.uncles_hash);
+    assert_eq!(Some(actual.nonce), expected.nonce);
+    assert_eq!(actual.ommers_hash, expected.uncles_hash);
     assert_eq!(actual.logs_bloom, expected.logs_bloom);
-    assert_eq!(actual.miner, expected.author);
+    assert_eq!(actual.beneficiary, expected.author);
     assert_eq!(actual.state_root, expected.state_root);
     assert_eq!(actual.transactions_root, expected.transactions_root);
     assert_eq!(actual.receipts_root, expected.receipts_root);
     assert_eq!(actual.extra_data, expected.extra_data);
-    assert_eq!(actual.mix_hash, expected.mix_hash);
+    assert_eq!(Some(actual.mix_hash), expected.mix_hash);
     assert_eq!(actual.gas_used, expected.gas_used.to::<u64>());
     assert_eq!(actual.gas_limit, expected.gas_limit.to::<u64>());
     assert_eq!(actual.difficulty, expected.difficulty);
