@@ -5,7 +5,10 @@ use std::{
 };
 
 use alloy_rlp::{Encodable, RlpDecodableWrapper, RlpEncodableWrapper};
-use discv5::enr::{CombinedKey, Enr as Discv5Enr};
+use discv5::{
+    enr::{CombinedKey, Enr as Discv5Enr},
+    handler::NodeContact,
+};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -86,23 +89,6 @@ impl ssz::Encode for SszEnr {
         self.encode(&mut buf);
         buf.ssz_bytes_len()
     }
-}
-
-pub fn generate_random_remote_enr() -> (CombinedKey, Enr) {
-    let key = CombinedKey::generate_secp256k1();
-    let mut rng = rand::thread_rng();
-
-    // Generate an IP between 1.0.0.0 and 223.255.255.255
-    // We don't want to generate a multicast address (224.0.0.0 - 239.255.255.255)
-    let ip = Ipv4Addr::from(rng.gen_range(0x1000000..=0xDFFFFFFF)); // 0xDFFFFFFF == 223.255.255.255
-
-    let enr = Discv5Enr::builder()
-        .ip(ip.into())
-        .udp4(8000)
-        .build(&key)
-        .expect("Failed to generate random ENR.");
-
-    (key, enr)
 }
 
 #[cfg(test)]

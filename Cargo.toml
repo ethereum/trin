@@ -46,7 +46,7 @@ chrono = "0.4.38"
 clap = { version = "4.2.1", features = ["derive"] }
 delay_map = "0.4.0"
 directories = "3.0"
-discv5 = { version = "0.9.1", features = ["serde"] }
+discv5 = { rev = "2c59223f6b7d668b6667b4105da751d4e8aa5548", git = "https://github.com/kolbyml/discv5"}
 env_logger = "0.9.0"
 eth_trie = "0.5.0"
 ethereum_hashing = "0.7.0"
@@ -96,7 +96,7 @@ tree_hash_derive = "0.8.0"
 uds_windows = "1.0.1"
 ureq = { version = "2.5.0", features = ["json"] }
 url = "2.3.1"
-utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.16" }
+utp-rs = { git = "https://github.com/ogenev/utp", rev = "678f7bf593e4ea7c3f1548a8eb30a16b83af7a97" }
 
 # Trin workspace crates
 e2store = { path = "crates/e2store" }

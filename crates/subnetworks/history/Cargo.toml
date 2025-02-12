@@ -13,6 +13,7 @@ version.workspace = true
 
 [dependencies]
 alloy.workspace = true
+alloy-rlp.workspace = true
 anyhow.workspace = true
 discv5.workspace = true
 ethereum_ssz.workspace = true

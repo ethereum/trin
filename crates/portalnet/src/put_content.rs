@@ -4,6 +4,7 @@ use ethportal_api::{
     types::{
         distance::Metric,
         enr::Enr,
+        node_contact::NodeContact,
         portal::MAX_CONTENT_KEYS_PER_OFFER,
         portal_wire::{OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response},
     },
@@ -59,16 +60,18 @@ pub fn propagate_put_content_cross_thread<TContentKey: OverlayContentKey, TMetri
     );
 
     // Map from content_ids to interested ENRs
-    let mut content_id_to_interested_enrs = kbuckets.batch_interested_enrs::<TMetric>(&content_ids);
+    let mut content_id_to_interested_node_contacts =
+        kbuckets.batch_interested_node_contacts::<TMetric>(&content_ids);
 
     // Map from ENRs to content they will put content
-    let mut enrs_and_content: HashMap<Enr, Vec<&(TContentKey, RawContentValue)>> = HashMap::new();
+    let mut node_contacts_and_content: HashMap<NodeContact, Vec<&(TContentKey, RawContentValue)>> =
+        HashMap::new();
     for (content_id, content_key_value) in &content {
-        let interested_enrs = content_id_to_interested_enrs.remove(content_id).unwrap_or_else(|| {
-            error!("interested_enrs should contain all content ids, even if there are no interested ENRs");
+        let interested_node_contacts = content_id_to_interested_node_contacts.remove(content_id).unwrap_or_else(|| {
+            error!("interested_node_contacts should contain all content ids, even if there are no interested ENRs");
             vec![]
         });
-        if interested_enrs.is_empty() {
+        if interested_node_contacts.is_empty() {
             debug!(
                 content.id = %hex_encode(content_id),
                 "No peers eligible for neighborhood gossip"
@@ -77,23 +80,25 @@ pub fn propagate_put_content_cross_thread<TContentKey: OverlayContentKey, TMetri
         };
 
         // Select put content recipients
-        for enr in select_put_content_recipients::<TMetric>(content_id, interested_enrs) {
-            enrs_and_content
-                .entry(enr)
+        for node_contact in
+            select_put_content_recipients::<TMetric>(content_id, interested_node_contacts)
+        {
+            node_contacts_and_content
+                .entry(node_contact)
                 .or_default()
                 .push(content_key_value);
         }
     }
 
-    let num_propagated_peers = enrs_and_content.len();
+    let num_propagated_peers = node_contacts_and_content.len();
 
     // Create and send OFFER overlay request to the interested nodes
-    for (enr, mut interested_content) in enrs_and_content {
+    for (node_contact, mut interested_content) in node_contacts_and_content {
         let permit = match utp_controller {
             Some(ref utp_controller) => match utp_controller.get_outbound_semaphore() {
                 Some(permit) => Some(permit),
                 None => {
-                    trace!("Permit for put content not acquired! Skipping offering to enr: {enr}");
+                    trace!("Permit for put content not acquired! Skipping offering to node_contact: {}", node_contact.enr);
                     continue;
                 }
             },
@@ -103,14 +108,14 @@ pub fn propagate_put_content_cross_thread<TContentKey: OverlayContentKey, TMetri
         // offer messages are limited to 64 content keys
         if interested_content.len() > MAX_CONTENT_KEYS_PER_OFFER {
             warn!(
-                enr = %enr,
+                enr = %node_contact.enr,
                 content.len = interested_content.len(),
                 "Too many content items to offer to a single peer, dropping {}.",
                 interested_content.len() - MAX_CONTENT_KEYS_PER_OFFER
             );
             // sort content keys by distance to the node
             interested_content.sort_by_cached_key(|(key, _)| {
-                TMetric::distance(&key.content_id(), &enr.node_id().raw())
+                TMetric::distance(&key.content_id(), &node_contact.enr.node_id().raw())
             });
             // take 64 closest content keys
             interested_content.truncate(MAX_CONTENT_KEYS_PER_OFFER);
@@ -126,7 +131,9 @@ pub fn propagate_put_content_cross_thread<TContentKey: OverlayContentKey, TMetri
 
         let overlay_request = OverlayRequest::new(
             offer_request,
-            RequestDirection::Outgoing { destination: enr },
+            RequestDirection::Outgoing {
+                destination: node_contact,
+            },
             None,
             None,
             permit,
@@ -157,14 +164,16 @@ pub async fn trace_propagate_put_content_cross_thread<
 
     let content_id = content_key.content_id();
 
-    let interested_enrs = kbuckets.interested_enrs::<TMetric>(&content_id);
-    if interested_enrs.is_empty() {
+    let interested_node_contacts = kbuckets.interested_node_contacts::<TMetric>(&content_id);
+    if interested_node_contacts.is_empty() {
         debug!(content.id = %hex_encode(content_id), "No peers eligible for trace put content");
         return put_content_result;
     };
 
     // Select ENRs to put content to, create and send OFFER overlay request to the interested nodes
-    for enr in select_put_content_recipients::<TMetric>(&content_id, interested_enrs) {
+    for node_contact in
+        select_put_content_recipients::<TMetric>(&content_id, interested_node_contacts)
+    {
         let (result_tx, mut result_rx) = tokio::sync::mpsc::unbounded_channel();
         let offer_request = Request::PopulatedOfferWithResult(PopulatedOfferWithResult {
             content_item: (content_key.clone().to_bytes(), data.clone()),
@@ -176,7 +185,7 @@ pub async fn trace_propagate_put_content_cross_thread<
         let overlay_request = OverlayRequest::new(
             offer_request,
             RequestDirection::Outgoing {
-                destination: enr.clone(),
+                destination: node_contact.clone(),
             },
             responder,
             None,
@@ -187,13 +196,13 @@ pub async fn trace_propagate_put_content_cross_thread<
             continue;
         }
         // update put content result with peer marked as being offered the content
-        put_content_result.offered.push(enr.clone());
+        put_content_result.offered.push(node_contact.enr.clone());
         match rx.await {
             Ok(res) => {
                 if let Ok(Response::Accept(accept)) = res {
                     if !accept.content_keys.is_zero() {
                         // update put content result with peer marked as accepting the content
-                        put_content_result.accepted.push(enr.clone());
+                        put_content_result.accepted.push(node_contact.enr.clone());
                     }
                 } else {
                     // continue to next peer if no content was accepted
@@ -205,7 +214,7 @@ pub async fn trace_propagate_put_content_cross_thread<
         }
         if let Some(OfferTrace::Success(_)) = result_rx.recv().await {
             // update put content result with peer marked as successfully transferring the content
-            put_content_result.transferred.push(enr);
+            put_content_result.transferred.push(node_contact.enr);
         }
     }
     put_content_result
@@ -216,40 +225,45 @@ const NUM_FARTHER_NODES: usize = 4;
 
 /// Selects put content recipients from a vec of interested ENRs.
 ///
-/// If number of ENRs is at most `NUM_CLOSEST_NODES + NUM_FARTHER_NODES`, then all are returned.
-/// Otherwise, ENRs are sorted by distance from `content_id` and then:
+/// If number of NodeContacts is at most `NUM_CLOSEST_NODES + NUM_FARTHER_NODES`, then all are returned.
+/// Otherwise, NodeContacts are sorted by distance from `content_id` and then:
 ///
-/// 1. Closest `NUM_CLOSEST_NODES` ENRs are selected
-/// 2. Random `NUM_FARTHER_NODES` ENRs are selected from the rest
+/// 1. Closest `NUM_CLOSEST_NODES` NodeContacts are selected
+/// 2. Random `NUM_FARTHER_NODES` NodeContacts are selected from the rest
 fn select_put_content_recipients<TMetric: Metric>(
     content_id: &[u8; 32],
-    mut enrs: Vec<Enr>,
-) -> Vec<Enr> {
+    mut node_contacts: Vec<NodeContact>,
+) -> Vec<NodeContact> {
     // Check if we need to do any selection
-    if enrs.len() <= NUM_CLOSEST_NODES + NUM_FARTHER_NODES {
-        return enrs;
+    if node_contacts.len() <= NUM_CLOSEST_NODES + NUM_FARTHER_NODES {
+        return node_contacts;
     }
 
     // Sort enrs by distance
-    enrs.sort_by_cached_key(|enr| TMetric::distance(content_id, &enr.node_id().raw()));
+    node_contacts.sort_by_cached_key(|node_contact| {
+        TMetric::distance(content_id, &node_contact.enr.node_id().raw())
+    });
 
     // Split of at NUM_CLOSEST_NODES
-    let mut farther_enrs = enrs.split_off(NUM_CLOSEST_NODES);
+    let mut farther_node_contacts = node_contacts.split_off(NUM_CLOSEST_NODES);
 
     // Select random NUM_FARTHER_NODES
     let mut rng = rand::thread_rng();
     for _ in 0..NUM_FARTHER_NODES {
-        let enr = farther_enrs.swap_remove(rng.gen_range(0..farther_enrs.len()));
-        enrs.push(enr);
+        let node_contact =
+            farther_node_contacts.swap_remove(rng.gen_range(0..farther_node_contacts.len()));
+        node_contacts.push(node_contact);
     }
 
-    enrs
+    node_contacts
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use ethportal_api::types::{distance::XorMetric, enr::generate_random_remote_enr};
+    use ethportal_api::types::{
+        distance::XorMetric, node_contact::generate_random_remote_node_contact,
+    };
     use rand::random;
     use rstest::rstest;
 
@@ -257,14 +271,14 @@ mod tests {
 
     #[allow(clippy::zero_repeat_side_effects)]
     #[rstest]
-    #[case(vec![generate_random_remote_enr().1; 0], 0)]
-    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES - 1], NUM_CLOSEST_NODES - 1)]
-    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES], NUM_CLOSEST_NODES)]
-    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES + 1], NUM_CLOSEST_NODES + 1)]
-    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES + NUM_FARTHER_NODES], NUM_CLOSEST_NODES + NUM_FARTHER_NODES)]
-    #[case(vec![generate_random_remote_enr().1; 256], NUM_CLOSEST_NODES + NUM_FARTHER_NODES)]
+    #[case(vec![generate_random_remote_node_contact().1; 0], 0)]
+    #[case(vec![generate_random_remote_node_contact().1; NUM_CLOSEST_NODES - 1], NUM_CLOSEST_NODES - 1)]
+    #[case(vec![generate_random_remote_node_contact().1; NUM_CLOSEST_NODES], NUM_CLOSEST_NODES)]
+    #[case(vec![generate_random_remote_node_contact().1; NUM_CLOSEST_NODES + 1], NUM_CLOSEST_NODES + 1)]
+    #[case(vec![generate_random_remote_node_contact().1; NUM_CLOSEST_NODES + NUM_FARTHER_NODES], NUM_CLOSEST_NODES + NUM_FARTHER_NODES)]
+    #[case(vec![generate_random_remote_node_contact().1; 256], NUM_CLOSEST_NODES + NUM_FARTHER_NODES)]
     fn test_select_put_content_recipients_no_panic(
-        #[case] all_nodes: Vec<Enr>,
+        #[case] all_nodes: Vec<NodeContact>,
         #[case] expected_size: usize,
     ) {
         let put_content_recipients =

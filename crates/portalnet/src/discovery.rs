@@ -12,10 +12,13 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use discv5::{
     enr::{CombinedKey, Enr as Discv5Enr, NodeId},
-    ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
+    ConfigBuilder, Discv5, Event, IpMode, ListenConfig, RequestError, TalkRequest,
 };
 use ethportal_api::{
-    types::{discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec},
+    types::{
+        discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, node_contact::NodeContact,
+        portal_wire::NetworkSpec,
+    },
     utils::bytes::hex_decode,
     version::get_trin_version,
     NodeInfo,
@@ -41,21 +44,12 @@ pub const ENR_PORTAL_CLIENT_KEY: &str = "c";
 
 pub type ProtocolRequest = Vec<u8>;
 
-/// The contact info for a remote node.
-#[derive(Clone, Debug)]
-pub struct NodeAddress {
-    /// The node's ENR.
-    pub enr: Enr,
-    /// The node's observed socket address.
-    pub socket_addr: SocketAddr,
-}
-
 /// Base Node Discovery Protocol v5 layer
 pub struct Discovery {
     /// The inner Discv5 service.
     discv5: Discv5,
     /// A cache of the latest observed `NodeAddress` for a node ID.
-    node_addr_cache: Arc<RwLock<LruCache<NodeId, NodeAddress>>>,
+    node_contact_cache: Arc<RwLock<LruCache<NodeId, NodeContact>>>,
     /// Indicates if the Discv5 service has been started.
     pub started: bool,
     /// The socket address that the Discv5 service listens on.
@@ -172,12 +166,12 @@ impl Discovery {
                 .map_err(|e| format!("Failed to add bootnode enr: {e}"))?;
         }
 
-        let node_addr_cache = LruCache::new(portal_config.node_addr_cache_capacity);
-        let node_addr_cache = Arc::new(RwLock::new(node_addr_cache));
+        let node_contact_cache = LruCache::new(portal_config.node_contact_cache_capacity);
+        let node_contact_cache = Arc::new(RwLock::new(node_contact_cache));
 
         Ok(Self {
             discv5,
-            node_addr_cache,
+            node_contact_cache,
             started: false,
             listen_socket: listen_all_ips,
             network_spec,
@@ -202,7 +196,7 @@ impl Discovery {
 
         let (talk_req_tx, talk_req_rx) = mpsc::channel(TALKREQ_CHANNEL_BUFFER);
 
-        let node_addr_cache = Arc::clone(&self.node_addr_cache);
+        let node_contact_cache = Arc::clone(&self.node_contact_cache);
 
         tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
@@ -222,9 +216,10 @@ impl Discovery {
                             );
                             continue;
                         }
-                        if let Some(old) = node_addr_cache.write().put(
+                        if let Some(old) = node_contact_cache.write().put(
                             enr.node_id(),
-                            NodeAddress {
+                            NodeContact {
+                                public_key: enr.public_key(),
                                 enr: enr.clone(),
                                 socket_addr,
                             },
@@ -298,23 +293,40 @@ impl Discovery {
         self.discv5.add_enr(enr)
     }
 
-    /// Returns the cached `NodeAddress` or `None` if not cached.
-    pub fn cached_node_addr(&self, node_id: &NodeId) -> Option<NodeAddress> {
-        self.node_addr_cache.write().get(node_id).cloned()
+    pub fn try_node_contact_from_enr(&self, enr: Enr) -> anyhow::Result<NodeContact> {
+        let socket_addr = match self.discv5.ip_mode().get_contactable_addr(&enr) {
+            Some(socket_addr) => socket_addr,
+            None => return Err(anyhow!("No contactable address in ENR")),
+        };
+
+        Ok(NodeContact {
+            public_key: enr.public_key(),
+            socket_addr,
+            enr,
+        })
     }
 
-    /// Put a `NodeAddress` into cache. If the key already exists in the cache, then it updates the
+    pub fn ip_mode(&self) -> IpMode {
+        self.discv5.ip_mode()
+    }
+
+    /// Returns the cached `NodeContact` or `None` if not cached.
+    pub fn cached_node_contact(&self, node_id: &NodeId) -> Option<NodeContact> {
+        self.node_contact_cache.write().get(node_id).cloned()
+    }
+
+    /// Put a `NodeContact` into cache. If the key already exists in the cache, then it updates the
     /// key's value and returns the old value. Otherwise, `None` is returned.
-    pub fn put_cached_node_addr(&self, node_addr: NodeAddress) -> Option<NodeAddress> {
-        self.node_addr_cache
+    pub fn put_cached_node_addr(&self, node_contact: NodeContact) -> Option<NodeContact> {
+        self.node_contact_cache
             .write()
-            .put(node_addr.enr.node_id(), node_addr)
+            .put(node_contact.enr.node_id(), node_contact)
     }
 
     /// Sends a TALKREQ message to `enr`.
     pub async fn send_talk_req(
         &self,
-        enr: Enr,
+        node_contact: NodeContact,
         subnetwork: Subnetwork,
         request: ProtocolRequest,
     ) -> Result<Bytes, RequestError> {
@@ -331,7 +343,10 @@ impl Discovery {
             }
         };
 
-        let response = self.discv5.talk_req(enr, protocol, request).await?;
+        let response = self
+            .discv5
+            .talk_req(node_contact.into(), protocol, request)
+            .await?;
         Ok(Bytes::from(response))
     }
 }
@@ -339,7 +354,7 @@ impl Discovery {
 pub struct Discv5UdpSocket {
     talk_request_receiver: mpsc::UnboundedReceiver<TalkRequest>,
     discv5: Arc<Discovery>,
-    enr_cache: Arc<TokioRwLock<LruCache<NodeId, Enr>>>,
+    node_contact_cache: Arc<TokioRwLock<LruCache<NodeId, NodeContact>>>,
     header_oracle: Arc<TokioRwLock<HeaderOracle>>,
 }
 
@@ -348,25 +363,25 @@ impl Discv5UdpSocket {
         discv5: Arc<Discovery>,
         talk_request_receiver: mpsc::UnboundedReceiver<TalkRequest>,
         header_oracle: Arc<TokioRwLock<HeaderOracle>>,
-        enr_cache_capacity: usize,
+        node_contact_cache_capacity: usize,
     ) -> Self {
-        let enr_cache = LruCache::new(enr_cache_capacity);
-        let enr_cache = Arc::new(TokioRwLock::new(enr_cache));
+        let node_contact_cache = LruCache::new(node_contact_cache_capacity);
+        let node_contact_cache = Arc::new(TokioRwLock::new(node_contact_cache));
         Self {
             discv5,
             talk_request_receiver,
-            enr_cache,
+            node_contact_cache,
             header_oracle,
         }
     }
 }
 
-/// A wrapper around `Enr` that implements `ConnectionPeer`.
+/// A wrapper around `NodeContact` that implements `ConnectionPeer`.
 #[derive(Clone)]
-pub struct UtpPeer(pub Enr);
+pub struct UtpPeer(pub NodeContact);
 
 impl Deref for UtpPeer {
-    type Target = Enr;
+    type Target = NodeContact;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -375,7 +390,8 @@ impl Deref for UtpPeer {
 
 impl UtpPeer {
     pub fn client(&self) -> Option<String> {
-        self.get_decodable::<String>(ENR_PORTAL_CLIENT_KEY)
+        self.enr
+            .get_decodable::<String>(ENR_PORTAL_CLIENT_KEY)
             .and_then(|v| v.ok())
     }
 }
@@ -394,12 +410,12 @@ impl ConnectionPeer for UtpPeer {
     type Id = NodeId;
 
     fn id(&self) -> Self::Id {
-        self.node_id()
+        self.enr.node_id()
     }
 
     fn consolidate(a: Self, b: Self) -> Self {
         assert!(a.id() == b.id());
-        if a.seq() >= b.seq() {
+        if a.enr.seq() >= b.enr.seq() {
             a
         } else {
             b
@@ -411,23 +427,30 @@ impl ConnectionPeer for UtpPeer {
 impl AsyncUdpSocket<UtpPeer> for Discv5UdpSocket {
     async fn send_to(&mut self, buf: &[u8], peer: &Peer<UtpPeer>) -> io::Result<usize> {
         let peer_id = *peer.id();
-        let peer_enr = peer.peer().cloned();
+        let peer_node_contact = peer.peer().cloned();
         let discv5 = Arc::clone(&self.discv5);
-        let enr_cache = Arc::clone(&self.enr_cache);
+        let node_contact_cache = Arc::clone(&self.node_contact_cache);
         let header_oracle = Arc::clone(&self.header_oracle);
         let data = buf.to_vec();
         tokio::spawn(async move {
-            let enr = match peer_enr {
-                Some(enr) => enr.0,
-                None => match find_enr(&peer_id, &discv5, enr_cache, header_oracle).await {
-                    Ok(enr) => enr,
-                    Err(err) => {
-                        warn!(%err, "unable to send uTP talk request, ENR not found");
-                        return;
+            let node_contact = match peer_node_contact {
+                Some(node_contact) => node_contact.0,
+                None => {
+                    match find_node_contact(&peer_id, &discv5, node_contact_cache, header_oracle)
+                        .await
+                    {
+                        Ok(node_contact) => node_contact,
+                        Err(err) => {
+                            warn!(%err, "unable to send uTP talk request, NodeContact not found");
+                            return;
+                        }
                     }
-                },
+                }
             };
-            match discv5.send_talk_req(enr, Subnetwork::Utp, data).await {
+            match discv5
+                .send_talk_req(node_contact, Subnetwork::Utp, data)
+                .await
+            {
                 // We drop the talk response because it is ignored in the uTP protocol.
                 Ok(..) => {}
                 Err(err) => match err {
@@ -460,53 +483,92 @@ impl AsyncUdpSocket<UtpPeer> for Discv5UdpSocket {
     }
 }
 
-async fn find_enr(
+async fn find_node_contact(
     node_id: &NodeId,
     discv5: &Arc<Discovery>,
-    enr_cache: Arc<TokioRwLock<LruCache<NodeId, Enr>>>,
+    node_contact_cache: Arc<TokioRwLock<LruCache<NodeId, NodeContact>>>,
     header_oracle: Arc<TokioRwLock<HeaderOracle>>,
-) -> io::Result<Enr> {
-    if let Some(cached_enr) = enr_cache.write().await.get(node_id).cloned() {
-        return Ok(cached_enr);
+) -> io::Result<NodeContact> {
+    if let Some(cached_node_contact) = node_contact_cache.write().await.get(node_id).cloned() {
+        return Ok(cached_node_contact);
     }
 
     if let Some(enr) = discv5.find_enr(node_id) {
-        enr_cache.write().await.put(*node_id, enr.clone());
-        return Ok(enr);
+        let node_contact = discv5.try_node_contact_from_enr(enr).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Wasn't able to find a contactable address in the ENR: {err:?}"),
+            )
+        })?;
+        node_contact_cache
+            .write()
+            .await
+            .put(*node_id, node_contact.clone());
+        return Ok(node_contact);
     }
 
-    if let Some(enr) = discv5.cached_node_addr(node_id) {
-        enr_cache.write().await.put(*node_id, enr.enr.clone());
-        return Ok(enr.enr);
+    if let Some(node_contact) = discv5.cached_node_contact(node_id) {
+        node_contact_cache
+            .write()
+            .await
+            .put(*node_id, node_contact.clone());
+        return Ok(node_contact);
     }
 
     let history_jsonrpc_tx = header_oracle.read().await.history_jsonrpc_tx();
     if let Ok(history_jsonrpc_tx) = history_jsonrpc_tx {
         if let Ok(enr) = HeaderOracle::history_get_enr(node_id, history_jsonrpc_tx).await {
-            enr_cache.write().await.put(*node_id, enr.clone());
-            return Ok(enr);
+            let node_contact = discv5.try_node_contact_from_enr(enr).map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Wasn't able to find a contactable address in the ENR: {err:?}"),
+                )
+            })?;
+            node_contact_cache
+                .write()
+                .await
+                .put(*node_id, node_contact.clone());
+            return Ok(node_contact);
         }
     }
 
     let state_jsonrpc_tx = header_oracle.read().await.state_jsonrpc_tx();
     if let Ok(state_jsonrpc_tx) = state_jsonrpc_tx {
         if let Ok(enr) = HeaderOracle::state_get_enr(node_id, state_jsonrpc_tx).await {
-            enr_cache.write().await.put(*node_id, enr.clone());
-            return Ok(enr);
+            let node_contact = discv5.try_node_contact_from_enr(enr).map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Wasn't able to find a contactable address in the ENR: {err:?}"),
+                )
+            })?;
+            node_contact_cache
+                .write()
+                .await
+                .put(*node_id, node_contact.clone());
+            return Ok(node_contact);
         }
     }
 
     let beacon_jsonrpc_tx = header_oracle.read().await.beacon_jsonrpc_tx();
     if let Ok(beacon_jsonrpc_tx) = beacon_jsonrpc_tx {
         if let Ok(enr) = HeaderOracle::beacon_get_enr(node_id, beacon_jsonrpc_tx).await {
-            enr_cache.write().await.put(*node_id, enr.clone());
-            return Ok(enr);
+            let node_contact = discv5.try_node_contact_from_enr(enr).map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Wasn't able to find a contactable address in the ENR: {err:?}"),
+                )
+            })?;
+            node_contact_cache
+                .write()
+                .await
+                .put(*node_id, node_contact.clone());
+            return Ok(node_contact);
         }
     }
 
     debug!(node_id = %node_id, "uTP packet to unknown target");
     Err(io::Error::new(
         io::ErrorKind::Other,
-        "ENR not found for talk req destination",
+        "NodeContact not found for talk req destination",
     ))
 }

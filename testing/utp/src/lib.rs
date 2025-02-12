@@ -67,6 +67,7 @@ impl RpcServer for TestApp {
             peer_id: src_enr.node_id(),
         };
         self.discovery.add_enr(src_enr.clone()).unwrap();
+        let node_contact = self.discovery.try_node_contact_from_enr(src_enr).unwrap();
 
         let utp = Arc::clone(&self.utp_socket);
         let payload_store = Arc::clone(&self.utp_payload);
@@ -79,7 +80,7 @@ impl RpcServer for TestApp {
                 ..Default::default()
             };
             let mut conn = utp
-                .accept_with_cid(cid, Peer::new(UtpPeer(src_enr)), utp_config)
+                .accept_with_cid(cid, Peer::new(UtpPeer(node_contact)), utp_config)
                 .await
                 .unwrap();
             let mut data = vec![];
@@ -118,6 +119,7 @@ impl RpcServer for TestApp {
             peer_id: dst_enr.node_id(),
         };
         self.discovery.add_enr(dst_enr.clone()).unwrap();
+        let dst_node_contact = self.discovery.try_node_contact_from_enr(dst_enr).unwrap();
 
         let utp = Arc::clone(&self.utp_socket);
         let utp_config = ConnectionConfig {
@@ -129,7 +131,7 @@ impl RpcServer for TestApp {
         };
         tokio::spawn(async move {
             let mut conn = utp
-                .connect_with_cid(cid, Peer::new(UtpPeer(dst_enr)), utp_config)
+                .connect_with_cid(cid, Peer::new(UtpPeer(dst_node_contact)), utp_config)
                 .await
                 .unwrap();
 

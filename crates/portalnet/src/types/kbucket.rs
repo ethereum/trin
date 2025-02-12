@@ -8,7 +8,10 @@ use discv5::{
     },
     ConnectionDirection, ConnectionState, Enr, Key,
 };
-use ethportal_api::types::distance::{Distance, Metric};
+use ethportal_api::types::{
+    distance::{Distance, Metric},
+    node_contact::NodeContact,
+};
 use itertools::Itertools;
 use parking_lot::RwLock;
 use tracing::debug;
@@ -101,7 +104,7 @@ impl SharedKBucketsTable {
     ///
     /// Optionally the connection state can be modified.
     pub fn update_node(&self, node: Node, state: Option<ConnectionState>) -> UpdateResult {
-        let key = Key::from(node.enr.node_id());
+        let key = Key::from(node.enr().node_id());
         self.kbuckets.write().update_node(&key, node, state)
     }
 
@@ -121,7 +124,7 @@ impl SharedKBucketsTable {
 
     /// Attempts to insert or update in the routing table.
     pub fn insert_or_update(&self, node: Node, node_status: NodeStatus) -> InsertResult<NodeId> {
-        let key = Key::from(node.enr.node_id());
+        let key = Key::from(node.enr().node_id());
         self.kbuckets
             .write()
             .insert_or_update(&key, node, node_status)
@@ -133,15 +136,15 @@ impl SharedKBucketsTable {
     /// If node is not in the routing table, insert it with max distance and as disconnected.
     pub fn insert_or_update_discovered_nodes(
         &self,
-        enrs: impl IntoIterator<Item = Enr>,
+        node_contacts: impl IntoIterator<Item = NodeContact>,
     ) -> DiscoveredNodesUpdateResult {
         let mut result = DiscoveredNodesUpdateResult::default();
 
         // Acquire write lock here so that we can perform everything atomically.
         let mut kbuckets = self.kbuckets.write();
 
-        for enr in enrs {
-            let node_id = enr.node_id();
+        for node_contact in node_contacts {
+            let node_id = node_contact.enr.node_id();
 
             let key = Key::from(node_id);
 
@@ -150,8 +153,8 @@ impl SharedKBucketsTable {
             // (a subsequent ping will establish connectivity with the node). Ignore insertion
             // failures.
             if let Some(mut node) = Entry::from(kbuckets.entry(&key)).present_or_pending() {
-                if node.enr.seq() < enr.seq() {
-                    node.set_enr(enr);
+                if node.enr().seq() < node_contact.enr.seq() {
+                    node.set_node_contact(node_contact);
                     if let UpdateResult::Failed(reason) = kbuckets.update_node(&key, node, None) {
                         // The update removed the node because it would violate the incoming peers
                         // condition or a bucket/table filter.
@@ -164,7 +167,7 @@ impl SharedKBucketsTable {
                     }
                 }
             } else {
-                let node = Node::new(enr, Distance::MAX);
+                let node = Node::new(node_contact, Distance::MAX);
                 let status = NodeStatus {
                     state: ConnectionState::Disconnected,
                     direction: ConnectionDirection::Outgoing,
@@ -231,7 +234,7 @@ impl SharedKBucketsTable {
                     continue;
                 }
 
-                result.push(entry.node.value.enr());
+                result.push(entry.node.value.enr().clone());
                 if result.len() >= limit {
                     // We reached the limit, exit early
                     return result;
@@ -254,7 +257,7 @@ impl SharedKBucketsTable {
             // Sort by distance
             .sorted_by_cached_key(|node| target_key.distance(node.key))
             .take(limit)
-            .map(|node| node.value.enr())
+            .map(|node| node.value.enr().clone())
             .collect()
     }
 
@@ -273,12 +276,15 @@ impl SharedKBucketsTable {
             // Sort by distance
             .sorted_by_cached_key(|node| TMetric::distance(content_id, &node.key.preimage().raw()))
             .take(limit)
-            .map(|node| node.value.enr())
+            .map(|node| node.value.enr().clone())
             .collect()
     }
 
     /// Returns all nodes that are connected and interested into provided content id.
-    pub fn interested_enrs<TMetric: Metric>(&self, content_id: &[u8; 32]) -> Vec<Enr> {
+    pub fn interested_node_contacts<TMetric: Metric>(
+        &self,
+        content_id: &[u8; 32],
+    ) -> Vec<NodeContact> {
         self.kbuckets
             .write()
             .iter()
@@ -289,7 +295,7 @@ impl SharedKBucketsTable {
             .filter(|node| {
                 TMetric::distance(content_id, &node.key.preimage().raw()) <= node.value.data_radius
             })
-            .map(|node| node.value.enr())
+            .map(|node| node.value.node_contact())
             .collect()
     }
 
@@ -298,10 +304,10 @@ impl SharedKBucketsTable {
     /// The keys of the resulting map will always contain all `content_ids`. If none of the nodes is
     /// interested into specific content id, it will still be present in the result but the value
     /// associated with it will be empty.
-    pub fn batch_interested_enrs<TMetric: Metric>(
+    pub fn batch_interested_node_contacts<TMetric: Metric>(
         &self,
         content_ids: &[&[u8; 32]],
-    ) -> HashMap<[u8; 32], Vec<Enr>> {
+    ) -> HashMap<[u8; 32], Vec<NodeContact>> {
         let mut result = content_ids
             .iter()
             .map(|content_id| (**content_id, vec![]))
@@ -318,7 +324,7 @@ impl SharedKBucketsTable {
                     result
                         .entry(**content_id)
                         .or_default()
-                        .push(node.value.enr());
+                        .push(node.value.node_contact());
                 }
             }
         }
@@ -339,7 +345,7 @@ impl SharedKBucketsTable {
         self.kbuckets
             .write()
             .iter()
-            .map(|entry| entry.node.value.enr())
+            .map(|entry| entry.node.value.enr().clone())
             .collect()
     }
 }
@@ -366,7 +372,9 @@ mod tests {
         enr::CombinedKey,
         kbucket::{FailureReason, MAX_NODES_PER_BUCKET},
     };
-    use ethportal_api::{generate_random_remote_enr, types::distance::XorMetric};
+    use ethportal_api::types::{
+        distance::XorMetric, node_contact::generate_random_remote_node_contact,
+    };
     use itertools::chain;
 
     use super::*;
@@ -387,35 +395,38 @@ mod tests {
         };
     }
 
-    fn create_kbuckets_table() -> (Enr, SharedKBucketsTable) {
-        let (_, local_enr) = generate_random_remote_enr();
+    fn create_kbuckets_table() -> (NodeContact, SharedKBucketsTable) {
+        let (_, local_node_contact) = generate_random_remote_node_contact();
         let kbuckets = SharedKBucketsTable::new(KBucketsTable::new(
-            Key::from(local_enr.node_id()),
+            Key::from(local_node_contact.enr.node_id()),
             *PENDING_TIMEOUT_SEC,
             MAX_INCOMING_PER_BUCKET,
             /* table_filter= */ None,
             /* bucket_filter= */ None,
         ));
-        (local_enr, kbuckets)
+        (local_node_contact, kbuckets)
     }
 
-    fn generate_random_enr(node_id: impl AsRef<[u8]>, log2_distance: usize) -> Enr {
-        generate_random_enr_with_key(node_id, log2_distance).1
-    }
-
-    fn generate_random_enr_with_key(
+    fn generate_random_node_contact(
         node_id: impl AsRef<[u8]>,
         log2_distance: usize,
-    ) -> (CombinedKey, Enr) {
+    ) -> NodeContact {
+        generate_random_node_contact_with_key(node_id, log2_distance).1
+    }
+
+    fn generate_random_node_contact_with_key(
+        node_id: impl AsRef<[u8]>,
+        log2_distance: usize,
+    ) -> (CombinedKey, NodeContact) {
         if !(250..=256).contains(&log2_distance) {
             panic!("log2_distance not in [250, 256] range");
         }
         let node_id = NodeId::parse(node_id.as_ref()).expect("Expected valid node id");
         loop {
-            let (sk, enr) = generate_random_remote_enr();
-            let distance = XorMetric::distance(&node_id.raw(), &enr.node_id().raw());
+            let (sk, node_contact) = generate_random_remote_node_contact();
+            let distance = XorMetric::distance(&node_id.raw(), &node_contact.enr.node_id().raw());
             if distance.log2() == Some(log2_distance) {
-                return (sk, enr);
+                return (sk, node_contact);
             }
         }
     }
@@ -440,8 +451,8 @@ mod tests {
         fn simple() {
             let (_local_enr, kbuckets) = create_kbuckets_table();
 
-            let (_, enr) = generate_random_remote_enr();
-            let node = Node::new(enr.clone(), Distance::MAX);
+            let (_, node_contact) = generate_random_remote_node_contact();
+            let node = Node::new(node_contact.clone(), Distance::MAX);
             let status = NodeStatus {
                 state: ConnectionState::Connected,
                 direction: ConnectionDirection::Outgoing,
@@ -452,18 +463,21 @@ mod tests {
                 InsertResult::Inserted,
             ));
 
-            assert!(kbuckets.entry(enr.node_id()).present().is_some());
+            assert!(kbuckets
+                .entry(node_contact.enr.node_id())
+                .present()
+                .is_some());
         }
 
         #[test]
         fn full_bucket() {
-            let (local_enr, kbuckets) = create_kbuckets_table();
-            let local_node_id = local_enr.node_id();
+            let (local_node_contact, kbuckets) = create_kbuckets_table();
+            let local_node_id = local_node_contact.enr.node_id();
             let log2_distance = 256;
 
             // Insert into bucket until full
             for _ in 0..MAX_NODES_PER_BUCKET {
-                let enr = generate_random_enr(local_node_id, log2_distance);
+                let enr = generate_random_node_contact(local_node_id, log2_distance);
                 let node = Node::new(enr, Distance::MAX);
                 assert!(matches!(
                     kbuckets.insert_or_update(node, *CONNECTED),
@@ -472,7 +486,7 @@ mod tests {
             }
 
             let node_1 = Node::new(
-                generate_random_enr(local_node_id, log2_distance),
+                generate_random_node_contact(local_node_id, log2_distance),
                 Distance::MAX,
             );
 
@@ -484,7 +498,7 @@ mod tests {
 
             // 2. Change one node to disconnected
             let random_enr = kbuckets
-                .nodes_by_distances(local_enr, &[log2_distance as u16], 1)
+                .nodes_by_distances(local_node_contact.enr, &[log2_distance as u16], 1)
                 .into_iter()
                 .next()
                 .unwrap();
@@ -509,13 +523,13 @@ mod tests {
                 InsertResult::Pending { .. },
             ));
             assert!(matches!(
-                kbuckets.entry(node_1.enr.node_id()),
+                kbuckets.entry(node_1.enr().node_id()),
                 Entry::Pending(_, _),
             ));
 
             // 5. Inserting connected node into full bucket with pending node should fail.
             let node_2 = Node::new(
-                generate_random_enr(local_node_id, log2_distance),
+                generate_random_node_contact(local_node_id, log2_distance),
                 Distance::MAX,
             );
             assert!(matches!(
@@ -526,7 +540,7 @@ mod tests {
             // 6. Waiting PENDING_TIMEOUT_SEC should be enough to insert node_1 into bucket
             sleep(*PENDING_TIMEOUT_SEC);
             assert!(matches!(
-                kbuckets.entry(node_1.enr.node_id()),
+                kbuckets.entry(node_1.enr().node_id()),
                 Entry::Present(_, _)
             ));
         }
@@ -542,22 +556,24 @@ mod tests {
 
             // 1. Initialization - Prepare enrs
 
-            let (secret_key_1, old_enr_1) = generate_random_remote_enr();
-            let node_id_1 = old_enr_1.node_id();
+            let (secret_key_1, old_enr_1) = generate_random_remote_node_contact();
+            let node_id_1 = old_enr_1.enr.node_id();
             let mut new_enr_1 = old_enr_1.clone();
             new_enr_1
+                .enr
                 .set_udp4(DEFAULT_DISCOVERY_PORT, &secret_key_1)
                 .unwrap();
 
-            let (secret_key_2, old_enr_2) = generate_random_remote_enr();
-            let node_id_2 = old_enr_2.node_id();
+            let (secret_key_2, old_enr_2) = generate_random_remote_node_contact();
+            let node_id_2 = old_enr_2.enr.node_id();
             let mut new_enr_2 = old_enr_2.clone();
             new_enr_2
+                .enr
                 .set_udp4(DEFAULT_DISCOVERY_PORT, &secret_key_2)
                 .unwrap();
 
-            let (_, enr_3) = generate_random_remote_enr();
-            let node_id_3 = enr_3.node_id();
+            let (_, enr_3) = generate_random_remote_node_contact();
+            let node_id_3 = enr_3.enr.node_id();
 
             // 2. Insert:
             // - local_enr - should be ignored
@@ -572,11 +588,11 @@ mod tests {
             assert!(result.removed_nodes.is_empty());
             assert!(matches!(
                 kbuckets.entry(node_id_1),
-                Entry::Present(node, status) if node.enr == old_enr_1 && status == *DISCONNECTED,
+                Entry::Present(node, status) if *node.enr() == old_enr_1.enr && status == *DISCONNECTED,
             ));
             assert!(matches!(
                 kbuckets.entry(node_id_2),
-                Entry::Present(node, status) if node.enr == new_enr_2 && status == *DISCONNECTED,
+                Entry::Present(node, status) if *node.enr() == new_enr_2.enr && status == *DISCONNECTED,
             ));
 
             // 3. Update connection status of node_id_1
@@ -586,7 +602,7 @@ mod tests {
             );
             assert!(matches!(
                 kbuckets.entry(node_id_1),
-                Entry::Present(node, status) if node.enr == old_enr_1 && status == *CONNECTED,
+                Entry::Present(node, status) if *node.enr() == old_enr_1.enr && status == *CONNECTED,
             ));
 
             // 4. Insert and Update:
@@ -602,55 +618,58 @@ mod tests {
             assert!(result.removed_nodes.is_empty());
             assert!(matches!(
                 kbuckets.entry(node_id_1),
-                Entry::Present(node, status) if node.enr == new_enr_1 && status == *CONNECTED,
+                Entry::Present(node, status) if *node.enr() == new_enr_1.enr && status == *CONNECTED,
             ));
             assert!(matches!(
                 kbuckets.entry(node_id_2),
-                Entry::Present(node, status) if node.enr == new_enr_2 && status == *DISCONNECTED,
+                Entry::Present(node, status) if *node.enr() == new_enr_2.enr && status == *DISCONNECTED,
             ));
             assert!(matches!(
                 kbuckets.entry(node_id_3),
-                Entry::Present(node, status) if node.enr == enr_3 && status == *DISCONNECTED,
+                Entry::Present(node, status) if *node.enr() == enr_3.enr && status == *DISCONNECTED,
             ));
         }
 
         #[test]
         fn full_bucket() {
-            let (local_enr, kbuckets) = create_kbuckets_table();
-            let local_node_id = local_enr.node_id();
+            let (local_node_contract, kbuckets) = create_kbuckets_table();
+            let local_node_id = local_node_contract.enr.node_id();
             let log2_distance = 256;
 
             // Insert until bucket is full
             for _ in 0..MAX_NODES_PER_BUCKET {
-                let enr_256 = generate_random_enr(local_node_id, log2_distance);
+                let enr_256 = generate_random_node_contact(local_node_id, log2_distance);
                 let _ =
                     kbuckets.insert_or_update(Node::new(enr_256, Distance::ZERO), *DISCONNECTED);
             }
 
             // insert_or_update_discovered_nodes shouldn't do anything
-            let enr = generate_random_enr(local_node_id, log2_distance);
-            let result = kbuckets.insert_or_update_discovered_nodes([enr.clone()]);
+            let node_contact = generate_random_node_contact(local_node_id, log2_distance);
+            let result = kbuckets.insert_or_update_discovered_nodes([node_contact.clone()]);
             assert!(result.inserted_nodes.is_empty());
             assert!(result.removed_nodes.is_empty());
-            assert!(matches!(kbuckets.entry(enr.node_id()), Entry::Absent));
+            assert!(matches!(
+                kbuckets.entry(node_contact.enr.node_id()),
+                Entry::Absent
+            ));
         }
 
         #[test]
         fn pending() {
-            let (local_enr, kbuckets) = create_kbuckets_table();
-            let local_node_id = local_enr.node_id();
+            let (local_node_contact, kbuckets) = create_kbuckets_table();
+            let local_node_id = local_node_contact.enr.node_id();
             let log2_distance = 256;
 
             // Insert until bucket is full
             for _ in 0..MAX_NODES_PER_BUCKET {
-                let enr_256 = generate_random_enr(local_node_id, log2_distance);
+                let enr_256 = generate_random_node_contact(local_node_id, log2_distance);
                 let _ =
                     kbuckets.insert_or_update(Node::new(enr_256, Distance::ZERO), *DISCONNECTED);
             }
 
             // Insert one node as pending
             let (secret_key, mut pending_enr) =
-                generate_random_enr_with_key(local_node_id, log2_distance);
+                generate_random_node_contact_with_key(local_node_id, log2_distance);
             assert!(matches!(
                 kbuckets
                     .insert_or_update(Node::new(pending_enr.clone(), Distance::MAX), *CONNECTED),
@@ -659,12 +678,13 @@ mod tests {
 
             // Check that pending node is updated
             pending_enr
+                .enr
                 .set_udp4(DEFAULT_DISCOVERY_PORT, &secret_key)
                 .unwrap();
             kbuckets.insert_or_update_discovered_nodes([pending_enr.clone()]);
             assert!(matches!(
-                kbuckets.entry(pending_enr.node_id()),
-                Entry::Pending(node, _) if node.enr == pending_enr,
+                kbuckets.entry(pending_enr.enr.node_id()),
+                Entry::Pending(node, _) if *node.enr() == pending_enr.enr,
             ));
         }
     }
@@ -676,24 +696,24 @@ mod tests {
         fn local() {
             let (local_enr, kbuckets) = create_kbuckets_table();
             assert_eq!(
-                kbuckets.nodes_by_distances(local_enr.clone(), &[0], 10),
-                vec![local_enr],
+                kbuckets.nodes_by_distances(local_enr.enr.clone(), &[0], 10),
+                vec![local_enr.enr],
             );
         }
 
         #[test]
         fn closer_first() {
-            let (local_enr, kbuckets) = create_kbuckets_table();
-            let local_node_id = local_enr.node_id();
+            let (local_node_contact, kbuckets) = create_kbuckets_table();
+            let local_node_id = local_node_contact.enr.node_id();
 
             let nodes_per_bucket = 5;
 
             // Add "nodes_per_bucket" nodes at distances 255 (closer) and 256 (farther)
             let closer_nodes = (0..nodes_per_bucket)
-                .map(|_| generate_random_enr(local_node_id, 255))
+                .map(|_| generate_random_node_contact(local_node_id, 255))
                 .collect_vec();
             let farther_nodes = (0..nodes_per_bucket)
-                .map(|_| generate_random_enr(local_node_id, 256))
+                .map(|_| generate_random_node_contact(local_node_id, 256))
                 .collect_vec();
 
             for enr in chain(&closer_nodes, &farther_nodes) {
@@ -703,34 +723,48 @@ mod tests {
 
             // Check that local node is always returned when distance 0 is present
             assert_eq!(
-                kbuckets.nodes_by_distances(local_enr.clone(), &[256, 255, 0], /* limit= */ 1),
-                vec![local_enr.clone()],
+                kbuckets.nodes_by_distances(
+                    local_node_contact.enr.clone(),
+                    &[256, 255, 0],
+                    /* limit= */ 1
+                ),
+                vec![local_node_contact.enr.clone()],
             );
 
             // Check that nodes_by_distances returns closer nodes even if farther distance is first
             // in argument
             assert_same_enrs(
-                kbuckets.nodes_by_distances(local_enr.clone(), &[256, 255], nodes_per_bucket),
-                closer_nodes,
+                kbuckets.nodes_by_distances(
+                    local_node_contact.enr.clone(),
+                    &[256, 255],
+                    nodes_per_bucket,
+                ),
+                closer_nodes
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
             );
 
             // Check that only nodes that correspond to provided distance are returned
             assert_same_enrs(
-                kbuckets.nodes_by_distances(local_enr, &[256], 2 * nodes_per_bucket),
-                farther_nodes,
+                kbuckets.nodes_by_distances(local_node_contact.enr, &[256], 2 * nodes_per_bucket),
+                farther_nodes
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
             );
         }
 
         #[test]
         fn only_connected() {
-            let (local_enr, kbuckets) = create_kbuckets_table();
-            let local_node_id = local_enr.node_id();
+            let (local_node_contact, kbuckets) = create_kbuckets_table();
+            let local_node_id = local_node_contact.enr.node_id();
 
             let nodes_per_bucket = 5;
 
             // Insert closer nodes as disconnected
             let closer_nodes = (0..nodes_per_bucket)
-                .map(|_| generate_random_enr(local_node_id, 255))
+                .map(|_| generate_random_node_contact(local_node_id, 255))
                 .collect_vec();
             for enr in &closer_nodes {
                 let _ =
@@ -739,7 +773,7 @@ mod tests {
 
             // Insert farther nodes as connected
             let farther_nodes = (0..nodes_per_bucket)
-                .map(|_| generate_random_enr(local_node_id, 256))
+                .map(|_| generate_random_node_contact(local_node_id, 256))
                 .collect_vec();
             for enr in &farther_nodes {
                 let _ =
@@ -748,8 +782,15 @@ mod tests {
 
             // Check that only connected (farther) nodes are returned
             assert_same_enrs(
-                kbuckets.nodes_by_distances(local_enr.clone(), &[255, 256], 2 * nodes_per_bucket),
-                farther_nodes,
+                kbuckets.nodes_by_distances(
+                    local_node_contact.enr.clone(),
+                    &[255, 256],
+                    2 * nodes_per_bucket,
+                ),
+                farther_nodes
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
             );
         }
     }
@@ -765,7 +806,7 @@ mod tests {
 
             // Distance 254 and disconnected
             let enr_dis_254_disconnected = (0..nodes_per_distance)
-                .map(|_| generate_random_enr(target_node_id, 254))
+                .map(|_| generate_random_node_contact(target_node_id, 254))
                 .collect_vec();
             for enr in &enr_dis_254_disconnected {
                 let _ =
@@ -774,10 +815,10 @@ mod tests {
 
             // Distances 255 and 256 and connected
             let enr_dis_255_connected = (0..nodes_per_distance)
-                .map(|_| generate_random_enr(target_node_id, 255))
+                .map(|_| generate_random_node_contact(target_node_id, 255))
                 .collect_vec();
             let enr_dis_256_connected = (0..nodes_per_distance)
-                .map(|_| generate_random_enr(target_node_id, 256))
+                .map(|_| generate_random_node_contact(target_node_id, 256))
                 .collect_vec();
             let all_connected = chain(&enr_dis_255_connected, &enr_dis_256_connected)
                 .cloned()
@@ -791,13 +832,19 @@ mod tests {
             // With high limit, all connected are returned
             assert_same_enrs(
                 kbuckets.closest_to_node_id(target_node_id, 3 * nodes_per_distance),
-                all_connected,
+                all_connected
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
             );
 
             // With small limit, closest are returned
             assert_same_enrs(
                 kbuckets.closest_to_node_id(target_node_id, nodes_per_distance),
-                enr_dis_255_connected,
+                enr_dis_255_connected
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
             );
         }
 
@@ -810,7 +857,7 @@ mod tests {
 
             // Distance 254 and disconnected
             let enr_dis_254_disconnected = (0..nodes_per_distance)
-                .map(|_| generate_random_enr(content_id, 254))
+                .map(|_| generate_random_node_contact(content_id, 254))
                 .collect_vec();
             for enr in &enr_dis_254_disconnected {
                 let _ =
@@ -819,10 +866,10 @@ mod tests {
 
             // Distances 255 and 256 and connected
             let enr_dis_255_connected = (0..nodes_per_distance)
-                .map(|_| generate_random_enr(content_id, 255))
+                .map(|_| generate_random_node_contact(content_id, 255))
                 .collect_vec();
             let enr_dis_256_connected = (0..nodes_per_distance)
-                .map(|_| generate_random_enr(content_id, 256))
+                .map(|_| generate_random_node_contact(content_id, 256))
                 .collect_vec();
             let all_connected = chain(&enr_dis_255_connected, &enr_dis_256_connected)
                 .cloned()
@@ -836,18 +883,24 @@ mod tests {
             // With high limit, all connected are returned
             assert_same_enrs(
                 kbuckets.closest_to_content_id::<XorMetric>(&content_id, 3 * nodes_per_distance),
-                all_connected,
+                all_connected
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
             );
 
             // With small limit, closest are returned
             assert_same_enrs(
                 kbuckets.closest_to_content_id::<XorMetric>(&content_id, nodes_per_distance),
-                enr_dis_255_connected,
+                enr_dis_255_connected
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
             );
         }
     }
 
-    mod interested_enrs {
+    mod interested_node_contacts {
         use alloy::primitives::U256;
 
         use super::*;
@@ -858,34 +911,39 @@ mod tests {
             let content_id = NodeId::random().raw();
 
             // Connected node with zero radius
-            let (_, enr_zero_connected) = generate_random_remote_enr();
+            let (_, enr_zero_connected) = generate_random_remote_node_contact();
             let _ = kbuckets
                 .insert_or_update(Node::new(enr_zero_connected, Distance::ZERO), *CONNECTED);
 
             // Connected node with max radius
-            let (_, enr_max_connected) = generate_random_remote_enr();
+            let (_, enr_max_connected) = generate_random_remote_node_contact();
             let _ = kbuckets.insert_or_update(
                 Node::new(enr_max_connected.clone(), Distance::MAX),
                 *CONNECTED,
             );
 
             // Disconnected node with max radius
-            let (_, enr_max_disconnected) = generate_random_remote_enr();
+            let (_, enr_max_disconnected) = generate_random_remote_node_contact();
             let _ = kbuckets.insert_or_update(
                 Node::new(enr_max_disconnected.clone(), Distance::MAX),
                 *DISCONNECTED,
             );
 
             // Connected node at exact distance
-            let (_, enr_exact_connected) = generate_random_remote_enr();
-            let distance = XorMetric::distance(&content_id, &enr_exact_connected.node_id().raw());
+            let (_, enr_exact_connected) = generate_random_remote_node_contact();
+            let distance =
+                XorMetric::distance(&content_id, &enr_exact_connected.enr.node_id().raw());
             let _ = kbuckets
                 .insert_or_update(Node::new(enr_exact_connected.clone(), distance), *CONNECTED);
 
             // Should return only connected nodes with radius that contains content id
             assert_same_enrs(
-                kbuckets.interested_enrs::<XorMetric>(&content_id),
-                vec![enr_max_connected, enr_exact_connected],
+                kbuckets
+                    .interested_node_contacts::<XorMetric>(&content_id)
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
+                vec![enr_max_connected.enr, enr_exact_connected.enr],
             );
         }
 
@@ -895,49 +953,78 @@ mod tests {
 
             // Content ids
             let content_id_1 = NodeId::random().raw();
-            let content_id_2 = generate_random_enr(content_id_1, 256).node_id().raw();
+            let content_id_2 = generate_random_node_contact(content_id_1, 256)
+                .enr
+                .node_id()
+                .raw();
 
             // Node that should contain content_id_1 but not content_id_2
-            let enr = generate_random_enr(content_id_1, 255);
+            let enr = generate_random_node_contact(content_id_1, 255);
             let half_max_distance = Distance::from(U256::MAX.wrapping_shr(1));
             let node = Node::new(enr.clone(), half_max_distance);
             let _ = kbuckets.insert_or_update(node, *CONNECTED);
 
             // Connected node with zero radius, shouldn't be returned
-            let (_, enr_zero_connected) = generate_random_remote_enr();
+            let (_, enr_zero_connected) = generate_random_remote_node_contact();
             let _ = kbuckets
                 .insert_or_update(Node::new(enr_zero_connected, Distance::ZERO), *CONNECTED);
 
             // Disconnected node with max radius, shouldn't be returned
-            let (_, enr_max_disconnected) = generate_random_remote_enr();
+            let (_, enr_max_disconnected) = generate_random_remote_node_contact();
             let _ = kbuckets.insert_or_update(
                 Node::new(enr_max_disconnected.clone(), Distance::MAX),
                 *DISCONNECTED,
             );
 
-            let mut result =
-                kbuckets.batch_interested_enrs::<XorMetric>(&[&content_id_1, &content_id_2]);
+            let mut result = kbuckets
+                .batch_interested_node_contacts::<XorMetric>(&[&content_id_1, &content_id_2]);
             assert_eq!(result.len(), 2);
-            assert_same_enrs(result.remove(&content_id_1).unwrap(), vec![enr.clone()]);
-            assert_same_enrs(result.remove(&content_id_2).unwrap(), vec![]);
+            assert_same_enrs(
+                result
+                    .remove(&content_id_1)
+                    .unwrap()
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
+                vec![enr.enr.clone()],
+            );
+            assert_same_enrs(
+                result
+                    .remove(&content_id_2)
+                    .unwrap()
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
+                vec![],
+            );
 
             // Add connected node with max radius, should always be returned
-            let (_, enr_max_connected) = generate_random_remote_enr();
+            let (_, enr_max_connected) = generate_random_remote_node_contact();
             let _ = kbuckets.insert_or_update(
                 Node::new(enr_max_connected.clone(), Distance::MAX),
                 *CONNECTED,
             );
 
-            let mut result =
-                kbuckets.batch_interested_enrs::<XorMetric>(&[&content_id_1, &content_id_2]);
+            let mut result = kbuckets
+                .batch_interested_node_contacts::<XorMetric>(&[&content_id_1, &content_id_2]);
             assert_eq!(result.len(), 2);
             assert_same_enrs(
-                result.remove(&content_id_1).unwrap(),
-                vec![enr, enr_max_connected.clone()],
+                result
+                    .remove(&content_id_1)
+                    .unwrap()
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
+                vec![enr.enr, enr_max_connected.enr.clone()],
             );
             assert_same_enrs(
-                result.remove(&content_id_2).unwrap(),
-                vec![enr_max_connected],
+                result
+                    .remove(&content_id_2)
+                    .unwrap()
+                    .iter()
+                    .map(|node_contact| node_contact.enr.clone())
+                    .collect_vec(),
+                vec![enr_max_connected.enr],
             );
         }
     }

@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use discv5::{enr::NodeId, rpc::RequestId};
 use ethportal_api::types::{
     enr::Enr,
+    node_contact::NodeContact,
     portal_wire::{Request, Response},
 };
 use futures::channel::oneshot;
@@ -16,7 +17,7 @@ pub enum RequestDirection {
     /// An incoming request from `source`.
     Incoming { id: RequestId, source: NodeId },
     /// An outgoing request to `destination`.
-    Outgoing { destination: Enr },
+    Outgoing { destination: NodeContact },
 }
 
 /// An identifier for an overlay network request. The ID is used to track active outgoing requests.
@@ -68,8 +69,8 @@ impl OverlayRequest {
 
 /// An active outgoing overlay request.
 pub struct ActiveOutgoingRequest {
-    /// The ENR of the destination (target) node.
-    pub destination: Enr,
+    /// The NodeContact of the destination (target) node.
+    pub destination: NodeContact,
     /// An optional responder to send the result of the associated request.
     pub responder: Option<OverlayResponder>,
     pub request: Request,

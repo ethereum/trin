@@ -1837,8 +1837,7 @@ dependencies = [
 [[package]]
 name = "discv5"
 version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4b4e7798d2ff74e29cee344dc490af947ae657d6ab5273dde35d58ce06a4d71"
+source = "git+https://github.com/kolbyml/discv5?rev=2c59223f6b7d668b6667b4105da751d4e8aa5548#2c59223f6b7d668b6667b4105da751d4e8aa5548"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -6710,6 +6709,7 @@ dependencies = [
 name = "trin-bench"
 version = "0.1.0"
 dependencies = [
+ "alloy-rlp",
  "anyhow",
  "clap",
  "e2store",
@@ -6781,6 +6781,7 @@ name = "trin-history"
 version = "0.1.0"
 dependencies = [
  "alloy",
+ "alloy-rlp",
  "anyhow",
  "discv5",
  "env_logger 0.9.3",
@@ -7096,7 +7097,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utp-rs"
 version = "0.1.0-alpha.8"
-source = "git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.16#a4da8630ba0f56eb04a4ead6c374a850724445ac"
+source = "git+https://github.com/ogenev/utp?rev=678f7bf593e4ea7c3f1548a8eb30a16b83af7a97#678f7bf593e4ea7c3f1548a8eb30a16b83af7a97"
 dependencies = [
  "async-trait",
  "delay_map 0.3.0",

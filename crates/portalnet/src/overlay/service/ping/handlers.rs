@@ -16,7 +16,7 @@ pub fn handle_capabilities(
     let Ok(capabilities) = radius_capabilities.capabilities() else {
         warn!(
             protocol = %protocol,
-            request.source = %node.enr.node_id(),
+            request.source = %node.enr().node_id(),
             "Capabilities weren't decoded correctly",
         );
         return None;

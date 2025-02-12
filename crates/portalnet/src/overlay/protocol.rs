@@ -20,6 +20,7 @@ use ethportal_api::{
         distance::{Distance, Metric},
         enr::Enr,
         network::Subnetwork,
+        node_contact::NodeContact,
         ping_extensions::extensions::type_0::ClientInfoRadiusCapabilities,
         portal::PutContentInfo,
         portal_wire::{
@@ -286,8 +287,14 @@ impl<
 
     /// `AddEnr` adds requested `enr` to our kbucket.
     pub fn add_enr(&self, enr: Enr) -> Result<(), OverlayRequestError> {
+        let node_contact = self
+            .discovery
+            .try_node_contact_from_enr(enr)
+            .map_err(|err| {
+                OverlayRequestError::Failure(format!("Unable to add ENR to routing table: {err:?}"))
+            })?;
         match self.kbuckets.insert_or_update(
-            Node::new(enr.clone(), Distance::MAX),
+            Node::new(node_contact, Distance::MAX),
             NodeStatus {
                 state: ConnectionState::Connected,
                 direction: ConnectionDirection::Incoming,
@@ -325,7 +332,7 @@ impl<
         self.kbuckets
             .entry(node_id)
             .present()
-            .map(|node| node.enr)
+            .map(|node| node.enr().clone())
             .ok_or_else(|| OverlayRequestError::Failure("Couldn't get ENR".to_string()))
     }
 
@@ -384,7 +391,18 @@ impl<
             payload,
         };
 
-        let direction = RequestDirection::Outgoing { destination: enr };
+        let node_contact = self
+            .discovery
+            .try_node_contact_from_enr(enr)
+            .map_err(|err| {
+                OverlayRequestError::Failure(format!(
+                    "Unable to locate content on the network: {err:?}"
+                ))
+            })?;
+
+        let direction = RequestDirection::Outgoing {
+            destination: node_contact,
+        };
 
         // Send the request and wait on the response.
         match self
@@ -406,7 +424,17 @@ impl<
         // Construct the request.
         validate_find_nodes_distances(&distances)?;
         let request = FindNodes { distances };
-        let direction = RequestDirection::Outgoing { destination: enr };
+        let node_contact = self
+            .discovery
+            .try_node_contact_from_enr(enr)
+            .map_err(|err| {
+                OverlayRequestError::Failure(format!(
+                    "Unable to locate content on the network: {err:?}"
+                ))
+            })?;
+        let direction = RequestDirection::Outgoing {
+            destination: node_contact,
+        };
 
         // Send the request and wait on the response.
         match self
@@ -429,8 +457,17 @@ impl<
         let request = FindContent {
             content_key: content_key.clone(),
         };
+
+        let node_contact = self
+            .discovery
+            .try_node_contact_from_enr(enr)
+            .map_err(|err| {
+                OverlayRequestError::Failure(format!(
+                    "Unable to locate content on the network: {err:?}"
+                ))
+            })?;
         let direction = RequestDirection::Outgoing {
-            destination: enr.clone(),
+            destination: node_contact.clone(),
         };
         let content_key = TContentKey::try_from_bytes(&content_key).map_err(|err| {
             OverlayRequestError::FailedValidation(format!(
@@ -459,7 +496,7 @@ impl<
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
                         let content = RawContentValue::from(
-                            self.init_find_content_stream(enr, conn_id).await?,
+                            self.init_find_content_stream(node_contact, conn_id).await?,
                         );
                         match self.validate_content(&content_key, &content).await {
                             Ok(_) => Ok((Content::Content(content), true)),
@@ -492,16 +529,16 @@ impl<
     /// Initialize FindContent uTP stream with remote node
     async fn init_find_content_stream(
         &self,
-        enr: Enr,
+        node_contact: NodeContact,
         conn_id: u16,
     ) -> Result<Bytes, OverlayRequestError> {
         let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
             send: conn_id.wrapping_add(1),
-            peer_id: enr.node_id(),
+            peer_id: node_contact.enr.node_id(),
         };
         self.utp_controller
-            .connect_inbound_stream(cid, UtpPeer(enr))
+            .connect_inbound_stream(cid, UtpPeer(node_contact))
             .await
             .map_err(|err| OverlayRequestError::ContentNotFound {
                 message: format!("Unable to locate content on the network: {err:?}"),
@@ -518,9 +555,16 @@ impl<
     ) -> Result<Accept, OverlayRequestError> {
         // Construct the request.
         let request = Request::PopulatedOffer(PopulatedOffer { content_items });
-
+        let node_contact = self
+            .discovery
+            .try_node_contact_from_enr(enr)
+            .map_err(|err| {
+                OverlayRequestError::Failure(format!(
+                    "Unable to locate content on the network: {err:?}"
+                ))
+            })?;
         let direction = RequestDirection::Outgoing {
-            destination: enr.clone(),
+            destination: node_contact,
         };
 
         // Send the request and wait on the response.
@@ -544,9 +588,17 @@ impl<
             content_item: (content_key, content_value),
             result_tx,
         });
+        let node_contact = self
+            .discovery
+            .try_node_contact_from_enr(enr)
+            .map_err(|err| {
+                OverlayRequestError::Failure(format!(
+                    "Unable to locate content on the network: {err:?}"
+                ))
+            })?;
 
         let direction = RequestDirection::Outgoing {
-            destination: enr.clone(),
+            destination: node_contact,
         };
 
         // Send the offer request and wait on the response.

@@ -1,6 +1,7 @@
 use discv5::{enr::NodeId, kbucket::Key, Enr};
 use ethportal_api::{
     types::{
+        node_contact::NodeContact,
         portal_wire::{Content, FindContent, FindNodes, Request},
         query_trace::QueryTrace,
     },

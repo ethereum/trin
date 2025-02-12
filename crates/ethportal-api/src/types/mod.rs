@@ -8,6 +8,7 @@ pub mod enr;
 pub mod execution;
 pub mod jsonrpc;
 pub mod network;
+pub mod node_contact;
 pub mod node_id;
 pub mod ping_extensions;
 pub mod portal;

@@ -1,5 +1,8 @@
 use delay_map::HashMapDelay;
-use ethportal_api::{types::enr::Enr, OverlayContentKey};
+use ethportal_api::{
+    types::{enr::Enr, node_contact::NodeContact},
+    OverlayContentKey,
+};
 use futures::prelude::*;
 use rand::{seq::SliceRandom, thread_rng};
 use tokio::time::Duration;
@@ -10,9 +13,9 @@ const OFFER_QUEUE_TIMEOUT: Duration = Duration::from_secs(120);
 /// A record of peers that have offered a content key.
 struct SeenPeers {
     /// The peer that originally offered the content key.
-    origin: Enr,
+    origin: NodeContact,
     /// A list of subsequent peers that have also offered the content key.
-    fallback: Vec<Enr>,
+    fallback: Vec<NodeContact>,
 }
 
 /// In-memory queue of content keys that have been accepted, and are
@@ -53,17 +56,17 @@ where
     /// If the key is not in the queue, it is added to the queue and returns true.
     /// If the key is in the queue, the seen peer is stored as a fallback, and it returns false.
     /// Also polls for expired items, which will remove them from the queue.
-    pub fn add_key_to_queue(&mut self, content_key: &TContentKey, peer: &Enr) -> bool {
+    pub fn add_key_to_queue(&mut self, content_key: &TContentKey, peer: &NodeContact) -> bool {
         // poll for expired items, which will remove them from the queue
         let _ = future::poll_fn(|cx| self.content_key_map.poll_expired(cx)).now_or_never();
         if let Some(mut seen_peers) = self.content_key_map.remove(content_key) {
             if seen_peers.origin == *peer || seen_peers.fallback.contains(peer) {
                 debug!(
-                    "Received multiple offers containing the same content key: {content_key} from peer: {peer}"
+                    "Received multiple offers containing the same content key: {content_key} from peer: {}", peer.enr
                 );
             } else {
                 debug!(
-                    "Content key: {content_key} already in accept queue, adding peer to fallback list: {peer}"
+                    "Content key: {content_key} already in accept queue, adding peer to fallback list: {}", peer.enr
                 );
                 seen_peers.fallback.push(peer.clone());
             }
@@ -88,7 +91,7 @@ where
     /// Removes a failed content key, and returns a randomly selected
     /// fallback peer to send a fallback FINDCONTENT request.
     /// If no fallback peer is found, it returns None.
-    pub fn process_failed_key(&mut self, content_key: &TContentKey) -> Option<Enr> {
+    pub fn process_failed_key(&mut self, content_key: &TContentKey) -> Option<NodeContact> {
         if let Some(mut seen_peers) = self.content_key_map.remove(content_key) {
             if seen_peers.fallback.is_empty() {
                 debug!("Failed to process content key: {content_key}, no fallback peers found.");
@@ -108,7 +111,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use ethportal_api::{types::enr::generate_random_remote_enr, IdentityContentKey};
+    use ethportal_api::{
+        types::node_contact::generate_random_remote_node_contact, IdentityContentKey,
+    };
 
     use super::*;
 
@@ -116,7 +121,7 @@ mod tests {
     async fn test_remove_key() {
         let mut accept_queue = AcceptQueue::default();
         let content_key = IdentityContentKey::random();
-        let (_, peer) = generate_random_remote_enr();
+        let (_, peer) = generate_random_remote_node_contact();
         assert!(accept_queue.add_key_to_queue(&content_key, &peer));
         assert!(!accept_queue.add_key_to_queue(&content_key, &peer));
         accept_queue.remove_key(&content_key);
@@ -127,8 +132,8 @@ mod tests {
     async fn test_multiple_peers() {
         let mut accept_queue = AcceptQueue::default();
         let content_key = IdentityContentKey::random();
-        let (_, peer1) = generate_random_remote_enr();
-        let (_, peer2) = generate_random_remote_enr();
+        let (_, peer1) = generate_random_remote_node_contact();
+        let (_, peer2) = generate_random_remote_node_contact();
         assert!(accept_queue.add_key_to_queue(&content_key, &peer1));
         assert!(!accept_queue.add_key_to_queue(&content_key, &peer2));
         assert!(!accept_queue.add_key_to_queue(&content_key, &peer1));
@@ -140,8 +145,8 @@ mod tests {
     async fn test_queue_keeps_record_after_duplicate_offers_from_same_peer() {
         let mut accept_queue = AcceptQueue::default();
         let content_key = IdentityContentKey::random();
-        let (_, peer1) = generate_random_remote_enr();
-        let (_, peer2) = generate_random_remote_enr();
+        let (_, peer1) = generate_random_remote_node_contact();
+        let (_, peer2) = generate_random_remote_node_contact();
         assert!(accept_queue.add_key_to_queue(&content_key, &peer1));
         assert!(!accept_queue.add_key_to_queue(&content_key, &peer2));
         // peer1 offers the same content key again
@@ -154,8 +159,8 @@ mod tests {
     async fn test_process_failed_key() {
         let mut accept_queue = AcceptQueue::default();
         let content_key = IdentityContentKey::random();
-        let (_, original_peer) = generate_random_remote_enr();
-        let (_, fallback_peer) = generate_random_remote_enr();
+        let (_, original_peer) = generate_random_remote_node_contact();
+        let (_, fallback_peer) = generate_random_remote_node_contact();
         assert!(accept_queue.add_key_to_queue(&content_key, &original_peer));
         assert!(!accept_queue.add_key_to_queue(&content_key, &fallback_peer));
         let actual_fallback = accept_queue.process_failed_key(&content_key);
@@ -168,9 +173,9 @@ mod tests {
         let content_key1 = IdentityContentKey::random();
         let content_key2 = IdentityContentKey::random();
         let content_key3 = IdentityContentKey::random();
-        let (_, peer1) = generate_random_remote_enr();
-        let (_, peer2) = generate_random_remote_enr();
-        let (_, peer3) = generate_random_remote_enr();
+        let (_, peer1) = generate_random_remote_node_contact();
+        let (_, peer2) = generate_random_remote_node_contact();
+        let (_, peer3) = generate_random_remote_node_contact();
         assert!(accept_queue.add_key_to_queue(&content_key1, &peer1));
         // peer2 is fallback peer for content_key1
         assert!(!accept_queue.add_key_to_queue(&content_key1, &peer2));
@@ -198,7 +203,7 @@ mod tests {
             content_key_map: HashMapDelay::new(Duration::from_secs(1)),
         };
         let content_key = IdentityContentKey::random();
-        let (_, peer) = generate_random_remote_enr();
+        let (_, peer) = generate_random_remote_node_contact();
         assert!(accept_queue.add_key_to_queue(&content_key, &peer));
         tokio::time::sleep(Duration::from_secs(3)).await;
         // validate that the content key has been removed from the queue

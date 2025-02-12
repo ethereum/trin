@@ -17,7 +17,7 @@ use ethportal_api::{
 };
 use portalnet::{
     bootnodes::Bootnodes,
-    config::{PortalnetConfig, NODE_ADDR_CACHE_CAPACITY},
+    config::{PortalnetConfig, NODE_CONTACT_CACHE_CAPACITY},
     constants::{
         DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK, DEFAULT_UTP_TRANSFER_LIMIT,
         DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_WS_PORT,
@@ -433,7 +433,7 @@ impl TrinConfig {
             bootnodes: self.bootnodes.to_enrs(self.network.network()),
             no_stun: self.no_stun,
             no_upnp: self.no_upnp,
-            node_addr_cache_capacity: NODE_ADDR_CACHE_CAPACITY,
+            node_contact_cache_capacity: NODE_CONTACT_CACHE_CAPACITY,
             disable_poke: self.disable_poke,
             trusted_block_root: self.trusted_block_root,
             utp_transfer_limit: self.utp_transfer_limit,

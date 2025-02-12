@@ -7,6 +7,7 @@ use ethportal_api::{
     types::{
         distance::Metric,
         enr::Enr,
+        node_contact::NodeContact,
         ping_extensions::{
             decode::DecodedExtension,
             extension_types::Extensions,
@@ -141,7 +142,7 @@ impl<
             // If the ENR sequence number in pong is less than the ENR sequence number for the
             // routing table entry, then request the node.
             if node.enr().seq() < ping.enr_seq {
-                self.request_node(&node.enr());
+                self.request_node(node.node_contact());
             }
 
             let extension =
@@ -195,8 +196,8 @@ impl<
     /// Processes a Pong response.
     ///
     /// Refreshes the node if necessary. Attempts to mark the node as connected.
-    pub(super) fn process_pong(&self, pong: Pong, source: Enr) {
-        let node_id = source.node_id();
+    pub(super) fn process_pong(&self, pong: Pong, source: NodeContact) {
+        let node_id = source.enr.node_id();
         trace!(
             protocol = %self.protocol,
             response.source = %node_id,
@@ -209,7 +210,7 @@ impl<
         // TODO: Perform update on non-ENR node entry state. See note in `process_ping`.
         if let Some(node) = self.kbuckets.entry(node_id).present_or_pending() {
             if node.enr().seq() < pong.enr_seq {
-                self.request_node(&node.enr());
+                self.request_node(node.node_contact());
             }
 
             let extension =
@@ -218,7 +219,7 @@ impl<
                     Err(err) => {
                         warn!(
                             protocol = %self.protocol,
-                            request.source = %source,
+                            request.source = %source.enr,
                             "Failed to decode custom payload during process_ping: {err:?}",
                         );
                         return;
@@ -228,7 +229,7 @@ impl<
             if !self.ping_extensions.is_supported(extension.clone().into()) {
                 warn!(
                     protocol = %self.protocol,
-                    request.source = %source,
+                    request.source = %source.enr,
                     "Extension type isn't supported on this subnetwork: {extension:?}",
                 );
                 return;
@@ -247,7 +248,7 @@ impl<
                 DecodedExtension::Error(ping_error) => {
                     warn!(
                         protocol = %self.protocol,
-                        request.source = %source,
+                        request.source = %source.enr,
                         "Received an error response from a pong request: {ping_error:?}",
                     );
                     return;
@@ -302,7 +303,7 @@ impl<
     pub(super) fn ping_node(&self, node: Node) {
         trace!(
             protocol = %self.protocol,
-            request.dest = %node.enr.node_id(),
+            request.dest = %node.enr().node_id(),
             "Sending Ping message",
         );
 
@@ -310,7 +311,7 @@ impl<
             self.ping_extensions
                 .latest_mutually_supported_base_extension(capabilities)
         }) {
-            Some(Some(extension)) => self.handle_base_extension(extension, node.enr.node_id()),
+            Some(Some(extension)) => self.handle_base_extension(extension, node.enr().node_id()),
             _ => (0, self.create_capabilities().into()),
         };
 
@@ -322,7 +323,7 @@ impl<
         let request = OverlayRequest::new(
             ping,
             RequestDirection::Outgoing {
-                destination: node.enr.clone(),
+                destination: node.node_contact(),
             },
             None,
             None,

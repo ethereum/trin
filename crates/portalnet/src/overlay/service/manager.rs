@@ -24,6 +24,7 @@ use ethportal_api::{
         distance::{Distance, Metric},
         enr::{Enr, SszEnr},
         network::Subnetwork,
+        node_contact::NodeContact,
         portal_wire::{
             Accept, Content, FindContent, FindNodes, Message, Nodes, Offer, OfferTrace,
             PopulatedOffer, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
@@ -83,7 +84,7 @@ use crate::{
     put_content::propagate_put_content_cross_thread,
     types::{
         kbucket::{DiscoveredNodesUpdateResult, Entry, SharedKBucketsTable},
-        node::Node,
+        node::{self, Node},
     },
     utils::portal_wire,
     utp::{controller::UtpController, timed_semaphore::OwnedTimedSemaphorePermit},
@@ -207,7 +208,15 @@ impl<
 
             // TODO: Decide default data radius, and define a constant. Or if there is an
             // associated database, then look for a radius value there.
-            let node = Node::new(enr, Distance::MAX);
+            let Ok(node_contact) = self.discovery.try_node_contact_from_enr(enr) else {
+                warn!(
+                    protocol = %self.protocol,
+                    bootnode = %node_id,
+                    "Failed to create NodeContact from bootnode ENR",
+                );
+                continue;
+            };
+            let node = Node::new(node_contact, Distance::MAX);
             let state = if set_connected {
                 ConnectionState::Connected
             } else {
@@ -463,11 +472,13 @@ impl<
         match query_event {
             // Send a FINDNODES on behalf of the query.
             QueryEvent::Waiting(query_id, node_id, request) => {
-                // Look up the node's ENR.
-                if let Some(enr) = self.find_enr(&node_id) {
+                // Look up the node's NodeContact.
+                if let Some(node_contact) = self.find_node_contact(&node_id) {
                     let request = OverlayRequest::new(
                         request,
-                        RequestDirection::Outgoing { destination: enr },
+                        RequestDirection::Outgoing {
+                            destination: node_contact,
+                        },
                         None,
                         Some(query_id),
                         None,
@@ -493,7 +504,7 @@ impl<
             QueryEvent::Finished(query_id, mut query_info, query)
             | QueryEvent::TimedOut(query_id, mut query_info, query) => {
                 let result = query.into_result();
-                // Obtain the ENRs for the resulting nodes.
+                // Obtain the NodeContacts for the resulting nodes.
                 let mut found_enrs = Vec::new();
                 for node_id in result.into_iter() {
                     if let Some(position) = query_info
@@ -503,9 +514,9 @@ impl<
                     {
                         let enr = query_info.untrusted_enrs.swap_remove(position);
                         found_enrs.push(enr);
-                    } else if let Some(enr) = self.find_enr(&node_id) {
+                    } else if let Some(node_contact) = self.find_node_contact(&node_id) {
                         // look up from the routing table
-                        found_enrs.push(enr);
+                        found_enrs.push(node_contact.enr.clone());
                     } else {
                         warn!(
                             query.id = %query_id,
@@ -543,13 +554,15 @@ impl<
     ) {
         match query_event {
             QueryEvent::Waiting(query_id, node_id, request) => {
-                if let Some(enr) = self.find_enr(&node_id) {
-                    // If we find the node's ENR, then send the request on behalf of the
+                if let Some(node_contact) = self.find_node_contact(&node_id) {
+                    // If we find the node's NodeContact, then send the request on behalf of the
                     // query. No callback channel is necessary for the request, because the
                     // response will be incorporated into the query.
                     let request = OverlayRequest::new(
                         request,
-                        RequestDirection::Outgoing { destination: enr },
+                        RequestDirection::Outgoing {
+                            destination: node_contact,
+                        },
                         None,
                         Some(query_id),
                         None,
@@ -608,8 +621,8 @@ impl<
                         nodes_to_poke,
                         valid_content_tx,
                     } => {
-                        let source = match self.find_enr(&peer) {
-                            Some(enr) => enr,
+                        let source = match self.find_node_contact(&peer) {
+                            Some(node_contact) => node_contact,
                             _ => {
                                 debug!("Received uTP payload from unknown {peer}");
                                 return;
@@ -620,7 +633,7 @@ impl<
                             let cid = utp_rs::cid::ConnectionId {
                                 recv: connection_id,
                                 send: connection_id.wrapping_add(1),
-                                peer_id: source.node_id(),
+                                peer_id: source.enr.node_id(),
                             };
                             let data = match utp_processing
                                 .utp_controller
@@ -773,7 +786,7 @@ impl<
                 let request = OverlayRequest::new(
                     offer_request,
                     RequestDirection::Outgoing {
-                        destination: node.enr(),
+                        destination: node.node_contact(),
                     },
                     None,
                     None,
@@ -936,19 +949,20 @@ impl<
                     Ok(Content::Content(content))
                 } else {
                     // Generate a connection ID for the uTP connection.
-                    let enr = self.find_enr(source).ok_or_else(|| {
+                    let node_contact = self.find_node_contact(source).ok_or_else(|| {
                         OverlayRequestError::AcceptError(
-                            "handle_find_content: unable to find ENR for NodeId".to_string(),
+                            "handle_find_content: unable to find NodeContact for NodeId"
+                                .to_string(),
                         )
                     })?;
-                    let cid = self.utp_controller.cid(enr.node_id(), false);
+                    let cid = self.utp_controller.cid(node_contact.enr.node_id(), false);
                     let cid_send = cid.send;
 
                     // Wait for an incoming connection with the given CID. Then, write the data
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_controller);
                     tokio::spawn(async move {
-                        utp.accept_outbound_stream(cid, UtpPeer(enr), &content)
+                        utp.accept_outbound_stream(cid, UtpPeer(node_contact), &content)
                             .await;
                         permit.drop();
                     });
@@ -1034,11 +1048,11 @@ impl<
 
         let mut accepted_keys: Vec<TContentKey> = Vec::default();
 
-        // if we're unable to find the ENR for the source node we throw an error
-        // since the enr is required for the accept queue, and it is expected to be present
-        let enr = self.find_enr(source).ok_or_else(|| {
+        // if we're unable to find the NodeContact for the source node we throw an error
+        // since the node_contact is required for the accept queue, and it is expected to be present
+        let node_contact = self.find_node_contact(source).ok_or_else(|| {
             OverlayRequestError::AcceptError(
-                "handle_offer: unable to find ENR for NodeId".to_string(),
+                "handle_offer: unable to find NodeContact for NodeId".to_string(),
             )
         })?;
         for (i, key) in content_keys.iter().enumerate() {
@@ -1055,7 +1069,11 @@ impl<
                 })?;
             if accept {
                 // accept all keys that are successfully added to the queue
-                if self.accept_queue.write().add_key_to_queue(key, &enr) {
+                if self
+                    .accept_queue
+                    .write()
+                    .add_key_to_queue(key, &node_contact)
+                {
                     accepted_keys.push(key.clone());
                 } else {
                     accept = false;
@@ -1080,11 +1098,11 @@ impl<
         // Generate a connection ID for the uTP connection if there is data we would like to
         // accept.
         let enr_str = if enabled!(Level::TRACE) {
-            enr.to_base64()
+            node_contact.enr.to_base64()
         } else {
             String::with_capacity(0)
         };
-        let cid: ConnectionId<NodeId> = self.utp_controller.cid(enr.node_id(), false);
+        let cid: ConnectionId<NodeId> = self.utp_controller.cid(node_contact.enr.node_id(), false);
         let cid_send = cid.send;
 
         let content_keys_string: Vec<String> = content_keys
@@ -1104,7 +1122,7 @@ impl<
 
         let utp_processing = UtpProcessing::from(self);
         tokio::spawn(async move {
-            let peer = UtpPeer(enr);
+            let peer = UtpPeer(node_contact);
             let peer_client = peer.client();
             let data = match utp_processing
                 .utp_controller
@@ -1234,7 +1252,12 @@ impl<
     }
 
     /// Sends a TALK request via Discovery v5 to some destination node.
-    fn send_talk_req(&self, request: Request, request_id: OverlayRequestId, destination: Enr) {
+    fn send_talk_req(
+        &self,
+        request: Request,
+        request_id: OverlayRequestId,
+        destination: NodeContact,
+    ) {
         let discovery = Arc::clone(&self.discovery);
         let response_tx = self.response_tx.clone();
         let protocol = self.protocol;
@@ -1292,9 +1315,9 @@ impl<
             // The node is not in the overlay routing table, so look for the node's ENR in the node
             // address cache. If an entry is found, then attempt to insert the node as a connected
             // peer.
-            if let Some(node_addr) = self.discovery.cached_node_addr(&source) {
+            if let Some(node_contact) = self.discovery.cached_node_contact(&source) {
                 // TODO: Decide default data radius, and define a constant.
-                let node = Node::new(node_addr.enr, Distance::MAX);
+                let node = Node::new(node_contact, Distance::MAX);
                 self.connect_node(node, ConnectionDirection::Incoming);
             }
         }
@@ -1304,19 +1327,19 @@ impl<
     fn process_request_failure(
         &mut self,
         request_id: OverlayRequestId,
-        destination: Enr,
+        destination: NodeContact,
         error: OverlayRequestError,
     ) {
         debug!(
             protocol = %self.protocol,
             request.id = %hex_encode_compact(request_id.to_be_bytes()),
-            request.dest = %destination.node_id(),
+            request.dest = %destination.enr.node_id(),
             error = %error,
             "Request failed",
         );
 
         // Attempt to mark the node as disconnected.
-        let node_id = destination.node_id();
+        let node_id = destination.enr.node_id();
         let _ = self.update_node_connection_state(node_id, ConnectionState::Disconnected);
         // Remove the node from the ping queue.
         self.peers_to_ping.remove(&node_id);
@@ -1326,16 +1349,16 @@ impl<
     fn process_response(
         &mut self,
         response: Response,
-        source: Enr,
+        source: NodeContact,
         request: Request,
         query_id: Option<QueryId>,
         request_permit: Option<OwnedTimedSemaphorePermit>,
     ) {
         // If the node is present in the routing table, but the node is not connected, then
         // use the existing entry's value and direction. Otherwise, build a new entry from
-        // the source ENR and establish a connection in the outgoing direction, because this
+        // the source NodeContact and establish a connection in the outgoing direction, because this
         // node is responding to our request.
-        let (node, status) = match self.kbuckets.entry(source.node_id()) {
+        let (node, status) = match self.kbuckets.entry(source.enr.node_id()) {
             Entry::Present(node, node_status) => (node, node_status),
             Entry::Pending(node, node_status) => (node, node_status),
             _ => {
@@ -1360,12 +1383,12 @@ impl<
             ConnectionState::Disconnected => self.connect_node(node, status.direction),
             ConnectionState::Connected => {
                 match self
-                    .update_node_connection_state(source.node_id(), ConnectionState::Connected)
+                    .update_node_connection_state(source.enr.node_id(), ConnectionState::Connected)
                 {
                     Ok(_) => {}
                     Err(_) => {
                         // If the update fails, then remove the node from the ping queue.
-                        self.peers_to_ping.remove(&source.node_id());
+                        self.peers_to_ping.remove(&source.enr.node_id());
                     }
                 }
             }
@@ -1387,7 +1410,7 @@ impl<
     fn process_accept(
         &self,
         response: Accept,
-        enr: Enr,
+        node_contact: NodeContact,
         offer: Request,
         request_permit: Option<OwnedTimedSemaphorePermit>,
     ) -> anyhow::Result<Accept> {
@@ -1418,14 +1441,14 @@ impl<
         let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
             send: conn_id.wrapping_add(1),
-            peer_id: enr.node_id(),
+            peer_id: node_contact.enr.node_id(),
         };
         let store = Arc::clone(&self.store);
         let response_clone = response.clone();
 
         let utp_controller = Arc::clone(&self.utp_controller);
         tokio::spawn(async move {
-            let peer = UtpPeer(enr);
+            let peer = UtpPeer(node_contact);
             let content_items = match offer {
                 Request::Offer(offer) => {
                     Self::provide_requested_content(store, &response_clone, offer.content_keys)
@@ -1642,7 +1665,7 @@ impl<
                         let cid = utp_rs::cid::ConnectionId {
                             recv: conn_id,
                             send: conn_id.wrapping_add(1),
-                            peer_id: fallback_peer.node_id(),
+                            peer_id: fallback_peer.enr.node_id(),
                         };
                         utp_processing
                             .utp_controller
@@ -1654,19 +1677,18 @@ impl<
             }
             _ => return Err(anyhow!("invalid response")),
         };
-        let validated_content = match Self::validate_and_store_content(
-            content_key,
-            data,
-            utp_processing.clone(),
-        )
-        .await
-        {
-            Some(validated_content) => validated_content,
-            None => {
-                debug!("Fallback FINDCONTENT request to peer {fallback_peer} did not yield valid content");
-                return Ok(());
-            }
-        };
+        let validated_content =
+            match Self::validate_and_store_content(content_key, data, utp_processing.clone()).await
+            {
+                Some(validated_content) => validated_content,
+                None => {
+                    debug!(
+                        "Fallback FINDCONTENT request to peer {} did not yield valid content",
+                        fallback_peer.enr
+                    );
+                    return Ok(());
+                }
+            };
 
         propagate_put_content_cross_thread::<_, TMetric>(
             validated_content,
@@ -1679,7 +1701,7 @@ impl<
 
     /// Update the recorded radius of a node in our routing table.
     pub(super) fn update_node(&self, node: Node) {
-        let node_id = node.enr.node_id();
+        let node_id = node.enr().node_id();
 
         if let UpdateResult::Failed(_) = self.kbuckets.update_node(node, None) {
             error!(
@@ -1690,10 +1712,10 @@ impl<
     }
 
     /// Processes a Nodes response.
-    fn process_nodes(&mut self, nodes: Nodes, source: Enr, query_id: Option<QueryId>) {
+    fn process_nodes(&mut self, nodes: Nodes, source: NodeContact, query_id: Option<QueryId>) {
         trace!(
             protocol = %self.protocol,
-            response.source = %source.node_id(),
+            response.source = %source.enr.node_id(),
             query.id = ?query_id,
             "Processing Nodes message",
         );
@@ -1711,10 +1733,15 @@ impl<
     }
 
     /// Processes a Content response.
-    fn process_content(&mut self, content: Content, source: Enr, query_id: Option<QueryId>) {
+    fn process_content(
+        &mut self,
+        content: Content,
+        source: NodeContact,
+        query_id: Option<QueryId>,
+    ) {
         trace!(
             protocol = %self.protocol,
-            response.source = %source.node_id(),
+            response.source = %source.enr.node_id(),
             "Processing Content message",
         );
         match content {
@@ -1733,7 +1760,7 @@ impl<
                 let enrs: Vec<Enr> = enrs.into_iter().map(|ssz_enr| ssz_enr.into()).collect();
                 self.process_discovered_enrs(enrs.clone());
                 if let Some(query_id) = query_id {
-                    self.advance_find_content_query_with_enrs(&query_id, source, enrs);
+                    self.advance_find_content_query_with_enrs(&query_id, source.enr, enrs);
                 }
             }
         }
@@ -1870,14 +1897,24 @@ impl<
         let local_node_id = self.local_enr().node_id();
 
         // Ignore outself
-        let enrs = enrs
+        let node_contacts = enrs
             .into_iter()
-            .filter(|enr| enr.node_id() != local_node_id);
+            .filter(|enr| enr.node_id() != local_node_id)
+            .filter_map(|enr| match self.discovery.try_node_contact_from_enr(enr) {
+                Ok(contact) => Some(contact),
+                Err(err) => {
+                    warn!("Failed to process discovered ENR: {err}");
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
 
         let DiscoveredNodesUpdateResult {
             inserted_nodes,
             removed_nodes,
-        } = self.kbuckets.insert_or_update_discovered_nodes(enrs);
+        } = self
+            .kbuckets
+            .insert_or_update_discovered_nodes(node_contacts);
 
         for node_id in inserted_nodes {
             self.peers_to_ping.insert(node_id);
@@ -1926,10 +1963,10 @@ impl<
         Ok(content_items)
     }
 
-    /// Advances a find node query (if one is active for the node) using the received ENRs.
+    /// Advances a find node query (if one is active for the node) using the received NodeContacts.
     /// Does nothing if called with a node_id that does not have a corresponding active query
     /// request.
-    fn advance_find_node_query(&mut self, source: Enr, enrs: Vec<Enr>, query_id: QueryId) {
+    fn advance_find_node_query(&mut self, source: NodeContact, enrs: Vec<Enr>, query_id: QueryId) {
         // Check whether this request was sent on behalf of a query.
         // If so, advance the query with the returned data.
         let local_node_id = self.local_enr().node_id();
@@ -1944,7 +1981,7 @@ impl<
                 }
             }
             query.on_success(
-                &source.node_id(),
+                &source.enr.node_id(),
                 enrs.iter().map(|enr| enr.into()).collect(),
             );
         }
@@ -1995,16 +2032,16 @@ impl<
     fn advance_find_content_query_with_connection_id(
         &mut self,
         query_id: &QueryId,
-        source: Enr,
+        source: NodeContact,
         utp: u16,
     ) {
         if let Some((query_info, query)) = self.find_content_query_pool.get_mut(*query_id) {
             if let Some(trace) = &mut query_info.trace {
-                trace.node_responded_with_content(&source);
+                trace.node_responded_with_content(&source.enr);
             }
             // Mark the query successful for the source of the response with the connection id.
             query.on_success(
-                &source.node_id(),
+                &source.enr.node_id(),
                 FindContentQueryResponse::ConnectionId(utp),
             );
         }
@@ -2014,30 +2051,28 @@ impl<
     fn advance_find_content_query_with_content(
         &mut self,
         query_id: &QueryId,
-        source: Enr,
+        source: NodeContact,
         content: RawContentValue,
     ) {
         let pool = &mut self.find_content_query_pool;
         if let Some((query_info, query)) = pool.get_mut(*query_id) {
             if let Some(trace) = &mut query_info.trace {
-                trace.node_responded_with_content(&source);
+                trace.node_responded_with_content(&source.enr);
             }
             // Mark the query successful for the source of the response with the content.
             query.on_success(
-                &source.node_id(),
+                &source.enr.node_id(),
                 FindContentQueryResponse::Content(content),
             );
         }
     }
 
     /// Submits a request for the node info of a destination (target) node.
-    pub(super) fn request_node(&self, destination: &Enr) {
+    pub(super) fn request_node(&self, destination: NodeContact) {
         let find_nodes = Request::FindNodes(FindNodes { distances: vec![0] });
         let request = OverlayRequest::new(
             find_nodes,
-            RequestDirection::Outgoing {
-                destination: destination.clone(),
-            },
+            RequestDirection::Outgoing { destination },
             None,
             None,
             None,
@@ -2047,7 +2082,7 @@ impl<
 
     /// Attempts to insert a newly connected node or update an existing node to connected.
     fn connect_node(&mut self, node: Node, connection_direction: ConnectionDirection) {
-        let node_id = node.enr.node_id();
+        let node_id = node.enr().node_id();
         let status = NodeStatus {
             state: ConnectionState::Connected,
             direction: connection_direction,
@@ -2273,23 +2308,25 @@ impl<
         );
     }
 
-    /// Returns an ENR if one is known for the given NodeId.
-    pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
+    /// Returns an NodeContact if one is known for the given NodeId.
+    pub fn find_node_contact(&self, node_id: &NodeId) -> Option<NodeContact> {
         // Check whether we know this node id in our X's Portal Network's routing table.
         if let Some(node) = self.kbuckets.entry(*node_id).present_or_pending() {
-            return Some(node.enr);
+            return Some(node.node_contact());
         }
 
         // Check whether this node id is in our discv5 routing table
         if let Some(enr) = self.discovery.find_enr(node_id) {
-            debug!(node_id=%node_id, enr=%enr, "#1596: discv5 routing table");
-            return Some(enr);
+            if let Ok(node_contact) = self.discovery.try_node_contact_from_enr(enr) {
+                debug!(node_id=%node_id, enr=%node_contact.enr, "#1596: discv5 routing table");
+                return Some(node_contact);
+            }
         }
 
         // Check whether this node id is in our discovery ENR cache
-        if let Some(node_addr) = self.discovery.cached_node_addr(node_id) {
-            debug!(node_id=%node_id, enr=?node_addr, "#1596: cached node addr");
-            return Some(node_addr.enr);
+        if let Some(node_contact) = self.discovery.cached_node_contact(node_id) {
+            debug!(node_id=%node_id, enr=?node_contact.enr, "#1596: cached node addr");
+            return Some(node_contact);
         }
 
         // Check the existing find node queries for the ENR.
@@ -2299,8 +2336,10 @@ impl<
                 .iter()
                 .find(|v| v.node_id() == *node_id)
             {
-                debug!(node_id=%node_id, enr=%enr, "#1596: node query_pool");
-                return Some(enr.clone());
+                if let Ok(node_contact) = self.discovery.try_node_contact_from_enr(enr.clone()) {
+                    debug!(node_id=%node_id, enr=%enr, "#1596: node query_pool");
+                    return Some(node_contact);
+                }
             }
         }
 
@@ -2311,8 +2350,10 @@ impl<
                 .iter()
                 .find(|v| v.node_id() == *node_id)
             {
-                debug!(node_id=%node_id, enr=%enr, "#1596: content query_pool");
-                return Some(enr.clone());
+                if let Ok(node_contact) = self.discovery.try_node_contact_from_enr(enr.clone()) {
+                    debug!(node_id=%node_id, enr=%enr, "#1596: content query_pool");
+                    return Some(node_contact);
+                }
             }
         }
 
@@ -2462,7 +2503,7 @@ mod tests {
     use ethportal_api::types::{
         content_key::overlay::IdentityContentKey,
         distance::XorMetric,
-        enr::generate_random_remote_enr,
+        node_contact::generate_random_remote_node_contact,
         ping_extensions::extensions::type_0::ClientInfoRadiusCapabilities,
         portal_wire::{Ping, Pong, MAINNET},
     };
@@ -2482,7 +2523,7 @@ mod tests {
     use crate::{
         config::PortalnetConfig,
         constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_UTP_TRANSFER_LIMIT},
-        discovery::{Discovery, NodeAddress},
+        discovery::Discovery,
         overlay::{config::OverlayConfig, ping_extensions::MockPingExtension},
     };
 
@@ -2588,8 +2629,8 @@ mod tests {
     async fn process_ping_source_in_table_higher_enr_seq() {
         let mut service = task::spawn(build_service());
 
-        let (_, source) = generate_random_remote_enr();
-        let node_id = source.node_id();
+        let (_, source) = generate_random_remote_node_contact();
+        let node_id = source.enr.node_id();
         let status = NodeStatus {
             state: ConnectionState::Connected,
             direction: ConnectionDirection::Outgoing,
@@ -2601,7 +2642,7 @@ mod tests {
         let _ = service.kbuckets.insert_or_update(node, status);
 
         let ping = Ping {
-            enr_seq: source.seq() + 1,
+            enr_seq: source.enr.seq() + 1,
             payload_type: 0,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
@@ -2646,12 +2687,12 @@ mod tests {
     async fn process_ping_source_not_in_table() {
         let mut service = task::spawn(build_service());
 
-        let (_, source) = generate_random_remote_enr();
-        let node_id = source.node_id();
+        let (_, source) = generate_random_remote_node_contact();
+        let node_id = source.enr.node_id();
         let data_radius = Distance::MAX;
 
         let ping = Ping {
-            enr_seq: source.seq(),
+            enr_seq: source.enr.seq(),
             payload_type: 0,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
@@ -2670,8 +2711,8 @@ mod tests {
     async fn process_request_failure() {
         let mut service = task::spawn(build_service());
 
-        let (_, destination) = generate_random_remote_enr();
-        let node_id = destination.node_id();
+        let (_, destination) = generate_random_remote_node_contact();
+        let node_id = destination.enr.node_id();
         let status = NodeStatus {
             state: ConnectionState::Connected,
             direction: ConnectionDirection::Outgoing,
@@ -2705,7 +2746,7 @@ mod tests {
     async fn process_pong_source_in_table_higher_enr_seq() {
         let mut service = task::spawn(build_service());
 
-        let (_, source) = generate_random_remote_enr();
+        let (_, source) = generate_random_remote_node_contact();
         let status = NodeStatus {
             state: ConnectionState::Connected,
             direction: ConnectionDirection::Outgoing,
@@ -2717,7 +2758,7 @@ mod tests {
         let _ = service.kbuckets.insert_or_update(node, status);
 
         let pong = Pong {
-            enr_seq: source.seq() + 1,
+            enr_seq: source.enr.seq() + 1,
             payload_type: 0,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
@@ -2762,11 +2803,11 @@ mod tests {
     async fn process_pong_source_not_in_table() {
         let mut service = task::spawn(build_service());
 
-        let (_, source) = generate_random_remote_enr();
+        let (_, source) = generate_random_remote_node_contact();
         let data_radius = Distance::MAX;
 
         let pong = Pong {
-            enr_seq: source.seq(),
+            enr_seq: source.enr.seq(),
             payload_type: 0,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
@@ -2805,15 +2846,15 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         // Generate random ENRs to simulate.
-        let (_, enr1) = generate_random_remote_enr();
-        let (_, enr2) = generate_random_remote_enr();
+        let (_, enr1) = generate_random_remote_node_contact();
+        let (_, enr2) = generate_random_remote_node_contact();
 
-        let enrs: Vec<Enr> = vec![enr1.clone(), enr2.clone()];
+        let enrs: Vec<Enr> = vec![enr1.enr.clone(), enr2.enr.clone()];
         service.process_discovered_enrs(enrs);
 
         // Check routing table for first ENR.
         // Node should be present in a disconnected state in the outgoing direction.
-        match service.kbuckets.entry(enr1.node_id()) {
+        match service.kbuckets.entry(enr1.enr.node_id()) {
             Entry::Present(_node, status) => {
                 assert_eq!(ConnectionState::Disconnected, status.state);
                 assert_eq!(ConnectionDirection::Outgoing, status.direction);
@@ -2823,7 +2864,7 @@ mod tests {
 
         // Check routing table for second ENR.
         // Node should be present in a disconnected state in the outgoing direction.
-        match service.kbuckets.entry(enr2.node_id()) {
+        match service.kbuckets.entry(enr2.enr.node_id()) {
             Entry::Present(_node, status) => {
                 assert_eq!(ConnectionState::Disconnected, status.state);
                 assert_eq!(ConnectionDirection::Outgoing, status.direction);
@@ -2833,11 +2874,11 @@ mod tests {
 
         // Check ping queue for first ENR.
         // Key for node should be present.
-        assert!(service.peers_to_ping.contains_key(&enr1.node_id()));
+        assert!(service.peers_to_ping.contains_key(&enr1.enr.node_id()));
 
         // Check ping queue for second ENR.
         // Key for node should be present.
-        assert!(service.peers_to_ping.contains_key(&enr2.node_id()));
+        assert!(service.peers_to_ping.contains_key(&enr2.enr.node_id()));
     }
 
     #[test_log::test(tokio::test)]
@@ -2846,11 +2887,11 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         // Generate random ENRs to simulate.
-        let (sk1, mut enr1) = generate_random_remote_enr();
-        let (_, enr2) = generate_random_remote_enr();
+        let (sk1, mut enr1) = generate_random_remote_node_contact();
+        let (_, enr2) = generate_random_remote_node_contact();
 
-        let node_id_1 = enr1.node_id();
-        let node_id_2 = enr2.node_id();
+        let node_id_1 = enr1.enr.node_id();
+        let node_id_2 = enr2.enr.node_id();
 
         let status = NodeStatus {
             state: ConnectionState::Connected,
@@ -2869,23 +2910,23 @@ mod tests {
 
         // Modify first ENR to increment sequence number.
         let updated_udp: u16 = DEFAULT_DISCOVERY_PORT;
-        let _ = enr1.set_udp4(updated_udp, &sk1);
-        assert_ne!(1, enr1.seq());
+        let _ = enr1.enr.set_udp4(updated_udp, &sk1);
+        assert_ne!(1, enr1.enr.seq());
 
-        let enrs: Vec<Enr> = vec![enr1, enr2];
+        let enrs: Vec<Enr> = vec![enr1.enr.clone(), enr2.enr.clone()];
         service.process_discovered_enrs(enrs);
 
         // Check routing table for first ENR.
         // Node should be present with ENR sequence number equal to 2.
         match service.kbuckets.entry(node_id_1).present() {
-            Some(node) => assert_eq!(2, node.enr.seq()),
+            Some(node) => assert_eq!(2, node.enr().seq()),
             _ => panic!(),
         };
 
         // Check routing table for second ENR.
         // Node should be present with ENR sequence number equal to 1.
         match service.kbuckets.entry(node_id_2).present() {
-            Some(node) => assert_eq!(1, node.enr.seq()),
+            Some(node) => assert_eq!(1, node.enr().seq()),
             _ => panic!(),
         };
     }
@@ -2903,11 +2944,11 @@ mod tests {
             direction: ConnectionDirection::Outgoing,
         };
 
-        let (_, enr) = generate_random_remote_enr();
-        let peer = Node::new(enr.clone(), Distance::MAX);
+        let (_, node_contact) = generate_random_remote_node_contact();
+        let peer = Node::new(node_contact.clone(), Distance::MAX);
         let _ = service.kbuckets.insert_or_update(peer.clone(), status);
 
-        let peer_node_ids: Vec<NodeId> = vec![peer.enr.node_id()];
+        let peer_node_ids: Vec<NodeId> = vec![peer.enr().node_id()];
 
         // Node has maximum radius, so there should be one offer in the channel.
         OverlayService::<
@@ -2930,7 +2971,7 @@ mod tests {
             assert!(matches!(req.request, Request::PopulatedOffer { .. }));
             assert_eq!(
                 RequestDirection::Outgoing {
-                    destination: peer.enr()
+                    destination: peer.node_contact()
                 },
                 req.direction
             );
@@ -2948,10 +2989,10 @@ mod tests {
         let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
         let content = RawContentValue::from_str("0xef").unwrap();
 
-        let (_, enr1) = generate_random_remote_enr();
-        let (_, enr2) = generate_random_remote_enr();
+        let (_, enr1) = generate_random_remote_node_contact();
+        let (_, enr2) = generate_random_remote_node_contact();
         let peers = [enr1, enr2];
-        let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.node_id()).collect();
+        let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.enr.node_id()).collect();
 
         // No nodes in the routing table, so no commands should be in the channel.
         OverlayService::<
@@ -2985,17 +3026,17 @@ mod tests {
         };
 
         // The first node has a maximum radius, so the content SHOULD be offered.
-        let (_, enr1) = generate_random_remote_enr();
+        let (_, enr1) = generate_random_remote_node_contact();
         let peer1 = Node::new(enr1.clone(), Distance::MAX);
         let _ = service.kbuckets.insert_or_update(peer1.clone(), status);
 
         // The second node has a radius of zero, so the content SHOULD NOT not be offered.
-        let (_, enr2) = generate_random_remote_enr();
+        let (_, enr2) = generate_random_remote_node_contact();
         let peer2 = Node::new(enr2.clone(), Distance::from(U256::ZERO));
         let _ = service.kbuckets.insert_or_update(peer2.clone(), status);
 
         let peers = vec![peer1.clone(), peer2];
-        let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.enr.node_id()).collect();
+        let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.enr().node_id()).collect();
 
         // One offer should be in the channel for the maximum radius node.
         OverlayService::<
@@ -3018,7 +3059,7 @@ mod tests {
             assert!(matches!(req.request, Request::PopulatedOffer { .. }));
             assert_eq!(
                 RequestDirection::Outgoing {
-                    destination: peer1.enr()
+                    destination: peer1.node_contact()
                 },
                 req.direction
             );
@@ -3033,8 +3074,8 @@ mod tests {
     async fn request_node() {
         let mut service = task::spawn(build_service());
 
-        let (_, destination) = generate_random_remote_enr();
-        service.request_node(&destination);
+        let (_, destination) = generate_random_remote_node_contact();
+        service.request_node(destination.clone());
 
         let command = assert_ready!(poll_command_rx!(service));
         assert!(command.is_some());
@@ -3068,7 +3109,7 @@ mod tests {
     async fn ping_node() {
         let mut service = task::spawn(build_service());
 
-        let (_, destination) = generate_random_remote_enr();
+        let (_, destination) = generate_random_remote_node_contact();
         service.ping_node(Node::new(destination.clone(), Distance::MAX));
 
         let command = assert_ready!(poll_command_rx!(service));
@@ -3096,11 +3137,11 @@ mod tests {
     async fn connect_node() {
         let mut service = task::spawn(build_service());
 
-        let (_, enr) = generate_random_remote_enr();
-        let node_id = enr.node_id();
+        let (_, node_contact) = generate_random_remote_node_contact();
+        let node_id = node_contact.enr.node_id();
 
         let data_radius = Distance::MAX;
-        let node = Node::new(enr, data_radius);
+        let node = Node::new(node_contact, data_radius);
         let connection_direction = ConnectionDirection::Outgoing;
 
         assert!(!service.peers_to_ping.contains_key(&node_id));
@@ -3124,11 +3165,11 @@ mod tests {
     async fn update_node_connection_state_disconnected_to_connected() {
         let mut service = task::spawn(build_service());
 
-        let (_, enr) = generate_random_remote_enr();
-        let node_id = enr.node_id();
+        let (_, node_contact) = generate_random_remote_node_contact();
+        let node_id = node_contact.enr.node_id();
 
         let data_radius = Distance::MAX;
-        let node = Node::new(enr, data_radius);
+        let node = Node::new(node_contact, data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3162,11 +3203,11 @@ mod tests {
     async fn update_node_connection_state_connected_to_disconnected() {
         let mut service = task::spawn(build_service());
 
-        let (_, enr) = generate_random_remote_enr();
-        let node_id = enr.node_id();
+        let (_, node_contact) = generate_random_remote_node_contact();
+        let node_id = node_contact.enr.node_id();
 
         let data_radius = Distance::MAX;
-        let node = Node::new(enr, data_radius);
+        let node = Node::new(node_contact, data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3208,8 +3249,8 @@ mod tests {
         let mut enrs: Vec<SszEnr> = Vec::new();
         for _ in 0..original_nodes_size {
             // Generates an ENR of size 63 bytes.
-            let (_, enr) = generate_random_remote_enr();
-            enrs.push(SszEnr::new(enr));
+            let (_, node_contact) = generate_random_remote_node_contact();
+            enrs.push(SszEnr::new(node_contact.enr));
         }
 
         pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_NODES_ENRS_SIZE);
@@ -3221,12 +3262,12 @@ mod tests {
     async fn test_init_find_nodes_query() {
         let mut service = task::spawn(build_service());
 
-        let (_, bootnode1) = generate_random_remote_enr();
-        let (_, bootnode2) = generate_random_remote_enr();
-        let bootnodes = vec![bootnode1.clone(), bootnode2.clone()];
+        let (_, bootnode1) = generate_random_remote_node_contact();
+        let (_, bootnode2) = generate_random_remote_node_contact();
+        let bootnodes = vec![bootnode1.enr.clone(), bootnode2.enr.clone()];
 
-        let (_, target_enr) = generate_random_remote_enr();
-        let target_node_id = target_enr.node_id();
+        let (_, target_node_contact) = generate_random_remote_node_contact();
+        let target_node_id = target_node_contact.enr.node_id();
 
         assert_eq!(service.find_node_query_pool.iter().count(), 0);
 
@@ -3240,8 +3281,8 @@ mod tests {
         let pool = &mut service.find_node_query_pool;
         let (query_info, query) = pool.iter().next().unwrap();
 
-        assert!(query_info.untrusted_enrs.contains(&bootnode1));
-        assert!(query_info.untrusted_enrs.contains(&bootnode2));
+        assert!(query_info.untrusted_enrs.contains(&bootnode1.enr));
+        assert!(query_info.untrusted_enrs.contains(&bootnode2.enr));
         match query_info.query_type {
             QueryType::FindNode {
                 target,
@@ -3261,12 +3302,12 @@ mod tests {
     async fn test_advance_findnodes_query() {
         let mut service = build_service();
 
-        let (_, bootnode) = generate_random_remote_enr();
-        let bootnodes = vec![bootnode.clone()];
-        let bootnode_node_id = bootnode.node_id();
+        let (_, bootnode) = generate_random_remote_node_contact();
+        let bootnodes = vec![bootnode.enr.clone()];
+        let bootnode_node_id = bootnode.enr.node_id();
 
-        let (_, target_enr) = generate_random_remote_enr();
-        let target_node_id = target_enr.node_id();
+        let (_, target_node_contact) = generate_random_remote_node_contact();
+        let target_node_id = target_node_contact.enr.node_id();
 
         service.add_bootnodes(bootnodes, true);
         service.query_num_results = 3;
@@ -3299,14 +3340,14 @@ mod tests {
         }
 
         // Create two ENRs to use as dummy responses to the query from the bootnode.
-        let (_, enr1) = generate_random_remote_enr();
-        let (_, enr2) = generate_random_remote_enr();
-        let node_id_1 = enr1.node_id();
-        let node_id_2 = enr2.node_id();
+        let (_, enr1) = generate_random_remote_node_contact();
+        let (_, enr2) = generate_random_remote_node_contact();
+        let node_id_1 = enr1.enr.node_id();
+        let node_id_2 = enr2.enr.node_id();
 
         service.advance_find_node_query(
             bootnode.clone(),
-            vec![enr1.clone(), enr2.clone()],
+            vec![enr1.enr.clone(), enr2.enr.clone()],
             QueryId(0),
         );
 
@@ -3350,8 +3391,8 @@ mod tests {
             _ => panic!(),
         };
 
-        service.advance_find_node_query(enr1.clone(), vec![enr2.clone()], QueryId(0));
-        service.advance_find_node_query(enr2.clone(), vec![enr1.clone()], QueryId(0));
+        service.advance_find_node_query(enr1.clone(), vec![enr2.enr.clone()], QueryId(0));
+        service.advance_find_node_query(enr2.clone(), vec![enr1.enr.clone()], QueryId(0));
 
         let event = OverlayService::<
             IdentityContentKey,
@@ -3374,9 +3415,9 @@ mod tests {
                 assert!(results.contains(&bootnode_node_id));
 
                 let untrusted_enrs = query_info.untrusted_enrs;
-                assert!(untrusted_enrs.contains(&enr1));
-                assert!(untrusted_enrs.contains(&enr2));
-                assert!(untrusted_enrs.contains(&bootnode));
+                assert!(untrusted_enrs.contains(&enr1.enr));
+                assert!(untrusted_enrs.contains(&enr2.enr));
+                assert!(untrusted_enrs.contains(&bootnode.enr));
             }
             _ => panic!(),
         }
@@ -3386,12 +3427,12 @@ mod tests {
     async fn test_find_enrs() {
         let mut service = task::spawn(build_service());
 
-        let (_, bootnode) = generate_random_remote_enr();
-        let bootnodes = vec![bootnode.clone()];
-        let bootnode_node_id = bootnode.node_id();
+        let (_, bootnode) = generate_random_remote_node_contact();
+        let bootnodes = vec![bootnode.enr.clone()];
+        let bootnode_node_id = bootnode.enr.node_id();
 
-        let (_, target_enr) = generate_random_remote_enr();
-        let target_node_id = target_enr.node_id();
+        let (_, target_node_contact) = generate_random_remote_node_contact();
+        let target_node_id = target_node_contact.enr.node_id();
 
         service.add_bootnodes(bootnodes, true);
 
@@ -3406,38 +3447,39 @@ mod tests {
         >::query_event_poll(&mut service.find_node_query_pool)
         .await;
 
-        let (_, enr1) = generate_random_remote_enr();
-        let (_, enr2) = generate_random_remote_enr();
-        let node_id_1 = enr1.node_id();
-        let node_id_2 = enr2.node_id();
+        let (_, enr1) = generate_random_remote_node_contact();
+        let (_, enr2) = generate_random_remote_node_contact();
+        let node_id_1 = enr1.enr.node_id();
+        let node_id_2 = enr2.enr.node_id();
 
         service.advance_find_node_query(
             bootnode.clone(),
-            vec![enr1.clone(), enr2.clone()],
+            vec![enr1.enr.clone(), enr2.enr.clone()],
             QueryId(0),
         );
 
-        let found_bootnode_enr = service.find_enr(&bootnode_node_id).unwrap();
+        let found_bootnode_enr = service.find_node_contact(&bootnode_node_id).unwrap();
         assert_eq!(found_bootnode_enr, bootnode);
 
-        let found_enr1 = service.find_enr(&node_id_1).unwrap();
+        let found_enr1 = service.find_node_contact(&node_id_1).unwrap();
         assert_eq!(found_enr1, enr1);
 
-        let found_enr2 = service.find_enr(&node_id_2).unwrap();
+        let found_enr2 = service.find_node_contact(&node_id_2).unwrap();
         assert_eq!(found_enr2, enr2);
 
         // Test discovery node address cache
-        let (_, enr3) = generate_random_remote_enr();
-        let node_id_3 = enr3.node_id();
+        let (_, enr3) = generate_random_remote_node_contact();
+        let node_id_3 = enr3.enr.node_id();
 
-        let node_addr = NodeAddress {
-            enr: enr3.clone(),
-            socket_addr: SocketAddr::V4(enr3.udp4_socket().unwrap()),
+        let node_addr = NodeContact {
+            public_key: enr3.enr.public_key(),
+            enr: enr3.enr.clone(),
+            socket_addr: SocketAddr::V4(enr3.enr.udp4_socket().unwrap()),
         };
 
         service.discovery.put_cached_node_addr(node_addr);
 
-        let found_enr3 = service.find_enr(&node_id_3).unwrap();
+        let found_enr3 = service.find_node_contact(&node_id_3).unwrap();
         assert_eq!(found_enr3, enr3);
     }
 
@@ -3445,10 +3487,10 @@ mod tests {
     async fn init_find_content_query() {
         let mut service = task::spawn(build_service());
 
-        let (_, bootnode_enr) = generate_random_remote_enr();
+        let (_, bootnode_node_contact) = generate_random_remote_node_contact();
 
         let data_radius = Distance::MAX;
-        let bootnode = Node::new(bootnode_enr.clone(), data_radius);
+        let bootnode = Node::new(bootnode_node_contact.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3489,7 +3531,9 @@ mod tests {
 
         // Query info should contain bootnode ENR. It is the only node in the routing table, so
         // it is among the "closest".
-        assert!(query_info.untrusted_enrs.contains(&bootnode_enr));
+        assert!(query_info
+            .untrusted_enrs
+            .contains(&bootnode_node_contact.enr));
     }
 
     #[tokio::test]
@@ -3514,10 +3558,10 @@ mod tests {
     async fn advance_find_content_query_with_enrs() {
         let mut service = task::spawn(build_service());
 
-        let (_, bootnode_enr) = generate_random_remote_enr();
+        let (_, bootnode_node_contact) = generate_random_remote_node_contact();
 
         let data_radius = Distance::MAX;
-        let bootnode = Node::new(bootnode_enr.clone(), data_radius);
+        let bootnode = Node::new(bootnode_node_contact.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3546,11 +3590,11 @@ mod tests {
         }
 
         // Simulate a response from the bootnode.
-        let (_, enr) = generate_random_remote_enr();
+        let (_, node_contact) = generate_random_remote_node_contact();
         service.advance_find_content_query_with_enrs(
             &query_id,
-            bootnode_enr.clone(),
-            vec![enr.clone()],
+            bootnode_node_contact.enr.clone(),
+            vec![node_contact.enr.clone()],
         );
 
         let pool = &mut service.find_content_query_pool;
@@ -3559,7 +3603,7 @@ mod tests {
             .expect("Query pool does not contain query");
 
         // Query info should contain the "discovered" ENR.
-        assert!(query_info.untrusted_enrs.contains(&enr));
+        assert!(query_info.untrusted_enrs.contains(&node_contact.enr));
 
         match query.clone().into_result() {
             FindContentQueryResult::NoneFound => {}
@@ -3571,11 +3615,11 @@ mod tests {
     async fn advance_find_content_query_with_content() {
         let mut service = task::spawn(build_service());
 
-        let (_, bootnode_enr) = generate_random_remote_enr();
-        let bootnode_node_id = bootnode_enr.node_id();
+        let (_, bootnode_node_contact) = generate_random_remote_node_contact();
+        let bootnode_node_id = bootnode_node_contact.enr.node_id();
 
         let data_radius = Distance::MAX;
-        let bootnode = Node::new(bootnode_enr.clone(), data_radius);
+        let bootnode = Node::new(bootnode_node_contact.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3606,7 +3650,11 @@ mod tests {
 
         // Simulate a response from the bootnode.
         let content = RawContentValue::from_str("0x00010203").unwrap();
-        service.advance_find_content_query_with_content(&query_id, bootnode_enr, content.clone());
+        service.advance_find_content_query_with_content(
+            &query_id,
+            bootnode_node_contact,
+            content.clone(),
+        );
 
         let pool = &mut service.find_content_query_pool;
         let (_, query) = pool
@@ -3631,11 +3679,11 @@ mod tests {
     async fn advance_find_content_query_with_connection_id() {
         let mut service = task::spawn(build_service());
 
-        let (_, bootnode_enr) = generate_random_remote_enr();
-        let bootnode_node_id = bootnode_enr.node_id();
+        let (_, bootnode_node_contact) = generate_random_remote_node_contact();
+        let bootnode_node_id = bootnode_node_contact.enr.node_id();
 
         let data_radius = Distance::MAX;
-        let bootnode = Node::new(bootnode_enr.clone(), data_radius);
+        let bootnode = Node::new(bootnode_node_contact.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3667,7 +3715,7 @@ mod tests {
         let actual_connection_id = 1;
         service.advance_find_content_query_with_connection_id(
             &query_id,
-            bootnode_enr,
+            bootnode_node_contact,
             actual_connection_id,
         );
 
@@ -3694,10 +3742,10 @@ mod tests {
     async fn handle_find_content_query_event() {
         let mut service = task::spawn(build_service());
 
-        let (_, bootnode_enr) = generate_random_remote_enr();
+        let (_, bootnode_node_contact) = generate_random_remote_node_contact();
 
         let data_radius = Distance::MAX;
-        let bootnode = Node::new(bootnode_enr.clone(), data_radius);
+        let bootnode = Node::new(bootnode_node_contact.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3747,7 +3795,7 @@ mod tests {
         assert_eq!(
             request.direction,
             RequestDirection::Outgoing {
-                destination: bootnode_enr.clone()
+                destination: bootnode_node_contact.clone()
             }
         );
         assert_eq!(request.query_id, Some(query_id));
@@ -3756,7 +3804,7 @@ mod tests {
         let content = RawContentValue::from_str("0x00010203").unwrap();
         service.advance_find_content_query_with_content(
             &query_id,
-            bootnode_enr.clone(),
+            bootnode_node_contact.clone(),
             content.clone(),
         );
 

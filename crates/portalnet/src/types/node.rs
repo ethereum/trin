@@ -1,14 +1,15 @@
 use std::fmt;
 
 use ethportal_api::types::{
-    distance::Distance, enr::Enr, ping_extensions::extension_types::Extensions,
+    distance::Distance, enr::Enr, node_contact::NodeContact,
+    ping_extensions::extension_types::Extensions,
 };
 
 /// A node in the overlay network routing table.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Node {
-    /// The node's ENR.
-    pub enr: Enr,
+    /// The node's NodeContact.
+    pub node_contact: NodeContact,
 
     /// The node's data radius.
     pub data_radius: Distance,
@@ -22,18 +23,23 @@ pub struct Node {
 
 impl Node {
     /// Creates a new node.
-    pub fn new(enr: Enr, data_radius: Distance) -> Node {
+    pub fn new(node_contact: NodeContact, data_radius: Distance) -> Node {
         Node {
-            enr,
+            node_contact,
             data_radius,
             capabilities: None,
             ephemeral_header_count: None,
         }
     }
 
+    /// Returns the NodeContact of the node.
+    pub fn node_contact(&self) -> NodeContact {
+        self.node_contact.clone()
+    }
+
     /// Returns the ENR of the node.
-    pub fn enr(&self) -> Enr {
-        self.enr.clone()
+    pub fn enr(&self) -> &Enr {
+        &self.node_contact.enr
     }
 
     /// Returns the data radius of the node.
@@ -61,9 +67,14 @@ impl Node {
         self.ephemeral_header_count
     }
 
+    /// Sets the NodeContact of the node.
+    pub fn set_node_contact(&mut self, node_contact: NodeContact) {
+        self.node_contact = node_contact;
+    }
+
     /// Sets the ENR of the node.
     pub fn set_enr(&mut self, enr: Enr) {
-        self.enr = enr;
+        self.node_contact.enr = enr;
     }
 
     /// Sets the data radius of the node.
@@ -87,7 +98,7 @@ impl fmt::Display for Node {
         write!(
             f,
             "Node(node_id={}, radius={})",
-            self.enr.node_id(),
+            self.node_contact.enr.node_id(),
             self.data_radius,
         )
     }
