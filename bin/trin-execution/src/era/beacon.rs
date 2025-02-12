@@ -11,7 +11,7 @@ use ethportal_api::{
         body::Transactions,
     },
     types::execution::{transaction::Transaction, withdrawal::Withdrawal},
-    utils::roots::calculate_merkle_patricia_root,
+    utils::roots::{calculate_merkle_patricia_root, calculate_withdrawals_root},
     Header,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -40,12 +40,9 @@ impl ProcessBeaconBlock for SignedBeaconBlockBellatrix {
     fn process_beacon_block(&self) -> anyhow::Result<ProcessedBlock> {
         let payload = &self.message.body.execution_payload;
 
-        let transactions = process_transactions(&payload.transactions)?;
-        let transactions_root = calculate_merkle_patricia_root(
-            transactions
-                .iter()
-                .map(|transaction| &transaction.transaction),
-        )?;
+        let transactions = decode_transactions(&payload.transactions)?;
+        let transactions_root = calculate_merkle_patricia_root(&transactions);
+        let transactions = process_transactions(transactions)?;
 
         let header = Header {
             parent_hash: payload.parent_hash,
@@ -83,16 +80,13 @@ impl ProcessBeaconBlock for SignedBeaconBlockCapella {
     fn process_beacon_block(&self) -> anyhow::Result<ProcessedBlock> {
         let payload = &self.message.body.execution_payload;
 
-        let transactions = process_transactions(&payload.transactions)?;
-        let transactions_root = calculate_merkle_patricia_root(
-            transactions
-                .iter()
-                .map(|transaction| &transaction.transaction),
-        )?;
+        let transactions = decode_transactions(&payload.transactions)?;
+        let transactions_root = calculate_merkle_patricia_root(&transactions);
+        let transactions = process_transactions(transactions)?;
 
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
-        let withdrawals_root = calculate_merkle_patricia_root(&withdrawals)?;
+        let withdrawals_root = calculate_withdrawals_root(&withdrawals);
 
         let header = Header {
             parent_hash: payload.parent_hash,
@@ -130,16 +124,13 @@ impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
     fn process_beacon_block(&self) -> anyhow::Result<ProcessedBlock> {
         let payload = &self.message.body.execution_payload;
 
-        let transactions = process_transactions(&payload.transactions)?;
-        let transactions_root = calculate_merkle_patricia_root(
-            transactions
-                .iter()
-                .map(|transaction| &transaction.transaction),
-        )?;
+        let transactions = decode_transactions(&payload.transactions)?;
+        let transactions_root = calculate_merkle_patricia_root(&transactions);
+        let transactions = process_transactions(transactions)?;
 
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
-        let withdrawals_root = calculate_merkle_patricia_root(&withdrawals)?;
+        let withdrawals_root = calculate_withdrawals_root(&withdrawals);
 
         let header = Header {
             parent_hash: payload.parent_hash,
@@ -173,14 +164,22 @@ impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
     }
 }
 
+fn decode_transactions(transactions: &Transactions) -> anyhow::Result<Vec<Transaction>> {
+    transactions
+        .into_iter()
+        .map(|raw_tx| {
+            Transaction::decode(&mut raw_tx.to_vec().as_slice())
+                .map_err(|err| anyhow::anyhow!("Failed decoding transaction rlp: {err:?}"))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()
+}
+
 fn process_transactions(
-    transactions: &Transactions,
+    transactions: Vec<Transaction>,
 ) -> anyhow::Result<Vec<TransactionsWithSender>> {
     transactions
         .into_par_iter()
-        .map(|raw_tx| {
-            let transaction = Transaction::decode(&mut raw_tx.to_vec().as_slice())
-                .map_err(|err| anyhow::anyhow!("Failed decoding transaction rlp: {err:?}"))?;
+        .map(|transaction| {
             transaction
                 .get_transaction_sender_address()
                 .map(|sender_address| TransactionsWithSender {

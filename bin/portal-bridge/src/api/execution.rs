@@ -216,7 +216,7 @@ impl ExecutionApi {
         };
 
         // Validate Receipts
-        let receipts_root = receipts.root()?;
+        let receipts_root = receipts.root();
         if receipts_root != full_header.header.receipts_root {
             bail!(
                 "Receipts root doesn't match header receipts root: {receipts_root:?} - {:?}",

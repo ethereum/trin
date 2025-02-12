@@ -197,7 +197,7 @@ mod tests {
             });
             // test that txs are properly deserialized if tx root is properly calculated
             assert_eq!(
-                block_body.transactions_root().unwrap(),
+                block_body.transactions_root(),
                 full_header.header.transactions_root
             );
             // this block has no uncles, aka an empty uncles root is calculated.

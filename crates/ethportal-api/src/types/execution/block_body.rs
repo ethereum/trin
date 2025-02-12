@@ -1,7 +1,7 @@
 use std::vec;
 
 use alloy::{
-    primitives::{keccak256, B256},
+    primitives::B256,
     rlp::{self, Decodable, Encodable},
 };
 use anyhow::{anyhow, bail};
@@ -15,7 +15,10 @@ use super::{
     transaction::{Transaction, TransactionWithRlpHeader},
 };
 use crate::{
-    types::execution::withdrawal::Withdrawal, utils::roots::calculate_merkle_patricia_root,
+    types::execution::withdrawal::Withdrawal,
+    utils::roots::{
+        calculate_merkle_patricia_root, calculate_ommers_root, calculate_withdrawals_root,
+    },
 };
 
 pub const SHANGHAI_TIMESTAMP: u64 = 1681338455;
@@ -89,7 +92,7 @@ impl BlockBody {
             );
         }
         // Validate txs root
-        let txs_root = self.transactions_root()?;
+        let txs_root = self.transactions_root();
         if txs_root != header.transactions_root {
             bail!(
                 "Block body txs root doesn't match header txs root: {txs_root:?} - {:?}",
@@ -120,7 +123,7 @@ impl BlockBody {
         }
     }
 
-    pub fn transactions_root(&self) -> anyhow::Result<B256> {
+    pub fn transactions_root(&self) -> B256 {
         calculate_merkle_patricia_root(self.transactions())
     }
 
@@ -134,8 +137,7 @@ impl BlockBody {
     }
 
     pub fn uncles_root(&self) -> B256 {
-        let encoded_uncles = alloy_rlp::encode(self.uncles().to_vec());
-        keccak256(&encoded_uncles)
+        calculate_ommers_root(self.uncles())
     }
 
     /// Returns reference to block's withdrawals.
@@ -153,7 +155,7 @@ impl BlockBody {
         let Some(withdrawals) = self.withdrawals() else {
             bail!("Block body doesn't have withdrawals");
         };
-        calculate_merkle_patricia_root(withdrawals)
+        Ok(calculate_withdrawals_root(withdrawals))
     }
 }
 
@@ -509,10 +511,7 @@ mod tests {
         let block_body = get_14764013_block_body();
         let expected_tx_root =
             "0x18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7".to_owned();
-        assert_eq!(
-            hex_encode(block_body.transactions_root().unwrap()),
-            expected_tx_root
-        );
+        assert_eq!(hex_encode(block_body.transactions_root()), expected_tx_root);
     }
 
     #[test_log::test]
@@ -537,7 +536,7 @@ mod tests {
             "0x18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7".to_owned();
         assert_ne!(
             expected_tx_root,
-            hex_encode(invalid_block_body.transactions_root().unwrap())
+            hex_encode(invalid_block_body.transactions_root())
         );
     }
 

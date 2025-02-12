@@ -1,7 +1,4 @@
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::ops::{Deref, DerefMut};
 
 use alloy::{
     primitives::{Address, Bloom, BloomInput, B256, U256},
@@ -12,12 +9,11 @@ use alloy::{
 };
 use anyhow::anyhow;
 use bytes::{Buf, BufMut, Bytes};
-use eth_trie::{EthTrie, MemoryDB, Trie};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
 use super::transaction::JsonBytes;
-use crate::utils::bytes::hex_decode;
+use crate::utils::{bytes::hex_decode, roots::calculate_merkle_patricia_root};
 
 // 2 ^ 14
 const MAX_TRANSACTION_COUNT: usize = 16384;
@@ -29,20 +25,8 @@ pub struct Receipts {
 }
 
 impl Receipts {
-    pub fn root(&self) -> anyhow::Result<B256> {
-        let memdb = Arc::new(MemoryDB::new(true));
-        let mut trie = EthTrie::new(memdb);
-
-        // Insert receipts into receipts tree
-        for (index, receipt) in self.receipt_list.iter().enumerate() {
-            let path = alloy::rlp::encode(index);
-            let encoded_receipt = alloy::rlp::encode(receipt);
-            trie.insert(&path, &encoded_receipt)
-                .map_err(|err| anyhow!("Error calculating receipts root: {err:?}"))?;
-        }
-
-        trie.root_hash()
-            .map_err(|err| anyhow!("Error calculating receipts root: {err:?}"))
+    pub fn root(&self) -> B256 {
+        calculate_merkle_patricia_root(&self.receipt_list)
     }
 }
 
@@ -627,7 +611,7 @@ mod tests {
             ],
         };
         assert_eq!(
-            hex_encode(receipts.root().unwrap()),
+            hex_encode(receipts.root()),
             EXPECTED_RECEIPTS_ROOT.to_owned()
         );
     }
@@ -839,7 +823,7 @@ mod tests {
             &hex_decode("0xc9e543effd8c9708acc53249157c54b0c6aecd69285044bcb9df91cedc6437ad")
                 .unwrap(),
         );
-        assert_eq!(receipts.root().unwrap(), expected_receipts_root);
+        assert_eq!(receipts.root(), expected_receipts_root);
     }
 
     #[test_log::test]
@@ -854,7 +838,7 @@ mod tests {
             &hex_decode("0xd262fe545cec9ec04f4246334d05437fac8d8dfe201a1f6476fab545878cb251")
                 .unwrap(),
         );
-        assert_eq!(receipts.root().unwrap(), expected_receipts_root);
+        assert_eq!(receipts.root(), expected_receipts_root);
     }
 
     #[rstest::rstest]
@@ -875,7 +859,7 @@ mod tests {
         .unwrap();
         let receipts: Receipts = serde_json::from_str(&receipts).unwrap();
         let expected_receipts_root: B256 = B256::from_str(expected_root).unwrap();
-        assert_eq!(receipts.root().unwrap(), expected_receipts_root);
+        assert_eq!(receipts.root(), expected_receipts_root);
     }
 
     const EXPECTED_RECEIPTS_ROOT: &str =

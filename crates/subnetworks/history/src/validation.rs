@@ -84,7 +84,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                         trusted_header.uncles_hash
                     ));
                 }
-                let actual_txs_root = block_body.transactions_root()?;
+                let actual_txs_root = block_body.transactions_root();
                 if actual_txs_root != trusted_header.transactions_root {
                     return Err(anyhow!(
                         "Content validation failed: Invalid transactions root. Found: {:?} - Expected: {:?}",
@@ -105,7 +105,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .recursive_find_header_by_hash_with_proof(B256::from(key.block_hash))
                     .await?
                     .header;
-                let actual_receipts_root = receipts.root()?;
+                let actual_receipts_root = receipts.root();
                 if actual_receipts_root != trusted_header.receipts_root {
                     return Err(anyhow!(
                         "Content validation failed: Invalid receipts root. Found: {:?} - Expected: {:?}",
