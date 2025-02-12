@@ -7,4 +7,4 @@
 .vscode/
 # Ignore downloaded consensus specs test data
 testing/ef-tests/mainnet*
-
+bin/trin-bench/logs*
