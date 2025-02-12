@@ -25,3 +25,61 @@ jobs:
 
       - name: Validate PR commits with commitlint
         run: sudo npx commitlint --from ${{ github.event.pull_request.head.sha }}~${{ github.event.pull_request.commits }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  check-cross-build:
+    # This is a stripped-down version of the full release build in .github/workflows/release.yml
+    # Some key changes:
+    # - No need to extract the version of the build
+    # - No need to upload artifacts
+    # - Fewer architectures, just to verify that some custom cases work
+    name: Verify cross-compilation
+    strategy:
+      matrix:
+        arch:
+          [
+            x86_64-unknown-linux-gnu,
+            aarch64-apple-darwin,
+            x86_64-pc-windows-gnu,
+          ]
+        include:
+          - arch: x86_64-unknown-linux-gnu
+            platform: ubuntu-20.04
+            profile: release
+          - arch: aarch64-apple-darwin
+            platform: macos-latest
+            profile: release
+          - arch: x86_64-pc-windows-gnu
+            platform: ubuntu-20.04
+            profile: release
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - name: Get latest version of stable Rust
+        run: rustup update stable
+      - name: Install target
+        run: rustup target add ${{ matrix.arch }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # ==============================
+      # Apple M1 SDK setup
+      # ==============================
+
+      - name: Apple M1 setup
+        if: ${{ matrix.job.target == 'aarch64-apple-darwin' }}
+        run: |
+          echo "SDKROOT=$(xcrun -sdk macosx --show-sdk-path)" >> $GITHUB_ENV
+          echo "MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx --show-sdk-platform-version)" >> $GITHUB_ENV
+
+      # ==============================
+      #       Builds
+      # ==============================
+
+      # This is the main thing being tested, looking for a `make` failure
+      - name: Build trin for ${{ matrix.arch }}
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
+          env PROFILE=${{ matrix.profile }} make build-${{ matrix.arch }}
