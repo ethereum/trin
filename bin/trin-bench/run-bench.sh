@@ -36,7 +36,7 @@ popd || { echo "Failed to return to original directory"; exit 1; }
 
 if [ "$PORTAL_CLIENT" == "trin" ]; then
     pushd ../.. || { echo "Failed to change directory"; exit 1; }
-    cargo build --release -p trin || { echo "Failed to build trin"; exit 1; }
+    cargo build --profile profiling -p trin || { echo "Failed to build trin"; exit 1; }
     popd || { echo "Failed to return to original directory"; exit 1; }
 fi
 
@@ -83,7 +83,8 @@ run_trin() {
             --max-radius 100 \            
             > "$log_file.log" 2>&1 &
     else
-        ../../target/release/trin \
+        # RUST_LOG=info,utp_rs=trace 
+        samply record -s -o $log_file.json.gz -- ./../../target/profiling/trin \
             --web3-transport http \
             --web3-http-address "$web3_address" \
             --mb "$mb" \
@@ -112,6 +113,7 @@ fi
     --epoch-accumulator-path ../../portal-accumulators \
     --start-era1 1000 \
     --end-era1 1010 \
+    --offer-concurrency 10 \
     > "$LOG_DIR/trin_benchmark.log" 2>&1 &
 TRIN_BENCH_PID=$!
 
@@ -158,6 +160,7 @@ cleanup() {
     # Move logs and performance files to the archive folder
     find "$LOG_DIR" -maxdepth 1 -type f -name "*.log" -exec mv {} "$RUN_FOLDER/" \;
     find "$LOG_DIR" -maxdepth 1 -type f -name "*.svg" -exec mv {} "$RUN_FOLDER/" \;
+    find "$LOG_DIR" -maxdepth 1 -type f -name "*.gz" -exec mv {} "$RUN_FOLDER/" \;
 
     echo "Archived logs to $RUN_FOLDER"
 }

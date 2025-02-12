@@ -27,3 +27,4 @@ trin-execution.workspace = true
 trin-utils.workspace = true
 trin-validation.workspace = true
 url.workspace = true
+alloy-rlp.workspace = true
