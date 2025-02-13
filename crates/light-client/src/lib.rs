@@ -9,5 +9,4 @@ pub mod database;
 pub mod errors;
 pub mod node;
 pub mod rpc;
-pub mod types;
 pub mod utils;

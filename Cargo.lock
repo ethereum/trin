@@ -300,7 +300,7 @@ dependencies = [
  "derive_more 1.0.0",
  "once_cell",
  "serde",
- "sha2 0.10.8",
+ "sha2",
 ]
 
 [[package]]
@@ -320,7 +320,7 @@ dependencies = [
  "derive_more 1.0.0",
  "once_cell",
  "serde",
- "sha2 0.10.8",
+ "sha2",
 ]
 
 [[package]]
@@ -2162,7 +2162,7 @@ dependencies = [
  "ed25519",
  "rand_core",
  "serde",
- "sha2 0.10.8",
+ "sha2",
  "subtle",
  "zeroize",
 ]
@@ -2340,7 +2340,7 @@ checksum = "c853bd72c9e5787f8aafc3df2907c2ed03cff3150c3acd94e2e53a98ab70a8ab"
 dependencies = [
  "cpufeatures",
  "ring",
- "sha2 0.10.8",
+ "sha2",
 ]
 
 [[package]]
@@ -2413,7 +2413,7 @@ dependencies = [
  "serde-this-or-that",
  "serde_json",
  "serde_yaml",
- "sha2 0.10.8",
+ "sha2",
  "sha3 0.9.1",
  "snap",
  "ssz_types",
@@ -3659,7 +3659,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "once_cell",
- "sha2 0.10.8",
+ "sha2",
  "signature",
 ]
 
@@ -3791,6 +3791,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "ethereum_ssz",
  "ethportal-api",
  "figment",
  "futures",
@@ -3804,7 +3805,6 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "snowbridge-milagro-bls",
- "ssz-rs",
  "ssz_types",
  "strum",
  "thiserror 1.0.69",
@@ -3812,6 +3812,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.19",
  "tree_hash",
+ "tree_hash_derive",
+ "trin-validation",
 ]
 
 [[package]]
@@ -5157,7 +5159,7 @@ dependencies = [
  "revm-primitives",
  "ripemd",
  "secp256k1",
- "sha2 0.10.8",
+ "sha2",
  "substrate-bn",
 ]
 
@@ -5272,7 +5274,7 @@ version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b241d2e59b74ef9e98d94c78c47623d04c8392abaf82014dfd372a16041128f"
 dependencies = [
- "sha2 0.10.8",
+ "sha2",
 ]
 
 [[package]]
@@ -5380,7 +5382,7 @@ version = "7.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d38ff6bf570dc3bb7100fce9f7b60c33fa71d80e88da3f2580df4ff2bdded74"
 dependencies = [
- "sha2 0.10.8",
+ "sha2",
  "walkdir",
 ]
 
@@ -5853,19 +5855,6 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.9.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d58a1e1bf39749807d89cf2d98ac2dfa0ff1cb3faa38fbb64dd88ac8013d800"
-dependencies = [
- "block-buffer 0.9.0",
- "cfg-if",
- "cpufeatures",
- "digest 0.9.0",
- "opaque-debug",
-]
-
-[[package]]
-name = "sha2"
 version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "793db75ad2bcafc3ffa7c68b215fee268f537982cd901d132f89c6343f3a3dc8"
@@ -6041,31 +6030,6 @@ checksum = "d91ed6c858b01f942cd56b37a94b3e0a1798290327d1236e4d9cf4eaca44d29d"
 dependencies = [
  "base64ct",
  "der",
-]
-
-[[package]]
-name = "ssz-rs"
-version = "0.8.0"
-source = "git+https://github.com/ralexstokes/ssz-rs?rev=d09f55b4f8554491e3431e01af1c32347a8781cd#d09f55b4f8554491e3431e01af1c32347a8781cd"
-dependencies = [
- "bitvec",
- "hex",
- "lazy_static",
- "num-bigint",
- "serde",
- "sha2 0.9.9",
- "ssz-rs-derive",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "ssz-rs-derive"
-version = "0.8.0"
-source = "git+https://github.com/ralexstokes/ssz-rs?rev=d09f55b4f8554491e3431e01af1c32347a8781cd#d09f55b4f8554491e3431e01af1c32347a8781cd"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]

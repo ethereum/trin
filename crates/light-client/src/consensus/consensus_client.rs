@@ -19,7 +19,6 @@ use ethportal_api::{
     utils::bytes::hex_encode,
 };
 use milagro_bls::PublicKey;
-use ssz_rs::prelude::*;
 use ssz_types::{typenum, BitVector, FixedVector};
 use tracing::{debug, info, warn};
 use tree_hash::TreeHash;
@@ -30,8 +29,6 @@ use crate::{
     consensus::{
         constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES, rpc::portal_rpc::expected_current_slot,
     },
-    types::Bytes32,
-    utils::bytes_to_bytes32,
 };
 
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md
@@ -581,14 +578,14 @@ pub fn verify_generic_update(
 
 fn compute_committee_sign_root(
     genesis_root: &[u8],
-    header: Bytes32,
+    header: B256,
     fork_version: &[u8],
-) -> Result<Node> {
-    let genesis_root = genesis_root.to_vec().try_into()?;
+) -> Result<B256> {
+    let genesis_root = B256::from_slice(genesis_root);
     let domain_type = &hex::decode("07000000")?[..];
-    let fork_version = Vector::from_iter(fork_version.to_vec());
+    let fork_version = FixedVector::from(fork_version.to_vec());
     let domain = compute_domain(domain_type, fork_version, genesis_root)?;
-    compute_signing_root(header, domain)
+    Ok(compute_signing_root(header, domain))
 }
 
 fn get_participating_keys(
@@ -627,12 +624,12 @@ fn verify_sync_committee_signature(
 ) -> bool {
     let res: Result<bool> = (move || {
         let public_keys: Vec<&PublicKey> = pks.iter().collect();
-        let header_root = bytes_to_bytes32(attested_header.tree_hash_root().as_slice());
+        let header_root = attested_header.tree_hash_root();
         let signing_root = compute_committee_sign_root(genesis_root, header_root, fork_version)?;
 
         Ok(is_aggregate_valid(
             signature,
-            signing_root.r#as_bytes(),
+            signing_root.as_slice(),
             &public_keys,
         ))
     })();
@@ -645,11 +642,7 @@ fn is_finality_proof_valid(
     finality_header: &mut BeaconBlockHeader,
     finality_branch: &FixedVector<B256, FinalizedRootProofLen>,
 ) -> bool {
-    let finality_branch = finality_branch
-        .iter()
-        .map(|h| bytes_to_bytes32(h.as_slice()))
-        .collect::<Vec<_>>();
-    is_proof_valid(attested_header, finality_header, &finality_branch, 6, 41)
+    is_proof_valid(attested_header, finality_header, finality_branch, 6, 41)
 }
 
 fn is_next_committee_proof_valid(
@@ -657,14 +650,10 @@ fn is_next_committee_proof_valid(
     next_committee: &mut SyncCommittee,
     next_committee_branch: &FixedVector<B256, CurrentSyncCommitteeProofLen>,
 ) -> bool {
-    let next_committee_branch = next_committee_branch
-        .iter()
-        .map(|h| bytes_to_bytes32(h.as_slice()))
-        .collect::<Vec<_>>();
     is_proof_valid(
         attested_header,
         next_committee,
-        &next_committee_branch,
+        next_committee_branch,
         5,
         23,
     )
@@ -675,14 +664,10 @@ fn is_current_committee_proof_valid(
     current_committee: &mut SyncCommittee,
     current_committee_branch: &FixedVector<B256, CurrentSyncCommitteeProofLen>,
 ) -> bool {
-    let current_committee_branch = current_committee_branch
-        .iter()
-        .map(|h| bytes_to_bytes32(h.as_slice()))
-        .collect::<Vec<_>>();
     is_proof_valid(
         attested_header,
         current_committee,
-        &current_committee_branch,
+        current_committee_branch,
         5,
         22,
     )
