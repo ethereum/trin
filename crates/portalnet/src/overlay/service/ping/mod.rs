@@ -6,7 +6,6 @@ use discv5::{enr::NodeId, rpc::RequestId};
 use ethportal_api::{
     types::{
         distance::Metric,
-        enr::Enr,
         node_contact::NodeContact,
         ping_extensions::{
             decode::DecodedExtension,

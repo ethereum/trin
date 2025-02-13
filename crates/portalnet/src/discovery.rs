@@ -47,7 +47,7 @@ pub type ProtocolRequest = Vec<u8>;
 /// Base Node Discovery Protocol v5 layer
 pub struct Discovery {
     /// The inner Discv5 service.
-    discv5: Discv5,
+    pub discv5: Discv5,
     /// A cache of the latest observed `NodeAddress` for a node ID.
     node_contact_cache: Arc<RwLock<LruCache<NodeId, NodeContact>>>,
     /// Indicates if the Discv5 service has been started.

@@ -2,7 +2,6 @@ use std::fmt::Debug;
 
 use discv5::{enr::NodeId, rpc::RequestId};
 use ethportal_api::types::{
-    enr::Enr,
     node_contact::NodeContact,
     portal_wire::{Request, Response},
 };

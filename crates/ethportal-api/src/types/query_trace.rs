@@ -221,9 +221,8 @@ mod tests {
     use serde_json::Value;
     use ureq::json;
 
-    use crate::types::node_contact::{generate_random_remote_node_contact, NodeContact};
-
     use super::*;
+    use crate::types::node_contact::{generate_random_remote_node_contact, NodeContact};
 
     fn new_node() -> (NodeId, NodeContact) {
         let (_, node_contact) = generate_random_remote_node_contact();

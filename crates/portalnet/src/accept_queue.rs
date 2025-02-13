@@ -1,8 +1,5 @@
 use delay_map::HashMapDelay;
-use ethportal_api::{
-    types::{enr::Enr, node_contact::NodeContact},
-    OverlayContentKey,
-};
+use ethportal_api::{types::node_contact::NodeContact, OverlayContentKey};
 use futures::prelude::*;
 use rand::{seq::SliceRandom, thread_rng};
 use tokio::time::Duration;

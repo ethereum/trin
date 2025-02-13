@@ -225,8 +225,8 @@ const NUM_FARTHER_NODES: usize = 4;
 
 /// Selects put content recipients from a vec of interested ENRs.
 ///
-/// If number of NodeContacts is at most `NUM_CLOSEST_NODES + NUM_FARTHER_NODES`, then all are returned.
-/// Otherwise, NodeContacts are sorted by distance from `content_id` and then:
+/// If number of NodeContacts is at most `NUM_CLOSEST_NODES + NUM_FARTHER_NODES`, then all are
+/// returned. Otherwise, NodeContacts are sorted by distance from `content_id` and then:
 ///
 /// 1. Closest `NUM_CLOSEST_NODES` NodeContacts are selected
 /// 2. Random `NUM_FARTHER_NODES` NodeContacts are selected from the rest

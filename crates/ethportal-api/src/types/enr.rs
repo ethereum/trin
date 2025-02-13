@@ -1,15 +1,10 @@
 use std::{
-    net::Ipv4Addr,
     ops::{Deref, DerefMut},
     str::FromStr,
 };
 
 use alloy_rlp::{Encodable, RlpDecodableWrapper, RlpEncodableWrapper};
-use discv5::{
-    enr::{CombinedKey, Enr as Discv5Enr},
-    handler::NodeContact,
-};
-use rand::Rng;
+use discv5::enr::{CombinedKey, Enr as Discv5Enr};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ssz::DecodeError;

@@ -84,7 +84,7 @@ use crate::{
     put_content::propagate_put_content_cross_thread,
     types::{
         kbucket::{DiscoveredNodesUpdateResult, Entry, SharedKBucketsTable},
-        node::{self, Node},
+        node::Node,
     },
     utils::portal_wire,
     utp::{controller::UtpController, timed_semaphore::OwnedTimedSemaphorePermit},

@@ -117,6 +117,9 @@ pub fn spawn_history_heartbeat(network: Arc<HistoryNetwork>) {
             // this wait at the top. Otherwise, we get two log lines immediately on startup.
             heart_interval.tick().await;
 
+            let metrics = network.overlay.discovery.discv5.metrics();
+            info!("Server metrics {:?}", metrics);
+
             let storage_log = network.overlay.store.read().get_summary_info();
             let message_log = network.overlay.get_message_summary();
             let utp_log = network.overlay.get_utp_summary();
