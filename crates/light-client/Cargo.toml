@@ -16,8 +16,8 @@ alloy.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
-ethportal-api.workspace = true
 ethereum_ssz.workspace = true
+ethportal-api.workspace = true
 figment = { version = "0.10.7", features = ["toml", "env"] }
 futures.workspace = true
 hex.workspace = true
