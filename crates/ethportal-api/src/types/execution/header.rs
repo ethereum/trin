@@ -1,4 +1,5 @@
 use alloy::{
+    consensus::Header as ConsensusHeader,
     primitives::{keccak256, Address, Bloom, Bytes, B256, B64, U256, U64},
     rlp::{self, Decodable, Encodable},
     rpc::types::Header as RpcHeader,
@@ -116,6 +117,63 @@ impl Header {
                 .parent_beacon_block_root
                 .as_ref()
                 .map_or(0, Encodable::length)
+    }
+
+    pub fn to_rpc_header(self, size: Option<U256>) -> RpcHeader {
+        let hash = self.hash();
+        let Header {
+            parent_hash,
+            uncles_hash,
+            author,
+            state_root,
+            transactions_root,
+            receipts_root,
+            logs_bloom,
+            difficulty,
+            number,
+            gas_limit,
+            gas_used,
+            timestamp,
+            extra_data,
+            mix_hash,
+            nonce,
+            base_fee_per_gas,
+            withdrawals_root,
+            blob_gas_used,
+            excess_blob_gas,
+            parent_beacon_block_root,
+        } = self;
+
+        let consensus_header = ConsensusHeader {
+            parent_hash,
+            ommers_hash: uncles_hash,
+            beneficiary: author,
+            state_root,
+            transactions_root,
+            receipts_root,
+            logs_bloom,
+            difficulty,
+            number,
+            gas_limit: gas_limit.to(),
+            gas_used: gas_used.to(),
+            timestamp,
+            extra_data: extra_data.into(),
+            mix_hash: mix_hash.unwrap_or_default(),
+            nonce: nonce.unwrap_or_default(),
+            base_fee_per_gas: base_fee_per_gas.map(|v| v.to()),
+            withdrawals_root,
+            blob_gas_used: blob_gas_used.map(|v| v.to()),
+            excess_blob_gas: excess_blob_gas.map(|v| v.to()),
+            parent_beacon_block_root: parent_beacon_block_root.map(|h264| h264.0.into()),
+            requests_hash: None,
+        };
+
+        RpcHeader {
+            hash,
+            inner: consensus_header,
+            total_difficulty: None,
+            size,
+        }
     }
 }
 
@@ -248,65 +306,6 @@ impl PartialEq for Header {
             && self.blob_gas_used == other.blob_gas_used
             && self.excess_blob_gas == other.excess_blob_gas
             && self.parent_beacon_block_root == other.parent_beacon_block_root
-    }
-}
-
-/// Convert the standard header into a reth-style header type for RPC.
-///
-/// This allows us to easily prepare a header for an RPC response.
-/// RpcHeader is a field in reth's `Block` RPC type used in eth_getBlockByHash, for example.
-impl From<Header> for RpcHeader {
-    fn from(header: Header) -> Self {
-        let hash = header.hash();
-        let Header {
-            parent_hash,
-            uncles_hash,
-            author,
-            state_root,
-            transactions_root,
-            receipts_root,
-            logs_bloom,
-            difficulty,
-            number,
-            gas_limit,
-            gas_used,
-            timestamp,
-            extra_data,
-            mix_hash,
-            nonce,
-            base_fee_per_gas,
-            withdrawals_root,
-            blob_gas_used,
-            excess_blob_gas,
-            parent_beacon_block_root,
-        } = header;
-
-        Self {
-            parent_hash,
-            uncles_hash,
-            miner: author,
-            state_root,
-            transactions_root,
-            receipts_root,
-            logs_bloom,
-            difficulty,
-            number,
-            gas_limit: gas_limit.to(),
-            gas_used: gas_used.to(),
-            timestamp,
-            extra_data: extra_data.into(),
-            mix_hash,
-            nonce,
-            base_fee_per_gas: base_fee_per_gas.map(|v| v.to()),
-            withdrawals_root,
-            blob_gas_used: blob_gas_used.map(|v| v.to()),
-            excess_blob_gas: excess_blob_gas.map(|v| v.to()),
-            hash,
-            parent_beacon_block_root: parent_beacon_block_root.map(|h264| h264.0.into()),
-            // We don't have access to total_difficulty
-            total_difficulty: None,
-            requests_root: None,
-        }
     }
 }
 

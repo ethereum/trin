@@ -3,6 +3,7 @@ use alloy::{
     rlp::{self, Encodable},
     rpc::types::{
         Block, BlockId, BlockNumberOrTag, BlockTransactions, TransactionRequest, Withdrawal,
+        Withdrawals,
     },
 };
 use ethportal_api::{
@@ -219,7 +220,8 @@ impl EthApi {
         let uncles = body.uncles().iter().map(|uncle| uncle.hash()).collect();
         let withdrawals = body
             .withdrawals()
-            .map(|withdrawals| withdrawals.iter().map(Withdrawal::from).collect());
+            .map(|withdrawals| withdrawals.iter().map(Withdrawal::from).collect())
+            .map(Withdrawals::new);
 
         // Calculate block size:
         //   len(rlp(header, transactions, uncles, withdrawals))
@@ -243,10 +245,9 @@ impl EthApi {
 
         // Combine header and block body into the single json representation of the block.
         let block = Block {
-            header: header.into(),
+            header: header.to_rpc_header(Some(U256::from(size))),
             transactions,
             uncles,
-            size: Some(U256::from(size)),
             withdrawals,
         };
         Ok(block)
