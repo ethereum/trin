@@ -37,10 +37,10 @@ jobs:
           ]
         include:
           - arch: aarch64-unknown-linux-gnu
-            platform: ubuntu-20.04
+            platform: ubuntu-latest
             profile: release
           - arch: x86_64-unknown-linux-gnu
-            platform: ubuntu-20.04
+            platform: ubuntu-latest
             profile: release
           - arch: x86_64-apple-darwin
             platform: macos-latest
@@ -49,7 +49,7 @@ jobs:
             platform: macos-latest
             profile: release
           - arch: x86_64-pc-windows-gnu
-            platform: ubuntu-20.04
+            platform: ubuntu-latest
             profile: release
 
     runs-on: ${{ matrix.platform }}
