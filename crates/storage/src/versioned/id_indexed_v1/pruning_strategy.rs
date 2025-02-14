@@ -109,12 +109,12 @@ impl PruningStrategy {
 
     /// Returns `true` when used capacity is above target capacity.
     pub fn is_usage_above_target_capacity(&self, usage_stats: &UsageStats) -> bool {
-        usage_stats.is_above(self.target_capacity_bytes())
+        usage_stats.is_estimated_disk_usage_above(self.target_capacity_bytes())
     }
 
     /// Returns `true` when used capacity is above storage capacity.
     pub fn should_prune(&self, usage_stats: &UsageStats) -> bool {
-        usage_stats.is_above(self.config.storage_capacity_bytes)
+        usage_stats.is_estimated_disk_usage_above(self.config.storage_capacity_bytes)
     }
 
     /// Returns the number of entries to prune.
@@ -128,9 +128,9 @@ impl PruningStrategy {
             debug!(
                 Db = %self.config.content_type,
                 "Storage capacity is 0. Pruning everything ({})",
-                usage_stats.entry_count
+                usage_stats.entry_count(),
             );
-            return usage_stats.entry_count;
+            return usage_stats.entry_count();
         }
 
         self.estimate_to_delete_until_target(usage_stats)
@@ -167,16 +167,17 @@ impl PruningStrategy {
     /// Returns the estimated number of items to delete to reach target capacity. It returns 0 if
     /// already below target capacity.
     fn estimate_to_delete_until_target(&self, usage_stats: &UsageStats) -> u64 {
-        let Some(average_entry_size_bytes) = usage_stats.average_entry_size_bytes() else {
+        let Some(average_entry_disk_usage_bytes) = usage_stats.average_entry_disk_usage_bytes()
+        else {
             // Means that storage is empty and nothing can be deleted.
             return 0;
         };
 
         // The estimated number of entries at the target capacity.
         let estimated_target_capacity_count =
-            (self.target_capacity_bytes() as f64 / average_entry_size_bytes).floor() as u64;
-        if usage_stats.entry_count > estimated_target_capacity_count {
-            usage_stats.entry_count - estimated_target_capacity_count
+            (self.target_capacity_bytes() as f64 / average_entry_disk_usage_bytes).floor() as u64;
+        if usage_stats.entry_count() > estimated_target_capacity_count {
+            usage_stats.entry_count() - estimated_target_capacity_count
         } else {
             0
         }
@@ -205,6 +206,7 @@ mod tests {
     use crate::{versioned::ContentType, DistanceFunction};
 
     const DEFAULT_STORAGE_CAPACITY_BYTES: u64 = 1_000_000;
+    const EXTRA_DISK_USAGE_PER_ENTRY: u64 = 100;
 
     fn create_default_pruning_strategy() -> PruningStrategy {
         create_pruning_strategy(DEFAULT_STORAGE_CAPACITY_BYTES)
@@ -237,14 +239,18 @@ mod tests {
     #[case::above_full(110, 1_100_000, true)]
     fn is_usage_above_target_capacity(
         #[case] entry_count: u64,
-        #[case] total_entry_size_bytes: u64,
+        #[case] estimated_disk_usage: u64,
         #[case] expected: bool,
     ) {
         let pruning_strategy = create_default_pruning_strategy();
-        let usage_stats = UsageStats {
+
+        let total_entry_size_bytes =
+            estimated_disk_usage - entry_count * EXTRA_DISK_USAGE_PER_ENTRY;
+        let usage_stats = UsageStats::new(
             entry_count,
             total_entry_size_bytes,
-        };
+            EXTRA_DISK_USAGE_PER_ENTRY,
+        );
 
         assert_eq!(
             pruning_strategy.is_usage_above_target_capacity(&usage_stats),
@@ -264,15 +270,20 @@ mod tests {
     #[case::above_full_6(2000, 1_050_000, true, 100)]
     fn should_prune_and_pruning_count(
         #[case] entry_count: u64,
-        #[case] total_entry_size_bytes: u64,
+        #[case] estimated_disk_usage: u64,
         #[case] should_prune: bool,
         #[case] pruning_count: u64,
     ) {
         let pruning_strategy = create_default_pruning_strategy();
-        let usage_stats = UsageStats {
+
+        let total_entry_size_bytes =
+            estimated_disk_usage - entry_count * EXTRA_DISK_USAGE_PER_ENTRY;
+        let usage_stats = UsageStats::new(
             entry_count,
             total_entry_size_bytes,
-        };
+            EXTRA_DISK_USAGE_PER_ENTRY,
+        );
+
         assert_eq!(
             pruning_strategy.should_prune(&usage_stats),
             should_prune,
@@ -288,19 +299,24 @@ mod tests {
     #[rstest]
     #[case::empty(0, 0, false, false, 0)]
     #[case::few_entries(100, 20_000, true, true, 100)]
-    #[case::many_entries(10_000, 1_000_000, true, true, 10_000)]
+    #[case::many_entries(10_000, 2_000_000, true, true, 10_000)]
     fn zero_storage_capacity(
         #[case] entry_count: u64,
-        #[case] total_entry_size_bytes: u64,
+        #[case] estimated_disk_usage: u64,
         #[case] is_usage_above_target_capacity: bool,
         #[case] should_prune: bool,
         #[case] pruning_count: u64,
     ) {
         let pruning_strategy = create_pruning_strategy(/* storage_capacity_bytes= */ 0);
-        let usage_stats = UsageStats {
+
+        let total_entry_size_bytes =
+            estimated_disk_usage - entry_count * EXTRA_DISK_USAGE_PER_ENTRY;
+        let usage_stats = UsageStats::new(
             entry_count,
             total_entry_size_bytes,
-        };
+            EXTRA_DISK_USAGE_PER_ENTRY,
+        );
+
         assert_eq!(
             pruning_strategy.is_usage_above_target_capacity(&usage_stats),
             is_usage_above_target_capacity,
