@@ -309,7 +309,11 @@ impl<
                                 self.metrics.report_inbound_response(&response);
                                 self.process_response(response, request.destination, request.request, request.query_id, request.request_permit)
                             }
-                            Err(error) => self.process_request_failure(response.request_id, request.destination, error),
+                            Err(error) => {
+                                // Metric repord failed request
+                                self.metrics.report_failed_outbound_request(&request.request);
+                                self.process_request_failure(response.request_id, request.destination, error)
+                            },
                         }
 
                     } else {
@@ -1754,6 +1758,10 @@ impl<
         query_trace_events_tx: Option<UnboundedSender<QueryTraceEvent>>,
     ) {
         let mut content = content;
+        // report the total bytes of content received
+        utp_processing
+            .metrics
+            .report_bytes_inbound(content.len() as u64);
         // Operate under assumption that all content in the store is valid
         let local_value = utp_processing.store.read().get(&content_key);
         if let Ok(Some(val)) = local_value {

@@ -1,6 +1,7 @@
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::uninlined_format_args)]
 
+mod downloader;
 pub mod events;
 mod jsonrpc;
 pub mod network;
@@ -10,6 +11,7 @@ pub mod validation;
 
 use std::sync::Arc;
 
+use downloader::Downloader;
 use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use network::HistoryNetwork;
 use portalnet::{
@@ -22,7 +24,7 @@ use tokio::{
     task::JoinHandle,
     time::{interval, Duration},
 };
-use tracing::info;
+use tracing::{error, info};
 use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
@@ -101,6 +103,14 @@ pub fn spawn_history_network(
 
         // hacky test: make sure we establish a session with the boot node
         network.overlay.ping_bootnodes().await;
+
+        let overlay_arc = network.overlay.clone();
+        let downloader = Downloader::new(overlay_arc);
+        tokio::spawn(async move {
+            if let Err(e) = downloader.start().await {
+                error!("Downloader error: {:?}", e);
+            }
+        });
 
         tokio::signal::ctrl_c()
             .await

@@ -20,12 +20,16 @@ ethportal-api.workspace = true
 parking_lot.workspace = true
 portalnet.workspace = true
 serde_json.workspace = true
+ssz_types.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tree_hash.workspace = true
 trin-storage.workspace = true
+trin-metrics.workspace = true
 trin-validation.workspace = true
 utp-rs.workspace = true
+portal-bridge.workspace = true
+futures = "0.3.31"
 
 [dev-dependencies]
 env_logger.workspace = true
