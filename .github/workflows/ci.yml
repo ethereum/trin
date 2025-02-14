@@ -4,7 +4,7 @@ on: [pull_request]
 
 jobs:
   commitlint:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -14,7 +14,7 @@ jobs:
           sudo apt update
           sudo apt install -y sudo
           sudo apt install -y git curl
-          sudo curl -sL https://deb.nodesource.com/setup_14.x | sudo -E bash -
+          sudo curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           sudo DEBIAN_FRONTEND=noninteractive apt install -y nodejs
           sudo npm install -g conventional-changelog-conventionalcommits
           sudo npm install -g commitlint@latest
@@ -43,13 +43,13 @@ jobs:
           ]
         include:
           - arch: x86_64-unknown-linux-gnu
-            platform: ubuntu-20.04
+            platform: ubuntu-24.04
             profile: release
           - arch: aarch64-apple-darwin
             platform: macos-latest
             profile: release
           - arch: x86_64-pc-windows-gnu
-            platform: ubuntu-20.04
+            platform: ubuntu-24.04
             profile: release
 
     runs-on: ${{ matrix.platform }}
