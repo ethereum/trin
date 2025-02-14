@@ -535,6 +535,10 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
         Ok(deleted_content)
     }
 
+    /// Calculates the raw content size, that is stored in `content_size` column.
+    ///
+    /// Represents the raw size (in bytes) of the content id, key and value. This is used in
+    /// combination with [extra_disk_usage_per_content_bytes]  to estimate disk usage.
     fn calculate_content_size(
         raw_content_id: &[u8],
         raw_content_key: &[u8],
