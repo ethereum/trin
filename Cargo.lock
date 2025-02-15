@@ -6957,6 +6957,7 @@ dependencies = [
  "quickcheck",
  "rand",
  "rstest",
+ "rusqlite",
  "serde_json",
  "serial_test",
  "ssz_types",
