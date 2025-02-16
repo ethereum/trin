@@ -553,7 +553,9 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
 const fn extra_disk_usage_per_content_bytes(content_type: &ContentType) -> u64 {
     match content_type {
         ContentType::History => 750,
+        ContentType::HistoryEternal => 750,
         ContentType::State => 500,
+        ContentType::HistoryEphemeral => panic!("HistoryEphemeral is not supported"),
     }
 }
 

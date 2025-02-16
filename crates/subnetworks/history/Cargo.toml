@@ -19,6 +19,7 @@ ethereum_ssz.workspace = true
 ethportal-api.workspace = true
 parking_lot.workspace = true
 portalnet.workspace = true
+rusqlite.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
