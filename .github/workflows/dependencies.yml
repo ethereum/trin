@@ -31,6 +31,9 @@ jobs:
   update:
     name: Update
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -57,6 +60,7 @@ jobs:
         with:
           add-paths: ./Cargo.lock
           commit-message: ${{ steps.msg.outputs.commit_message }}
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           title: ${{ env.TITLE }}
           body: ${{ steps.msg.outputs.body }}
           branch: ${{ env.BRANCH }}
