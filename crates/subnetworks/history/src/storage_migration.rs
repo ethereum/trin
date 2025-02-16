@@ -4,7 +4,13 @@ use ethportal_api::{
             history::HistoryContentValue as OldHistoryContentValue,
             history_new::HistoryContentValue as NewHistoryContentValue,
         },
-        execution::{header_with_proof as old_hwp, header_with_proof_new as new_hwp},
+        execution::{
+            header_with_proof::BlockHeaderProof as OldBlockHeaderProof,
+            header_with_proof_new::{
+                BlockHeaderProof, BlockProofHistoricalHashesAccumulator, BlockProofHistoricalRoots,
+                BlockProofHistoricalSummaries, ExecutionBlockProofCapella, HeaderWithProof,
+            },
+        },
         network::Subnetwork,
     },
     ContentValue, HistoryContentKey, OverlayContentKey, RawContentValue,
@@ -113,56 +119,51 @@ fn convert_content_value(
 ) -> Result<Option<RawContentValue>, ContentStoreError> {
     let old_content_value = OldHistoryContentValue::decode(content_key, &raw_content_value)?;
     match old_content_value {
-        OldHistoryContentValue::BlockHeaderWithProof(old_hwp) => {
-            let proof = match old_hwp.proof {
-                old_hwp::BlockHeaderProof::None(_) => return Ok(None),
-                old_hwp::BlockHeaderProof::PreMergeAccumulatorProof(
-                    pre_merge_accumulator_proof,
-                ) => {
-                    let proof = new_hwp::BlockProofHistoricalHashesAccumulator::new(
+        OldHistoryContentValue::BlockHeaderWithProof(old_header_with_proof) => {
+            let proof = match old_header_with_proof.proof {
+                OldBlockHeaderProof::None(_) => return Ok(None),
+                OldBlockHeaderProof::PreMergeAccumulatorProof(pre_merge_accumulator_proof) => {
+                    let proof = BlockProofHistoricalHashesAccumulator::new(
                         pre_merge_accumulator_proof.proof.to_vec(),
                     )
                     .map_err(|err| ContentStoreError::InvalidData {
                         message: format!("Invalid HistoricalHashes proof: {err:?}"),
                     })?;
-                    new_hwp::BlockHeaderProof::HistoricalHashes(proof)
+                    BlockHeaderProof::HistoricalHashes(proof)
                 }
-                old_hwp::BlockHeaderProof::HistoricalRootsBlockProof(historical_roots_proof) => {
+                OldBlockHeaderProof::HistoricalRootsBlockProof(historical_roots_proof) => {
                     // Note: there is inconsistency between field names because old types are not
                     // in sync with most recent spec.
-                    let proof = new_hwp::BlockProofHistoricalRoots {
+                    let proof = BlockProofHistoricalRoots {
                         beacon_block_proof: historical_roots_proof.historical_roots_proof,
                         beacon_block_root: historical_roots_proof.beacon_block_root,
                         execution_block_proof: historical_roots_proof.beacon_block_proof,
                         slot: historical_roots_proof.slot,
                     };
-                    new_hwp::BlockHeaderProof::HistoricalRoots(proof)
+                    BlockHeaderProof::HistoricalRoots(proof)
                 }
-                old_hwp::BlockHeaderProof::HistoricalSummariesBlockProof(
-                    historical_summaries_proof,
-                ) => {
+                OldBlockHeaderProof::HistoricalSummariesBlockProof(historical_summaries_proof) => {
                     // Note: there is inconsistency between field names because old types are not
                     // in sync with most recent spec.
-                    let execution_block_proof = new_hwp::ExecutionBlockProofCapella::new(
+                    let execution_block_proof = ExecutionBlockProofCapella::new(
                         historical_summaries_proof.beacon_block_proof.to_vec(),
                     )
                     .map_err(|err| ContentStoreError::InvalidData {
                         message: format!("Invalid ExecutionBlockProofCapella proof: {err:?}"),
                     })?;
-                    let proof = new_hwp::BlockProofHistoricalSummaries {
+                    let proof = BlockProofHistoricalSummaries {
                         beacon_block_proof: historical_summaries_proof.historical_summaries_proof,
                         beacon_block_root: historical_summaries_proof.beacon_block_root,
                         execution_block_proof,
                         slot: historical_summaries_proof.slot,
                     };
-                    new_hwp::BlockHeaderProof::HistoricalSummaries(proof)
+                    BlockHeaderProof::HistoricalSummaries(proof)
                 }
             };
-            let new_content_value =
-                NewHistoryContentValue::BlockHeaderWithProof(new_hwp::HeaderWithProof {
-                    header: old_hwp.header,
-                    proof,
-                });
+            let new_content_value = NewHistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
+                header: old_header_with_proof.header,
+                proof,
+            });
             Ok(Some(new_content_value.encode()))
         }
         OldHistoryContentValue::BlockBody(_) | OldHistoryContentValue::Receipts(_) => {
