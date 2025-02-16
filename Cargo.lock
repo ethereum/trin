@@ -2014,7 +2014,7 @@ dependencies = [
 [[package]]
 name = "discv5"
 version = "0.9.1"
-source = "git+https://github.com/kolbyml/discv5?rev=87b2ce39a6d67e3b7a849006e9794f45a89d273b#87b2ce39a6d67e3b7a849006e9794f45a89d273b"
+source = "git+https://github.com/kolbyml/discv5?rev=bb38420622be87e7420326f047ff559722060eea#bb38420622be87e7420326f047ff559722060eea"
 dependencies = [
  "aes",
  "aes-gcm",

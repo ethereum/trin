@@ -121,51 +121,51 @@ async fn main() -> anyhow::Result<()> {
         offer_count += 1;
     }
 
-    // gossip bodies
-    for block in blocks.clone() {
-        let permit = gossip_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore");
+    // // gossip bodies
+    // for block in blocks.clone() {
+    //     let permit = gossip_semaphore
+    //         .clone()
+    //         .acquire_owned()
+    //         .await
+    //         .expect("to be able to acquire semaphore");
 
-        let content_key = HistoryContentKey::new_block_body(block.header.header.hash());
-        let content_value =
-            HistoryContentValue::BlockBody(ethportal_api::BlockBody::Legacy(BlockBodyLegacy {
-                txs: block.body.body.transactions().to_vec(),
-                uncles: block.body.body.uncles().to_vec(),
-            }));
-        serve_full_block_handles.push(spawn_serve_history_content(
-            send_node_client.clone(),
-            receiver_node_enr.clone(),
-            content_key,
-            content_value,
-            Some(permit),
-        ));
-        offer_count += 1;
-    }
+    //     let content_key = HistoryContentKey::new_block_body(block.header.header.hash());
+    //     let content_value =
+    //         HistoryContentValue::BlockBody(ethportal_api::BlockBody::Legacy(BlockBodyLegacy {
+    //             txs: block.body.body.transactions().to_vec(),
+    //             uncles: block.body.body.uncles().to_vec(),
+    //         }));
+    //     serve_full_block_handles.push(spawn_serve_history_content(
+    //         send_node_client.clone(),
+    //         receiver_node_enr.clone(),
+    //         content_key,
+    //         content_value,
+    //         Some(permit),
+    //     ));
+    //     offer_count += 1;
+    // }
 
-    // gossip receipts
-    for block in blocks.clone() {
-        let permit = gossip_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore");
+    // // gossip receipts
+    // for block in blocks.clone() {
+    //     let permit = gossip_semaphore
+    //         .clone()
+    //         .acquire_owned()
+    //         .await
+    //         .expect("to be able to acquire semaphore");
 
-        let content_key = HistoryContentKey::new_block_receipts(block.header.header.hash());
-        let content_value = HistoryContentValue::Receipts(Receipts {
-            receipt_list: block.receipts.receipts.receipt_list,
-        });
-        serve_full_block_handles.push(spawn_serve_history_content(
-            send_node_client.clone(),
-            receiver_node_enr.clone(),
-            content_key,
-            content_value,
-            Some(permit),
-        ));
-        offer_count += 1;
-    }
+    //     let content_key = HistoryContentKey::new_block_receipts(block.header.header.hash());
+    //     let content_value = HistoryContentValue::Receipts(Receipts {
+    //         receipt_list: block.receipts.receipts.receipt_list,
+    //     });
+    //     serve_full_block_handles.push(spawn_serve_history_content(
+    //         send_node_client.clone(),
+    //         receiver_node_enr.clone(),
+    //         content_key,
+    //         content_value,
+    //         Some(permit),
+    //     ));
+    //     offer_count += 1;
+    // }
 
     // Wait till all blocks are done gossiping.
     // This can't deadlock, because the tokio::spawn has a timeout.
