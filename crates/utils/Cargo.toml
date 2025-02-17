@@ -18,6 +18,7 @@ directories.workspace = true
 tempfile.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+console-subscriber = "0.4.1"
 
 [target.'cfg(windows)'.dependencies]
 # The crates for detecting whether the terminal supports colors are OS-specific.

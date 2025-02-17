@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, time::Duration};
 
 use tracing_subscriber::EnvFilter;
 
@@ -9,10 +9,23 @@ pub fn init_tracing_logger() {
         false => EnvFilter::builder().parse_lossy(rust_log),
     };
 
-    tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .with_ansi(detect_ansi_support())
-        .init();
+    match env::var("TRACING_CONSOLE_PORT") {
+        Ok(port) => {
+            let port = port.parse::<u16>().unwrap();
+            console_subscriber::ConsoleLayer::builder()
+                // set how long the console will retain data from completed tasks
+                .retention(Duration::from_secs(60))
+                // set the address the server is bound to
+                .server_addr(([127, 0, 0, 1], port))
+                .init();
+        }
+        Err(_) => {
+            tracing_subscriber::fmt()
+                .with_env_filter(env_filter)
+                .with_ansi(detect_ansi_support())
+                .init();
+        }
+    }
 }
 
 pub fn detect_ansi_support() -> bool {

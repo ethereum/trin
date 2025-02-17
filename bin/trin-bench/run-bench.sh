@@ -84,7 +84,44 @@ run_trin() {
             > "$log_file.log" 2>&1 &
     else
         # RUST_LOG=info,utp_rs=trace 
-        samply record -s -o $log_file.json.gz -- ./../../target/profiling/trin \
+        # samply record -s -o $log_file.json.gz -- 
+        TOKIO_CONSOLE_BUFFER_CAPACITY=2000000 TRACING_CONSOLE_PORT=5554 ./../../target/profiling/trin \
+            --web3-transport http \
+            --web3-http-address "$web3_address" \
+            --mb "$mb" \
+            --bootnodes none \
+            --external-address "$external_address" \
+            --discovery-port "$discovery_port" \
+            --data-dir "$data_dir" \
+            --max-radius 100 \
+            > "$log_file.log" 2>&1 &
+    fi
+    PIDS+=("$!")
+}
+
+run_trinr() {
+    local log_file="$1"
+    local web3_address="$2"
+    local external_address="$3"
+    local discovery_port="$4"
+    local data_dir="$5"
+    local mb="$6"
+    
+    if $USE_PERF; then
+        cargo flamegraph --profile release -c "record -F 97 --call-graph dwarf,64000 -g -o $log_file.perf" --release --output "$log_file.svg" -p trin -- \
+            --web3-transport http \
+            --web3-http-address "$web3_address" \
+            --mb "$mb" \
+            --bootnodes none \
+            --external-address "$external_address" \
+            --discovery-port "$discovery_port" \
+            --data-dir "$data_dir" \
+            --max-radius 100 \            
+            > "$log_file.log" 2>&1 &
+    else
+        # RUST_LOG=info,utp_rs=trace 
+        # samply record -s -o $log_file.json.gz -- 
+        TOKIO_CONSOLE_BUFFER_CAPACITY=2000000 TRACING_CONSOLE_PORT=5555 ./../../target/profiling/trin \
             --web3-transport http \
             --web3-http-address "$web3_address" \
             --mb "$mb" \
@@ -103,7 +140,7 @@ if [ "$PORTAL_CLIENT" == "trin" ]; then
     run_trin "$LOG_DIR/$DATA_DIR_SENDER" "http://127.0.0.1:$PORT_SENDER/" "127.0.0.1:$EXT_PORT_SENDER" "$EXT_PORT_SENDER" "$LOG_DIR/$DATA_DIR_SENDER" "0"
 
     # Run trin receiver
-    run_trin "$LOG_DIR/$DATA_DIR_RECEIVER" "http://127.0.0.1:$PORT_RECEIVER/" "127.0.0.1:$EXT_PORT_RECEIVER" "$EXT_PORT_RECEIVER" "$LOG_DIR/$DATA_DIR_RECEIVER" "10000"
+    run_trinr "$LOG_DIR/$DATA_DIR_RECEIVER" "http://127.0.0.1:$PORT_RECEIVER/" "127.0.0.1:$EXT_PORT_RECEIVER" "$EXT_PORT_RECEIVER" "$LOG_DIR/$DATA_DIR_RECEIVER" "10000"
 fi
 
 # Run trin benchmark coordinator
