@@ -55,9 +55,10 @@ impl fmt::Display for Subnetwork {
     }
 }
 
-// Convert camel_case cli args to/from the Subnetwork enum.
-impl Subnetwork {
-    pub fn from_cli_arg(s: &str) -> Result<Self, String> {
+impl std::str::FromStr for Subnetwork {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "beacon" => Ok(Subnetwork::Beacon),
             "history" => Ok(Subnetwork::History),
@@ -69,7 +70,10 @@ impl Subnetwork {
             _ => Err(format!("Unknown subnetwork: {s}")),
         }
     }
+}
 
+// Convert camel_case cli args to/from the Subnetwork enum.
+impl Subnetwork {
     pub fn to_cli_arg(&self) -> String {
         match self {
             Subnetwork::Beacon => "beacon".to_string(),

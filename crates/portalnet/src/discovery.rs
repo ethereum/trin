@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use discv5::{
     enr::{CombinedKey, Enr as Discv5Enr, NodeId},
-    ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
+    ConfigBuilder, Discv5, Event, ListenConfig, QueryError, RequestError, TalkRequest,
 };
 use ethportal_api::{
     types::{discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec},
@@ -296,6 +296,21 @@ impl Discovery {
     /// Adds `enr` to the discv5 routing table.
     pub fn add_enr(&self, enr: Enr) -> Result<(), &'static str> {
         self.discv5.add_enr(enr)
+    }
+
+    /// Removes `enr` from the discv5 routing table.
+    pub fn remove_node(&self, node_id: &NodeId) -> bool {
+        self.discv5.remove_node(node_id)
+    }
+
+    /// Updates the local ENR TCP/UDP socket.
+    pub fn update_local_enr_socket(&self, socket_addr: SocketAddr, is_tcp: bool) -> bool {
+        self.discv5.update_local_enr_socket(socket_addr, is_tcp)
+    }
+
+    /// Look up ENRs closest to the given target
+    pub async fn recursive_find_nodes(&self, target_node: NodeId) -> Result<Vec<Enr>, QueryError> {
+        self.discv5.find_node(target_node).await
     }
 
     /// Returns the cached `NodeAddress` or `None` if not cached.

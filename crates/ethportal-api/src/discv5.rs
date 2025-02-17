@@ -1,3 +1,4 @@
+use alloy::primitives::bytes::Bytes;
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
@@ -15,11 +16,7 @@ pub trait Discv5Api {
 
     /// Update the socket address of the local node record.
     #[method(name = "updateNodeInfo")]
-    async fn update_node_info(
-        &self,
-        socket_addr: String,
-        is_tcp: Option<bool>,
-    ) -> RpcResult<NodeInfo>;
+    async fn update_node_info(&self, socket_addr: String, is_tcp: bool) -> RpcResult<NodeInfo>;
 
     /// Returns meta information about discv5 routing table.
     #[method(name = "routingTableInfo")]
@@ -40,4 +37,12 @@ pub trait Discv5Api {
     /// Fetch the ENR representation associated with the given Node ID.
     #[method(name = "lookupEnr")]
     async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr>;
+
+    /// Look up ENRs closest to the given target
+    #[method(name = "recursiveFindNodes")]
+    async fn recursive_find_nodes(&self, node_id: NodeId) -> RpcResult<Vec<Enr>>;
+
+    /// Send a TALKREQ request with a payload to a given peer and wait for response.
+    #[method(name = "talkReq")]
+    async fn talk_req(&self, enr: Enr, protocol: String, request: Vec<u8>) -> RpcResult<Bytes>;
 }
