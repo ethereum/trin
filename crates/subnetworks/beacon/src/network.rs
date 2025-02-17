@@ -58,6 +58,7 @@ impl BeaconNetwork {
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(BeaconStorage::new(storage_config)?));
+        storage.write().spawn_pruning_task(); // Spawn pruning task to clean up expired content.
         let storage_clone = Arc::clone(&storage);
         let validator = Arc::new(BeaconValidator::new(header_oracle));
         let ping_extensions = Arc::new(BeaconPingExtensions {});

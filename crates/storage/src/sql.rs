@@ -26,6 +26,10 @@ pub const LC_BOOTSTRAP_LOOKUP_QUERY: &str =
 pub const LC_BOOTSTRAP_LATEST_BLOCK_ROOT_QUERY: &str =
     "SELECT block_root FROM lc_bootstrap ORDER BY slot DESC LIMIT 1";
 
+/// Query to prune the lc_bootstrap table by deleting all records with slot less than the given
+/// slot.
+pub const LC_BOOTSTRAP_PRUNE_QUERY: &str = "DELETE FROM lc_bootstrap WHERE slot < (?1)";
+
 /// Total beacon data size is the combination of lc_bootstrap, lc_update and historical_summaries
 /// tables
 pub const TOTAL_DATA_SIZE_QUERY_BEACON: &str = "SELECT
