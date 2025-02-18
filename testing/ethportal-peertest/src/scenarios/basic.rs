@@ -1,3 +1,5 @@
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
 use alloy::primitives::{B256, U256};
 use ethportal_api::{
     types::{distance::Distance, network::Subnetwork},
@@ -29,6 +31,73 @@ pub async fn test_discv5_routing_table_info(target: &Client) {
     let node_info = target.node_info().await.unwrap();
     let result = Discv5ApiClient::routing_table_info(target).await.unwrap();
     assert_eq!(result.local_node_id, node_info.node_id);
+}
+
+pub async fn test_discv5_add_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing discv5_addEnr");
+    let result = Discv5ApiClient::add_enr(target, peertest.bootnode.enr.clone())
+        .await
+        .unwrap();
+    assert!(result);
+}
+
+pub async fn test_discv5_get_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing discv5_getEnr");
+    let result = Discv5ApiClient::add_enr(target, peertest.bootnode.enr.clone())
+        .await
+        .unwrap();
+    assert!(result);
+    let result = Discv5ApiClient::get_enr(target, peertest.bootnode.enr.node_id())
+        .await
+        .unwrap();
+    assert_eq!(result, peertest.bootnode.enr);
+}
+
+pub async fn test_discv5_delete_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing discv5_deleteEnr");
+    let result = Discv5ApiClient::delete_enr(target, peertest.bootnode.enr.node_id())
+        .await
+        .unwrap();
+    assert!(result);
+    let result = Discv5ApiClient::get_enr(target, peertest.bootnode.enr.node_id())
+        .await
+        .unwrap_err();
+    assert_eq!(
+        result.to_string(),
+        "ErrorObject { code: ServerError(-32099), message: \"ENR not found\", data: None }"
+    );
+    // add it back since scenario tests share resources so a different test could still need it
+    let result = Discv5ApiClient::add_enr(target, peertest.bootnode.enr.clone())
+        .await
+        .unwrap();
+    assert!(result);
+}
+
+pub async fn test_discv5_update_node_info(target: &Client) {
+    info!("Testing discv5_updateNodeInfo");
+
+    let _ = Discv5ApiClient::update_node_info(
+        target,
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080).to_string(),
+        false,
+    )
+    .await
+    .unwrap();
+
+    let node_info = Discv5ApiClient::node_info(target).await.unwrap();
+    assert_eq!(node_info.enr.udp4().unwrap(), 8080);
+
+    // switch it back
+    let _ = Discv5ApiClient::update_node_info(
+        target,
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8999).to_string(),
+        false,
+    )
+    .await
+    .unwrap();
+
+    let node_info = Discv5ApiClient::node_info(target).await.unwrap();
+    assert_eq!(node_info.enr.udp4().unwrap(), 8999);
 }
 
 pub async fn test_routing_table_info(subnetwork: Subnetwork, target: &Client) {
