@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use alloy::primitives::B256;
 use ethportal_api::{
@@ -15,12 +15,13 @@ use ethportal_api::{
     },
     BeaconContentKey, OverlayContentKey, RawContentValue,
 };
+use light_client::consensus::rpc::portal_rpc::expected_current_slot;
 use r2d2::Pool;
 use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
 use rusqlite::params;
 use ssz::{Decode, Encode};
 use ssz_types::{typenum::U128, VariableList};
-use tracing::debug;
+use tracing::{debug, error, info};
 use tree_hash::TreeHash;
 use trin_metrics::storage::StorageMetricsReporter;
 use trin_storage::{
@@ -29,8 +30,8 @@ use trin_storage::{
         HISTORICAL_SUMMARIES_EPOCH_LOOKUP_QUERY, HISTORICAL_SUMMARIES_LOOKUP_QUERY,
         INSERT_BOOTSTRAP_QUERY, INSERT_LC_UPDATE_QUERY,
         INSERT_OR_REPLACE_HISTORICAL_SUMMARIES_QUERY, LC_BOOTSTRAP_LATEST_BLOCK_ROOT_QUERY,
-        LC_BOOTSTRAP_LOOKUP_QUERY, LC_BOOTSTRAP_ROOT_LOOKUP_QUERY, LC_UPDATE_LOOKUP_QUERY,
-        LC_UPDATE_PERIOD_LOOKUP_QUERY, TOTAL_DATA_SIZE_QUERY_BEACON,
+        LC_BOOTSTRAP_LOOKUP_QUERY, LC_BOOTSTRAP_PRUNE_QUERY, LC_BOOTSTRAP_ROOT_LOOKUP_QUERY,
+        LC_UPDATE_LOOKUP_QUERY, LC_UPDATE_PERIOD_LOOKUP_QUERY, TOTAL_DATA_SIZE_QUERY_BEACON,
     },
     utils::get_total_size_of_directory_in_bytes,
     ContentStore, DataSize, PortalStorageConfig, ShouldWeStoreContent,
@@ -310,6 +311,21 @@ impl BeaconStorage {
             .report_content_data_storage_bytes(network_content_storage_usage as f64);
 
         Ok(storage)
+    }
+
+    /// Spawn a task to prune old  beacon data from the database on every new run and once a day
+    pub fn spawn_pruning_task(&self) {
+        let sql_connection_pool = self.sql_connection_pool.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60 * 60 * 24)); // once a day
+            loop {
+                interval.tick().await;
+                if let Err(e) = prune_old_bootstrap_data(&sql_connection_pool) {
+                    error!("Failed pruning old bootstrap data: {:?}", e);
+                }
+            }
+        });
     }
 
     fn db_insert_lc_bootstrap(
@@ -661,6 +677,28 @@ impl BeaconStorage {
     }
 }
 
+/// Prune old bootstrap data from the database
+fn prune_old_bootstrap_data(
+    sql_connection_pool: &Pool<SqliteConnectionManager>,
+) -> Result<(), ContentStoreError> {
+    let conn = sql_connection_pool.get()?;
+    let expected_current_slot = expected_current_slot();
+    // One slot is 12 sec, and we want the threshold to be 4 months before the current slot
+    let slot_threshold = expected_current_slot - (4 * 30 * 24 * 60 * 60 / 12);
+    info!(
+        slot_threshold = slot_threshold,
+        "Pruning light client bootstrap data  outside of the weak subjectivity period..."
+    );
+
+    match conn.execute(LC_BOOTSTRAP_PRUNE_QUERY, params![slot_threshold]) {
+        Ok(_) => {
+            info!("Pruning light client bootstrap data completed successfully");
+            Ok(())
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
@@ -860,5 +898,35 @@ mod test {
         });
         let result = storage.get(&key).unwrap().unwrap();
         assert_eq!(result, value.as_ssz_bytes());
+    }
+
+    #[test]
+    fn test_beacon_storage_prune_old_bootstrap_data() {
+        let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
+        let mut storage = BeaconStorage::new(config).unwrap();
+        let mut value = test_utils::get_light_client_bootstrap(0);
+        // Set the bootstrap slot to outdated value
+        let current_slot = expected_current_slot();
+        let outdated_slot = current_slot - (4 * 30 * 24 * 60 * 60 / 12) - 1;
+        value.bootstrap.header_deneb_mut().unwrap().beacon.slot = outdated_slot;
+        let block_root = value
+            .bootstrap
+            .header_deneb()
+            .unwrap()
+            .beacon
+            .tree_hash_root();
+        let key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
+            block_hash: *block_root,
+        });
+        // Ensure the bootstrap is saved into db
+        storage.put(key.clone(), value.as_ssz_bytes()).unwrap();
+        let result = storage.get(&key).unwrap().unwrap();
+        assert_eq!(result, value.as_ssz_bytes());
+        // Prune the old bootstrap data
+        let result = prune_old_bootstrap_data(&storage.sql_connection_pool);
+        assert!(result.is_ok());
+        // Check if the data was pruned
+        let result = storage.get(&key).unwrap();
+        assert_eq!(result, None);
     }
 }
