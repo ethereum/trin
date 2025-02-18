@@ -24,6 +24,7 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tree_hash.workspace = true
+trin-metrics.workspace = true
 trin-storage.workspace = true
 trin-validation.workspace = true
 utp-rs.workspace = true
