@@ -71,6 +71,7 @@ reth-ipc = { tag = "v1.0.8", git = "https://github.com/paradigmxyz/reth.git"}
 revm = { version = "14.0.3", default-features = false, features = ["std", "secp256k1", "serde-json", "c-kzg"] }
 revm-primitives = { version = "10.0.0", default-features = false, features = ["std", "serde"] }
 rstest = "0.18.2"
+rust-embed = "8.5.0"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
 scraper = "0.18.1"
 serde = { version = "1.0.150", features = ["derive"] }

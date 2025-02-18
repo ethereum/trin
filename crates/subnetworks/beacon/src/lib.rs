@@ -31,6 +31,9 @@ use utp_rs::socket::UtpSocket;
 
 use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler, network::BeaconNetwork};
 
+/// Load default trusted block root for the beacon network.
+const DEFAULT_TRUSTED_BLOCK_ROOT: &str = include_str!("assets/trusted_block_root.txt");
+
 type BeaconHandler = Option<BeaconRequestHandler>;
 type BeaconNetworkTask = Option<JoinHandle<()>>;
 type BeaconMessageTx = Option<mpsc::UnboundedSender<OverlayRequest>>;

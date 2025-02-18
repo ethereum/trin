@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use alloy::primitives::B256;
+use anyhow::anyhow;
 use ethportal_api::{
     types::{distance::XorMetric, network::Subnetwork},
     BeaconContentKey,
@@ -20,7 +21,7 @@ use utp_rs::socket::UtpSocket;
 
 use crate::{
     ping_extensions::BeaconPingExtensions, storage::BeaconStorage, sync::BeaconSync,
-    validation::BeaconValidator,
+    validation::BeaconValidator, DEFAULT_TRUSTED_BLOCK_ROOT,
 };
 
 /// Beacon network layer on top of the overlay protocol. Encapsulates beacon network specific data
@@ -52,7 +53,7 @@ impl BeaconNetwork {
         header_oracle: Arc<RwLock<HeaderOracle>>,
     ) -> anyhow::Result<Self> {
         let config = OverlayConfig {
-            bootnode_enrs: portal_config.bootnodes,
+            bootnode_enrs: portal_config.bootnodes.clone(),
             utp_transfer_limit: portal_config.utp_transfer_limit,
             gossip_dropped: GOSSIP_DROPPED,
             ..Default::default()
@@ -77,39 +78,120 @@ impl BeaconNetwork {
         let beacon_client = Arc::new(Mutex::new(None));
         let beacon_client_clone = Arc::clone(&beacon_client);
 
-        // Spawn the beacon sync task.
-        let trusted_block_root: Option<B256> = match portal_config.trusted_block_root {
-            Some(trusted_block_root) => Some(trusted_block_root),
-            None => {
-                // If no trusted block root is provided, we check for the latest block root in the
-                // database.
-                let block_root = storage_clone.read().lookup_latest_block_root()?;
-                if let Some(block_root) = block_root {
-                    info!(block_root = %block_root, "No trusted block root provided. Using latest block root from storage.");
-                }
-                block_root
-            }
-        };
+        // Get the trusted block root to start syncing from.
+        let trusted_block_root = get_trusted_block_root(&portal_config, storage_clone)?;
 
-        if let Some(trusted_block_root) = trusted_block_root {
-            tokio::spawn(async move {
-                let beacon_sync = BeaconSync::new(overlay_tx);
-                let beacon_sync = beacon_sync.start(trusted_block_root).await;
-                match beacon_sync {
-                    Ok(client) => {
-                        let mut beacon_client = beacon_client_clone.lock().await;
-                        *beacon_client = Some(client);
-                    }
-                    Err(err) => {
-                        error!(error = %err, "Failed to start beacon sync.");
-                    }
+        // Spawn the beacon sync task.
+        tokio::spawn(async move {
+            let beacon_sync = BeaconSync::new(overlay_tx);
+            let beacon_sync = beacon_sync.start(trusted_block_root).await;
+            match beacon_sync {
+                Ok(client) => {
+                    let mut beacon_client = beacon_client_clone.lock().await;
+                    *beacon_client = Some(client);
                 }
-            });
-        }
+                Err(err) => {
+                    error!(error = %err, "Failed to start beacon sync.");
+                }
+            }
+        });
 
         Ok(Self {
             overlay: Arc::new(overlay),
             beacon_client,
         })
+    }
+}
+
+/// Get the trusted block root to start syncing light client from.
+fn get_trusted_block_root(
+    portal_config: &PortalnetConfig,
+    storage: Arc<PLRwLock<BeaconStorage>>,
+) -> anyhow::Result<B256> {
+    // 1) Check if a trusted block root was provided via config
+    if let Some(block_root) = portal_config.trusted_block_root {
+        return Ok(block_root);
+    }
+
+    // 2) Otherwise, try to read the latest block root from storage
+    let maybe_db_block_root = storage.read().lookup_latest_block_root()?;
+    if let Some(db_block_root) = maybe_db_block_root {
+        info!(
+            block_root = %db_block_root,
+            "No trusted block root provided. Using latest block root from storage."
+        );
+        return Ok(db_block_root);
+    }
+
+    // 3) If there's still nothing, log and attempt to load the default checkpoint file
+    info!("No trusted block root provided and no block root found in storage. Loading default checkpoint.");
+    get_default_trusted_root()
+}
+
+/// Get the default trusted block root from the embedded file.
+fn get_default_trusted_root() -> anyhow::Result<B256> {
+    B256::from_str(DEFAULT_TRUSTED_BLOCK_ROOT.trim())
+        .map_err(|err| anyhow!("Failed to parse trusted block root: {err}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use discv5::enr::NodeId;
+    use ethportal_api::{types::distance::Distance, utils::bytes::hex_decode};
+    use parking_lot::RwLock;
+    use tempfile::TempDir;
+    use trin_storage::{config::StorageCapacityConfig, PortalStorageConfigFactory};
+
+    use super::*;
+
+    /// Test that embedded "trusted_block_root.txt" can be loaded & parsed into bytes.
+    #[test]
+    fn test_embedded_trusted_block_root_parsing() {
+        let block_root =
+            get_default_trusted_root().expect("Failed to parse embedded trusted block root");
+
+        assert_eq!(
+            block_root.as_slice(),
+            hex_decode(DEFAULT_TRUSTED_BLOCK_ROOT.trim()).expect("Failed to decode hex")
+        )
+    }
+
+    /// Test to ensure `get_trusted_block_root` falls back to the embedded file
+    /// if the config and storage are both empty.
+    #[test]
+    fn test_get_trusted_block_root_fallback_to_file() {
+        let portal_config = PortalnetConfig {
+            trusted_block_root: None,
+            ..Default::default()
+        };
+        let temp_dir = TempDir::new().unwrap();
+        let storage_cfg_factory = PortalStorageConfigFactory::new(
+            StorageCapacityConfig::Specific {
+                beacon_mb: Some(1),
+                history_mb: Some(1),
+                state_mb: Some(1),
+            },
+            NodeId::random(),
+            temp_dir.path().to_path_buf(),
+        )
+        .unwrap();
+
+        let storage_config = storage_cfg_factory
+            .create(&Subnetwork::Beacon, Distance::MAX)
+            .unwrap();
+        // A mock storage that always returns None
+        let storage_clone = Arc::new(RwLock::new(BeaconStorage::new(storage_config).unwrap()));
+
+        let result = get_trusted_block_root(&portal_config, storage_clone)
+            .expect("Function should not fail with an Err");
+
+        assert_eq!(
+            result.as_slice(),
+            hex_decode(DEFAULT_TRUSTED_BLOCK_ROOT.trim()).expect("Failed to decode hex")
+        );
+
+        temp_dir.close().unwrap();
     }
 }
