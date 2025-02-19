@@ -1,6 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use alloy::primitives::{B256, U256};
+use discv5::rpc::Message;
 use ethportal_api::{
     types::{distance::Distance, network::Subnetwork},
     version::get_trin_version,
@@ -98,6 +99,35 @@ pub async fn test_discv5_update_node_info(target: &Client) {
 
     let node_info = Discv5ApiClient::node_info(target).await.unwrap();
     assert_eq!(node_info.enr.udp4().unwrap(), 8999);
+}
+
+pub async fn test_discv5_talk_req(target: &Client, peertest: &Peertest) {
+    let enr = peertest.bootnode.enr.clone();
+    let protocol = String::from("beacon");
+    let request = hex::decode("0100a028839e1549000003ef001000007619dde7").unwrap();
+
+    let response = Discv5ApiClient::talk_req(target, enr, protocol, request)
+        .await
+        .unwrap();
+
+    let _message = Message::decode(&response).unwrap();
+}
+
+pub async fn test_discv5_recursive_find_node(target: &Client, peertest: &Peertest) {
+    let bootnode_node_id = peertest
+        .bootnode
+        .ipc_client
+        .node_info()
+        .await
+        .unwrap()
+        .node_id;
+    let bootnode_enr = peertest.bootnode.enr.clone();
+
+    let response = Discv5ApiClient::recursive_find_nodes(target, bootnode_node_id)
+        .await
+        .unwrap();
+
+    assert_eq!(response[0], bootnode_enr);
 }
 
 pub async fn test_routing_table_info(subnetwork: Subnetwork, target: &Client) {

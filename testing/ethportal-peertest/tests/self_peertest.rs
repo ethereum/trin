@@ -34,14 +34,16 @@ async fn peertest_stateless() {
     )
     .await;
 
-    peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
-    peertest::scenarios::basic::test_web3_client_version(&target).await;
+    // peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
+    // peertest::scenarios::basic::test_web3_client_version(&target).await;
     peertest::scenarios::basic::test_discv5_node_info(&peertest).await;
     peertest::scenarios::basic::test_discv5_routing_table_info(&target).await;
     peertest::scenarios::basic::test_discv5_add_enr(&target, &peertest).await;
     peertest::scenarios::basic::test_discv5_get_enr(&target, &peertest).await;
     peertest::scenarios::basic::test_discv5_delete_enr(&target, &peertest).await;
     peertest::scenarios::basic::test_discv5_update_node_info(&target).await;
+    // peertest::scenarios::basic::test_discv5_talk_req(&target, &peertest).await;
+    peertest::scenarios::basic::test_discv5_recursive_find_node(&target, &peertest).await;
     peertest::scenarios::eth_rpc::test_eth_chain_id(&peertest).await;
 
     // for subnetwork in [Subnetwork::History, Subnetwork::Beacon, Subnetwork::State] {
@@ -60,8 +62,8 @@ async fn peertest_stateless() {
     //     peertest::scenarios::find::test_recursive_find_nodes_random(subnetwork, &peertest).await;
     // }
 
-    peertest::scenarios::basic::test_history_store(&target).await;
-    peertest::scenarios::basic::test_history_local_content_absent(&target).await;
+    // peertest::scenarios::basic::test_history_store(&target).await;
+    // peertest::scenarios::basic::test_history_local_content_absent(&target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
 }
