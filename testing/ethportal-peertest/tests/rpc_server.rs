@@ -1,10 +1,9 @@
 #![cfg(unix)]
 /// Test that a 3rd-party web3 client can understand our JSON-RPC API
-use std::fs;
 use std::net::{IpAddr, Ipv4Addr};
 
 use alloy::{
-    primitives::U256,
+    primitives::{Bytes, U256},
     providers::{DynProvider, IpcConnect, Provider, ProviderBuilder},
     rpc::{
         client::ClientBuilder,
@@ -13,20 +12,22 @@ use alloy::{
     transports::RpcError,
 };
 use ethportal_api::{
-    types::execution::{block_body::BlockBody, header_with_proof::HeaderWithProof},
-    utils::bytes::{hex_decode, hex_encode},
+    types::execution::{block_body::BlockBody, header_with_proof_new::HeaderWithProof},
+    utils::bytes::hex_encode,
     version::APP_NAME,
     ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use jsonrpsee::async_client::Client;
 use portalnet::constants::{DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
 use rpc::RpcServerHandle;
+use serde::Deserialize;
 use serde_yaml::Value;
 use serial_test::serial;
 use ssz::Decode;
 
 mod utils;
 use trin::cli::TrinConfig;
+use trin_utils::submodules::read_portal_spec_tests_file;
 use url::Url;
 use utils::init_tracing;
 
@@ -130,7 +131,7 @@ async fn test_eth_chain_id() {
 async fn test_eth_get_block_by_number() {
     let (web3_server, web3_client, native_client) = setup_web3_server().await;
 
-    let (hwp, body) = get_full_block();
+    let (hwp, body) = get_full_block_14764013();
     let block_number = hwp.header.number;
 
     // Store header with proof in server
@@ -160,9 +161,9 @@ async fn test_eth_get_block_by_number() {
         .expect("specified block not found");
 
     assert_header(&block.header, &hwp.header);
-    assert_eq!(block.header.size, Some(U256::from(37890)));
+    assert_eq!(block.header.size, Some(U256::from(8086)));
     assert_eq!(block.transactions.len(), body.transactions().len());
-    assert!(block.uncles.is_empty());
+    assert_eq!(block.uncles.len(), 1);
     assert_eq!(
         block.withdrawals.unwrap_or_default().len(),
         body.withdrawals().unwrap_or_default().len()
@@ -175,17 +176,12 @@ async fn test_eth_get_block_by_number() {
     // First tx
     assert_eq!(
         hex_encode(hashes[0]),
-        "0xd06a110de42d674a84b2091cbd85ef514fb4e903f9a80dd7b640c48365a1a832"
+        "0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559"
     );
     // Last tx
     assert_eq!(
-        hex_encode(hashes[84]),
-        "0x27e9e8fb3745d990c7d775268539fa17bbf06255e24a882c3153bf3b513ced9e"
-    );
-    // Legacy block
-    assert_eq!(
-        hex_encode(hashes[5]),
-        "0x2f678341f550f7073a514c4b34f09824119f31dfbe7cc73ffccb21b7a2ba5710"
+        hex_encode(hashes[18]),
+        "0x654e68914918cc400de261aaa40d95bcb8a9542756113771accfae0af09c451f"
     );
 
     web3_server.stop().unwrap();
@@ -196,7 +192,7 @@ async fn test_eth_get_block_by_number() {
 async fn test_eth_get_block_by_number_hydrated() {
     let (web3_server, web3_client, native_client) = setup_web3_server().await;
 
-    let (hwp, _body) = get_full_block();
+    let (hwp, _body) = get_full_block_14764013();
     let block_number = hwp.header.number;
 
     // Store header with proof in server
@@ -250,7 +246,7 @@ async fn test_eth_get_block_by_tag() {
 async fn test_eth_get_block_by_hash() {
     let (web3_server, web3_client, native_client) = setup_web3_server().await;
 
-    let (hwp, body) = get_full_block();
+    let (hwp, body) = get_full_block_14764013();
     let block_hash = hwp.header.hash();
 
     // Store header with proof in server
@@ -280,9 +276,9 @@ async fn test_eth_get_block_by_hash() {
         .expect("specified block not found");
 
     assert_header(&block.header, &hwp.header);
-    assert_eq!(block.header.size, Some(U256::from(37890)));
+    assert_eq!(block.header.size, Some(U256::from(8086)));
     assert_eq!(block.transactions.len(), body.transactions().len());
-    assert!(block.uncles.is_empty());
+    assert_eq!(block.uncles.len(), 1);
     assert_eq!(
         block.withdrawals.unwrap_or_default().len(),
         body.withdrawals().unwrap_or_default().len()
@@ -295,17 +291,12 @@ async fn test_eth_get_block_by_hash() {
     // First tx
     assert_eq!(
         hex_encode(hashes[0]),
-        "0xd06a110de42d674a84b2091cbd85ef514fb4e903f9a80dd7b640c48365a1a832"
+        "0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559"
     );
     // Last tx
     assert_eq!(
-        hex_encode(hashes[84]),
-        "0x27e9e8fb3745d990c7d775268539fa17bbf06255e24a882c3153bf3b513ced9e"
-    );
-    // Legacy block
-    assert_eq!(
-        hex_encode(hashes[5]),
-        "0x2f678341f550f7073a514c4b34f09824119f31dfbe7cc73ffccb21b7a2ba5710"
+        hex_encode(hashes[18]),
+        "0x654e68914918cc400de261aaa40d95bcb8a9542756113771accfae0af09c451f"
     );
 
     web3_server.stop().unwrap();
@@ -316,7 +307,7 @@ async fn test_eth_get_block_by_hash() {
 async fn test_eth_get_block_by_hash_hydrated() {
     let (web3_server, web3_client, native_client) = setup_web3_server().await;
 
-    let (hwp, _body) = get_full_block();
+    let (hwp, _body) = get_full_block_14764013();
     let block_hash = hwp.header.hash();
 
     // Store header with proof in server
@@ -363,30 +354,21 @@ fn assert_header(actual: &RpcHeader, expected: &Header) {
     assert_eq!(actual.timestamp, expected.timestamp);
 }
 
-fn get_full_block() -> (HeaderWithProof, BlockBody) {
-    let file = fs::read_to_string("../../crates/validation/src/assets/hive/blocks.yaml").unwrap();
-    let value: Value = serde_yaml::from_str(&file).unwrap();
-    let all_blocks = value.as_sequence().unwrap();
-    let post_shanghai = all_blocks.last().unwrap();
-    // Why assert the block number? With the current yaml structure, appending a new block into the
-    // yaml file would cause this function to return a different block. This assertion catches the
-    // problem early.
-    assert_eq!(post_shanghai["number"], 17510000);
+fn get_full_block_14764013() -> (HeaderWithProof, BlockBody) {
+    let hwp_file =
+        read_portal_spec_tests_file("tests/mainnet/history/headers_with_proof/14764013.yaml")
+            .unwrap();
+    let hwp = get_content_value::<HeaderWithProof>(&hwp_file);
 
-    // header
-    let ssz_header = get_ssz_contents(post_shanghai, "header");
-    let hwp = HeaderWithProof::from_ssz_bytes(&ssz_header).unwrap();
-
-    // body
-    let ssz_body = get_ssz_contents(post_shanghai, "body");
-    let body = BlockBody::from_ssz_bytes(&ssz_body).unwrap();
+    let body_file =
+        read_portal_spec_tests_file("tests/mainnet/history/bodies/14764013.yaml").unwrap();
+    let body = get_content_value::<BlockBody>(&body_file);
 
     (hwp, body)
 }
 
-// Panic if content is missing, since we're in a test
-fn get_ssz_contents(value: &Value, field: &str) -> Vec<u8> {
-    let content_pair = value.get(field).unwrap().as_mapping().unwrap();
-    let hex_encoded = content_pair.get("content_value").unwrap().as_str().unwrap();
-    hex_decode(hex_encoded).unwrap()
+fn get_content_value<T: Decode>(yaml_file: &str) -> T {
+    let value: Value = serde_yaml::from_str(yaml_file).unwrap();
+    let bytes = Bytes::deserialize(&value["content_value"]).unwrap();
+    T::from_ssz_bytes(&bytes).unwrap()
 }

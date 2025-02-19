@@ -1,10 +1,13 @@
 use ethportal_api::{
     jsonrpsee::async_client::Client,
-    types::execution::header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
+    types::execution::header_with_proof_new::{
+        BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummaries, HeaderWithProof,
+    },
     ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
     StateNetworkApiClient,
 };
 use tracing::info;
+use trin_validation::constants::{MERGE_BLOCK_NUMBER, SHANGHAI_BLOCK_NUMBER};
 
 use crate::{
     utils::{
@@ -48,10 +51,32 @@ async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &Peerte
     // Make sure that peer has block header
     let history_content_key =
         HistoryContentKey::new_block_header_by_hash(fixture.block_header.hash());
+
+    let proof = match fixture.block_header.number {
+        0..MERGE_BLOCK_NUMBER => BlockHeaderProof::HistoricalHashes(Default::default()),
+        MERGE_BLOCK_NUMBER..SHANGHAI_BLOCK_NUMBER => {
+            BlockHeaderProof::HistoricalRoots(BlockProofHistoricalRoots {
+                beacon_block_proof: Default::default(),
+                beacon_block_root: Default::default(),
+                execution_block_proof: Default::default(),
+                slot: 0,
+            })
+        }
+        SHANGHAI_BLOCK_NUMBER.. => {
+            BlockHeaderProof::HistoricalSummaries(BlockProofHistoricalSummaries {
+                beacon_block_proof: Default::default(),
+                beacon_block_root: Default::default(),
+                execution_block_proof: Default::default(),
+                slot: 0,
+            })
+        }
+    };
+
     let history_content_value = HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
         header: fixture.block_header.clone(),
-        proof: BlockHeaderProof::None(SszNone::default()),
+        proof: proof.clone(),
     });
+
     HistoryNetworkApiClient::store(
         &peer.ipc_client,
         history_content_key,

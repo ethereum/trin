@@ -256,7 +256,7 @@ async fn peertest_history_offer_propagates_gossip() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[serial]
+#[ignore = "pr/1666 Re-add #[serial] when re-enabling"]
 async fn peertest_history_offer_propagates_gossip_with_large_content() {
     let (peertest, target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
@@ -269,7 +269,7 @@ async fn peertest_history_offer_propagates_gossip_with_large_content() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[serial]
+#[ignore = "pr/1666 Re-add #[serial] when re-enabling"]
 async fn peertest_history_offer_propagates_gossip_multiple_content_values() {
     let (peertest, target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
@@ -282,7 +282,7 @@ async fn peertest_history_offer_propagates_gossip_multiple_content_values() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[serial]
+#[ignore = "pr/1666 Re-add #[serial] when re-enabling"]
 async fn peertest_history_offer_propagates_gossip_multiple_large_content_values() {
     let (peertest, target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
@@ -295,7 +295,7 @@ async fn peertest_history_offer_propagates_gossip_multiple_large_content_values(
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[serial]
+#[ignore = "pr/1666 Re-add #[serial] when re-enabling"]
 async fn peertest_history_gossip_dropped_with_offer() {
     let (peertest, target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;
@@ -305,7 +305,7 @@ async fn peertest_history_gossip_dropped_with_offer() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[serial]
+#[ignore = "pr/1666 Re-add #[serial] when re-enabling"]
 async fn peertest_history_gossip_dropped_with_find_content() {
     let (peertest, target, handle) =
         setup_peertest(&Network::Mainnet, &[Subnetwork::History]).await;

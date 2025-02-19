@@ -450,8 +450,6 @@ mod tests {
         // And that if fails even if root hash that corresponds to the first node is given
         let proof = TrieProof::from(vec![last_node.clone(), root_node.clone()]);
         let error = validate_trie_proof(Some(last_node.node_hash()), &[2, 1], &proof).unwrap_err();
-        dbg!(&error);
-        dbg!(last_node.node_hash());
         assert!(matches!(
             error,
             StateValidationError::InvalidNodeHash {

@@ -171,7 +171,7 @@ mod tests {
     use anyhow::Result;
     use ethportal_api::{
         types::{
-            execution::header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
+            execution::header_with_proof_new::{BlockHeaderProof, HeaderWithProof},
             jsonrpc::{endpoints::HistoryEndpoint, json_rpc_mock::MockJsonRpcBuilder},
             portal::GetContentInfo,
         },
@@ -193,7 +193,7 @@ mod tests {
     fn create_validator_with_header(header: Header) -> StateValidator {
         let history_content_value = HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
             header: header.clone(),
-            proof: BlockHeaderProof::None(SszNone::default()),
+            proof: BlockHeaderProof::HistoricalHashes(Default::default()),
         });
         let history_jsonrpc_tx = MockJsonRpcBuilder::new()
             .with_response(

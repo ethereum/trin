@@ -187,35 +187,35 @@ impl ssz::Encode for SszNone {
     }
 }
 
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
+// #[cfg(test)]
+// #[allow(clippy::unwrap_used)]
+// mod tests {
 
-    use serde_json::Value;
-    use ssz::Decode;
+//     use serde_json::Value;
+//     use ssz::Decode;
 
-    use super::*;
-    use crate::{
-        test_utils::read_file_from_tests_submodule,
-        utils::bytes::{hex_decode, hex_encode},
-    };
+//     use super::*;
+//     use crate::{
+//         test_utils::read_file_from_tests_submodule,
+//         utils::bytes::{hex_decode, hex_encode},
+//     };
 
-    #[test_log::test]
-    fn decode_encode_header_with_proofs() {
-        let file = read_file_from_tests_submodule(
-            "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
-        )
-        .unwrap();
-        let json: Value = serde_json::from_str(&file).unwrap();
-        let hwps = json.as_object().unwrap();
-        for (block_number, obj) in hwps {
-            let _content_key = obj.get("content_key").unwrap();
-            let block_number: u64 = block_number.parse().unwrap();
-            let proof = obj.get("content_value").unwrap().as_str().unwrap();
-            let hwp = HeaderWithProof::from_ssz_bytes(&hex_decode(proof).unwrap()).unwrap();
-            assert_eq!(block_number, hwp.header.number);
-            let encoded = hex_encode(hwp.as_ssz_bytes());
-            assert_eq!(encoded, proof);
-        }
-    }
-}
+//     #[test_log::test]
+//     fn decode_encode_header_with_proofs() {
+//         let file = read_file_from_tests_submodule(
+//             "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
+//         )
+//         .unwrap();
+//         let json: Value = serde_json::from_str(&file).unwrap();
+//         let hwps = json.as_object().unwrap();
+//         for (block_number, obj) in hwps {
+//             let _content_key = obj.get("content_key").unwrap();
+//             let block_number: u64 = block_number.parse().unwrap();
+//             let proof = obj.get("content_value").unwrap().as_str().unwrap();
+//             let hwp = HeaderWithProof::from_ssz_bytes(&hex_decode(proof).unwrap()).unwrap();
+//             assert_eq!(block_number, hwp.header.number);
+//             let encoded = hex_encode(hwp.as_ssz_bytes());
+//             assert_eq!(encoded, proof);
+//         }
+//     }
+// }

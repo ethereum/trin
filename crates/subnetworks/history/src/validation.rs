@@ -4,7 +4,7 @@ use alloy::primitives::B256;
 use anyhow::{anyhow, ensure};
 use ethportal_api::{
     types::execution::{
-        block_body::BlockBody, header::Header, header_with_proof::HeaderWithProof,
+        block_body::BlockBody, header::Header, header_with_proof_new::HeaderWithProof,
         receipts::Receipts,
     },
     utils::bytes::hex_encode,

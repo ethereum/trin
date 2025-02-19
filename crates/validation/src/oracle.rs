@@ -5,7 +5,7 @@ use ethportal_api::{
     consensus::header::BeaconBlockHeader,
     light_client::store::LightClientStore,
     types::{
-        execution::header_with_proof::HeaderWithProof,
+        execution::header_with_proof_new::HeaderWithProof,
         jsonrpc::{
             endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint},
             request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},

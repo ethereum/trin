@@ -36,7 +36,7 @@ pub use types::{
         state::StateContentKey,
     },
     content_value::{
-        beacon::BeaconContentValue, error::ContentValueError, history::HistoryContentValue,
+        beacon::BeaconContentValue, error::ContentValueError, history_new::HistoryContentValue,
         state::StateContentValue, ContentValue,
     },
     discv5::*,
