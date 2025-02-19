@@ -16,6 +16,7 @@ use ethportal_api::{
 };
 use rusqlite::named_params;
 use tracing::{debug, error, info, warn};
+use trin_metrics::portalnet::PORTALNET_METRICS;
 use trin_storage::{
     error::ContentStoreError,
     versioned::{create_store, ContentType, IdIndexedV1Store, IdIndexedV1StoreConfig},
@@ -42,6 +43,9 @@ mod sql {
 
 const BATCH_DELETE_LIMIT: usize = 100;
 
+/// We will print metrics summary after this many entries are processed.
+const PRINT_SUMMARY_FREQUENCY: usize = 10_000;
+
 #[allow(unused)]
 pub fn maybe_migrate(config: &PortalStorageConfig) -> Result<(), ContentStoreError> {
     let conn = config.sql_connection_pool.get()?;
@@ -52,6 +56,8 @@ pub fn maybe_migrate(config: &PortalStorageConfig) -> Result<(), ContentStoreErr
     }
 
     info!("Legacy history table exists. Starting migration.");
+
+    let metrics = PORTALNET_METRICS.history_migration();
 
     let config = IdIndexedV1StoreConfig::new(
         ContentType::HistoryEternal,
@@ -67,6 +73,8 @@ pub fn maybe_migrate(config: &PortalStorageConfig) -> Result<(), ContentStoreErr
 
     let mut batch_delete_query = conn.prepare(sql::BATCH_DELETE)?;
 
+    let mut summary_threshold = 0;
+    let mut processed_count = 0;
     loop {
         let deleted = batch_delete_query
             .query_map(named_params! { ":limit": BATCH_DELETE_LIMIT }, |row| {
@@ -82,6 +90,8 @@ pub fn maybe_migrate(config: &PortalStorageConfig) -> Result<(), ContentStoreErr
             break;
         }
 
+        processed_count += deleted.len();
+
         for (raw_content_key, raw_content_value) in deleted {
             // Decode content key
             let content_key = match HistoryContentKey::try_from_bytes(&raw_content_key) {
@@ -91,6 +101,7 @@ pub fn maybe_migrate(config: &PortalStorageConfig) -> Result<(), ContentStoreErr
                         err=%err,
                         "Error decoding content key",
                     );
+                    metrics.report_content_key_decoding_error();
                     continue;
                 }
             };
@@ -105,16 +116,20 @@ pub fn maybe_migrate(config: &PortalStorageConfig) -> Result<(), ContentStoreErr
                             err=%err,
                             "Error decoding content value",
                         );
+                        metrics.report_content_value_decoding_error(&content_key);
                         continue;
                     }
                 };
 
             // Convert and write content value
+            let content_value_label = metrics.get_content_value_label(&old_content_value);
             match convert_content_value(&content_key, old_content_value) {
                 Some(new_content_value) => {
+                    metrics.report_content_migrated(content_value_label);
                     store.insert(&content_key, new_content_value)?;
                 }
                 None => {
+                    metrics.report_content_dropped(content_value_label);
                     debug!(
                         key=%content_key.to_bytes(),
                         "Dropping content item",
@@ -122,11 +137,16 @@ pub fn maybe_migrate(config: &PortalStorageConfig) -> Result<(), ContentStoreErr
                 }
             }
         }
+
+        if processed_count > summary_threshold {
+            summary_threshold += PRINT_SUMMARY_FREQUENCY;
+            info!("Processed {processed_count}\n{}", metrics.get_summary());
+        }
     }
 
     conn.execute_batch(sql::DROP_TABLE)?;
 
-    info!("Migration finished!");
+    info!("Migration finished!\n{}", metrics.get_summary());
 
     Ok(())
 }
