@@ -3,7 +3,7 @@ use std::{net::SocketAddr, sync::Arc};
 use alloy::primitives::bytes::Bytes;
 use discv5::enr::NodeId;
 use ethportal_api::{
-    types::{enr::Enr, network::Subnetwork},
+    types::{discv5::Pong, enr::Enr, network::Subnetwork},
     Discv5ApiServer, NodeInfo, RoutingTableInfo,
 };
 use portalnet::discovery::Discovery;
@@ -95,6 +95,16 @@ impl Discv5ApiServer for Discv5Api {
             .send_talk_req(enr, subnetwork, request)
             .await
             .map_err(|err| RpcServeError::Message(err.to_string()).into())
+    }
+
+    /// Send a PING message to the designated node and wait for a PONG response.
+    async fn ping(&self, enr: Enr) -> RpcResult<Pong> {
+        let pong = self
+            .discv5
+            .send_ping(enr)
+            .await
+            .map_err(|err| RpcServeError::Message(err.to_string()))?;
+        Ok(pong.into())
     }
 }
 

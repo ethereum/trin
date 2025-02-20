@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use discv5::{
     enr::{CombinedKey, Enr as Discv5Enr, NodeId},
+    service::Pong,
     ConfigBuilder, Discv5, Event, ListenConfig, QueryError, RequestError, TalkRequest,
 };
 use ethportal_api::{
@@ -348,6 +349,10 @@ impl Discovery {
 
         let response = self.discv5.talk_req(enr, protocol, request).await?;
         Ok(Bytes::from(response))
+    }
+
+    pub async fn send_ping(&self, enr: Enr) -> Result<Pong, RequestError> {
+        self.discv5.send_ping(enr).await
     }
 }
 

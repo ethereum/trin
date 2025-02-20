@@ -130,6 +130,18 @@ pub async fn test_discv5_recursive_find_node(target: &Client, peertest: &Peertes
     assert_eq!(response[0], bootnode_enr);
 }
 
+pub async fn test_discv5_ping(target: &Client, peertest: &Peertest) {
+    let enr = peertest.bootnode.enr.clone();
+    let bootnode_node_info = peertest.bootnode.ipc_client.node_info().await.unwrap();
+    let bootnode_enr_seq = bootnode_node_info.enr.seq();
+    let bootnode_ip = bootnode_node_info.ip.unwrap();
+
+    let pong = Discv5ApiClient::ping(target, enr).await.unwrap();
+
+    assert_eq!(pong.enr_seq, bootnode_enr_seq);
+    assert_eq!(pong.ip.to_string(), bootnode_ip);
+}
+
 pub async fn test_routing_table_info(subnetwork: Subnetwork, target: &Client) {
     info!("Testing routing_table_info for {subnetwork}");
     let node_info = target.node_info().await.unwrap();

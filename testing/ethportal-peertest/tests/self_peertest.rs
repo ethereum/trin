@@ -44,7 +44,8 @@ async fn peertest_stateless() {
     peertest::scenarios::basic::test_discv5_update_node_info(&target).await;
     // peertest::scenarios::basic::test_discv5_talk_req(&target, &peertest).await;
     peertest::scenarios::basic::test_discv5_recursive_find_node(&target, &peertest).await;
-    peertest::scenarios::eth_rpc::test_eth_chain_id(&peertest).await;
+    peertest::scenarios::basic::test_discv5_ping(&target, &peertest).await;
+    // peertest::scenarios::eth_rpc::test_eth_chain_id(&peertest).await;
 
     // for subnetwork in [Subnetwork::History, Subnetwork::Beacon, Subnetwork::State] {
     //     peertest::scenarios::basic::test_routing_table_info(subnetwork, &target).await;

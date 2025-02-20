@@ -3,7 +3,7 @@ use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 use crate::types::{
-    discv5::{NodeInfo, RoutingTableInfo},
+    discv5::{NodeInfo, Pong, RoutingTableInfo},
     enr::Enr,
 };
 
@@ -45,4 +45,8 @@ pub trait Discv5Api {
     /// Send a TALKREQ request with a payload to a given peer and wait for response.
     #[method(name = "talkReq")]
     async fn talk_req(&self, enr: Enr, protocol: String, request: Vec<u8>) -> RpcResult<Bytes>;
+
+    /// Send a PING message to the designated node and wait for a PONG response.
+    #[method(name = "ping")]
+    async fn ping(&self, enr: Enr) -> RpcResult<Pong>;
 }
