@@ -1,0 +1,75 @@
+name: "Monthly Block Root Update"
+
+on:
+  # Runs on the 1st day of each month at midnight UTC
+  schedule:
+    - cron: '0 0 1 * *'
+  # Allows manual run from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  update-block-root:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Fetch finalized block root
+        id: fetch_block_root
+        env:
+          CLOUDFLARE_CLIENT_ID: ${{ secrets.CLOUDFLARE_CLIENT_ID }}
+          CLOUDFLARE_CLIENT_SECRET: ${{ secrets.CLOUDFLARE_CLIENT_SECRET }}
+        run: |
+          echo "Fetching the latest finalized block from EthPandaOps..."
+
+          RESPONSE=$(curl -s -G \
+            -H "CF-Access-Client-Id: $CLOUDFLARE_CLIENT_ID" \
+            -H "CF-Access-Client-Secret: $CLOUDFLARE_CLIENT_SECRET" \
+            -H "accept: application/json" \
+            "https://lighthouse-geth.mainnet.eu1.ethpandaops.io/eth/v1/beacon/headers/finalized")
+
+          echo "API Response: $RESPONSE"
+
+          # Extract the block root
+          LATEST_BLOCK_ROOT=$(echo "$RESPONSE" | jq -r '.data.root')
+          if [ -z "$LATEST_BLOCK_ROOT" ] || [ "$LATEST_BLOCK_ROOT" = "null" ]; then
+           echo "ERROR: Could not parse a valid block root from the JSON response."
+           exit 1
+          fi
+
+          echo "LATEST_BLOCK_ROOT=$LATEST_BLOCK_ROOT" >> $GITHUB_ENV
+          echo "Got latest finalized block root: $LATEST_BLOCK_ROOT"
+
+          # Extract the slot
+          BEACON_SLOT=$(echo "$RESPONSE" | jq -r '.data.header.message.slot')
+          if [ -z "$BEACON_SLOT" ] || [ "$BEACON_SLOT" = "null" ]; then
+           echo "ERROR: Could not parse a valid slot from the JSON response."
+           exit 1
+          fi
+          
+          echo "BEACON_SLOT=$BEACON_SLOT" >> $GITHUB_ENV
+          echo "Got latest finalized beacon slot: $BEACON_SLOT"
+
+      - name: Update trusted block root file
+        run: |
+          echo "Overwriting crates/subnetworks/beacon/src/assets/trusted_block_root.txt with the new block root ..."
+          echo "${{ env.LATEST_BLOCK_ROOT }}" > crates/subnetworks/beacon/src/assets/trusted_block_root.txt
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: "monthly-block-root-update"
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          title: "chore: monthly trusted block root update"
+          body: |
+            This PR updates the file with the latest finalized block root **${{ env.LATEST_BLOCK_ROOT }}**.
+            
+            [View on beaconcha.in](https://beaconcha.in/slot/${{ env.BEACON_SLOT }})
+          commit-message: "chore: update trusted block root to ${{ env.LATEST_BLOCK_ROOT }}"
+          labels: "auto-update"
+          base: "master"
