@@ -27,10 +27,9 @@ impl Discv5Api {
 impl Discv5ApiServer for Discv5Api {
     /// Returns ENR and Node ID information of the local discv5 node.
     async fn node_info(&self) -> RpcResult<NodeInfo> {
-        Ok(self
-            .discv5
+        self.discv5
             .node_info()
-            .map_err(|err| RpcServeError::Message(err.to_string()))?)
+            .map_err(|err| RpcServeError::Message(err.to_string()).into())
     }
 
     /// Update the socket address of the local node record.
@@ -59,10 +58,9 @@ impl Discv5ApiServer for Discv5Api {
 
     /// Fetch the latest ENR associated with the given node ID.
     async fn get_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
-        Ok(self
-            .discv5
+        self.discv5
             .find_enr(&node_id)
-            .ok_or_else(|| RpcServeError::Message("ENR not found".to_string()))?)
+            .ok_or_else(|| RpcServeError::Message("ENR not found".to_string()).into())
     }
 
     /// Delete Node ID from the routing table.
@@ -71,8 +69,11 @@ impl Discv5ApiServer for Discv5Api {
     }
 
     /// Fetch the ENR representation associated with the given Node ID.
-    async fn lookup_enr(&self, _node_id: NodeId) -> RpcResult<Enr> {
-        Err(RpcServeError::MethodNotFound("lookup_enr".to_owned()))?
+    async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
+        self.discv5
+            .lookup_enr(node_id)
+            .await
+            .map_err(|err| RpcServeError::Message(err.to_string()).into())
     }
 
     /// Look up ENRs closest to the given target

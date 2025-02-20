@@ -18,7 +18,7 @@ async-trait.workspace = true
 bytes.workspace = true
 crossbeam-channel = "0.5.13"
 delay_map.workspace = true
-discv5.workspace = true
+discv5 = { workspace = true, features = ["libp2p"] }
 ethereum_ssz.workspace = true
 ethportal-api.workspace = true
 fnv = "1.0.7"
