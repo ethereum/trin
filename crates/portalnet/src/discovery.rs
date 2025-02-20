@@ -354,6 +354,10 @@ impl Discovery {
     pub async fn send_ping(&self, enr: Enr) -> Result<Pong, RequestError> {
         self.discv5.send_ping(enr).await
     }
+
+    pub async fn find_node(&self, enr: Enr, distances: Vec<u64>) -> Result<Vec<Enr>, RequestError> {
+        self.discv5.find_node_designated_peer(enr, distances).await
+    }
 }
 
 pub struct Discv5UdpSocket {

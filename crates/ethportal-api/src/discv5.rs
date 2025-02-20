@@ -49,4 +49,9 @@ pub trait Discv5Api {
     /// Send a PING message to the designated node and wait for a PONG response.
     #[method(name = "ping")]
     async fn ping(&self, enr: Enr) -> RpcResult<Pong>;
+
+    /// Send a FINDNODE request for nodes that fall within the given set of distances, to the
+    /// designated peer and wait for a response.
+    #[method(name = "findNode")]
+    async fn find_node(&self, enr: Enr, distances: Vec<u64>) -> RpcResult<Vec<Enr>>;
 }

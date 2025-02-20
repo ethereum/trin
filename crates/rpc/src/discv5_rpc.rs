@@ -106,6 +106,15 @@ impl Discv5ApiServer for Discv5Api {
             .map_err(|err| RpcServeError::Message(err.to_string()))?;
         Ok(pong.into())
     }
+
+    /// Send a FINDNODE request for nodes that fall within the given set of distances, to the
+    /// designated peer and wait for a response.
+    async fn find_node(&self, enr: Enr, distances: Vec<u64>) -> RpcResult<Vec<Enr>> {
+        self.discv5
+            .find_node(enr, distances)
+            .await
+            .map_err(|err| RpcServeError::Message(err.to_string()).into())
+    }
 }
 
 impl std::fmt::Debug for Discv5Api {
