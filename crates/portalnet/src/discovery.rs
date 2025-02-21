@@ -358,11 +358,6 @@ impl Discovery {
     pub async fn find_node(&self, enr: Enr, distances: Vec<u64>) -> Result<Vec<Enr>, RequestError> {
         self.discv5.find_node_designated_peer(enr, distances).await
     }
-
-    pub async fn lookup_enr(&self, node_id: NodeId) -> Result<Enr, RequestError> {
-        let multiaddr = node_id.as_ref().to_vec();
-        self.discv5.request_enr(multiaddr).await
-    }
 }
 
 pub struct Discv5UdpSocket {

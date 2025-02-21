@@ -70,10 +70,17 @@ impl Discv5ApiServer for Discv5Api {
 
     /// Fetch the ENR representation associated with the given Node ID.
     async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
-        self.discv5
-            .lookup_enr(node_id)
-            .await
-            .map_err(|err| RpcServeError::Message(err.to_string()).into())
+        for enr in self.recursive_find_nodes(node_id).await? {
+            if enr.node_id() == node_id {
+                return Ok(enr);
+            } else {
+                let nodes = self.find_node(enr, vec![256]).await?;
+                if let Some(enr) = nodes.into_iter().find(|enr| enr.node_id() == node_id) {
+                    return Ok(enr);
+                }
+            }
+        }
+        Err(RpcServeError::Message(format!("Unable to find ENR for node_id: {node_id}")).into())
     }
 
     /// Look up ENRs closest to the given target

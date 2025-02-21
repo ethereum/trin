@@ -45,6 +45,8 @@ async fn peertest_stateless() {
     // peertest::scenarios::basic::test_discv5_talk_req(&target, &peertest).await;
     peertest::scenarios::basic::test_discv5_recursive_find_node(&target, &peertest).await;
     peertest::scenarios::basic::test_discv5_ping(&target, &peertest).await;
+    peertest::scenarios::basic::test_discv5_lookup_enr(&target, &peertest).await;
+    peertest::scenarios::basic::test_discv5_find_node(&target, &peertest).await;
     // peertest::scenarios::eth_rpc::test_eth_chain_id(&peertest).await;
 
     // for subnetwork in [Subnetwork::History, Subnetwork::Beacon, Subnetwork::State] {
@@ -58,7 +60,7 @@ async fn peertest_stateless() {
     //     peertest::scenarios::basic::test_find_nodes(subnetwork, &target, &peertest).await;
     //     peertest::scenarios::basic::test_find_nodes_zero_distance(subnetwork, &target, &peertest)
     //         .await;
-    //     peertest::scenarios::find::test_recursive_find_nodes_self(subnetwork, &peertest).await;
+    // peertest::scenarios::find::test_recursive_find_nodes_self(subnetwork, &peertest).await;
     //     peertest::scenarios::find::test_recursive_find_nodes_peer(subnetwork, &peertest).await;
     //     peertest::scenarios::find::test_recursive_find_nodes_random(subnetwork, &peertest).await;
     // }

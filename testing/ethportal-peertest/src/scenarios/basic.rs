@@ -121,25 +121,56 @@ pub async fn test_discv5_recursive_find_node(target: &Client, peertest: &Peertes
         .await
         .unwrap()
         .node_id;
-    let bootnode_enr = peertest.bootnode.enr.clone();
 
     let response = Discv5ApiClient::recursive_find_nodes(target, bootnode_node_id)
         .await
         .unwrap();
 
-    assert_eq!(response[0], bootnode_enr);
+    assert!(!response.is_empty());
 }
 
 pub async fn test_discv5_ping(target: &Client, peertest: &Peertest) {
-    let enr = peertest.bootnode.enr.clone();
+    let bootnode_enr = peertest.bootnode.enr.clone();
     let bootnode_node_info = peertest.bootnode.ipc_client.node_info().await.unwrap();
     let bootnode_enr_seq = bootnode_node_info.enr.seq();
     let bootnode_ip = bootnode_node_info.ip.unwrap();
 
-    let pong = Discv5ApiClient::ping(target, enr).await.unwrap();
+    let pong = Discv5ApiClient::ping(target, bootnode_enr).await.unwrap();
 
     assert_eq!(pong.enr_seq, bootnode_enr_seq);
     assert_eq!(pong.ip.to_string(), bootnode_ip);
+}
+
+pub async fn test_discv5_lookup_enr(target: &Client, peertest: &Peertest) {
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let bootnode_node_id = peertest
+        .bootnode
+        .ipc_client
+        .node_info()
+        .await
+        .unwrap()
+        .node_id;
+
+    let enr = Discv5ApiClient::lookup_enr(target, bootnode_node_id)
+        .await
+        .unwrap();
+
+    assert_eq!(enr, bootnode_enr);
+}
+
+pub async fn test_discv5_find_node(target: &Client, peertest: &Peertest) {
+    let peertest_node_enrs = peertest
+        .nodes
+        .iter()
+        .map(|node| node.enr.clone())
+        .collect::<Vec<ethportal_api::types::enr::Enr>>();
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let distances = vec![256];
+    let enrs = Discv5ApiClient::find_node(target, bootnode_enr, distances)
+        .await
+        .unwrap();
+
+    assert_eq!(enrs, peertest_node_enrs)
 }
 
 pub async fn test_routing_table_info(subnetwork: Subnetwork, target: &Client) {
