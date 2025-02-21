@@ -9,7 +9,7 @@ use crate::{error::ContentStoreError, utils::setup_sql, DistanceFunction};
 
 const BYTES_IN_MB_U64: u64 = 1000 * 1000;
 
-/// The storage capacity configurtion.
+/// The storage capacity configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StorageCapacityConfig {
     Combined {
