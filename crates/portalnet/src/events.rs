@@ -62,7 +62,7 @@ pub struct PortalnetEvents {
     pub beacon_handle: OverlayHandle,
     /// Send TalkReq events with "utp" protocol id to `UtpListener`
     pub utp_talk_reqs: mpsc::UnboundedSender<TalkRequest>,
-    /// The Portal Network to Protocal Id Map etc MAINNET, ANGELFOOD
+    /// The Portal Network to Protocol Id Map etc MAINNET, ANGELFOOD
     network_spec: Arc<NetworkSpec>,
 }
 
