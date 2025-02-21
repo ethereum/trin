@@ -60,7 +60,7 @@ pub struct Discovery {
     pub started: bool,
     /// The socket address that the Discv5 service listens on.
     pub listen_socket: SocketAddr,
-    /// The Portal Network to Protocal Id Map etc MAINNET, ANGELFOOD
+    /// The Portal Network to Protocol Id Map etc MAINNET, ANGELFOOD
     network_spec: Arc<NetworkSpec>,
 }
 
