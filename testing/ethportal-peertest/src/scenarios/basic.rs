@@ -104,7 +104,7 @@ pub async fn test_discv5_update_node_info(target: &Client) {
 pub async fn test_discv5_talk_req(target: &Client, peertest: &Peertest) {
     let enr = peertest.bootnode.enr.clone();
     let protocol = String::from("beacon");
-    let request = hex::decode("0100a028839e1549000003ef001000007619dde7").unwrap();
+    let request = hex::decode("01").unwrap();
 
     let response = Discv5ApiClient::talk_req(target, enr, protocol, request)
         .await
