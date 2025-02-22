@@ -515,7 +515,7 @@ mod tests {
         let (temp_dir, config) =
             create_test_portal_storage_config_with_capacity(/* capacity_mb= */ 1000)?;
 
-        // 1. Manully write content with undecodable content key
+        // 1. Manually write content with undecodable content key
 
         let content_id = B256::random();
         let content_key = vec![0x00u8, 0x01, 0x02, 0x03, 0x04];
