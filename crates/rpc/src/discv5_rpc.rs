@@ -73,11 +73,13 @@ impl Discv5ApiServer for Discv5Api {
         for enr in self.recursive_find_nodes(node_id).await? {
             if enr.node_id() == node_id {
                 return Ok(enr);
-            } else {
-                let nodes = self.find_node(enr, vec![256]).await?;
-                if let Some(enr) = nodes.into_iter().find(|enr| enr.node_id() == node_id) {
-                    return Ok(enr);
-                }
+            } else if let Some(enr) = self
+                .find_node(enr, vec![256])
+                .await?
+                .into_iter()
+                .find(|enr| enr.node_id() == node_id)
+            {
+                return Ok(enr);
             }
         }
         Err(RpcServeError::Message(format!("Unable to find ENR for node_id: {node_id}")).into())
