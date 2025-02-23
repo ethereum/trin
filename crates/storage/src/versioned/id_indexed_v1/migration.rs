@@ -139,7 +139,7 @@ mod tests {
 
         // make sure we can initialize new store and that it's empty
         let store = IdIndexedV1Store::<IdentityContentKey>::create(ContentType::History, config)?;
-        assert_eq!(store.usage_stats(), UsageStats::default(),);
+        assert_eq!(store.usage_stats(), UsageStats::default());
 
         Ok(())
     }

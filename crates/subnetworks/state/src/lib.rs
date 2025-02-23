@@ -127,7 +127,7 @@ pub fn spawn_state_heartbeat(network: Arc<StateNetwork>) {
             let cpu_percent =
                 100.0 * process_time.elapsed().as_secs_f64() / clock_time.elapsed().as_secs_f64();
 
-            let storage_log = network.overlay.store.read().get_summary_info();
+            let storage_log = network.overlay.store.lock().get_summary_info();
             let message_log = network.overlay.get_message_summary();
             let utp_log = network.overlay.get_utp_summary();
             info!("reports~ data: {storage_log}; msgs: {message_log}; cpu={cpu_percent:.1}%");

@@ -85,7 +85,8 @@ run_trin() {
     else
         # RUST_LOG=info,utp_rs=trace 
         # samply record -s -o $log_file.json.gz -- 
-        TOKIO_CONSOLE_BUFFER_CAPACITY=2000000 TRACING_CONSOLE_PORT=5554 ./../../target/profiling/trin \
+        # TOKIO_CONSOLE_BUFFER_CAPACITY=2000000 TRACING_CONSOLE_PORT=5554 
+        samply record -s -o $log_file.json.gz -- ./../../target/profiling/trin \
             --web3-transport http \
             --web3-http-address "$web3_address" \
             --mb "$mb" \
@@ -121,7 +122,8 @@ run_trinr() {
     else
         # RUST_LOG=info,utp_rs=trace 
         # samply record -s -o $log_file.json.gz -- 
-        TOKIO_CONSOLE_BUFFER_CAPACITY=2000000 TRACING_CONSOLE_PORT=5555 ./../../target/profiling/trin \
+        # TOKIO_CONSOLE_BUFFER_CAPACITY=2000000 TRACING_CONSOLE_PORT=5555 
+        samply record -s -o $log_file.json.gz -- ./../../target/profiling/trin \
             --web3-transport http \
             --web3-http-address "$web3_address" \
             --mb "$mb" \
@@ -129,7 +131,7 @@ run_trinr() {
             --external-address "$external_address" \
             --discovery-port "$discovery_port" \
             --data-dir "$data_dir" \
-            --max-radius 100 \
+            --max-radius 100 --enable-metrics-with-url 0.0.0.0:9100  \
             > "$log_file.log" 2>&1 &
     fi
     PIDS+=("$!")
@@ -182,6 +184,7 @@ cleanup() {
     if kill -0 "$TRIN_BENCH_PID" 2>/dev/null; then
         echo "Stopping trin-bench with PID $TRIN_BENCH_PID..."
         kill -SIGINT "$TRIN_BENCH_PID"
+        pkill -SIGINT -P "$TRIN_BENCH_PID"
         wait "$TRIN_BENCH_PID" 2>/dev/null
     fi
 

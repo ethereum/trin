@@ -36,7 +36,7 @@ use ethportal_api::{
     OverlayContentKey, RawContentKey, RawContentValue,
 };
 use futures::{channel::oneshot, future::join_all, prelude::*};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use rand::Rng;
 use smallvec::SmallVec;
 use ssz::Encode;
@@ -56,7 +56,7 @@ use utp_rs::cid::ConnectionId;
 
 use super::OverlayService;
 use crate::{
-    accept_queue::AcceptQueue,
+    accept_queue::{self, AcceptQueue},
     discovery::{Discovery, UtpPeer},
     events::{EventEnvelope, OverlayEvent},
     find::{
@@ -77,8 +77,8 @@ use crate::{
         errors::OverlayRequestError,
         ping_extensions::PingExtension,
         request::{
-            ActiveOutgoingRequest, OverlayRequest, OverlayRequestId, OverlayResponse,
-            RequestDirection,
+            ActiveOutgoingRequest, OverlayRequest, OverlayRequestId, OverlayResponder,
+            OverlayResponse, RequestDirection,
         },
     },
     put_content::propagate_put_content_cross_thread,
@@ -122,7 +122,7 @@ impl<
     #[allow(clippy::too_many_arguments)]
     pub async fn spawn(
         discovery: Arc<Discovery>,
-        store: Arc<RwLock<TStore>>,
+        store: Arc<Mutex<TStore>>,
         kbuckets: SharedKBucketsTable,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
@@ -385,7 +385,7 @@ impl<
     /// This requires store lock and can block the thread, so it shouldn't be called other lock is
     /// already held.
     pub(super) fn data_radius(&self) -> Distance {
-        self.store.read().radius()
+        self.store.lock().radius()
     }
 
     /// Maintains the routing table.
@@ -828,16 +828,19 @@ impl<
             RequestDirection::Incoming { id, source } => {
                 self.register_node_activity(source);
 
-                let response = self.handle_request(request.request.clone(), id.clone(), &source);
-                // Send response to responder if present.
-                if let Some(responder) = request.responder {
-                    if let Ok(ref response) = response {
-                        self.metrics.report_outbound_response(response);
-                    }
-                    let _ = responder.send(response);
-                }
-                // Perform background processing.
-                self.process_incoming_request(request.request, id, source);
+                // let response =
+                self.metrics.report_inbound_request(&request.request);
+                self.handle_request(request.request, request.responder, id, &source);
+
+                // // Send response to responder if present.
+                // if let Some(responder) = request.responder {
+                //     if let Ok(ref response) = response {
+                //         self.metrics.report_outbound_response(response);
+                //     }
+                //     let _ = responder.send(response);
+                // }
+                // // Perform background processing.
+                // self.process_incoming_request(request.request, id, source);
             }
             RequestDirection::Outgoing { destination } => {
                 self.active_outgoing_requests.write().insert(
@@ -862,27 +865,65 @@ impl<
     /// Attempts to build a response for a request.
     #[allow(clippy::result_large_err)]
     fn handle_request(
-        &mut self,
+        &self,
         request: Request,
+        responder: Option<OverlayResponder>,
         id: RequestId,
         source: &NodeId,
-    ) -> Result<Response, OverlayRequestError> {
+    ) {
         match request {
-            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, source, id))),
-            Request::FindNodes(find_nodes) => Ok(Response::Nodes(
-                self.handle_find_nodes(find_nodes, source, id),
-            )),
-            Request::FindContent(find_content) => Ok(Response::Content(self.handle_find_content(
-                find_content,
-                source,
-                id,
-            )?)),
-            Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer, source, id)?)),
+            Request::Ping(ping) => {
+                let response = Ok(Response::Pong(self.handle_ping(ping.clone(), source, id)));
+                // Send response to responder if present.
+                if let Some(responder) = responder {
+                    if let Ok(ref response) = response {
+                        self.metrics.report_outbound_response(response);
+                    }
+                    let _ = responder.send(response);
+                }
+
+                // Perform background processing.
+                self.process_ping(ping, *source);
+            }
+            Request::FindNodes(find_nodes) => {
+                let response = Ok(Response::Nodes(
+                    self.handle_find_nodes(find_nodes, source, id),
+                ));
+                // Send response to responder if present.
+                if let Some(responder) = responder {
+                    if let Ok(ref response) = response {
+                        self.metrics.report_outbound_response(response);
+                    }
+                    let _ = responder.send(response);
+                }
+            }
+            Request::FindContent(find_content) => {
+                let response = match self.handle_find_content(find_content, source, id) {
+                    Ok(response) => Ok(Response::Content(response)),
+                    Err(err) => Err(err),
+                };
+                // Send response to responder if present.
+                if let Some(responder) = responder {
+                    if let Ok(ref response) = response {
+                        self.metrics.report_outbound_response(response);
+                    }
+                    let _ = responder.send(response);
+                }
+            }
+            Request::Offer(offer) => self.handle_offer(offer, responder, *source, id),
             Request::PopulatedOffer(_) | Request::PopulatedOfferWithResult(_) => {
-                Err(OverlayRequestError::InvalidRequest(
+                let response = Err(OverlayRequestError::InvalidRequest(
                     "An offer with content attached is not a valid network message to receive"
                         .to_owned(),
-                ))
+                ));
+
+                // Send response to responder if present.
+                if let Some(responder) = responder {
+                    if let Ok(ref response) = response {
+                        self.metrics.report_outbound_response(response);
+                    }
+                    let _ = responder.send(response);
+                }
             }
         }
     }
@@ -941,7 +982,7 @@ impl<
             }
         };
         match (
-            self.store.read().get(&content_key),
+            self.store.lock().get(&content_key),
             self.utp_controller.get_outbound_semaphore(),
         ) {
             (Ok(Some(content)), Some(permit)) => {
@@ -998,9 +1039,11 @@ impl<
     fn handle_offer(
         &self,
         request: Offer,
-        source: &NodeId,
+        responder: Option<OverlayResponder>,
+        source: NodeId,
         request_id: RequestId,
-    ) -> Result<Accept, OverlayRequestError> {
+    ) {
+        // Ok(Response::Accept(
         trace!(
             protocol = %self.protocol,
             request.source = %source,
@@ -1009,11 +1052,20 @@ impl<
         );
 
         let mut requested_keys =
-            BitList::with_capacity(request.content_keys.len()).map_err(|_| {
+            match BitList::with_capacity(request.content_keys.len()).map_err(|_| {
                 OverlayRequestError::AcceptError(
                     "Unable to initialize bitlist for requested keys.".to_owned(),
                 )
-            })?;
+            }) {
+                Ok(keys) => keys,
+                Err(response) => {
+                    // Send response to responder if present.
+                    if let Some(responder) = responder {
+                        let _ = responder.send(Err(response));
+                    }
+                    return;
+                }
+            };
 
         // Attempt to get semaphore permit if fails we return an empty accept.
         // `get_inbound_semaphore()` isn't blocking and will instantly return with
@@ -1028,14 +1080,23 @@ impl<
         let permit = match self.utp_controller.get_inbound_semaphore() {
             Some(permit) => permit,
             None => {
-                return Ok(Accept {
+                let response = Ok(Response::Accept(Accept {
                     connection_id: 0,
                     content_keys: requested_keys,
-                });
+                }));
+                // Send response to responder if present.
+                if let Some(responder) = responder {
+                    if let Ok(ref response) = response {
+                        self.metrics.report_outbound_response(response);
+                    }
+                    let _ = responder.send(response);
+                }
+
+                return;
             }
         };
 
-        let content_keys: Vec<TContentKey> = request
+        let content_keys: Vec<TContentKey> = match request
             .content_keys
             .iter()
             .map(TContentKey::try_from_bytes)
@@ -1044,84 +1105,142 @@ impl<
                 OverlayRequestError::AcceptError(
                     "Unable to build content key from OFFER request".to_owned(),
                 )
-            })?;
+            }) {
+            Ok(keys) => keys,
+            Err(response) => {
+                // Send response to responder if present.
+                if let Some(responder) = responder {
+                    let _ = responder.send(Err(response));
+                }
+                return;
+            }
+        };
 
         let mut accepted_keys: Vec<TContentKey> = Vec::default();
 
         // if we're unable to find the NodeContact for the source node we throw an error
         // since the node_contact is required for the accept queue, and it is expected to be present
-        let node_contact = self.find_node_contact(source).ok_or_else(|| {
+        let node_contact = match self.find_node_contact(&source).ok_or_else(|| {
             OverlayRequestError::AcceptError(
                 "handle_offer: unable to find NodeContact for NodeId".to_string(),
             )
-        })?;
-        for (i, key) in content_keys.iter().enumerate() {
-            // Accept content if within radius and not already present in the data store.
-            let mut accept = self
-                .store
-                .read()
-                .is_key_within_radius_and_unavailable(key)
-                .map(|value| matches!(value, ShouldWeStoreContent::Store))
-                .map_err(|err| {
-                    OverlayRequestError::AcceptError(format!(
-                        "Unable to check content availability {err}"
-                    ))
-                })?;
-            if accept {
-                // accept all keys that are successfully added to the queue
-                if self
-                    .accept_queue
-                    .write()
-                    .add_key_to_queue(key, &node_contact)
-                {
-                    accepted_keys.push(key.clone());
-                } else {
-                    accept = false;
+        }) {
+            Ok(contact) => contact,
+            Err(response) => {
+                // Send response to responder if present.
+                if let Some(responder) = responder {
+                    let _ = responder.send(Err(response));
                 }
+                return;
             }
-            requested_keys.set(i, accept).map_err(|err| {
-                OverlayRequestError::AcceptError(format!(
-                    "Unable to set requested keys bits: {err:?}"
-                ))
-            })?;
-        }
-
-        // If no content keys were accepted, then return an Accept with a connection ID value of
-        // zero.
-        if requested_keys.is_zero() {
-            return Ok(Accept {
-                connection_id: 0,
-                content_keys: requested_keys,
-            });
-        }
-
-        // Generate a connection ID for the uTP connection if there is data we would like to
-        // accept.
-        let enr_str = if enabled!(Level::TRACE) {
-            node_contact.enr.to_base64()
-        } else {
-            String::with_capacity(0)
         };
-        let cid: ConnectionId<NodeId> = self.utp_controller.cid(node_contact.enr.node_id(), false);
-        let cid_send = cid.send;
-
-        let content_keys_string: Vec<String> = content_keys
-            .iter()
-            .map(|content_key| content_key.to_hex())
-            .collect();
-
-        trace!(
-            protocol = %self.protocol,
-            request.source = %source,
-            cid.send = cid.send,
-            cid.recv = cid.recv,
-            enr = enr_str,
-            request.content_keys = ?content_keys_string,
-            "Content keys handled by offer",
-        );
 
         let utp_processing = UtpProcessing::from(self);
+        let store = self.store.clone();
+        let accept_queue = self.accept_queue.clone();
+        let metrics = self.metrics.clone();
         tokio::spawn(async move {
+            for (i, key) in content_keys.iter().enumerate() {
+                // Accept content if within radius and not already present in the data store.
+                let mut accept = match store
+                    .lock()
+                    .is_key_within_radius_and_unavailable(key)
+                    .map(|value| matches!(value, ShouldWeStoreContent::Store))
+                    .map_err(|err| {
+                        OverlayRequestError::AcceptError(format!(
+                            "Unable to check content availability {err}"
+                        ))
+                    }) {
+                    Ok(accept) => accept,
+                    Err(response) => {
+                        // Send response to responder if present.
+                        if let Some(responder) = responder {
+                            let _ = responder.send(Err(response));
+                        }
+                        return;
+                    }
+                };
+                // let mut accept = true;
+                if accept {
+                    // accept all keys that are successfully added to the queue
+                    if accept_queue.write().add_key_to_queue(key, &node_contact) {
+                        accepted_keys.push(key.clone());
+                    } else {
+                        accept = false;
+                    }
+                }
+                if let Err(response) = requested_keys.set(i, accept).map_err(|err| {
+                    OverlayRequestError::AcceptError(format!(
+                        "Unable to set requested keys bits: {err:?}"
+                    ))
+                }) {
+                    // Send response to responder if present.
+                    if let Some(responder) = responder {
+                        let _ = responder.send(Err(response));
+                    }
+                    return;
+                };
+            }
+
+            // If no content keys were accepted, then return an Accept with a connection ID value of
+            // zero.
+            if requested_keys.is_zero() {
+                let response = Ok(Response::Accept(Accept {
+                    connection_id: 0,
+                    content_keys: requested_keys,
+                }));
+
+                // Send response to responder if present.
+                if let Some(responder) = responder {
+                    if let Ok(ref response) = response {
+                        metrics.report_outbound_response(response);
+                    }
+                    let _ = responder.send(response);
+                }
+
+                return;
+            }
+
+            // Generate a connection ID for the uTP connection if there is data we would like to
+            // accept.
+            let enr_str = if enabled!(Level::TRACE) {
+                node_contact.enr.to_base64()
+            } else {
+                String::with_capacity(0)
+            };
+            let cid: ConnectionId<NodeId> = utp_processing
+                .utp_controller
+                .cid(node_contact.enr.node_id(), false);
+            let cid_send = cid.send;
+
+            let content_keys_string: Vec<String> = content_keys
+                .iter()
+                .map(|content_key| content_key.to_hex())
+                .collect();
+
+            trace!(
+                // protocol = %self.protocol,
+                request.source = %source,
+                cid.send = cid.send,
+                cid.recv = cid.recv,
+                enr = enr_str,
+                request.content_keys = ?content_keys_string,
+                "Content keys handled by offer",
+            );
+
+            let response = Ok(Response::Accept(Accept {
+                connection_id: cid_send.to_be(),
+                content_keys: requested_keys,
+            }));
+
+            // Send response to responder if present.
+            if let Some(responder) = responder {
+                if let Ok(ref response) = response {
+                    metrics.report_outbound_response(response);
+                }
+                let _ = responder.send(response);
+            }
+
             let peer = UtpPeer(node_contact);
             let peer_client = peer.client();
             let data = match utp_processing
@@ -1242,13 +1361,6 @@ impl<
             // explicitly drop semaphore permit in thread so the permit is moved into the thread
             permit.drop();
         });
-
-        let accept = Accept {
-            connection_id: cid_send.to_be(),
-            content_keys: requested_keys,
-        };
-
-        Ok(accept)
     }
 
     /// Sends a TALK request via Discovery v5 to some destination node.
@@ -1285,14 +1397,6 @@ impl<
                 response,
             });
         });
-    }
-
-    /// Processes an incoming request from some source node.
-    fn process_incoming_request(&mut self, request: Request, _id: RequestId, source: NodeId) {
-        self.metrics.report_inbound_request(&request);
-        if let Request::Ping(ping) = request {
-            self.process_ping(ping, source);
-        }
     }
 
     /// Register source NodeId activity in overlay routing table
@@ -1575,15 +1679,11 @@ impl<
         // already stored.
         let key_desired = utp_processing
             .store
-            .read()
+            .lock()
             .is_key_within_radius_and_unavailable(&key);
         match key_desired {
             Ok(ShouldWeStoreContent::Store) => {
-                match utp_processing
-                    .store
-                    .write()
-                    .put(key.clone(), &content_value)
-                {
+                match utp_processing.store.lock().put(key.clone(), &content_value) {
                     Ok(dropped_content) => {
                         if !dropped_content.is_empty() && utp_processing.gossip_dropped {
                             // add dropped content to validation result, so it will be propagated
@@ -1782,7 +1882,7 @@ impl<
     ) {
         let mut content = content;
         // Operate under assumption that all content in the store is valid
-        let local_value = utp_processing.store.read().get(&content_key);
+        let local_value = utp_processing.store.lock().get(&content_key);
         if let Ok(Some(val)) = local_value {
             // todo validate & replace content value if different & punish bad peer
             content = val;
@@ -1823,7 +1923,7 @@ impl<
             let should_store = validation_result.valid_for_storing
                 && utp_processing
                     .store
-                    .read()
+                    .lock()
                     .is_key_within_radius_and_unavailable(&content_key)
                     .map_or_else(
                         |err| {
@@ -1835,7 +1935,7 @@ impl<
             if should_store {
                 match utp_processing
                     .store
-                    .write()
+                    .lock()
                     .put(content_key.clone(), content.clone())
                 {
                     Ok(dropped_content) => {
@@ -1926,7 +2026,7 @@ impl<
 
     /// Provide the requested content key and content value for the acceptor
     fn provide_requested_content(
-        store: Arc<RwLock<TStore>>,
+        store: Arc<Mutex<TStore>>,
         accept_message: &Accept,
         content_keys_offered: Vec<RawContentKey>,
     ) -> anyhow::Result<Vec<RawContentValue>> {
@@ -1947,7 +2047,7 @@ impl<
             .zip(content_keys_offered.iter())
         {
             if i {
-                match store.read().get(key) {
+                match store.lock().get(key) {
                     Ok(content) => match content {
                         Some(content) => content_items.push(content),
                         None => return Err(anyhow!("Unable to read offered content!")),
@@ -2233,7 +2333,7 @@ impl<
         debug!("Starting query for content key: {}", target);
 
         // Lookup content locally before querying the network.
-        if let Ok(Some(content)) = self.store.read().get(&target) {
+        if let Ok(Some(content)) = self.store.lock().get(&target) {
             let local_enr = self.local_enr();
             let mut query_trace = QueryTrace::new(&local_enr, target.content_id().into());
             query_trace.node_responded_with_content(&local_enr);
@@ -2415,7 +2515,7 @@ where
     TStore: ContentStore<Key = TContentKey>,
 {
     validator: Arc<TValidator>,
-    store: Arc<RwLock<TStore>>,
+    store: Arc<Mutex<TStore>>,
     metrics: OverlayMetricsReporter,
     kbuckets: SharedKBucketsTable,
     command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
@@ -2508,6 +2608,7 @@ mod tests {
         portal_wire::{Ping, Pong, MAINNET},
     };
     use kbucket::KBucketsTable;
+    use parking_lot::lock_api::RwLock;
     use rstest::*;
     use serial_test::serial;
     use tokio::{
@@ -2570,7 +2671,7 @@ mod tests {
 
         let node_id = discovery.local_enr().node_id();
         let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
-        let store = Arc::new(RwLock::new(store));
+        let store = Arc::new(Mutex::new(store));
 
         let overlay_config = OverlayConfig::default();
         let kbuckets = SharedKBucketsTable::new(KBucketsTable::new(

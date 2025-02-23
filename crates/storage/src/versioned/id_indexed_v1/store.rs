@@ -4,7 +4,7 @@ use ethportal_api::{types::distance::Distance, OverlayContentKey, RawContentValu
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{named_params, types::Type, OptionalExtension};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 use trin_metrics::storage::StorageMetricsReporter;
 
 use super::{
@@ -176,12 +176,18 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
     pub fn has_content(&self, content_id: &ContentId) -> Result<bool, ContentStoreError> {
         let timer = self.metrics.start_process_timer("has_content");
 
-        let has_content = self
-            .config
-            .sql_connection_pool
-            .get()?
-            .prepare(&sql::lookup_key(&self.config.content_type))?
-            .exists(named_params! { ":content_id": content_id.to_vec() })?;
+        let conn = self.config.sql_connection_pool.get()?;
+        let query = sql::has_key(&self.config.content_type);
+
+        // Use `prepare_cached` instead of `prepare` (if available) for better performance
+        let mut stmt = conn.prepare_cached(&query)?;
+
+        let has_content = stmt
+            .query_row(
+                named_params! { ":content_id": content_id.to_vec() },
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|result| result == 1)?;
 
         self.metrics.stop_process_timer(timer);
         Ok(has_content)

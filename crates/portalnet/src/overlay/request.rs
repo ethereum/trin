@@ -25,7 +25,7 @@ pub enum RequestDirection {
 pub type OverlayRequestId = u128;
 
 /// An overlay request response channel.
-type OverlayResponder = oneshot::Sender<Result<Response, OverlayRequestError>>;
+pub type OverlayResponder = oneshot::Sender<Result<Response, OverlayRequestError>>;
 
 /// A request to pass through the overlay.
 #[derive(Debug)]

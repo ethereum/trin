@@ -6,7 +6,7 @@ use ethportal_api::{
     BeaconContentKey,
 };
 use light_client::{consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client};
-use parking_lot::RwLock as PLRwLock;
+use parking_lot::{lock_api::Mutex as PLMutex, RwLock as PLRwLock};
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpPeer},
@@ -57,7 +57,7 @@ impl BeaconNetwork {
             gossip_dropped: GOSSIP_DROPPED,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(BeaconStorage::new(storage_config)?));
+        let storage = Arc::new(PLMutex::new(BeaconStorage::new(storage_config)?));
         let storage_clone = Arc::clone(&storage);
         let validator = Arc::new(BeaconValidator::new(header_oracle));
         let ping_extensions = Arc::new(BeaconPingExtensions {});
@@ -82,7 +82,7 @@ impl BeaconNetwork {
             None => {
                 // If no trusted block root is provided, we check for the latest block root in the
                 // database.
-                let block_root = storage_clone.read().lookup_latest_block_root()?;
+                let block_root = storage_clone.lock().lookup_latest_block_root()?;
                 if let Some(block_root) = block_root {
                     info!(block_root = %block_root, "No trusted block root provided. Using latest block root from storage.");
                 }

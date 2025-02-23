@@ -120,7 +120,7 @@ pub fn spawn_history_heartbeat(network: Arc<HistoryNetwork>) {
             let metrics = network.overlay.discovery.discv5.metrics();
             info!("Server metrics {:?}", metrics);
 
-            let storage_log = network.overlay.store.read().get_summary_info();
+            let storage_log = network.overlay.store.lock().get_summary_info();
             let message_log = network.overlay.get_message_summary();
             let utp_log = network.overlay.get_utp_summary();
             info!("reports~ data: {storage_log}; msgs: {message_log}");

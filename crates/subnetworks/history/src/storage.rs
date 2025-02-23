@@ -1,3 +1,5 @@
+use std::{thread::sleep, time::Duration};
+
 use ethportal_api::{
     types::{distance::Distance, network::Subnetwork, portal::PaginateLocalContentInfo},
     HistoryContentKey, OverlayContentKey, RawContentValue,
@@ -40,6 +42,7 @@ impl ContentStore for HistoryStorage {
         if self.disable_history_storage {
             return Ok(ShouldWeStoreContent::NotWithinRadius);
         }
+        // sleep(Duration::from_millis(100));
         if self.store.distance_to_content_id(&content_id) > self.store.radius() {
             Ok(ShouldWeStoreContent::NotWithinRadius)
         } else if self.store.has_content(&content_id)? {

@@ -59,6 +59,13 @@ pub fn lookup_key(content_type: &ContentType) -> String {
     )
 }
 
+pub fn has_key(content_type: &ContentType) -> String {
+    format!(
+        "SELECT EXISTS(SELECT 1 FROM {} WHERE content_id = :content_id);",
+        table_name(content_type)
+    )
+}
+
 pub fn lookup_value(content_type: &ContentType) -> String {
     format!(
         "SELECT content_value FROM {} WHERE content_id = :content_id LIMIT 1",
