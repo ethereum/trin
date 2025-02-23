@@ -83,7 +83,6 @@ impl Discv5ApiServer for Discv5Api {
             }
         }
 
-        
         Err(RpcServeError::Message(format!("Unable to find ENR for node_id: {node_id}")).into())
     }
 
