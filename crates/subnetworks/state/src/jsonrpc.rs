@@ -172,7 +172,7 @@ fn local_storage_lookup(
     network
         .overlay
         .store
-        .read()
+        .lock()
         .get(content_key)
         .map_err(|err| err.to_string())
 }
@@ -285,7 +285,7 @@ async fn store(
         network
             .overlay
             .store
-            .write()
+            .lock()
             .put(content_key, content_value.encode())
             .map(|_| true),
     )
@@ -352,7 +352,7 @@ async fn put_content(
 fn paginate(network: Arc<StateNetwork>, offset: u64, limit: u64) -> Result<Value, String> {
     to_json_result(
         "PaginateLocalContentKeys",
-        network.overlay.store.read().paginate(offset, limit),
+        network.overlay.store.lock().paginate(offset, limit),
     )
 }
 

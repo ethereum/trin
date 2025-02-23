@@ -7,7 +7,7 @@ use ethportal_api::{
     BeaconContentKey,
 };
 use light_client::{consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client};
-use parking_lot::RwLock as PLRwLock;
+use parking_lot::Mutex as PLMutex;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpPeer},
@@ -58,8 +58,8 @@ impl BeaconNetwork {
             gossip_dropped: GOSSIP_DROPPED,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(BeaconStorage::new(storage_config)?));
-        storage.write().spawn_pruning_task(); // Spawn pruning task to clean up expired content.
+        let storage = Arc::new(PLMutex::new(BeaconStorage::new(storage_config)?));
+        storage.lock().spawn_pruning_task(); // Spawn pruning task to clean up expired content.
         let storage_clone = Arc::clone(&storage);
         let validator = Arc::new(BeaconValidator::new(header_oracle));
         let ping_extensions = Arc::new(BeaconPingExtensions {});
@@ -106,7 +106,7 @@ impl BeaconNetwork {
 /// Get the trusted block root to start syncing light client from.
 fn get_trusted_block_root(
     portal_config: &PortalnetConfig,
-    storage: Arc<PLRwLock<BeaconStorage>>,
+    storage: Arc<PLMutex<BeaconStorage>>,
 ) -> anyhow::Result<B256> {
     // 1) Check if a trusted block root was provided via config
     if let Some(block_root) = portal_config.trusted_block_root {
@@ -114,7 +114,7 @@ fn get_trusted_block_root(
     }
 
     // 2) Otherwise, try to read the latest block root from storage
-    let maybe_db_block_root = storage.read().lookup_latest_block_root()?;
+    let maybe_db_block_root = storage.lock().lookup_latest_block_root()?;
     if let Some(db_block_root) = maybe_db_block_root {
         info!(
             block_root = %db_block_root,
@@ -140,7 +140,6 @@ mod tests {
 
     use discv5::enr::NodeId;
     use ethportal_api::{types::distance::Distance, utils::bytes::hex_decode};
-    use parking_lot::RwLock;
     use tempfile::TempDir;
     use trin_storage::{config::StorageCapacityConfig, PortalStorageConfigFactory};
 
@@ -182,7 +181,7 @@ mod tests {
             .create(&Subnetwork::Beacon, Distance::MAX)
             .unwrap();
         // A mock storage that always returns None
-        let storage_clone = Arc::new(RwLock::new(BeaconStorage::new(storage_config).unwrap()));
+        let storage_clone = Arc::new(PLMutex::new(BeaconStorage::new(storage_config).unwrap()));
 
         let result = get_trusted_block_root(&portal_config, storage_clone)
             .expect("Function should not fail with an Err");

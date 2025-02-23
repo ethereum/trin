@@ -35,7 +35,7 @@ use ethportal_api::{
     OverlayContentKey, RawContentKey, RawContentValue,
 };
 use futures::{channel::oneshot, future::join_all, prelude::*};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use rand::Rng;
 use smallvec::SmallVec;
 use ssz::Encode;
@@ -121,7 +121,7 @@ impl<
     #[allow(clippy::too_many_arguments)]
     pub async fn spawn(
         discovery: Arc<Discovery>,
-        store: Arc<RwLock<TStore>>,
+        store: Arc<Mutex<TStore>>,
         kbuckets: SharedKBucketsTable,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
@@ -376,7 +376,7 @@ impl<
     /// This requires store lock and can block the thread, so it shouldn't be called other lock is
     /// already held.
     pub(super) fn data_radius(&self) -> Distance {
-        self.store.read().radius()
+        self.store.lock().radius()
     }
 
     /// Maintains the routing table.
@@ -928,7 +928,7 @@ impl<
             }
         };
         match (
-            self.store.read().get(&content_key),
+            self.store.lock().get(&content_key),
             self.utp_controller.get_outbound_semaphore(),
         ) {
             (Ok(Some(content)), Some(permit)) => {
@@ -1045,7 +1045,7 @@ impl<
             // Accept content if within radius and not already present in the data store.
             let mut accept = self
                 .store
-                .read()
+                .lock()
                 .is_key_within_radius_and_unavailable(key)
                 .map(|value| matches!(value, ShouldWeStoreContent::Store))
                 .map_err(|err| {
@@ -1552,15 +1552,11 @@ impl<
         // already stored.
         let key_desired = utp_processing
             .store
-            .read()
+            .lock()
             .is_key_within_radius_and_unavailable(&key);
         match key_desired {
             Ok(ShouldWeStoreContent::Store) => {
-                match utp_processing
-                    .store
-                    .write()
-                    .put(key.clone(), &content_value)
-                {
+                match utp_processing.store.lock().put(key.clone(), &content_value) {
                     Ok(dropped_content) => {
                         if !dropped_content.is_empty() && utp_processing.gossip_dropped {
                             // add dropped content to validation result, so it will be propagated
@@ -1755,7 +1751,7 @@ impl<
     ) {
         let mut content = content;
         // Operate under assumption that all content in the store is valid
-        let local_value = utp_processing.store.read().get(&content_key);
+        let local_value = utp_processing.store.lock().get(&content_key);
         if let Ok(Some(val)) = local_value {
             // todo validate & replace content value if different & punish bad peer
             content = val;
@@ -1796,7 +1792,7 @@ impl<
             let should_store = validation_result.valid_for_storing
                 && utp_processing
                     .store
-                    .read()
+                    .lock()
                     .is_key_within_radius_and_unavailable(&content_key)
                     .map_or_else(
                         |err| {
@@ -1808,7 +1804,7 @@ impl<
             if should_store {
                 match utp_processing
                     .store
-                    .write()
+                    .lock()
                     .put(content_key.clone(), content.clone())
                 {
                     Ok(dropped_content) => {
@@ -1889,7 +1885,7 @@ impl<
 
     /// Provide the requested content key and content value for the acceptor
     fn provide_requested_content(
-        store: Arc<RwLock<TStore>>,
+        store: Arc<Mutex<TStore>>,
         accept_message: &Accept,
         content_keys_offered: Vec<RawContentKey>,
     ) -> anyhow::Result<Vec<RawContentValue>> {
@@ -1910,7 +1906,7 @@ impl<
             .zip(content_keys_offered.iter())
         {
             if i {
-                match store.read().get(key) {
+                match store.lock().get(key) {
                     Ok(content) => match content {
                         Some(content) => content_items.push(content),
                         None => return Err(anyhow!("Unable to read offered content!")),
@@ -2198,7 +2194,7 @@ impl<
         debug!("Starting query for content key: {}", target);
 
         // Lookup content locally before querying the network.
-        if let Ok(Some(content)) = self.store.read().get(&target) {
+        if let Ok(Some(content)) = self.store.lock().get(&target) {
             let local_enr = self.local_enr();
             let mut query_trace = QueryTrace::new(&local_enr, target.content_id().into());
             query_trace.node_responded_with_content(&local_enr);
@@ -2369,7 +2365,7 @@ where
     TStore: ContentStore<Key = TContentKey>,
 {
     validator: Arc<TValidator>,
-    store: Arc<RwLock<TStore>>,
+    store: Arc<Mutex<TStore>>,
     metrics: OverlayMetricsReporter,
     kbuckets: SharedKBucketsTable,
     command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
@@ -2462,6 +2458,7 @@ mod tests {
         portal_wire::{Ping, Pong, MAINNET},
     };
     use kbucket::KBucketsTable;
+    use parking_lot::lock_api::Mutex;
     use rstest::*;
     use serial_test::serial;
     use tokio::{
@@ -2524,7 +2521,7 @@ mod tests {
 
         let node_id = discovery.local_enr().node_id();
         let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
-        let store = Arc::new(RwLock::new(store));
+        let store = Arc::new(Mutex::new(store));
 
         let overlay_config = OverlayConfig::default();
         let kbuckets = SharedKBucketsTable::new(KBucketsTable::new(
