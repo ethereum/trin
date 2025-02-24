@@ -1,6 +1,6 @@
 [package]
 name = "ethportal-api"
-version = "0.4.2"
+version = "0.5.0"
 description = "Definitions for various Ethereum Portal Network JSONRPC APIs"
 authors.workspace = true
 categories.workspace = true
