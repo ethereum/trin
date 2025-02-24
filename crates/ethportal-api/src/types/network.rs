@@ -1,5 +1,7 @@
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 /// Enum for different "core" networks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Network {
@@ -29,7 +31,7 @@ impl std::str::FromStr for Network {
 }
 
 /// Enum for various different portal subnetworks in a "core" network.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum Subnetwork {
     Beacon,
     History,

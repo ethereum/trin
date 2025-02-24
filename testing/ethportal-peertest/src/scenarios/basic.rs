@@ -107,7 +107,7 @@ pub async fn test_discv5_update_node_info(target: &Client) {
 
 pub async fn test_discv5_talk_req(target: &Client, peertest: &Peertest) {
     let enr = peertest.bootnode.enr.clone();
-    let protocol = String::from("beacon");
+    let protocol = Subnetwork::Beacon;
     let data_radius = U256::MAX.as_ssz_bytes();
     let request = Message::Ping(Ping {
         enr_seq: 1,

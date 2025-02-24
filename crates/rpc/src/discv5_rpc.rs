@@ -98,12 +98,9 @@ impl Discv5ApiServer for Discv5Api {
     }
 
     /// Send a TALKREQ request with a payload to a given peer and wait for response.
-    async fn talk_req(&self, enr: Enr, protocol: String, request: Vec<u8>) -> RpcResult<Bytes> {
-        let subnetwork = protocol
-            .parse::<Subnetwork>()
-            .map_err(|err| RpcServeError::Message(format!("Unable to parse Subnetwork: {err}")))?;
+    async fn talk_req(&self, enr: Enr, protocol: Subnetwork, request: Vec<u8>) -> RpcResult<Bytes> {
         self.discv5
-            .send_talk_req(enr, subnetwork, request)
+            .send_talk_req(enr, protocol, request)
             .await
             .map_err(|err| RpcServeError::Message(err.to_string()).into())
     }
