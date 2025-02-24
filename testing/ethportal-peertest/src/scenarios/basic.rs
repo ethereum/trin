@@ -2,7 +2,12 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use alloy::primitives::{B256, U256};
 use ethportal_api::{
-    types::{distance::Distance, network::Subnetwork},
+    types::{
+        distance::Distance,
+        network::Subnetwork,
+        portal_wire::{Message, Ping},
+    },
+    utils::bytes::hex_encode,
     version::get_trin_version,
     BeaconNetworkApiClient, ContentValue, Discv5ApiClient, HistoryContentKey,
     HistoryNetworkApiClient, StateNetworkApiClient, Web3ApiClient,
@@ -102,15 +107,29 @@ pub async fn test_discv5_update_node_info(target: &Client) {
 
 pub async fn test_discv5_talk_req(target: &Client, peertest: &Peertest) {
     let enr = peertest.bootnode.enr.clone();
-    let protocol = String::from("utp");
-    let request = hex::decode("0100a028839e1549000003ef001000007619dde7").unwrap();
+    let protocol = String::from("beacon");
+    let data_radius = U256::MAX.as_ssz_bytes();
+    let request = Message::Ping(Ping {
+        enr_seq: 1,
+        payload_type: 1,
+        payload: data_radius.clone().into(),
+    })
+    .as_ssz_bytes();
 
-    let response = Discv5ApiClient::talk_req(target, enr, protocol, request)
+    let talk_req_response = Discv5ApiClient::talk_req(target, enr.clone(), protocol, request)
         .await
         .unwrap()
         .to_vec();
 
-    assert_eq!(response, Vec::<u8>::new())
+    let Message::Pong(pong) = Message::try_from(talk_req_response).unwrap() else {
+        panic!("received unexpected message type")
+    };
+
+    assert_eq!(
+        hex_encode(pong.payload.as_ssz_bytes()),
+        hex_encode(data_radius)
+    );
+    assert_eq!(pong.enr_seq, enr.seq())
 }
 
 pub async fn test_discv5_recursive_find_node(target: &Client, peertest: &Peertest) {
