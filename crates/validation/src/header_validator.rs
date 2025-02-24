@@ -2,9 +2,8 @@ use alloy::primitives::B256;
 use anyhow::anyhow;
 use ethportal_api::{
     consensus::historical_summaries::HistoricalSummaries,
-    types::execution::header_with_proof::{
-        BeaconBlockProof, BlockHeaderProof, HeaderWithProof, HistoricalRootsBlockProof,
-        HistoricalSummariesBlockProof,
+    types::execution::header_with_proof_new::{
+        BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummaries, HeaderWithProof,
     },
     Header,
 };
@@ -41,7 +40,7 @@ impl HeaderValidator {
 
     pub fn validate_header_with_proof(&self, hwp: &HeaderWithProof) -> anyhow::Result<()> {
         match &hwp.proof {
-            BlockHeaderProof::PreMergeAccumulatorProof(proof) => {
+            BlockHeaderProof::HistoricalHashes(proof) => {
                 if hwp.header.number > MERGE_BLOCK_NUMBER {
                     return Err(anyhow!("Invalid proof type found for post-merge header."));
                 }
@@ -53,7 +52,7 @@ impl HeaderValidator {
 
                 match verify_merkle_proof(
                     hwp.header.hash(),
-                    &proof.proof,
+                    proof,
                     15,
                     gen_index as usize,
                     epoch_hash,
@@ -64,24 +63,19 @@ impl HeaderValidator {
                     )),
                 }
             }
-            BlockHeaderProof::HistoricalRootsBlockProof(proof) => self
-                .verify_post_merge_pre_capella_header(hwp.header.number, hwp.header.hash(), proof),
-            BlockHeaderProof::HistoricalSummariesBlockProof(_) => {
+            BlockHeaderProof::HistoricalRoots(proof) => self.verify_post_merge_pre_capella_header(
+                hwp.header.number,
+                hwp.header.hash(),
+                proof,
+            ),
+            BlockHeaderProof::HistoricalSummaries(_) => {
                 if hwp.header.number < SHANGHAI_BLOCK_NUMBER {
                     return Err(anyhow!(
-                        "Invalid HistoricalSummariesBlockProof found for pre-Shanghai header."
+                        "Invalid BlockProofHistoricalSummaries found for pre-Shanghai header."
                     ));
                 }
                 // TODO: Validation for post-Capella headers is not implemented
                 Ok(())
-            }
-            BlockHeaderProof::None(_) => {
-                if hwp.header.number <= MERGE_BLOCK_NUMBER {
-                    Err(anyhow!("Missing accumulator proof for pre-merge header."))
-                } else {
-                    // Skip validation for post-merge headers until proof format is finalized
-                    Ok(())
-                }
             }
         }
     }
@@ -91,7 +85,7 @@ impl HeaderValidator {
         &self,
         block_number: u64,
         header_hash: B256,
-        proof: &HistoricalRootsBlockProof,
+        proof: &BlockProofHistoricalRoots,
     ) -> anyhow::Result<()> {
         if block_number <= MERGE_BLOCK_NUMBER {
             return Err(anyhow!(
@@ -107,7 +101,7 @@ impl HeaderValidator {
         // Verify the chain of proofs for post-merge/pre-capella block header
         Self::verify_beacon_block_proof(
             header_hash,
-            &proof.beacon_block_proof,
+            &proof.execution_block_proof,
             proof.beacon_block_root,
         )?;
 
@@ -119,7 +113,7 @@ impl HeaderValidator {
 
         if !verify_merkle_proof(
             proof.beacon_block_root,
-            &proof.historical_roots_proof,
+            &proof.beacon_block_proof,
             14,
             gen_index as usize,
             historical_root,
@@ -138,7 +132,7 @@ impl HeaderValidator {
         &self,
         block_number: u64,
         header_hash: B256,
-        proof: &HistoricalSummariesBlockProof,
+        proof: &BlockProofHistoricalSummaries,
         historical_summaries: HistoricalSummaries,
     ) -> anyhow::Result<()> {
         if block_number < SHANGHAI_BLOCK_NUMBER {
@@ -150,7 +144,7 @@ impl HeaderValidator {
         // Verify the chain of proofs for post-merge/pre-capella block header
         Self::verify_beacon_block_proof(
             header_hash,
-            &proof.beacon_block_proof,
+            &proof.execution_block_proof,
             proof.beacon_block_root,
         )?;
 
@@ -163,7 +157,7 @@ impl HeaderValidator {
 
         if !verify_merkle_proof(
             proof.beacon_block_root,
-            &proof.historical_summaries_proof,
+            &proof.beacon_block_proof,
             13,
             gen_index as usize,
             historical_summary,
@@ -179,7 +173,7 @@ impl HeaderValidator {
     /// Verify that the execution block header is included in the beacon block
     fn verify_beacon_block_proof(
         header_hash: B256,
-        block_body_proof: &BeaconBlockProof,
+        block_body_proof: &[B256],
         block_body_root: B256,
     ) -> anyhow::Result<()> {
         // BeaconBlock level:
@@ -199,7 +193,7 @@ impl HeaderValidator {
         if !verify_merkle_proof(
             header_hash,
             block_body_proof,
-            11,
+            block_body_proof.len(),
             gen_index,
             block_body_root,
         ) {
@@ -230,7 +224,7 @@ mod test {
     use ethportal_api::{
         types::execution::{
             accumulator::EpochAccumulator,
-            header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
+            header_with_proof_new::{BlockHeaderProof, HeaderWithProof},
         },
         utils::bytes::{hex_decode, hex_encode},
         HistoryContentKey, OverlayContentKey,
@@ -287,13 +281,13 @@ mod test {
         let epoch_accumulator = read_epoch_accumulator_122();
         let trin_proof = PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
         let fluffy_proof = match fluffy_hwp.proof {
-            BlockHeaderProof::PreMergeAccumulatorProof(val) => val,
+            BlockHeaderProof::HistoricalHashes(val) => val,
             _ => panic!("test reached invalid state"),
         };
         assert_eq!(trin_proof, fluffy_proof);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(trin_proof),
+            proof: BlockHeaderProof::HistoricalHashes(trin_proof),
         };
         header_validator.validate_header_with_proof(&hwp).unwrap();
     }
@@ -311,10 +305,10 @@ mod test {
         let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc_bytes).unwrap();
         assert_eq!(epoch_acc.len(), 5362);
         let proof = PreMergeAccumulator::construct_proof(&header, &epoch_acc).unwrap();
-        assert_eq!(proof.proof.len(), 15);
+        assert_eq!(proof.len(), 15);
         let header_with_proof = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(proof),
+            proof: BlockHeaderProof::HistoricalHashes(proof),
         };
         HeaderValidator::new()
             .validate_header_with_proof(&header_with_proof)
@@ -338,42 +332,16 @@ mod test {
         let header = get_header(1_000_001);
         let epoch_accumulator = read_epoch_accumulator_122();
         let mut proof = PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
-        proof.proof.swap(0, 1);
+        proof.swap(0, 1);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof(proof),
+            proof: BlockHeaderProof::HistoricalHashes(proof),
         };
         assert!(header_validator
             .validate_header_with_proof(&hwp)
             .unwrap_err()
             .to_string()
             .contains("Merkle proof validation failed"));
-    }
-
-    #[tokio::test]
-    #[should_panic(expected = "Missing accumulator proof for pre-merge header.")]
-    async fn header_validator_cannot_validate_merge_header_missing_proof() {
-        let header_validator = get_mainnet_header_validator();
-        let header = get_header(1_000_001);
-        let hwp = HeaderWithProof {
-            header,
-            proof: BlockHeaderProof::None(SszNone::default()),
-        };
-        header_validator.validate_header_with_proof(&hwp).unwrap();
-    }
-
-    #[tokio::test]
-    async fn header_validator_validates_post_merge_header_without_proof() {
-        let header_validator = get_mainnet_header_validator();
-        let future_height = MERGE_BLOCK_NUMBER + 1;
-        let future_header = generate_random_header(&future_height);
-        let future_hwp = HeaderWithProof {
-            header: future_header,
-            proof: BlockHeaderProof::None(SszNone::default()),
-        };
-        header_validator
-            .validate_header_with_proof(&future_hwp)
-            .unwrap();
     }
 
     #[tokio::test]
@@ -384,7 +352,7 @@ mod test {
         let future_header = generate_random_header(&future_height);
         let future_hwp = HeaderWithProof {
             header: future_header,
-            proof: BlockHeaderProof::PreMergeAccumulatorProof([B256::ZERO; 15].into()),
+            proof: BlockHeaderProof::HistoricalHashes(Default::default()),
         };
         header_validator
             .validate_header_with_proof(&future_hwp)
@@ -407,7 +375,7 @@ mod test {
             .as_str()
             .unwrap();
         let header_hash = B256::from_str(header_hash).unwrap();
-        let historical_roots_block_proof: HistoricalRootsBlockProof =
+        let historical_roots_block_proof: BlockProofHistoricalRoots =
             serde_yaml::from_value(value).unwrap();
 
         header_validator
@@ -454,7 +422,7 @@ mod test {
             .as_str()
             .unwrap();
         let header_hash = B256::from_str(header_hash).unwrap();
-        let historical_summaries_block_proof: HistoricalSummariesBlockProof =
+        let historical_summaries_block_proof: BlockProofHistoricalSummaries =
             serde_yaml::from_value(value).unwrap();
 
         // Load historical summaries from ssz file

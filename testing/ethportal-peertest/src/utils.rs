@@ -9,7 +9,7 @@ use anyhow::Result;
 use ethportal_api::{
     types::{
         content_key::history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
-        execution::header_with_proof::HeaderWithProof,
+        execution::header_with_proof_new::HeaderWithProof,
     },
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, BlockBodyKey, BlockReceiptsKey,
     ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,

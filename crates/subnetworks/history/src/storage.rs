@@ -8,6 +8,8 @@ use trin_storage::{
     ContentId, ContentStore, PortalStorageConfig, ShouldWeStoreContent,
 };
 
+use crate::storage_migration::maybe_migrate;
+
 /// Storage layer for the history network. Encapsulates history network specific data and logic.
 #[derive(Debug)]
 pub struct HistoryStorage {
@@ -59,10 +61,12 @@ impl HistoryStorage {
         config: PortalStorageConfig,
         disable_history_storage: bool,
     ) -> Result<Self, ContentStoreError> {
+        maybe_migrate(&config)?;
         let sql_connection_pool = config.sql_connection_pool.clone();
-        let config = IdIndexedV1StoreConfig::new(ContentType::History, Subnetwork::History, config);
+        let config =
+            IdIndexedV1StoreConfig::new(ContentType::HistoryEternal, Subnetwork::History, config);
         Ok(Self {
-            store: create_store(ContentType::History, config, sql_connection_pool)?,
+            store: create_store(ContentType::HistoryEternal, config, sql_connection_pool)?,
             disable_history_storage,
         })
     }

@@ -326,10 +326,8 @@ mod tests {
     #[fixture]
     fn headers_by_hash_with_proof_1000001_1000010() -> Vec<MigrationContentItem> {
         let old_content: HashMap<String, ContentItem> = serde_json::from_str(
-            &read_portal_spec_tests_file(
-                "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
-            )
-            .unwrap(),
+            &fs::read_to_string("../../validation/src/assets/fluffy/old_header_with_proofs.json")
+                .unwrap(),
         )
         .unwrap();
         let new_content: HashMap<String, ContentItem> = serde_json::from_str(

@@ -191,21 +191,19 @@ impl ssz::Encode for SszNone {
 #[allow(clippy::unwrap_used)]
 mod tests {
 
+    use std::fs;
+
     use serde_json::Value;
     use ssz::Decode;
 
     use super::*;
-    use crate::{
-        test_utils::read_file_from_tests_submodule,
-        utils::bytes::{hex_decode, hex_encode},
-    };
+    use crate::utils::bytes::{hex_decode, hex_encode};
 
     #[test_log::test]
     fn decode_encode_header_with_proofs() {
-        let file = read_file_from_tests_submodule(
-            "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
-        )
-        .unwrap();
+        let file =
+            fs::read_to_string("../validation/src/assets/fluffy/old_header_with_proofs.json")
+                .unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let hwps = json.as_object().unwrap();
         for (block_number, obj) in hwps {

@@ -63,13 +63,12 @@ impl ssz::Decode for HeaderWithProof {
         let mut decoder = builder.build()?;
 
         let header = decoder.decode_next_with(ssz_header::decode::from_ssz_bytes)?;
-
         let proof = decoder.decode_next::<ByteList1024>()?;
         let proof = if header.timestamp <= MERGE_TIMESTAMP {
             BlockHeaderProof::HistoricalHashes(
                 BlockProofHistoricalHashesAccumulator::from_ssz_bytes(&proof)?,
             )
-        } else if header.number <= SHANGHAI_TIMESTAMP {
+        } else if header.timestamp <= SHANGHAI_TIMESTAMP {
             BlockHeaderProof::HistoricalRoots(BlockProofHistoricalRoots::from_ssz_bytes(&proof)?)
         } else {
             BlockHeaderProof::HistoricalSummaries(BlockProofHistoricalSummaries::from_ssz_bytes(

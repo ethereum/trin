@@ -10,7 +10,7 @@ use ethportal_api::{
                 BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
                 SHANGHAI_TIMESTAMP,
             },
-            header_with_proof::{BlockHeaderProof, HeaderWithProof, SszNone},
+            header_with_proof_new::{BlockHeaderProof, HeaderWithProof},
         },
         jsonrpc::{params::Params, request::JsonRequest},
     },
@@ -123,11 +123,7 @@ impl ExecutionApi {
                 HistoryContentValue::BlockHeaderWithProof(header_with_proof)
             }
             None => {
-                let header_with_proof = HeaderWithProof {
-                    header: full_header.header.clone(),
-                    proof: BlockHeaderProof::None(SszNone { value: None }),
-                };
-                HistoryContentValue::BlockHeaderWithProof(header_with_proof)
+                bail!("Generate header with historical_roots or historical_summaries proof");
             }
         };
         Ok((
@@ -399,7 +395,7 @@ pub async fn construct_proof(
     epoch_acc: &EpochAccumulator,
 ) -> anyhow::Result<HeaderWithProof> {
     let proof = PreMergeAccumulator::construct_proof(&header, epoch_acc)?;
-    let proof = BlockHeaderProof::PreMergeAccumulatorProof(proof);
+    let proof = BlockHeaderProof::HistoricalHashes(proof);
     Ok(HeaderWithProof { header, proof })
 }
 
