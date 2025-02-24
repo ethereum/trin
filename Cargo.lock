@@ -2108,7 +2108,7 @@ checksum = "feeef44e73baff3a26d371801df019877a9866a8c493d315ab00177843314f35"
 
 [[package]]
 name = "e2store"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "alloy-rlp",
@@ -2169,7 +2169,7 @@ dependencies = [
 
 [[package]]
 name = "ef-tests"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -2432,7 +2432,7 @@ dependencies = [
 
 [[package]]
 name = "ethportal-peertest"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -3806,7 +3806,7 @@ dependencies = [
 
 [[package]]
 name = "light-client"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -4576,7 +4576,7 @@ dependencies = [
 
 [[package]]
 name = "portal-bridge"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -4623,7 +4623,7 @@ dependencies = [
 
 [[package]]
 name = "portalnet"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -5296,7 +5296,7 @@ checksum = "afab94fb28594581f62d981211a9a4d53cc8130bbcbbb89a0440d9b8e81a7746"
 
 [[package]]
 name = "rpc"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "discv5",
@@ -6913,7 +6913,7 @@ dependencies = [
 
 [[package]]
 name = "trin"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -6940,7 +6940,7 @@ dependencies = [
 
 [[package]]
 name = "trin-beacon"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -6969,7 +6969,7 @@ dependencies = [
 
 [[package]]
 name = "trin-evm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "ethportal-api",
@@ -6980,7 +6980,7 @@ dependencies = [
 
 [[package]]
 name = "trin-execution"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "alloy-rlp",
@@ -7017,7 +7017,7 @@ dependencies = [
 
 [[package]]
 name = "trin-history"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -7052,7 +7052,7 @@ dependencies = [
 
 [[package]]
 name = "trin-metrics"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "ethportal-api",
@@ -7062,7 +7062,7 @@ dependencies = [
 
 [[package]]
 name = "trin-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -7092,7 +7092,7 @@ dependencies = [
 
 [[package]]
 name = "trin-storage"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -7113,7 +7113,7 @@ dependencies = [
 
 [[package]]
 name = "trin-utils"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "ansi_term",
@@ -7127,7 +7127,7 @@ dependencies = [
 
 [[package]]
 name = "trin-validation"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -7352,7 +7352,7 @@ dependencies = [
 
 [[package]]
 name = "utp-testing"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",

@@ -33,7 +33,7 @@ license = "MIT"
 readme = "README.md"
 repository = "https://github.com/ethereum/trin"
 rust-version = "1.81.0"
-version = "0.1.0"
+version = "0.2.0"
 
 [workspace.dependencies]
 alloy = { version = "0.11.1", default-features = false, features = ["std"] }
