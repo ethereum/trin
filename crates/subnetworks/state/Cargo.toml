@@ -14,7 +14,7 @@ version.workspace = true
 [dependencies]
 alloy = { workspace = true, features = ["getrandom"] }
 anyhow.workspace = true
-cpu-time = "1.0.0"
+cpu-time = { workspace = true }
 discv5.workspace = true
 eth_trie.workspace = true
 ethportal-api.workspace = true

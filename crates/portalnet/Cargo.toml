@@ -16,29 +16,29 @@ alloy.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
-crossbeam-channel = "0.5.13"
+crossbeam-channel = { workspace = true }
 delay_map.workspace = true
 discv5.workspace = true
 ethereum_ssz.workspace = true
 ethportal-api.workspace = true
-fnv = "1.0.7"
+fnv = { workspace = true }
 futures.workspace = true
 hex.workspace = true
-igd-next = "0.14.2"
+igd-next = { workspace = true }
 itertools.workspace = true
 lazy_static.workspace = true
-leb128 = "0.2.1"
-local-ip-address = "0.5.6"
-lru = "0.7.8"
+leb128 = { workspace = true }
+local-ip-address = { workspace = true }
+lru = { workspace = true }
 parking_lot.workspace = true
 rand.workspace = true
 serde.workspace = true
-smallvec = "1.8.0"
+smallvec = { workspace = true }
 ssz_types.workspace = true
-stunclient = "0.4.1"
+stunclient = { workspace = true }
 thiserror.workspace = true
 tokio.workspace = true
-tokio-stream = { version = "0.1.14", features = ["sync"] }
+tokio-stream = { workspace = true, features = ["sync"] }
 tracing.workspace = true
 trin-metrics.workspace = true
 trin-storage.workspace = true

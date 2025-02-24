@@ -16,7 +16,7 @@ alloy = { workspace = true, features = ["rpc-types-eth", "provider-ipc", "provid
 discv5.workspace = true
 eth_trie.workspace = true
 ethportal-api.workspace = true
-http = "1.1.0"
+http = { workspace = true }
 portalnet.workspace = true
 reth-ipc.workspace = true
 revm.workspace = true
@@ -25,8 +25,8 @@ serde_json.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-tower = { version = "0.4.13", features = ["full"] }
-tower-http = { version = "0.5.0", features = ["full"] }
+tower = { workspace = true, features = ["full"] }
+tower-http = { workspace = true, features = ["full"] }
 tracing.workspace = true
 trin-evm.workspace = true
 trin-utils.workspace = true
