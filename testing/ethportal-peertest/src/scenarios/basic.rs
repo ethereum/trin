@@ -182,7 +182,7 @@ pub async fn test_discv5_find_node(target: &Client, peertest: &Peertest) {
         .nodes
         .iter()
         .map(|node| node.enr.clone())
-        .collect::<Vec<ethportal_api::types::enr::Enr>>();
+        .collect::<Vec<_>>();
     let bootnode_enr = peertest.bootnode.enr.clone();
     let distances = vec![256];
     let enrs = Discv5ApiClient::find_node(target, bootnode_enr, distances)
