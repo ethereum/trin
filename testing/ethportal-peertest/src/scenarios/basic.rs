@@ -1,6 +1,13 @@
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
 use alloy::primitives::{B256, U256};
 use ethportal_api::{
-    types::{distance::Distance, network::Subnetwork},
+    types::{
+        distance::Distance,
+        network::Subnetwork,
+        portal_wire::{Message, Ping},
+    },
+    utils::bytes::hex_encode,
     version::get_trin_version,
     BeaconNetworkApiClient, ContentValue, Discv5ApiClient, HistoryContentKey,
     HistoryNetworkApiClient, StateNetworkApiClient, Web3ApiClient,
@@ -29,6 +36,160 @@ pub async fn test_discv5_routing_table_info(target: &Client) {
     let node_info = target.node_info().await.unwrap();
     let result = Discv5ApiClient::routing_table_info(target).await.unwrap();
     assert_eq!(result.local_node_id, node_info.node_id);
+}
+
+pub async fn test_discv5_add_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing discv5_addEnr");
+    let result = Discv5ApiClient::add_enr(target, peertest.bootnode.enr.clone())
+        .await
+        .unwrap();
+    assert!(result);
+}
+
+pub async fn test_discv5_get_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing discv5_getEnr");
+    let result = Discv5ApiClient::add_enr(target, peertest.bootnode.enr.clone())
+        .await
+        .unwrap();
+    assert!(result);
+    let result = Discv5ApiClient::get_enr(target, peertest.bootnode.enr.node_id())
+        .await
+        .unwrap();
+    assert_eq!(result, peertest.bootnode.enr);
+}
+
+pub async fn test_discv5_delete_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing discv5_deleteEnr");
+    let result = Discv5ApiClient::delete_enr(target, peertest.bootnode.enr.node_id())
+        .await
+        .unwrap();
+    assert!(result);
+    let result = Discv5ApiClient::get_enr(target, peertest.bootnode.enr.node_id())
+        .await
+        .unwrap_err();
+    assert_eq!(
+        result.to_string(),
+        "ErrorObject { code: ServerError(-32099), message: \"ENR not found\", data: None }"
+    );
+    // add it back since scenario tests share resources so a different test could still need it
+    let result = Discv5ApiClient::add_enr(target, peertest.bootnode.enr.clone())
+        .await
+        .unwrap();
+    assert!(result);
+}
+
+pub async fn test_discv5_update_node_info(target: &Client) {
+    info!("Testing discv5_updateNodeInfo");
+
+    let _ = Discv5ApiClient::update_node_info(
+        target,
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080).to_string(),
+        false,
+    )
+    .await
+    .unwrap();
+
+    let node_info = Discv5ApiClient::node_info(target).await.unwrap();
+    assert_eq!(node_info.enr.udp4().unwrap(), 8080);
+
+    // switch it back
+    let _ = Discv5ApiClient::update_node_info(
+        target,
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8999).to_string(),
+        false,
+    )
+    .await
+    .unwrap();
+
+    let node_info = Discv5ApiClient::node_info(target).await.unwrap();
+    assert_eq!(node_info.enr.udp4().unwrap(), 8999);
+}
+
+pub async fn test_discv5_talk_req(target: &Client, peertest: &Peertest) {
+    let enr = peertest.bootnode.enr.clone();
+    let protocol = Subnetwork::Beacon;
+    let data_radius = U256::MAX.as_ssz_bytes();
+    let request = Message::Ping(Ping {
+        enr_seq: 1,
+        payload_type: 1,
+        payload: data_radius.clone().into(),
+    })
+    .as_ssz_bytes();
+
+    let talk_req_response = Discv5ApiClient::talk_req(target, enr.clone(), protocol, request)
+        .await
+        .unwrap()
+        .to_vec();
+
+    let Message::Pong(pong) = Message::try_from(talk_req_response).unwrap() else {
+        panic!("received unexpected message type")
+    };
+
+    assert_eq!(
+        hex_encode(pong.payload.as_ssz_bytes()),
+        hex_encode(data_radius)
+    );
+    assert_eq!(pong.enr_seq, enr.seq())
+}
+
+pub async fn test_discv5_recursive_find_node(target: &Client, peertest: &Peertest) {
+    let bootnode_node_id = peertest
+        .bootnode
+        .ipc_client
+        .node_info()
+        .await
+        .unwrap()
+        .node_id;
+
+    let response = Discv5ApiClient::recursive_find_nodes(target, bootnode_node_id)
+        .await
+        .unwrap();
+
+    assert!(!response.is_empty());
+}
+
+pub async fn test_discv5_ping(target: &Client, peertest: &Peertest) {
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let bootnode_node_info = peertest.bootnode.ipc_client.node_info().await.unwrap();
+    let bootnode_enr_seq = bootnode_node_info.enr.seq();
+    let bootnode_ip = bootnode_node_info.ip.unwrap();
+
+    let pong = Discv5ApiClient::ping(target, bootnode_enr).await.unwrap();
+
+    assert_eq!(pong.enr_seq, bootnode_enr_seq);
+    assert_eq!(pong.ip.to_string(), bootnode_ip);
+}
+
+pub async fn test_discv5_lookup_enr(target: &Client, peertest: &Peertest) {
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let bootnode_node_id = peertest
+        .bootnode
+        .ipc_client
+        .node_info()
+        .await
+        .unwrap()
+        .node_id;
+
+    let enr = Discv5ApiClient::lookup_enr(target, bootnode_node_id)
+        .await
+        .unwrap();
+
+    assert_eq!(enr, bootnode_enr);
+}
+
+pub async fn test_discv5_find_node(target: &Client, peertest: &Peertest) {
+    let peertest_node_enrs = peertest
+        .nodes
+        .iter()
+        .map(|node| node.enr.clone())
+        .collect::<Vec<_>>();
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let distances = vec![256];
+    let enrs = Discv5ApiClient::find_node(target, bootnode_enr, distances)
+        .await
+        .unwrap();
+
+    assert_eq!(enrs, peertest_node_enrs)
 }
 
 pub async fn test_routing_table_info(subnetwork: Subnetwork, target: &Client) {

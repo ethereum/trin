@@ -1,7 +1,24 @@
-use discv5::enr::NodeId;
+use std::net::IpAddr;
+
+use discv5::{enr::NodeId, service::Pong as Discv5Pong};
 use serde::{Deserialize, Serialize};
 
 use super::enr::Enr;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pong {
+    pub enr_seq: u64,
+    pub ip: IpAddr,
+    pub port: u16,
+}
+
+impl From<Discv5Pong> for Pong {
+    fn from(value: Discv5Pong) -> Self {
+        let Discv5Pong { enr_seq, ip, port } = value;
+        Self { enr_seq, ip, port }
+    }
+}
 
 /// Discv5 bucket
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

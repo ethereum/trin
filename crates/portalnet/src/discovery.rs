@@ -12,7 +12,8 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use discv5::{
     enr::{CombinedKey, Enr as Discv5Enr, NodeId},
-    ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
+    service::Pong,
+    ConfigBuilder, Discv5, Event, ListenConfig, QueryError, RequestError, TalkRequest,
 };
 use ethportal_api::{
     types::{discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec},
@@ -298,6 +299,21 @@ impl Discovery {
         self.discv5.add_enr(enr)
     }
 
+    /// Removes `enr` from the discv5 routing table.
+    pub fn remove_node(&self, node_id: &NodeId) -> bool {
+        self.discv5.remove_node(node_id)
+    }
+
+    /// Updates the local ENR TCP/UDP socket.
+    pub fn update_local_enr_socket(&self, socket_addr: SocketAddr, is_tcp: bool) -> bool {
+        self.discv5.update_local_enr_socket(socket_addr, is_tcp)
+    }
+
+    /// Look up ENRs closest to the given target
+    pub async fn recursive_find_nodes(&self, target_node: NodeId) -> Result<Vec<Enr>, QueryError> {
+        self.discv5.find_node(target_node).await
+    }
+
     /// Returns the cached `NodeAddress` or `None` if not cached.
     pub fn cached_node_addr(&self, node_id: &NodeId) -> Option<NodeAddress> {
         self.node_addr_cache.write().get(node_id).cloned()
@@ -333,6 +349,14 @@ impl Discovery {
 
         let response = self.discv5.talk_req(enr, protocol, request).await?;
         Ok(Bytes::from(response))
+    }
+
+    pub async fn send_ping(&self, enr: Enr) -> Result<Pong, RequestError> {
+        self.discv5.send_ping(enr).await
+    }
+
+    pub async fn find_node(&self, enr: Enr, distances: Vec<u64>) -> Result<Vec<Enr>, RequestError> {
+        self.discv5.find_node_designated_peer(enr, distances).await
     }
 }
 

@@ -58,7 +58,7 @@ pub fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> 
 pub fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>, String> {
     let subnetworks = subnetwork_string
         .split(',')
-        .map(Subnetwork::from_cli_arg)
+        .map(Subnetwork::from_str)
         .collect::<Result<Vec<Subnetwork>, String>>()?;
 
     if subnetworks.is_empty() {
