@@ -14,12 +14,12 @@ rust-version.workspace = true
 [dependencies]
 alloy = { workspace = true, features = ["consensus", "rlp", "rpc-types-eth", "serde"] }
 alloy-rlp.workspace = true
-alloy-rpc-types-eth = { version = "0.4.2", default-features = false, features = ["serde"] }
+alloy-rpc-types-eth = { workspace = true, features = ["serde"] }
 anyhow.workspace = true
-base64 = "0.13.0"
-bimap = "0.6.3"
+base64 = { workspace = true }
+bimap = { workspace = true }
 bytes.workspace = true
-c-kzg = "1.0.0"
+c-kzg = { workspace = true }
 discv5.workspace = true
 eth_trie.workspace = true
 ethereum_hashing.workspace = true
@@ -31,24 +31,24 @@ itertools.workspace = true
 jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"]}
 keccak-hash.workspace = true
 lazy_static.workspace = true
-once_cell = "1.17"
+once_cell = { workspace = true }
 quickcheck.workspace = true
 rand.workspace = true
-rs_merkle = "1.4.2"
-secp256k1 = { version = "0.29.0", features = ["global-context", "recovery", "rand"] }
+rs_merkle = { workspace = true }
+secp256k1 = { workspace = true, features = ["global-context", "recovery", "rand"] }
 serde = { workspace = true, features = ["rc"] }
 serde-this-or-that.workspace = true
 serde_json.workspace = true
-sha2 = "0.10.1"
+sha2 = { workspace = true }
 sha3.workspace = true
 ssz_types.workspace = true
-superstruct = "0.7.0"
+superstruct = { workspace = true }
 thiserror.workspace = true
 tokio.workspace = true
 tree_hash.workspace = true
 tree_hash_derive.workspace = true
 ureq.workspace = true
-validator = { version = "0.19.0", features = ["derive"] }
+validator = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 env_logger.workspace = true
@@ -61,4 +61,4 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [build-dependencies]
-vergen = { version = "8.0.0", features = ["build", "cargo", "git", "gitcl", "rustc"] }
+vergen = { workspace = true, features = ["build", "cargo", "git", "gitcl", "rustc"] }

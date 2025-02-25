@@ -16,7 +16,7 @@ ethereum_hashing.workspace = true
 ethereum_serde_utils.workspace = true
 ethereum_ssz.workspace = true
 ethereum_ssz_derive.workspace = true
-paste = "1.0.15"
+paste = { workspace = true }
 rstest.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true

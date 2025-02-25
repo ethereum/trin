@@ -18,11 +18,11 @@ async-trait.workspace = true
 chrono.workspace = true
 ethereum_ssz.workspace = true
 ethportal-api.workspace = true
-figment = { version = "0.10.7", features = ["toml", "env"] }
+figment = { workspace = true, features = ["toml", "env"] }
 futures.workspace = true
 hex.workspace = true
 jsonrpsee = { workspace = true, features = ["full"] }
-log = "0.4.17"
+log = { workspace = true }
 milagro_bls = { package="snowbridge-milagro-bls", git = "https://github.com/Snowfork/milagro_bls" }
 portalnet.workspace = true
 reqwest.workspace = true

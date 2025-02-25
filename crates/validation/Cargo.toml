@@ -14,8 +14,8 @@ version.workspace = true
 [dependencies]
 alloy.workspace = true
 anyhow.workspace = true
-enr = "0.13.0"
-ethereum_hashing = "0.7.0"
+enr = { workspace = true }
+ethereum_hashing = { workspace = true }
 ethereum_ssz.workspace = true
 ethereum_ssz_derive.workspace = true
 ethportal-api.workspace = true
@@ -30,7 +30,7 @@ tree_hash_derive.workspace = true
 
 [dev-dependencies]
 quickcheck.workspace = true
-quickcheck_macros = "1.0.0"
+quickcheck_macros = { workspace = true }
 rstest.workspace = true
 serde_yaml.workspace = true
 trin-utils.workspace = true
