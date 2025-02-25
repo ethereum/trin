@@ -8,7 +8,7 @@ use super::{
         type_65535::PingError,
     },
 };
-use crate::types::portal_wire::CustomPayload;
+use crate::{types::portal_wire::CustomPayload, utils::bytes::hex_encode};
 
 #[derive(Debug, Clone)]
 pub enum DecodedExtension {
@@ -39,23 +39,40 @@ impl DecodedExtension {
             Extensions::Capabilities => {
                 let capabilities = ClientInfoRadiusCapabilities::from_ssz_bytes(&payload.payload)
                     .map_err(|err| {
-                    anyhow!("Failed to decode ClientInfoRadiusCapabilities: {err:?}")
+                    anyhow!(
+                        "Failed to decode ClientInfoRadiusCapabilities: {err:?}, payload: {:?}",
+                        hex_encode(&*payload.payload)
+                    )
                 })?;
                 Ok(DecodedExtension::Capabilities(capabilities))
             }
             Extensions::BasicRadius => {
-                let basic_radius = BasicRadius::from_ssz_bytes(&payload.payload)
-                    .map_err(|err| anyhow!("Failed to decode BasicRadius: {err:?}"))?;
+                let basic_radius =
+                    BasicRadius::from_ssz_bytes(&payload.payload).map_err(|err| {
+                        anyhow!(
+                            "Failed to decode BasicRadius: {err:?}, payload: {:?}",
+                            hex_encode(&*payload.payload)
+                        )
+                    })?;
                 Ok(DecodedExtension::BasicRadius(basic_radius))
             }
             Extensions::HistoryRadius => {
-                let history_radius = HistoryRadius::from_ssz_bytes(&payload.payload)
-                    .map_err(|err| anyhow!("Failed to decode HistoryRadius: {err:?}"))?;
+                let history_radius =
+                    HistoryRadius::from_ssz_bytes(&payload.payload).map_err(|err| {
+                        anyhow!(
+                            "Failed to decode HistoryRadius: {err:?}, payload: {:?}",
+                            hex_encode(&*payload.payload)
+                        )
+                    })?;
                 Ok(DecodedExtension::HistoryRadius(history_radius))
             }
             Extensions::Error => {
-                let error = PingError::from_ssz_bytes(&payload.payload)
-                    .map_err(|err| anyhow!("Failed to decode PingError: {err:?}"))?;
+                let error = PingError::from_ssz_bytes(&payload.payload).map_err(|err| {
+                    anyhow!(
+                        "Failed to decode PingError: {err:?}, payload: {:?}",
+                        hex_encode(&*payload.payload)
+                    )
+                })?;
                 Ok(DecodedExtension::Error(error))
             }
         }

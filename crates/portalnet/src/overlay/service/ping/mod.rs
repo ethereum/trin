@@ -219,7 +219,7 @@ impl<
                         warn!(
                             protocol = %self.protocol,
                             request.source = %source,
-                            "Failed to decode custom payload during process_ping: {err:?}",
+                            "Failed to decode custom payload during process_pong: {err:?}",
                         );
                         return;
                     }
