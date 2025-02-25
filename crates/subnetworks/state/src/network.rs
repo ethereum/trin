@@ -4,7 +4,7 @@ use ethportal_api::{
     types::{distance::XorMetric, network::Subnetwork},
     StateContentKey,
 };
-use parking_lot::RwLock as PLRwLock;
+use parking_lot::Mutex;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpPeer},
@@ -60,7 +60,7 @@ impl StateNetwork {
             utp_transfer_limit: portal_config.utp_transfer_limit,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(StateStorage::new(storage_config)?));
+        let storage = Arc::new(Mutex::new(StateStorage::new(storage_config)?));
         let validator = Arc::new(StateValidator { header_oracle });
         let ping_extensions = Arc::new(StatePingExtensions {});
         let overlay = OverlayProtocol::new(

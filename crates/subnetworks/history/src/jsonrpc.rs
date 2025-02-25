@@ -150,7 +150,7 @@ async fn local_content(
     network: Arc<HistoryNetwork>,
     content_key: HistoryContentKey,
 ) -> Result<Value, String> {
-    let response = match network.overlay.store.read().get(&content_key)
+    let response = match network.overlay.store.lock().get(&content_key)
         {
             Ok(val) => match val {
                 Some(val) => {
@@ -176,7 +176,7 @@ async fn paginate_local_content_keys(
     offset: u64,
     limit: u64,
 ) -> Result<Value, String> {
-    let response = match network.overlay.store.read().paginate(offset, limit)
+    let response = match network.overlay.store.lock().paginate(offset, limit)
         {
             Ok(val) => Ok(json!(val)),
             Err(err) => Err(format!(
@@ -196,7 +196,7 @@ async fn store(
     let response = match network
         .overlay
         .store
-        .write()
+        .lock()
         .put::<Vec<u8>>(content_key, data)
     {
         Ok(_) => Ok(Value::Bool(true)),

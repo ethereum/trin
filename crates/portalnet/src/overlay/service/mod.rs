@@ -7,7 +7,7 @@ use delay_map::HashSetDelay;
 use discv5::enr::NodeId;
 use ethportal_api::{types::network::Subnetwork, OverlayContentKey};
 use manager::QueryTraceEvent;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use tokio::sync::{
     broadcast,
     mpsc::{UnboundedReceiver, UnboundedSender},
@@ -38,7 +38,8 @@ where
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
     /// The content database of the local node.
-    store: Arc<RwLock<TStore>>,
+    store: Arc<Mutex<TStore>>,
+
     /// The routing table of the local node.
     kbuckets: SharedKBucketsTable,
     /// The protocol identifier.

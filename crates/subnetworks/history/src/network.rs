@@ -4,7 +4,7 @@ use ethportal_api::{
     types::{distance::XorMetric, network::Subnetwork},
     HistoryContentKey,
 };
-use parking_lot::RwLock as PLRwLock;
+use parking_lot::Mutex;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpPeer},
@@ -55,7 +55,7 @@ impl HistoryNetwork {
             utp_transfer_limit: portal_config.utp_transfer_limit,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(HistoryStorage::new(
+        let storage = Arc::new(Mutex::new(HistoryStorage::new(
             storage_config,
             disable_history_storage,
         )?));

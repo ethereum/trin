@@ -119,7 +119,7 @@ pub fn spawn_beacon_heartbeat(network: Arc<BeaconNetwork>) {
             // this wait at the top. Otherwise, we get two log lines immediately on startup.
             heart_interval.tick().await;
 
-            let storage_log = network.overlay.store.read().get_summary_info();
+            let storage_log = network.overlay.store.lock().get_summary_info();
             let message_log = network.overlay.get_message_summary();
             let utp_log = network.overlay.get_utp_summary();
             info!("reports~ data: {storage_log}; msgs: {message_log}");

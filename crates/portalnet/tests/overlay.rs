@@ -15,7 +15,7 @@ use ethportal_api::{
     utils::bytes::hex_encode_upper,
     OverlayContentKey,
 };
-use parking_lot::RwLock;
+use parking_lot::Mutex;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
@@ -47,7 +47,7 @@ async fn init_overlay(
 
     let node_id = discovery.local_enr().node_id();
     let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
-    let store = Arc::new(RwLock::new(store));
+    let store = Arc::new(Mutex::new(store));
 
     let header_oracle = HeaderOracle::default();
     let header_oracle = Arc::new(TokioRwLock::new(header_oracle));
@@ -256,7 +256,7 @@ async fn overlay() {
     let content = vec![0xef];
     overlay_three
         .store
-        .write()
+        .lock()
         .put(content_key.clone(), &content)
         .expect("Unable to store content");
     let (found_content, utp_transfer, _) = overlay_one

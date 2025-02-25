@@ -31,7 +31,7 @@ use ethportal_api::{
     OverlayContentKey, RawContentKey, RawContentValue,
 };
 use futures::channel::oneshot;
-use parking_lot::RwLock;
+use parking_lot::Mutex;
 use tokio::sync::{broadcast, mpsc::UnboundedSender};
 use tracing::{debug, error, info, warn};
 use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
@@ -71,7 +71,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore, TPingExtens
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
     /// The data store.
-    pub store: Arc<RwLock<TStore>>,
+    pub store: Arc<Mutex<TStore>>,
     /// The overlay routing table of the local node.
     kbuckets: SharedKBucketsTable,
     /// The subnetwork protocol of the overlay.
@@ -106,7 +106,7 @@ impl<
         config: OverlayConfig,
         discovery: Arc<Discovery>,
         utp_socket: Arc<UtpSocket<UtpPeer>>,
-        store: Arc<RwLock<TStore>>,
+        store: Arc<Mutex<TStore>>,
         protocol: Subnetwork,
         validator: Arc<TValidator>,
         ping_extensions: Arc<TPingExtensions>,
@@ -178,7 +178,7 @@ impl<
 
     /// Returns the data radius of the local node.
     pub fn data_radius(&self) -> Distance {
-        self.store.read().radius()
+        self.store.lock().radius()
     }
 
     /// Processes a single Discovery v5 TALKREQ message.
@@ -223,7 +223,7 @@ impl<
     ) -> PutContentInfo {
         let should_we_store = match self
             .store
-            .read()
+            .lock()
             .is_key_within_radius_and_unavailable(&content_key)
         {
             Ok(should_we_store) => matches!(should_we_store, ShouldWeStoreContent::Store),
@@ -240,7 +240,7 @@ impl<
         if should_we_store {
             let _ = self
                 .store
-                .write()
+                .lock()
                 .put(content_key.clone(), content_value.clone());
         }
 
