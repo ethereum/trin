@@ -5,7 +5,9 @@ use ethportal_api::{
             history_new::HistoryContentValue as NewHistoryContentValue,
         },
         execution::{
-            header_with_proof::BlockHeaderProof as OldBlockHeaderProof,
+            header_with_proof::{
+                BlockHeaderProof as OldBlockHeaderProof, HeaderWithProof as OldHeaderWithProof,
+            },
             header_with_proof_new::{
                 BlockHeaderProof, BlockProofHistoricalHashesAccumulator, HeaderWithProof,
             },
@@ -157,30 +159,7 @@ fn convert_content_value(
 ) -> Option<RawContentValue> {
     match old_content_value {
         OldHistoryContentValue::BlockHeaderWithProof(old_header_with_proof) => {
-            let proof = match old_header_with_proof.proof {
-                OldBlockHeaderProof::None(_) => return None,
-                OldBlockHeaderProof::PreMergeAccumulatorProof(pre_merge_accumulator_proof) => {
-                    let proof = BlockProofHistoricalHashesAccumulator::new(
-                        pre_merge_accumulator_proof.proof.to_vec(),
-                    )
-                    .expect("[B256; 15] should convert to FixedVector<B256, U15>");
-                    BlockHeaderProof::HistoricalHashes(proof)
-                }
-                OldBlockHeaderProof::HistoricalRootsBlockProof(_) => {
-                    warn!(
-                        content_key = content_key.to_hex(),
-                        "Unexpected HistoricalRootsBlockProof"
-                    );
-                    return None;
-                }
-                OldBlockHeaderProof::HistoricalSummariesBlockProof(_) => {
-                    warn!(
-                        content_key = content_key.to_hex(),
-                        "Unexpected HistoricalSummariesBlockProof"
-                    );
-                    return None;
-                }
-            };
+            let proof = get_header_proof(content_key, old_header_with_proof.clone())?;
             let new_content_value = NewHistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
                 header: old_header_with_proof.header,
                 proof,
@@ -191,7 +170,46 @@ fn convert_content_value(
             // TODO: consider whether to filter post-merge bodies and receipts
             Some(old_content_value.encode())
         }
+        OldHistoryContentValue::BlockHeaderByNumber(old_header_with_proof) => {
+            let proof = get_header_proof(content_key, old_header_with_proof.clone())?;
+            let new_content_value = NewHistoryContentValue::BlockHeaderByNumber(HeaderWithProof {
+                header: old_header_with_proof.header,
+                proof,
+            });
+            Some(new_content_value.encode())
+        }
     }
+}
+
+fn get_header_proof(
+    content_key: &HistoryContentKey,
+    old_header_with_proof: OldHeaderWithProof,
+) -> Option<BlockHeaderProof> {
+    let proof = match old_header_with_proof.proof {
+        OldBlockHeaderProof::None(_) => return None,
+        OldBlockHeaderProof::PreMergeAccumulatorProof(pre_merge_accumulator_proof) => {
+            let proof = BlockProofHistoricalHashesAccumulator::new(
+                pre_merge_accumulator_proof.proof.to_vec(),
+            )
+            .expect("[B256; 15] should convert to FixedVector<B256, U15>");
+            BlockHeaderProof::HistoricalHashes(proof)
+        }
+        OldBlockHeaderProof::HistoricalRootsBlockProof(_) => {
+            warn!(
+                content_key = content_key.to_hex(),
+                "Unexpected HistoricalRootsBlockProof"
+            );
+            return None;
+        }
+        OldBlockHeaderProof::HistoricalSummariesBlockProof(_) => {
+            warn!(
+                content_key = content_key.to_hex(),
+                "Unexpected HistoricalSummariesBlockProof"
+            );
+            return None;
+        }
+    };
+    Some(proof)
 }
 
 #[cfg(test)]
@@ -312,6 +330,21 @@ mod tests {
         Ok(())
     }
 
+    fn header_by_hash_to_number(
+        old_content_value: RawContentValue,
+        new_content_value: Option<RawContentValue>,
+    ) -> (HistoryContentKey, RawContentValue, Option<RawContentValue>) {
+        let block_number = OldHeaderWithProof::from_ssz_bytes(&old_content_value)
+            .unwrap()
+            .header
+            .number;
+        (
+            HistoryContentKey::new_block_header_by_number(block_number),
+            old_content_value,
+            new_content_value,
+        )
+    }
+
     // Fixtures
 
     /// Migration shouldn't crash with undecodable content value.
@@ -361,15 +394,7 @@ mod tests {
         headers_by_hash_with_proof_1000001_1000010
             .into_iter()
             .map(|(_content_key, old_content_value, new_content_value)| {
-                let block_number = OldHeaderWithProof::from_ssz_bytes(&old_content_value)
-                    .unwrap()
-                    .header
-                    .number;
-                (
-                    HistoryContentKey::new_block_header_by_number(block_number),
-                    old_content_value,
-                    new_content_value,
-                )
+                header_by_hash_to_number(old_content_value, new_content_value)
             })
             .collect()
     }
@@ -408,6 +433,33 @@ mod tests {
             "0x0800000060020000f90255a087bac4b2f672ada2dc2c840dc9c6f6ee0c334bd1a56a985b9e7ab8ce6bbd7dd4a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479495222290dd7278aa3ddd389cc1e1d165cc4bafe5a0e55e04845685845dced4651a6f3d0e50b356ff4c43a659aa2699db0e7b0ea463a0e93c75c5ad3c88ee280f383f4f4a17f2852640f06ebc6397e2012108b890e7d4a015cfe3074ab21cc714aaa33c951877467f7fd3c32a8ba3331d50b6451c006379b901000121100a000000020000020080201000084080000202008000000000080000000040008000000020000000020020000002010000080020000440040000280100200001080000800c080000090000002000000101204405000000000008201000000000000000000000009000000000004000000800000440900050102008060002000040000000000000000001000800000000204100080806000040000000000220006050002000000000808200020004040000000001040340001000080000000000030008800000a000000000100000002000040010100000000a00000000001320020004002000000200000000000000520012040000000000000010040080840128fca98401c9c3808310f22c8465f8821b8f6265617665726275696c642e6f7267a00b93e63eedf5c0d976e80761a4869868f3d507551095a7ae9db02d58ccd88200880000000000000000850b978050aca03d4fc5f03a4a2fac8ab5cf1050b840ae1ff004bcdf9dac16ec5f5412d2b6b78f8080a00241b464d0c5f42d85568d6611b76f84f393320981227266c2686428ca28778700",
         ).unwrap();
         (content_key, content_value, None)
+    }
+
+    #[fixture]
+    fn header_by_number_without_proof_15600000(
+        header_by_hash_without_proof_15600000: MigrationContentItem,
+    ) -> MigrationContentItem {
+        let (_content_key, old_content_value, new_content_value) =
+            header_by_hash_without_proof_15600000;
+        header_by_hash_to_number(old_content_value, new_content_value)
+    }
+
+    #[fixture]
+    fn header_by_number_without_proof_17510000(
+        header_by_hash_without_proof_17510000: MigrationContentItem,
+    ) -> MigrationContentItem {
+        let (_content_key, old_content_value, new_content_value) =
+            header_by_hash_without_proof_17510000;
+        header_by_hash_to_number(old_content_value, new_content_value)
+    }
+
+    #[fixture]
+    fn header_by_number_without_proof_19463337(
+        header_by_hash_without_proof_19463337: MigrationContentItem,
+    ) -> MigrationContentItem {
+        let (_content_key, old_content_value, new_content_value) =
+            header_by_hash_without_proof_19463337;
+        header_by_hash_to_number(old_content_value, new_content_value)
     }
 
     #[fixture]
@@ -461,11 +513,17 @@ mod tests {
         header_by_hash_without_proof_15600000: MigrationContentItem,
         header_by_hash_without_proof_17510000: MigrationContentItem,
         header_by_hash_without_proof_19463337: MigrationContentItem,
+        header_by_number_without_proof_15600000: MigrationContentItem,
+        header_by_number_without_proof_17510000: MigrationContentItem,
+        header_by_number_without_proof_19463337: MigrationContentItem,
     ) -> anyhow::Result<()> {
         verify_migration(&[
             header_by_hash_without_proof_15600000,
             header_by_hash_without_proof_17510000,
             header_by_hash_without_proof_19463337,
+            header_by_number_without_proof_15600000,
+            header_by_number_without_proof_17510000,
+            header_by_number_without_proof_19463337,
         ])?;
         Ok(())
     }
@@ -491,6 +549,9 @@ mod tests {
         header_by_hash_without_proof_15600000: MigrationContentItem,
         header_by_hash_without_proof_17510000: MigrationContentItem,
         header_by_hash_without_proof_19463337: MigrationContentItem,
+        header_by_number_without_proof_15600000: MigrationContentItem,
+        header_by_number_without_proof_17510000: MigrationContentItem,
+        header_by_number_without_proof_19463337: MigrationContentItem,
         block_body_14764013: MigrationContentItem,
         block_receipt_14764013: MigrationContentItem,
     ) -> anyhow::Result<()> {
@@ -501,6 +562,9 @@ mod tests {
         content.push(header_by_hash_without_proof_15600000);
         content.push(header_by_hash_without_proof_17510000);
         content.push(header_by_hash_without_proof_19463337);
+        content.push(header_by_number_without_proof_15600000);
+        content.push(header_by_number_without_proof_17510000);
+        content.push(header_by_number_without_proof_19463337);
         content.push(block_body_14764013);
         content.push(block_receipt_14764013);
         content.shuffle(&mut rand::thread_rng());

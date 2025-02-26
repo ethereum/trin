@@ -16,6 +16,7 @@ pub enum HistoryContentValue {
     BlockHeaderWithProof(HeaderWithProof),
     BlockBody(BlockBody),
     Receipts(Receipts),
+    BlockHeaderByNumber(HeaderWithProof),
 }
 
 impl ContentValue for HistoryContentValue {
@@ -26,6 +27,7 @@ impl ContentValue for HistoryContentValue {
             Self::BlockHeaderWithProof(value) => value.as_ssz_bytes().into(),
             Self::BlockBody(value) => value.as_ssz_bytes().into(),
             Self::Receipts(value) => value.as_ssz_bytes().into(),
+            Self::BlockHeaderByNumber(value) => value.as_ssz_bytes().into(),
         }
     }
 
