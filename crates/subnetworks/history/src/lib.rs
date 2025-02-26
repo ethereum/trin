@@ -6,7 +6,6 @@ mod jsonrpc;
 pub mod network;
 mod ping_extensions;
 mod storage;
-mod storage_migration;
 pub mod validation;
 
 use std::sync::Arc;
