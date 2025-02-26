@@ -1,3 +1,4 @@
+pub mod e2hs;
 pub mod e2ss;
 pub mod e2store;
 pub mod entry_types;

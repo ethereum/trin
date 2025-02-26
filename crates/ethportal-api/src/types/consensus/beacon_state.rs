@@ -162,6 +162,18 @@ impl BeaconState {
     }
 }
 
+impl BeaconStateCapella {
+    pub fn build_block_root_proof(&self, block_root_index: usize) -> Vec<B256> {
+        // Build block hash proof for self.block_roots
+        let leaves: Vec<[u8; 32]> = self
+            .block_roots
+            .iter()
+            .map(|root| root.tree_hash_root().0)
+            .collect();
+        build_merkle_proof_for_index(leaves, block_root_index)
+    }
+}
+
 impl BeaconStateDeneb {
     pub fn build_historical_summaries_proof(&self) -> Vec<B256> {
         let leaves = vec![

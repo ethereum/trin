@@ -1,4 +1,5 @@
 // Execution Layer hard forks https://ethereum.org/en/history/
+pub const CANCUN_BLOCK_NUMBER: u64 = 19_426_587;
 pub const SHANGHAI_BLOCK_NUMBER: u64 = 17_034_870;
 pub const MERGE_BLOCK_NUMBER: u64 = 15_537_394;
 pub const LONDON_BLOCK_NUMBER: u64 = 12_965_000;

@@ -31,7 +31,7 @@ use crate::{
 
 const DEFAULT_SUBNETWORK: &str = "history";
 const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
-const DEFAULT_EPOCH_ACC_PATH: &str = "./portal-accumulators";
+pub const DEFAULT_EPOCH_ACC_PATH: &str = "./portal-accumulators";
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Trin Bridge", about = "Feed the network")]
