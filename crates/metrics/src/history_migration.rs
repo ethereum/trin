@@ -60,7 +60,8 @@ impl HistoryMigrationMetrics {
 
     pub fn get_content_value_label(&self, content_value: &HistoryContentValue) -> &str {
         match content_value {
-            HistoryContentValue::BlockHeaderWithProof(header_with_proof) => {
+            HistoryContentValue::BlockHeaderWithProof(header_with_proof)
+            | HistoryContentValue::BlockHeaderByNumber(header_with_proof) => {
                 match &header_with_proof.proof {
                     BlockHeaderProof::None(_) => "header_no_proof",
                     BlockHeaderProof::PreMergeAccumulatorProof(_) => "header_pre_merge_accumulator",
