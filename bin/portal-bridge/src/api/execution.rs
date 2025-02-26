@@ -211,6 +211,30 @@ impl ExecutionApi {
         Ok(headers)
     }
 
+    pub async fn get_era_receipts(
+        &self,
+        block_number: u64,
+        tx_count: u64,
+        receipts_root: B256,
+    ) -> anyhow::Result<Receipts> {
+        // Build receipts
+        let receipts = match tx_count {
+            0 => Receipts {
+                receipt_list: vec![],
+            },
+            _ => self.get_trusted_receipts(block_number).await?,
+        };
+
+        // Validate Receipts
+        let actual_receipts_root = receipts.root()?;
+        if actual_receipts_root != receipts_root {
+            bail!(
+                "Receipts root doesn't match header receipts root: {actual_receipts_root:?} - {receipts_root:?}",
+            );
+        }
+        Ok(receipts)
+    }
+
     /// Return validated Receipts content key / value for the given FullHeader.
     pub async fn get_receipts(
         &self,

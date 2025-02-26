@@ -10,7 +10,7 @@ use crate::types::{
     bytes::ByteList1024,
     consensus::{
         beacon_block::{BeaconBlockBellatrix, BeaconBlockCapella},
-        beacon_state::HistoricalBatch,
+        beacon_state::{BeaconStateCapella, HistoricalBatch},
         proof::build_merkle_proof_for_index,
     },
     execution::block_body::{MERGE_TIMESTAMP, SHANGHAI_TIMESTAMP},
@@ -196,6 +196,49 @@ pub mod ssz_header {
                 ssz::DecodeError::BytesInvalid("Unable to decode bytes into header.".to_string())
             })
         }
+    }
+}
+
+pub fn build_historical_roots_proof(
+    slot: u64,
+    historical_batch: &HistoricalBatch,
+    beacon_block: BeaconBlockBellatrix,
+) -> BlockProofHistoricalRoots {
+    // beacon block proof
+    let hb_proof = historical_batch.build_block_root_proof(slot % 8192);
+
+    // execution block proof
+    let mut execution_block_hash_proof = beacon_block.body.build_execution_block_hash_proof();
+    let body_root_proof = beacon_block.build_body_root_proof();
+    execution_block_hash_proof.extend(body_root_proof);
+
+    BlockProofHistoricalRoots {
+        beacon_block_proof: hb_proof.into(),
+        beacon_block_root: beacon_block.tree_hash_root(),
+        execution_block_proof: execution_block_hash_proof.into(),
+        slot,
+    }
+}
+
+pub fn build_historical_summaries_proof(
+    slot: u64,
+    capella_state: &BeaconStateCapella,
+    beacon_block: BeaconBlockCapella,
+) -> BlockProofHistoricalSummaries {
+    // beacon block proof
+    let block_root_proof = capella_state.build_block_root_proof(slot as usize % 8192);
+    let beacon_block_proof: FixedVector<B256, typenum::U13> = block_root_proof.into();
+
+    // execution block proof
+    let mut execution_block_hash_proof = beacon_block.body.build_execution_block_hash_proof();
+    let body_root_proof = beacon_block.build_body_root_proof();
+    execution_block_hash_proof.extend(body_root_proof);
+
+    BlockProofHistoricalSummaries {
+        beacon_block_proof,
+        beacon_block_root: beacon_block.tree_hash_root(),
+        execution_block_proof: execution_block_hash_proof.into(),
+        slot,
     }
 }
 

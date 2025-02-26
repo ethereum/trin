@@ -271,7 +271,7 @@ impl TryFrom<&Entry> for SlotIndexBlockEntry {
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
             entry.header.type_ == entry_types::SLOT_INDEX,
-            "invalid slot index entry: incorrect header type"
+            "invalid slot index block entry: incorrect header type"
         );
         ensure!(
             entry.header.length == SlotIndexBlock::SERIALIZED_SIZE as u32,
@@ -356,7 +356,7 @@ impl TryFrom<&Entry> for SlotIndexStateEntry {
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
             entry.header.type_ == entry_types::SLOT_INDEX,
-            "invalid slot index entry: incorrect header type"
+            "invalid slot index state entry: incorrect header type"
         );
         ensure!(
             entry.header.length == 24,
