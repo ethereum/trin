@@ -103,7 +103,10 @@ pub mod test {
             create_test_portal_storage_config_with_capacity(STORAGE_CAPACITY_MB)?;
         let conn = config.sql_connection_pool.get()?;
 
-        assert_eq!(get_store_version(&ContentType::History, &conn)?, None);
+        assert_eq!(
+            get_store_version(&ContentType::HistoryEternal, &conn)?,
+            None
+        );
         Ok(())
     }
 
@@ -197,14 +200,14 @@ pub mod test {
         let sql_connection_pool = config.sql_connection_pool.clone();
 
         update_store_info(
-            &ContentType::History,
+            &ContentType::HistoryEternal,
             StoreVersion::IdIndexedV1,
             &sql_connection_pool.get().unwrap(),
         )
         .unwrap();
 
         // Should panic - MockContentStore doesn't support migration.
-        create_store::<MockContentStore>(ContentType::History, config, sql_connection_pool)
+        create_store::<MockContentStore>(ContentType::HistoryEternal, config, sql_connection_pool)
             .unwrap();
     }
 }
