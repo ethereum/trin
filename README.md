@@ -2,22 +2,11 @@
 
 Trin is a Rust implementation of a [Portal Network](https://github.com/ethereum/portal-network-specs) client.
 
-The Portal Network is still in the research phase, and this client is experimental.
-
-**Do not rely on Trin in a production setting.**
-
-
 ## How to use Trin
 
 Check out the [Trin book](https://ethereum.github.io/trin) to quickly get up and running with Trin.
 
 > **NOTE**: This project uses [Git Submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules). If you just cloned the project, be sure to run: `git submodule update --init`. See our dedicated [page](https://ethereum.github.io/trin/developers/contributing/git/submodules.html) for more info.
-
-## Experimental Status
-
-Trin is a prototype Portal Network client. This implementation and the Portal Network specifications will continue to co-evolve.
-
-In this stage of development, Trin lacks comprehensive data validation.
 
 ## Want to help?
 
