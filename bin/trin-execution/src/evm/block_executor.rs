@@ -63,7 +63,7 @@ pub struct BlockExecutor<'a> {
     cumulative_gas_used: u64,
 }
 
-impl<'a> BlockExecutor<'a> {
+impl BlockExecutor<'_> {
     pub fn new(database: EvmDB) -> Self {
         let state_database = State::builder()
             .with_database(database)

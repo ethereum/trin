@@ -51,12 +51,12 @@ impl Encode for Nibbles {
             buf.push(0);
             self.nibbles
                 .chunks_exact(2)
-                .for_each(|x| buf.push(x[0] << 4 | x[1]));
+                .for_each(|x| buf.push((x[0] << 4) | x[1]));
         } else {
             buf.push(0x10 | self.nibbles[0]);
             self.nibbles[1..]
                 .chunks_exact(2)
-                .for_each(|x| buf.push(x[0] << 4 | x[1]));
+                .for_each(|x| buf.push((x[0] << 4) | x[1]));
         }
     }
 

@@ -52,7 +52,7 @@ executors:
     environment:
       IMAGE_NAME: portalnetwork/trin
     docker:
-      - image: cimg/rust:1.81.0
+      - image: cimg/rust:1.85.0
   docker-nightly:
     docker:
       - image: rustlang/rust:nightly
@@ -153,7 +153,7 @@ jobs:
     resource_class: xlarge
     executor:
       name: rust/default
-      tag: 1.81.0
+      tag: 1.85.0
     environment:
       RUSTFLAGS: "-D warnings"
       RUST_LOG: "debug"
@@ -174,7 +174,7 @@ jobs:
     resource_class: xlarge
     executor:
       name: rust/default
-      tag: 1.81.0
+      tag: 1.85.0
     environment:
       RUSTFLAGS: "-D warnings"
       RUST_LOG: "debug"
@@ -211,7 +211,7 @@ jobs:
     resource_class: 2xlarge
     executor:
       name: rust/default
-      tag: 1.81.0
+      tag: 1.85.0
     environment:
       RUSTFLAGS: "-D warnings"
       RUST_LOG: "debug,html5ever=error,selectors=error,discv5::service=info"
@@ -231,7 +231,7 @@ jobs:
   check-workspace-crates:
     executor:
       name: rust/default
-      tag: 1.81.0
+      tag: 1.85.0
     # parallelism level should be set to the amount of simulators we have or greater
     # The reason for this is the CI code currently only supports 1 input at a time
     # if we have a parallelism level of 5 and 6 sims one test runner will get 2 test sims and fail

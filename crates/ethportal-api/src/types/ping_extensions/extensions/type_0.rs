@@ -165,10 +165,7 @@ impl FromStr for ClientInfo {
     type Err = anyhow::Error;
 
     fn from_str(string: &str) -> Result<Self, anyhow::Error> {
-        ensure!(
-            string.as_bytes().len() <= 200,
-            "Client info string is too long"
-        );
+        ensure!(string.len() <= 200, "Client info string is too long");
         let parts: Vec<&str> = string.split('/').collect();
 
         if parts.len() != 4 {
