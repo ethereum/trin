@@ -172,7 +172,10 @@ async fn overlay() {
 
     // Ping node two from node one.
     // Node two should be in node one's routing table.
-    match overlay_one.send_ping(overlay_two.local_enr()).await {
+    match overlay_one
+        .send_ping(overlay_two.local_enr(), None, None)
+        .await
+    {
         Ok(pong) => {
             assert_eq!(overlay_two.local_enr().seq(), pong.enr_seq);
         }

@@ -20,6 +20,7 @@ use ethportal_api::{
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiServer, ContentValue, RawContentValue,
     RoutingTableInfo,
 };
+use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -78,8 +79,13 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     }
 
     /// Send a PING message to the designated node and wait for a PONG response
-    async fn ping(&self, enr: Enr) -> RpcResult<PongInfo> {
-        let endpoint = BeaconEndpoint::Ping(enr);
+    async fn ping(
+        &self,
+        enr: Enr,
+        payload_type: Option<u16>,
+        payload: Option<Value>,
+    ) -> RpcResult<PongInfo> {
+        let endpoint = BeaconEndpoint::Ping(enr, payload_type, payload);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

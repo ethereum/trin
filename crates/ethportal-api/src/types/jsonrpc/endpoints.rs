@@ -1,4 +1,5 @@
 use discv5::enr::NodeId;
+use serde_json::Value;
 
 use crate::{
     types::enr::Enr, BeaconContentKey, BeaconContentValue, HistoryContentKey, HistoryContentValue,
@@ -17,8 +18,8 @@ pub enum Discv5Endpoint {
 pub enum StateEndpoint {
     /// params: None
     RoutingTableInfo,
-    /// params: [enr]
-    Ping(Enr),
+    /// params: [enr, payload_type, payload]
+    Ping(Enr, Option<u16>, Option<Value>),
     /// params: [enr]
     AddEnr(Enr),
     /// params: [node_id]
@@ -82,8 +83,8 @@ pub enum HistoryEndpoint {
     Offer(Enr, Vec<(HistoryContentKey, HistoryContentValue)>),
     /// params: [enr, content_key, content_value]
     TraceOffer(Enr, HistoryContentKey, HistoryContentValue),
-    /// params: [enr]
-    Ping(Enr),
+    /// params: [enr, payload_type, payload]
+    Ping(Enr, Option<u16>, Option<Value>),
     /// params: content_key
     GetContent(HistoryContentKey),
     /// params: content_key
@@ -138,8 +139,8 @@ pub enum BeaconEndpoint {
     Offer(Enr, Vec<(BeaconContentKey, BeaconContentValue)>),
     /// params: [enr, content_key, content_value]
     TraceOffer(Enr, BeaconContentKey, BeaconContentValue),
-    /// params: enr
-    Ping(Enr),
+    /// params: [enr, payload_type, payload]
+    Ping(Enr, Option<u16>, Option<Value>),
     /// params: content_key
     GetContent(BeaconContentKey),
     /// params: content_key

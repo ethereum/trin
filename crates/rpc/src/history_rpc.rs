@@ -13,6 +13,7 @@ use ethportal_api::{
     ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiServer, RawContentValue,
     RoutingTableInfo,
 };
+use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -64,8 +65,13 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Send a PING message to the designated node and wait for a PONG response
-    async fn ping(&self, enr: Enr) -> RpcResult<PongInfo> {
-        let endpoint = HistoryEndpoint::Ping(enr);
+    async fn ping(
+        &self,
+        enr: Enr,
+        payload_type: Option<u16>,
+        payload: Option<Value>,
+    ) -> RpcResult<PongInfo> {
+        let endpoint = HistoryEndpoint::Ping(enr, payload_type, payload);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

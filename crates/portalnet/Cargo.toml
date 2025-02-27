@@ -34,6 +34,7 @@ parking_lot.workspace = true
 rand.workspace = true
 serde.workspace = true
 smallvec = "1.8.0"
+serde_json.workspace = true 
 ssz_types.workspace = true
 stunclient = "0.4.1"
 thiserror.workspace = true
