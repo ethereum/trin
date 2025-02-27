@@ -14,7 +14,7 @@ rust-version.workspace = true
 [dependencies]
 alloy = { workspace = true, features = ["consensus", "rlp", "rpc-types-eth", "serde"] }
 alloy-rlp.workspace = true
-alloy-rpc-types-eth = { version = "0.4.2", default-features = false, features = ["serde"] }
+alloy-rpc-types-eth = { version = "0.11.1", default-features = false, features = ["serde"] }
 anyhow.workspace = true
 base64 = "0.13.0"
 bimap = "0.6.3"
