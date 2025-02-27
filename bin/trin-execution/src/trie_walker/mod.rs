@@ -126,10 +126,7 @@ impl<DB: TrieWalkerDb> Iterator for TrieWalker<DB> {
     type Item = TrieProof;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let next_proof = match self.stack.pop() {
-            Some(next_proof) => next_proof,
-            None => return None,
-        };
+        let next_proof = self.stack.pop()?;
 
         let TrieProof { path, proof } = &next_proof;
         let last_node = proof.last().expect("Proof is empty");
