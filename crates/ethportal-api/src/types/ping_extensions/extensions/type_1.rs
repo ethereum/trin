@@ -1,9 +1,11 @@
+use serde::{Deserialize, Serialize};
 use ssz::Encode;
 use ssz_derive::{Decode, Encode};
 
 use crate::types::{distance::Distance, portal_wire::CustomPayload};
 
-#[derive(PartialEq, Debug, Clone, Encode, Decode)]
+#[derive(PartialEq, Eq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BasicRadius {
     pub data_radius: Distance,
 }
@@ -29,7 +31,7 @@ mod tests {
     use crate::{
         types::{
             distance::Distance,
-            ping_extensions::decode::DecodedExtension,
+            ping_extensions::decode::PingExtension,
             portal_wire::{Message, Ping, Pong},
         },
         utils::bytes::{hex_decode, hex_encode},
@@ -41,9 +43,9 @@ mod tests {
         let basic_radius = BasicRadius::new(data_radius);
         let custom_payload = CustomPayload::from(basic_radius.clone());
 
-        let decoded_extension = DecodedExtension::decode_extension(1, custom_payload).unwrap();
+        let decoded_extension = PingExtension::decode_ssz(1, custom_payload).unwrap();
 
-        if let DecodedExtension::BasicRadius(decoded_basic_radius) = decoded_extension {
+        if let PingExtension::BasicRadius(decoded_basic_radius) = decoded_extension {
             assert_eq!(basic_radius, decoded_basic_radius);
         } else {
             panic!("Decoded extension is not BasicRadius");

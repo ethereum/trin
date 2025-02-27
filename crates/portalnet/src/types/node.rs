@@ -1,7 +1,7 @@
 use std::fmt;
 
 use ethportal_api::types::{
-    distance::Distance, enr::Enr, ping_extensions::extension_types::Extensions,
+    distance::Distance, enr::Enr, ping_extensions::extension_types::PingExtensionType,
 };
 
 /// A node in the overlay network routing table.
@@ -14,7 +14,7 @@ pub struct Node {
     pub data_radius: Distance,
 
     /// The node's capabilities.
-    pub capabilities: Option<Vec<Extensions>>,
+    pub capabilities: Option<Vec<PingExtensionType>>,
 
     /// The node's ephemeral header count (only used for History Network)
     pub ephemeral_header_count: Option<u16>,
@@ -42,13 +42,13 @@ impl Node {
     }
 
     /// Returns the capabilities of the node.
-    pub fn capabilities(&self) -> Option<&[Extensions]> {
+    pub fn capabilities(&self) -> Option<&[PingExtensionType]> {
         self.capabilities.as_deref()
     }
 
     /// Compares the capabilities of the node with the given capabilities.
     /// Returns true if the capabilities are the same.
-    pub fn compare_capabilities(&self, capabilities: &[Extensions]) -> bool {
+    pub fn compare_capabilities(&self, capabilities: &[PingExtensionType]) -> bool {
         if let Some(node_capabilities) = &self.capabilities {
             capabilities.iter().all(|c| node_capabilities.contains(c))
         } else {
@@ -72,7 +72,7 @@ impl Node {
     }
 
     /// Sets the capabilities of the node.
-    pub fn set_capabilities(&mut self, capabilities: Vec<Extensions>) {
+    pub fn set_capabilities(&mut self, capabilities: Vec<PingExtensionType>) {
         self.capabilities = Some(capabilities);
     }
 

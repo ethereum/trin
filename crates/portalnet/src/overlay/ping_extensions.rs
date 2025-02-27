@@ -1,15 +1,15 @@
-use ethportal_api::types::ping_extensions::extension_types::Extensions;
+use ethportal_api::types::ping_extensions::extension_types::PingExtensionType;
 
-pub trait PingExtension {
+pub trait PingExtensions {
     /// Returns true if the extension is supported by the clients subnetwork.
-    fn is_supported(&self, extension: Extensions) -> bool;
+    fn is_supported(&self, extension: PingExtensionType) -> bool;
 
     /// Returns the newest extension that is supported by both clients, used for extended ping
     /// responses.
     fn latest_mutually_supported_base_extension(
         &self,
-        extensions: &[Extensions],
-    ) -> Option<Extensions>;
+        extensions: &[PingExtensionType],
+    ) -> Option<PingExtensionType>;
 
     /// Returns the extensions by their u16 type id that are supported by the clients subnetwork.
     fn raw_extensions(&self) -> Vec<u16>;
@@ -17,16 +17,16 @@ pub trait PingExtension {
 
 pub struct MockPingExtension {}
 
-impl PingExtension for MockPingExtension {
-    fn is_supported(&self, _extension: Extensions) -> bool {
+impl PingExtensions for MockPingExtension {
+    fn is_supported(&self, _extension: PingExtensionType) -> bool {
         true
     }
 
     fn latest_mutually_supported_base_extension(
         &self,
-        _extensions: &[Extensions],
-    ) -> Option<Extensions> {
-        Some(Extensions::HistoryRadius)
+        _extensions: &[PingExtensionType],
+    ) -> Option<PingExtensionType> {
+        Some(PingExtensionType::HistoryRadius)
     }
 
     fn raw_extensions(&self) -> Vec<u16> {

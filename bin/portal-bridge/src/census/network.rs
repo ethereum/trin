@@ -5,7 +5,12 @@ use discv5::enr::NodeId;
 use ethportal_api::{
     generate_random_node_ids,
     jsonrpsee::http_client::HttpClient,
-    types::{distance::Distance, network::Subnetwork, portal::PongInfo, portal_wire::OfferTrace},
+    types::{
+        network::Subnetwork,
+        ping_extensions::{decode::PingExtension, extension_types::PingExtensionType},
+        portal::PongInfo,
+        portal_wire::OfferTrace,
+    },
     BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, StateNetworkApiClient,
 };
 use futures::{future::JoinAll, StreamExt};
@@ -251,7 +256,27 @@ impl Network {
             return LivenessResult::Fail;
         };
 
-        let radius = Distance::from(pong_info.data_radius);
+        let payload_type = match PingExtensionType::try_from(pong_info.payload_type) {
+            Ok(payload_type) => payload_type,
+            Err(err) => {
+                warn!(
+                    subnetwork = %self.subnetwork,
+                    "liveness_check: failed to parse payload type: {err:?}",
+                );
+                return LivenessResult::Fail;
+            }
+        };
+
+        let radius = match PingExtension::decode_json(payload_type, pong_info.payload) {
+            Ok(PingExtension::Capabilities(payload)) => payload.data_radius,
+            _ => {
+                warn!(
+                    subnetwork = %self.subnetwork,
+                    "liveness_check: received unsupported ping extension: {}", payload_type,
+                );
+                return LivenessResult::Fail;
+            }
+        };
 
         // If ENR seq is not the latest one, fetch fresh ENR
         let enr = if enr.seq() < pong_info.enr_seq {
@@ -279,9 +304,13 @@ impl Network {
         ensure!(self.is_eligible(enr), "ping: peer is filtered out");
 
         match self.subnetwork {
-            Subnetwork::History => HistoryNetworkApiClient::ping(&self.client, enr.clone()),
-            Subnetwork::State => StateNetworkApiClient::ping(&self.client, enr.clone()),
-            Subnetwork::Beacon => BeaconNetworkApiClient::ping(&self.client, enr.clone()),
+            Subnetwork::History => {
+                HistoryNetworkApiClient::ping(&self.client, enr.clone(), None, None)
+            }
+            Subnetwork::State => StateNetworkApiClient::ping(&self.client, enr.clone(), None, None),
+            Subnetwork::Beacon => {
+                BeaconNetworkApiClient::ping(&self.client, enr.clone(), None, None)
+            }
             _ => unreachable!("ping: unsupported subnetwork: {}", self.subnetwork),
         }
         .await

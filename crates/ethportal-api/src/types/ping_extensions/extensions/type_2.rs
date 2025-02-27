@@ -1,9 +1,11 @@
+use serde::{Deserialize, Serialize};
 use ssz::Encode;
 use ssz_derive::{Decode, Encode};
 
 use crate::types::{distance::Distance, portal_wire::CustomPayload};
 
-#[derive(PartialEq, Debug, Clone, Encode, Decode)]
+#[derive(PartialEq, Eq, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistoryRadius {
     pub data_radius: Distance,
     pub ephemeral_header_count: u16,
@@ -33,7 +35,7 @@ mod tests {
     use crate::{
         types::{
             distance::Distance,
-            ping_extensions::decode::DecodedExtension,
+            ping_extensions::decode::PingExtension,
             portal_wire::{Message, Ping, Pong},
         },
         utils::bytes::{hex_decode, hex_encode},
@@ -45,9 +47,9 @@ mod tests {
         let history_radius = HistoryRadius::new(data_radius, 42);
         let custom_payload = CustomPayload::from(history_radius.clone());
 
-        let decoded_extension = DecodedExtension::decode_extension(2, custom_payload).unwrap();
+        let decoded_extension = PingExtension::decode_ssz(2, custom_payload).unwrap();
 
-        if let DecodedExtension::HistoryRadius(decoded_history_radius) = decoded_extension {
+        if let PingExtension::HistoryRadius(decoded_history_radius) = decoded_extension {
             assert_eq!(history_radius, decoded_history_radius);
         } else {
             panic!("Decoded extension is not HistoryRadius");

@@ -1,8 +1,9 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use alloy::primitives::U256;
 use anyhow::{bail, ensure};
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use ssz::{Decode, Encode, SszDecoderBuilder, SszEncoder};
 use ssz_types::{
     typenum::{U200, U400},
@@ -12,7 +13,7 @@ use ssz_types::{
 use crate::{
     types::{
         distance::Distance,
-        ping_extensions::extension_types::{ExtensionError, Extensions},
+        ping_extensions::extension_types::{ExtensionError, PingExtensionType},
         portal_wire::CustomPayload,
     },
     version::{
@@ -21,7 +22,8 @@ use crate::{
     },
 };
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClientInfoRadiusCapabilities {
     pub client_info: Option<ClientInfo>,
     pub data_radius: Distance,
@@ -49,10 +51,10 @@ impl ClientInfoRadiusCapabilities {
         }
     }
 
-    pub fn capabilities(&self) -> Result<Vec<Extensions>, ExtensionError> {
+    pub fn capabilities(&self) -> Result<Vec<PingExtensionType>, ExtensionError> {
         self.capabilities
             .iter()
-            .map(|&value| Extensions::try_from(value))
+            .map(|&value| PingExtensionType::try_from(value))
             .collect::<Result<Vec<_>, _>>()
     }
 }
@@ -74,7 +76,7 @@ impl Encode for ClientInfoRadiusCapabilities {
             + <VariableList<u16, U400> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
         let client_info = match &self.client_info {
-            Some(client_info) => client_info.string(),
+            Some(client_info) => client_info.to_string(),
             None => "".to_string(),
         };
         let bytes: Vec<u8> = client_info.as_bytes().to_vec();
@@ -126,7 +128,7 @@ impl Decode for ClientInfoRadiusCapabilities {
 
 /// Information about the client.
 /// example: trin/v0.1.1-892ad575/linux-x86_64/rustc1.81.0
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct ClientInfo {
     pub client_name: String,
     pub client_version: String,
@@ -147,9 +149,12 @@ impl ClientInfo {
             programming_language_version: format!("rustc{PROGRAMMING_LANGUAGE_VERSION}"),
         }
     }
+}
 
-    pub fn string(&self) -> String {
-        format!(
+impl Display for ClientInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
             "{}/{}-{}/{}-{}/{}",
             self.client_name,
             self.client_version,
@@ -203,6 +208,25 @@ impl FromStr for ClientInfo {
     }
 }
 
+impl Serialize for ClientInfo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.to_string().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ClientInfo {
+    fn deserialize<D>(deserializer: D) -> Result<ClientInfo, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        ClientInfo::from_str(&string).map_err(serde::de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use alloy::primitives::U256;
@@ -211,7 +235,7 @@ mod tests {
     use super::*;
     use crate::{
         types::{
-            ping_extensions::decode::DecodedExtension,
+            ping_extensions::decode::PingExtension,
             portal_wire::{Message, Ping, Pong},
         },
         utils::bytes::{hex_decode, hex_encode},
@@ -225,9 +249,9 @@ mod tests {
             ClientInfoRadiusCapabilities::new(radius, capabilities);
         let custom_payload = CustomPayload::from(client_info_radius_capabilities.clone());
 
-        let decoded_extension = DecodedExtension::decode_extension(0, custom_payload).unwrap();
+        let decoded_extension = PingExtension::decode_ssz(0, custom_payload).unwrap();
 
-        if let DecodedExtension::Capabilities(decoded_client_info_radius_capabilities) =
+        if let PingExtension::Capabilities(decoded_client_info_radius_capabilities) =
             decoded_extension
         {
             assert_eq!(
@@ -242,7 +266,7 @@ mod tests {
     #[test]
     fn test_client_info_from_str() {
         let client_info = ClientInfo::trin_client_info();
-        let string = client_info.string();
+        let string = client_info.to_string();
         let decoded = ClientInfo::from_str(&string).unwrap();
         assert_eq!(client_info, decoded);
     }

@@ -1,6 +1,7 @@
 use std::io;
 
 use ethportal_api::{types::query_trace::QueryTrace, ContentValueError};
+use portalnet::overlay::errors::PayloadTypeNotSupportedReason;
 use reth_ipc::server::IpcServerStartError;
 use serde::{Deserialize, Serialize};
 
@@ -47,20 +48,36 @@ pub enum RpcServeError {
         message: String,
         trace: Option<Box<QueryTrace>>,
     },
+    /// PayloadTypeNotSupported
+    #[error("Payload type not supported: {message}")]
+    PayloadTypeNotSupported {
+        message: String,
+        reason: PayloadTypeNotSupportedReason,
+    },
+    /// FailedToDecodePayload
+    #[error("Failed to decode payload: {message}")]
+    FailedToDecodePayload { message: String },
+    /// PayloadTypeRequired
+    #[error("Payload type required: {message}")]
+    PayloadTypeRequired { message: String },
 }
 
 impl From<RpcServeError> for ErrorObjectOwned {
-    fn from(e: RpcServeError) -> Self {
-        match e {
-            // -32099 is a custom error code for a server error
-            // see: https://www.jsonrpc.org/specification#error_object
-            // It's a bit of a cop-out, until we implement more specific errors, being
-            // sure not to conflict with the standard Ethereum error codes:
-            // https://docs.infura.io/networks/ethereum/json-rpc-methods#error-codes
-            RpcServeError::Message(msg) => ErrorObject::owned(-32099, msg, None::<()>),
+    fn from(err: RpcServeError) -> Self {
+        match err {
+            RpcServeError::Message(message) => ErrorObject::owned(-32099, message, None::<()>),
             RpcServeError::MethodNotFound(method) => ErrorObject::owned(-32601, method, None::<()>),
             RpcServeError::ContentNotFound { message, trace } => {
                 ErrorObject::owned(-39001, message, Some(trace))
+            }
+            RpcServeError::PayloadTypeNotSupported { message, reason } => {
+                ErrorObject::owned(-39004, message, Some(reason.to_string()))
+            }
+            RpcServeError::FailedToDecodePayload { message } => {
+                ErrorObject::owned(-39005, message, None::<()>)
+            }
+            RpcServeError::PayloadTypeRequired { message } => {
+                ErrorObject::owned(-39006, message, None::<()>)
             }
         }
     }

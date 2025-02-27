@@ -10,6 +10,7 @@ use ethportal_api::{
         },
         enr::Enr,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
+        ping_extensions::consts::STATE_SUPPORTED_EXTENSIONS,
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
@@ -20,12 +21,14 @@ use ethportal_api::{
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiServer, ContentValue, RawContentValue,
     RoutingTableInfo,
 };
+use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::{
     errors::RpcServeError,
     fetch::proxy_to_subnet,
     jsonrpsee::core::{async_trait, RpcResult},
+    ping_extension::parse_ping_payload,
 };
 
 pub struct BeaconNetworkApi {
@@ -78,8 +81,15 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     }
 
     /// Send a PING message to the designated node and wait for a PONG response
-    async fn ping(&self, enr: Enr) -> RpcResult<PongInfo> {
-        let endpoint = BeaconEndpoint::Ping(enr);
+    async fn ping(
+        &self,
+        enr: Enr,
+        payload_type: Option<u16>,
+        payload: Option<Value>,
+    ) -> RpcResult<PongInfo> {
+        let (payload_type, payload) =
+            parse_ping_payload(STATE_SUPPORTED_EXTENSIONS, payload_type, payload)?;
+        let endpoint = BeaconEndpoint::Ping(enr, payload_type, payload);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

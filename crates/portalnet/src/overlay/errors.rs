@@ -1,4 +1,7 @@
+use std::fmt::{self, Display, Formatter};
+
 use ethportal_api::types::query_trace::QueryTrace;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// An overlay request error.
@@ -70,6 +73,23 @@ impl From<discv5::RequestError> for OverlayRequestError {
             discv5::RequestError::Timeout => Self::Timeout,
             discv5::RequestError::InvalidRemotePacket => Self::InvalidRemoteDiscv5Packet,
             err => Self::Discv5Error(err),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PayloadTypeNotSupportedReason {
+    /// The client doesn't support this payload type.
+    Client,
+    /// The subnetwork doesn't support this payload type.
+    Subnetwork,
+}
+
+impl Display for PayloadTypeNotSupportedReason {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            PayloadTypeNotSupportedReason::Client => write!(f, "client"),
+            PayloadTypeNotSupportedReason::Subnetwork => write!(f, "subnetwork"),
         }
     }
 }

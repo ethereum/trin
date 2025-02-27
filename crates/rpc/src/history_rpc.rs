@@ -3,6 +3,7 @@ use ethportal_api::{
     types::{
         enr::Enr,
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
+        ping_extensions::consts::HISTORY_SUPPORTED_EXTENSIONS,
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
@@ -13,12 +14,14 @@ use ethportal_api::{
     ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiServer, RawContentValue,
     RoutingTableInfo,
 };
+use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::{
     errors::RpcServeError,
     fetch::proxy_to_subnet,
     jsonrpsee::core::{async_trait, RpcResult},
+    ping_extension::parse_ping_payload,
 };
 
 pub struct HistoryNetworkApi {
@@ -64,8 +67,15 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Send a PING message to the designated node and wait for a PONG response
-    async fn ping(&self, enr: Enr) -> RpcResult<PongInfo> {
-        let endpoint = HistoryEndpoint::Ping(enr);
+    async fn ping(
+        &self,
+        enr: Enr,
+        payload_type: Option<u16>,
+        payload: Option<Value>,
+    ) -> RpcResult<PongInfo> {
+        let (payload_type, payload) =
+            parse_ping_payload(HISTORY_SUPPORTED_EXTENSIONS, payload_type, payload)?;
+        let endpoint = HistoryEndpoint::Ping(enr, payload_type, payload);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

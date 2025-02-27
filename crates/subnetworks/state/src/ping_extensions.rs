@@ -1,29 +1,27 @@
-use ethportal_api::types::ping_extensions::extension_types::Extensions;
-use portalnet::overlay::ping_extensions::PingExtension;
+use ethportal_api::types::ping_extensions::{
+    consts::STATE_SUPPORTED_EXTENSIONS, extension_types::PingExtensionType,
+};
+use portalnet::overlay::ping_extensions::PingExtensions;
 
 pub struct StatePingExtensions {}
 
 impl StatePingExtensions {
-    pub const SUPPORT_EXTENSIONS: &[Extensions] = &[
-        Extensions::Capabilities,
-        Extensions::BasicRadius,
-        Extensions::Error,
-    ];
+    pub const SUPPORTED_EXTENSIONS: &[PingExtensionType] = STATE_SUPPORTED_EXTENSIONS;
 
     /// Base extensions that are required for the core subnetwork to function.
     /// These must be sorted by latest to oldest
-    pub const BASE_EXTENSIONS: &[Extensions] = &[Extensions::BasicRadius];
+    pub const BASE_EXTENSIONS: &[PingExtensionType] = &[PingExtensionType::BasicRadius];
 }
 
-impl PingExtension for StatePingExtensions {
-    fn is_supported(&self, extension: Extensions) -> bool {
-        Self::SUPPORT_EXTENSIONS.contains(&extension)
+impl PingExtensions for StatePingExtensions {
+    fn is_supported(&self, extension: PingExtensionType) -> bool {
+        Self::SUPPORTED_EXTENSIONS.contains(&extension)
     }
 
     fn latest_mutually_supported_base_extension(
         &self,
-        extensions: &[Extensions],
-    ) -> Option<Extensions> {
+        extensions: &[PingExtensionType],
+    ) -> Option<PingExtensionType> {
         for base_extension in Self::BASE_EXTENSIONS {
             if extensions.contains(base_extension) {
                 return Some(*base_extension);
@@ -33,7 +31,7 @@ impl PingExtension for StatePingExtensions {
     }
 
     fn raw_extensions(&self) -> Vec<u16> {
-        Self::SUPPORT_EXTENSIONS
+        Self::SUPPORTED_EXTENSIONS
             .iter()
             .map(|e| u16::from(*e))
             .collect()

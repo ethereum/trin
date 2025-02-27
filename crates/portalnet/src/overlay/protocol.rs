@@ -20,11 +20,17 @@ use ethportal_api::{
         distance::{Distance, Metric},
         enr::Enr,
         network::Subnetwork,
-        ping_extensions::extensions::type_0::ClientInfoRadiusCapabilities,
+        ping_extensions::{
+            decode::PingExtension,
+            extension_types::PingExtensionType,
+            extensions::{
+                type_0::ClientInfoRadiusCapabilities, type_1::BasicRadius, type_2::HistoryRadius,
+            },
+        },
         portal::PutContentInfo,
         portal_wire::{
-            Accept, Content, FindContent, FindNodes, Message, Nodes, OfferTrace, Ping, Pong,
-            PopulatedOffer, PopulatedOfferWithResult, Request, Response,
+            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, OfferTrace,
+            Ping, Pong, PopulatedOffer, PopulatedOfferWithResult, Request, Response,
         },
     },
     utils::bytes::hex_encode,
@@ -39,7 +45,7 @@ use trin_storage::{ContentStore, ShouldWeStoreContent};
 use trin_validation::validator::{ValidationResult, Validator};
 use utp_rs::socket::UtpSocket;
 
-use super::{ping_extensions::PingExtension, service::OverlayService};
+use super::{ping_extensions::PingExtensions, service::OverlayService};
 use crate::{
     bootnodes::Bootnode,
     discovery::{Discovery, UtpPeer},
@@ -99,7 +105,7 @@ impl<
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
         TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
-        TPingExtensions: 'static + PingExtension + Send + Sync,
+        TPingExtensions: 'static + PingExtensions + Send + Sync,
     > OverlayProtocol<TContentKey, TMetric, TValidator, TStore, TPingExtensions>
 {
     pub async fn new(
@@ -370,17 +376,68 @@ impl<
         enr
     }
 
+    /// Generate a default payload for a respective payload type.
+    pub fn default_payload(
+        &self,
+        payload_type: PingExtensionType,
+    ) -> Result<CustomPayload, OverlayRequestError> {
+        Ok(match payload_type {
+            PingExtensionType::Capabilities => ClientInfoRadiusCapabilities::new(
+                self.data_radius(),
+                self.ping_extensions.raw_extensions(),
+            )
+            .into(),
+            PingExtensionType::BasicRadius => BasicRadius {
+                data_radius: self.data_radius(),
+            }
+            .into(),
+            PingExtensionType::HistoryRadius => HistoryRadius {
+                data_radius: self.data_radius(),
+                ephemeral_header_count: 0,
+            }
+            .into(),
+            PingExtensionType::Error => return Err(OverlayRequestError::Failure(
+                "Can't create error message for ping, the Error payload can only be used by pong"
+                    .to_string(),
+            )),
+        })
+    }
+
     /// Sends a `Ping` request to `enr`.
-    pub async fn send_ping(&self, enr: Enr) -> Result<Pong, OverlayRequestError> {
+    pub async fn send_ping(
+        &self,
+        enr: Enr,
+        payload_type: Option<PingExtensionType>,
+        payload: Option<PingExtension>,
+    ) -> Result<Pong, OverlayRequestError> {
         // Construct the request.
         let enr_seq = self.discovery.local_enr().seq();
         let data_radius = self.data_radius();
-        let payload =
-            ClientInfoRadiusCapabilities::new(data_radius, self.ping_extensions.raw_extensions())
-                .into();
+
+        let (payload_type, payload) = match (payload_type, payload) {
+            (Some(payload_type), Some(payload)) => {
+                if payload_type != payload.payload_type() {
+                    return Err(OverlayRequestError::InvalidRequest(
+                        "Payload type mismatch".into(),
+                    ));
+                }
+                (payload_type, payload.into())
+            }
+            (Some(payload_type), None) => (payload_type, self.default_payload(payload_type)?),
+            (None, Some(payload)) => (payload.payload_type(), payload.into()),
+            (None, None) => (
+                PingExtensionType::Capabilities,
+                ClientInfoRadiusCapabilities::new(
+                    data_radius,
+                    self.ping_extensions.raw_extensions(),
+                )
+                .into(),
+            ),
+        };
+
         let request = Ping {
             enr_seq,
-            payload_type: 0,
+            payload_type: u16::from(payload_type),
             payload,
         };
 
@@ -694,7 +751,7 @@ impl<
             .collect();
         for bootnode in bootnodes {
             debug!(alias = %bootnode.alias, protocol = %self.protocol, "Attempting to bond with bootnode");
-            let ping_result = self.send_ping(bootnode.enr.clone()).await;
+            let ping_result = self.send_ping(bootnode.enr.clone(), None, None).await;
 
             match ping_result {
                 Ok(_) => {

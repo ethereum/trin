@@ -1,6 +1,7 @@
 use std::{borrow::Cow, fmt::Debug, ops::Deref, str};
 
 use anyhow::anyhow;
+use serde::{Deserialize, Serialize};
 use ssz::Encode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum::U300, VariableList};
@@ -8,7 +9,8 @@ use ssz_types::{typenum::U300, VariableList};
 use crate::{types::portal_wire::CustomPayload, utils::bytes::hex_encode};
 
 /// Used to respond to pings which the node can't handle
-#[derive(Eq, PartialEq, Clone, Encode, Decode)]
+#[derive(PartialEq, Eq, Clone, Encode, Decode, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PingError {
     pub error_code: u16,
     pub message: VariableList<u8, U300>,
@@ -81,7 +83,7 @@ mod tests {
     use super::*;
     use crate::{
         types::{
-            ping_extensions::decode::DecodedExtension,
+            ping_extensions::decode::PingExtension,
             portal_wire::{Message, Pong},
         },
         utils::bytes::{hex_decode, hex_encode},
@@ -93,9 +95,9 @@ mod tests {
         let ping_error = PingError::new(error_code);
         let custom_payload = CustomPayload::from(ping_error.clone());
 
-        let decoded_extension = DecodedExtension::decode_extension(65535, custom_payload).unwrap();
+        let decoded_extension = PingExtension::decode_ssz(65535, custom_payload).unwrap();
 
-        if let DecodedExtension::Error(decoded_ping_error) = decoded_extension {
+        if let PingExtension::Error(decoded_ping_error) = decoded_extension {
             assert_eq!(ping_error, decoded_ping_error);
         } else {
             panic!("Decoded extension is not PingError");

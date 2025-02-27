@@ -8,8 +8,8 @@ use ethportal_api::{
         distance::Metric,
         enr::Enr,
         ping_extensions::{
-            decode::DecodedExtension,
-            extension_types::Extensions,
+            decode::PingExtension,
+            extension_types::PingExtensionType,
             extensions::{
                 type_0::ClientInfoRadiusCapabilities,
                 type_1::BasicRadius,
@@ -30,7 +30,7 @@ use super::OverlayService;
 use crate::{
     overlay::{
         command::OverlayCommand,
-        ping_extensions::PingExtension,
+        ping_extensions::PingExtensions,
         request::{OverlayRequest, RequestDirection},
     },
     types::node::Node,
@@ -42,7 +42,7 @@ impl<
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
         TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
-        TPingExtensions: 'static + PingExtension + Send + Sync,
+        TPingExtensions: 'static + PingExtensions + Send + Sync,
     > OverlayService<TContentKey, TMetric, TValidator, TStore, TPingExtensions>
 {
     fn create_pong(&self, payload_type: u16, payload: CustomPayload) -> Pong {
@@ -67,7 +67,7 @@ impl<
             "Handling Ping message {request}",
         );
 
-        let extension_type = match Extensions::try_from(request.payload_type) {
+        let extension_type = match PingExtensionType::try_from(request.payload_type) {
             Ok(extension) => extension,
             Err(err) => {
                 warn!(
@@ -77,7 +77,7 @@ impl<
                     "Received non-supported extension type in ping message: {err:?}",
                 );
                 return self.create_pong(
-                    Extensions::Error.into(),
+                    PingExtensionType::Error.into(),
                     PingError::new(ErrorCodes::ExtensionNotSupported).into(),
                 );
             }
@@ -91,23 +91,23 @@ impl<
                 "Received non-supported ping extension on this portal subnetwork: {extension_type:?}",
             );
             return self.create_pong(
-                Extensions::Error.into(),
+                PingExtensionType::Error.into(),
                 PingError::new(ErrorCodes::ExtensionNotSupported).into(),
             );
         }
 
         match extension_type {
-            Extensions::Capabilities => {
+            PingExtensionType::Capabilities => {
                 self.create_pong(extension_type.into(), self.create_capabilities().into())
             }
-            Extensions::BasicRadius => self.create_pong(
+            PingExtensionType::BasicRadius => self.create_pong(
                 extension_type.into(),
                 BasicRadius {
                     data_radius: self.data_radius(),
                 }
                 .into(),
             ),
-            Extensions::HistoryRadius => self.create_pong(
+            PingExtensionType::HistoryRadius => self.create_pong(
                 extension_type.into(),
                 HistoryRadius {
                     data_radius: self.data_radius(),
@@ -115,7 +115,7 @@ impl<
                 }
                 .into(),
             ),
-            Extensions::Error => {
+            PingExtensionType::Error => {
                 warn!(
                     protocol = %self.protocol,
                     request.source = %source,
@@ -144,18 +144,17 @@ impl<
                 self.request_node(&node.enr());
             }
 
-            let extension =
-                match DecodedExtension::decode_extension(ping.payload_type, ping.payload) {
-                    Ok(extension) => extension,
-                    Err(err) => {
-                        warn!(
-                            protocol = %self.protocol,
-                            request.source = %source,
-                            "Failed to decode custom payload during process_ping: {err:?}",
-                        );
-                        return;
-                    }
-                };
+            let extension = match PingExtension::decode_ssz(ping.payload_type, ping.payload) {
+                Ok(extension) => extension,
+                Err(err) => {
+                    warn!(
+                        protocol = %self.protocol,
+                        request.source = %source,
+                        "Failed to decode custom payload during process_ping: {err:?}",
+                    );
+                    return;
+                }
+            };
 
             if !self.ping_extensions.is_supported(extension.clone().into()) {
                 warn!(
@@ -167,16 +166,14 @@ impl<
             }
 
             let node = match extension {
-                DecodedExtension::Capabilities(radius_capabilities) => {
+                PingExtension::Capabilities(radius_capabilities) => {
                     handle_capabilities(radius_capabilities, node, self.protocol)
                 }
-                DecodedExtension::BasicRadius(basic_radius) => {
-                    handle_basic_radius(basic_radius, node)
-                }
-                DecodedExtension::HistoryRadius(history_radius) => {
+                PingExtension::BasicRadius(basic_radius) => handle_basic_radius(basic_radius, node),
+                PingExtension::HistoryRadius(history_radius) => {
                     handle_history_radius(history_radius, node)
                 }
-                DecodedExtension::Error(ping_error) => {
+                PingExtension::Error(ping_error) => {
                     warn!(
                         protocol = %self.protocol,
                         request.source = %source,
@@ -212,18 +209,17 @@ impl<
                 self.request_node(&node.enr());
             }
 
-            let extension =
-                match DecodedExtension::decode_extension(pong.payload_type, pong.payload) {
-                    Ok(extension) => extension,
-                    Err(err) => {
-                        warn!(
-                            protocol = %self.protocol,
-                            request.source = %source,
-                            "Failed to decode custom payload during process_pong: {err:?}",
-                        );
-                        return;
-                    }
-                };
+            let extension = match PingExtension::decode_ssz(pong.payload_type, pong.payload) {
+                Ok(extension) => extension,
+                Err(err) => {
+                    warn!(
+                        protocol = %self.protocol,
+                        request.source = %source,
+                        "Failed to decode custom payload during process_pong: {err:?}",
+                    );
+                    return;
+                }
+            };
 
             if !self.ping_extensions.is_supported(extension.clone().into()) {
                 warn!(
@@ -235,16 +231,14 @@ impl<
             }
 
             let node = match extension {
-                DecodedExtension::Capabilities(radius_capabilities) => {
+                PingExtension::Capabilities(radius_capabilities) => {
                     handle_capabilities(radius_capabilities, node, self.protocol)
                 }
-                DecodedExtension::BasicRadius(basic_radius) => {
-                    handle_basic_radius(basic_radius, node)
-                }
-                DecodedExtension::HistoryRadius(history_radius) => {
+                PingExtension::BasicRadius(basic_radius) => handle_basic_radius(basic_radius, node),
+                PingExtension::HistoryRadius(history_radius) => {
                     handle_history_radius(history_radius, node)
                 }
-                DecodedExtension::Error(ping_error) => {
+                PingExtension::Error(ping_error) => {
                     warn!(
                         protocol = %self.protocol,
                         request.source = %source,
@@ -266,18 +260,18 @@ impl<
 
     fn handle_base_extension(
         &self,
-        extension: Extensions,
+        extension: PingExtensionType,
         node_id: NodeId,
     ) -> (u16, CustomPayload) {
         match extension {
-            Extensions::BasicRadius => (
+            PingExtensionType::BasicRadius => (
                 extension.into(),
                 BasicRadius {
                     data_radius: self.data_radius(),
                 }
                 .into(),
             ),
-            Extensions::HistoryRadius => (
+            PingExtensionType::HistoryRadius => (
                 extension.into(),
                 HistoryRadius {
                     data_radius: self.data_radius(),
