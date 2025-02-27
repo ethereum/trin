@@ -9,7 +9,6 @@ use alloy::{
         Block, BlockId, Filter, Log, SyncStatus, TransactionRequest,
     },
 };
-use alloy_rpc_types_engine::{ExecutionPayloadBodiesV2, ExecutionPayloadV4};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 use revm_primitives::{Address, B256, U256};
 
@@ -55,25 +54,12 @@ pub trait EngineApi {
         block_hashes: Vec<B256>,
     ) -> RpcResult<ExecutionPayloadBodiesV1>;
 
-    #[method(name = "getPayloadBodiesByHashV2")]
-    async fn get_payload_bodies_by_hash_v2(
-        &self,
-        block_hashes: Vec<B256>,
-    ) -> RpcResult<ExecutionPayloadBodiesV2>;
-
     #[method(name = "getPayloadBodiesByRangeV1")]
     async fn get_payload_bodies_by_range_v1(
         &self,
         start: u64,
         count: u64,
     ) -> RpcResult<ExecutionPayloadBodiesV1>;
-
-    #[method(name = "getPayloadBodiesByRangeV2")]
-    async fn get_payload_bodies_by_range_v2(
-        &self,
-        start: u64,
-        count: u64,
-    ) -> RpcResult<ExecutionPayloadBodiesV2>;
 
     #[method(name = "getPayloadV1")]
     async fn get_payload_v1(&self, payload_id: PayloadId) -> RpcResult<ExecutionPayloadV1>;
@@ -85,7 +71,7 @@ pub trait EngineApi {
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<ExecutionPayloadV3>;
 
     #[method(name = "getPayloadV4")]
-    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<ExecutionPayloadV4>;
+    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<ExecutionPayloadV3>;
 
     #[method(name = "newPayloadV1")]
     async fn new_payload_v1(&self, payload: ExecutionPayloadV1) -> RpcResult<PayloadStatus>;
@@ -104,7 +90,7 @@ pub trait EngineApi {
     #[method(name = "newPayloadV4")]
     async fn new_payload_v4(
         &self,
-        payload: ExecutionPayloadV4,
+        payload: ExecutionPayloadV3,
         versioned_hashes: Vec<B256>,
         parent_beacon_block_root: B256,
     ) -> RpcResult<PayloadStatus>;
