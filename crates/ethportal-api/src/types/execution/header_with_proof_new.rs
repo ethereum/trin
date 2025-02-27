@@ -4,10 +4,16 @@ use serde::Deserialize;
 use ssz::SszDecoderBuilder;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
+use tree_hash::TreeHash;
 
 use crate::{
     types::{
         bytes::ByteList1024,
+        consensus::{
+            beacon_block::{BeaconBlockBellatrix, BeaconBlockCapella},
+            beacon_state::HistoricalBatch,
+            proof::build_merkle_proof_for_index,
+        },
         execution::block_body::{MERGE_TIMESTAMP, SHANGHAI_TIMESTAMP},
     },
     Header,
@@ -194,12 +200,62 @@ pub mod ssz_header {
     }
 }
 
+pub fn build_block_proof_historical_roots(
+    slot: u64,
+    historical_batch: HistoricalBatch,
+    beacon_block: BeaconBlockBellatrix,
+) -> BlockProofHistoricalRoots {
+    // beacon block proof
+    let historical_batch_proof = historical_batch.build_block_root_proof(slot % 8192);
+
+    // execution block proof
+    let mut execution_block_hash_proof = beacon_block.body.build_execution_block_hash_proof();
+    let body_root_proof = beacon_block.build_body_root_proof();
+    execution_block_hash_proof.extend(body_root_proof);
+
+    BlockProofHistoricalRoots {
+        beacon_block_proof: historical_batch_proof.into(),
+        beacon_block_root: beacon_block.tree_hash_root(),
+        execution_block_proof: execution_block_hash_proof.into(),
+        slot,
+    }
+}
+
+pub fn build_block_proof_historical_summaries(
+    slot: u64,
+    // block roots fields from BeaconState
+    block_roots: FixedVector<B256, typenum::U8192>,
+    beacon_block: BeaconBlockCapella,
+) -> BlockProofHistoricalSummaries {
+    // beacon block proof
+    let leaves = block_roots
+        .iter()
+        .map(|root| root.tree_hash_root().0)
+        .collect();
+    let slot_index = slot as usize % 8192;
+    let block_root_proof = build_merkle_proof_for_index(leaves, slot_index);
+    let beacon_block_proof: FixedVector<B256, typenum::U13> = block_root_proof.into();
+
+    // execution block proof
+    let mut execution_block_hash_proof = beacon_block.body.build_execution_block_hash_proof();
+    let body_root_proof = beacon_block.build_body_root_proof();
+    execution_block_hash_proof.extend(body_root_proof);
+
+    BlockProofHistoricalSummaries {
+        beacon_block_proof,
+        beacon_block_root: beacon_block.tree_hash_root(),
+        execution_block_proof: execution_block_hash_proof.into(),
+        slot,
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use std::fs;
 
     use serde_json::Value;
+    use serde_yaml::Value as YamlValue;
     use ssz::Decode;
 
     use super::*;
@@ -235,5 +291,97 @@ mod tests {
         assert_eq!(hwp.header.number, filename.parse::<u64>().unwrap());
         let encoded = hex_encode(ssz::Encode::as_ssz_bytes(&hwp));
         assert_eq!(encoded, actual_hwp);
+    }
+
+    #[rstest::rstest]
+    #[case(
+        15539558,
+        4702208,
+        "15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01"
+    )] // epoch 575
+    #[case(
+        15547621,
+        4710400,
+        "15547621-96a9313cd506e32893d46c82358569ad242bb32786bd5487833e0f77767aec2a"
+    )] // epoch 576
+    #[case(
+        15555729,
+        4718592,
+        "15555729-c6fd396d54f61c6d0f1dd3653f81267b0378e9a0d638a229b24586d8fd0bc499"
+    )] // epoch 577
+    #[tokio::test]
+    async fn historical_roots_proof_generation(
+        #[case] block_number: u64,
+        #[case] slot: u64,
+        #[case] file_path: &str,
+    ) {
+        let test_vector = std::fs::read_to_string(format!(
+            "../../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_bellatrix/beacon_block_proof-{file_path}.yaml"
+        ))
+        .unwrap();
+        let test_vector: YamlValue = serde_yaml::from_str(&test_vector).unwrap();
+        let expected_proof = BlockProofHistoricalRoots {
+            beacon_block_proof: serde_yaml::from_value(test_vector["beacon_block_proof"].clone())
+                .unwrap(),
+            beacon_block_root: serde_yaml::from_value(test_vector["beacon_block_root"].clone())
+                .unwrap(),
+            execution_block_proof: serde_yaml::from_value(
+                test_vector["execution_block_proof"].clone(),
+            )
+            .unwrap(),
+            slot: serde_yaml::from_value(test_vector["slot"].clone()).unwrap(),
+        };
+
+        let test_assets_dir =
+            format!("../../crates/ethportal-api/src/assets/test/proofs/{block_number}",);
+        let historical_batch_path = format!("{test_assets_dir}/historical_batch.ssz");
+        let historical_batch_raw = std::fs::read(historical_batch_path).unwrap();
+        let historical_batch = HistoricalBatch::from_ssz_bytes(&historical_batch_raw).unwrap();
+        let block_path = format!("{test_assets_dir}/block.ssz");
+        let block_raw = std::fs::read(block_path).unwrap();
+        let block = BeaconBlockBellatrix::from_ssz_bytes(&block_raw).unwrap();
+        let actual_proof = build_block_proof_historical_roots(slot, historical_batch, block);
+
+        assert_eq!(expected_proof, actual_proof);
+    }
+
+    #[rstest::rstest]
+    #[case(17034870, 6209538)] // epoch 759
+    #[case(17042287, 6217730)] // epoch 760
+    #[case(17062257, 6238210)] // epoch 762
+    #[tokio::test]
+    async fn pre_deneb_historical_summaries_generation(
+        #[case] block_number: u64,
+        #[case] slot: u64,
+    ) {
+        let test_vector = std::fs::read_to_string(format!(
+            "../../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/beacon_block_proof-{block_number}.yaml",
+        ))
+        .unwrap();
+        let test_vector: YamlValue = serde_yaml::from_str(&test_vector).unwrap();
+        let expected_proof = BlockProofHistoricalSummaries {
+            beacon_block_proof: serde_yaml::from_value(test_vector["beacon_block_proof"].clone())
+                .unwrap(),
+            beacon_block_root: serde_yaml::from_value(test_vector["beacon_block_root"].clone())
+                .unwrap(),
+            execution_block_proof: serde_yaml::from_value(
+                test_vector["execution_block_proof"].clone(),
+            )
+            .unwrap(),
+            slot: serde_yaml::from_value(test_vector["slot"].clone()).unwrap(),
+        };
+
+        let test_assets_dir =
+            format!("../../crates/ethportal-api/src/assets/test/proofs/{block_number}");
+        let block_roots_path = format!("{test_assets_dir}/block_roots.ssz");
+        let block_roots_raw = std::fs::read(block_roots_path).unwrap();
+        let block_roots: FixedVector<B256, typenum::U8192> =
+            FixedVector::from_ssz_bytes(&block_roots_raw).unwrap();
+        let block_path = format!("{test_assets_dir}/block.ssz");
+        let block_raw = std::fs::read(block_path).unwrap();
+        let block = BeaconBlockCapella::from_ssz_bytes(&block_raw).unwrap();
+        let actual_proof = build_block_proof_historical_summaries(slot, block_roots, block);
+
+        assert_eq!(expected_proof, actual_proof);
     }
 }
