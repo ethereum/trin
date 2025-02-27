@@ -8,6 +8,7 @@ pub mod historical_summaries;
 pub mod kzg_commitment;
 pub mod light_client;
 pub mod participation_flags;
+pub mod proof;
 pub mod pubkey;
 pub mod serde;
 pub mod signature;

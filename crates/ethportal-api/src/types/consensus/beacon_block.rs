@@ -1,6 +1,5 @@
 use alloy::primitives::B256;
 use jsonrpsee::core::Serialize;
-use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::Deserialize;
 use serde_this_or_that::as_u64;
 use ssz::Decode;
@@ -12,6 +11,7 @@ use tree_hash_derive::TreeHash;
 use crate::consensus::{
     body::{BeaconBlockBodyBellatrix, BeaconBlockBodyCapella, BeaconBlockBodyDeneb},
     fork::ForkName,
+    proof::build_merkle_proof_for_index,
     signature::BlsSignature,
 };
 
@@ -69,31 +69,31 @@ impl BeaconBlock {
     }
 }
 
-impl BeaconBlockBellatrix {
+impl BeaconBlockCapella {
     pub fn build_body_root_proof(&self) -> Vec<B256> {
-        let mut leaves: Vec<[u8; 32]> = vec![
+        let leaves = vec![
             self.slot.tree_hash_root().0,
             self.proposer_index.tree_hash_root().0,
             self.parent_root.tree_hash_root().0,
             self.state_root.tree_hash_root().0,
             self.body.tree_hash_root().0,
         ];
-        // We want to add empty leaves to make the tree a power of 2
-        while leaves.len() < 8 {
-            leaves.push([0; 32]);
-        }
-
-        let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
         // We want to prove the body root, which is the 5th leaf
-        let indices_to_prove = vec![4];
-        let proof = merkle_tree.proof(&indices_to_prove);
-        let proof_hashes: Vec<B256> = proof
-            .proof_hashes()
-            .iter()
-            .map(|hash| B256::from_slice(hash))
-            .collect();
+        build_merkle_proof_for_index(leaves, 4)
+    }
+}
 
-        proof_hashes
+impl BeaconBlockBellatrix {
+    pub fn build_body_root_proof(&self) -> Vec<B256> {
+        let leaves = vec![
+            self.slot.tree_hash_root().0,
+            self.proposer_index.tree_hash_root().0,
+            self.parent_root.tree_hash_root().0,
+            self.state_root.tree_hash_root().0,
+            self.body.tree_hash_root().0,
+        ];
+        // We want to prove the body root, which is the 5th leaf
+        build_merkle_proof_for_index(leaves, 4)
     }
 }
 

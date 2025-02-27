@@ -1,6 +1,5 @@
 use alloy::primitives::{Address, B256};
 use discv5::enr::k256::elliptic_curve::consts::U16;
-use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz::Decode;
@@ -23,6 +22,7 @@ use crate::{
         },
         fork::ForkName,
         kzg_commitment::KzgCommitment,
+        proof::build_merkle_proof_for_index,
     },
     types::bytes::ByteList1G,
 };
@@ -87,9 +87,36 @@ impl BeaconBlockBody {
     }
 }
 
+impl BeaconBlockBodyCapella {
+    pub fn build_execution_payload_proof(&self) -> Vec<B256> {
+        let leaves = vec![
+            self.randao_reveal.tree_hash_root().0,
+            self.eth1_data.tree_hash_root().0,
+            self.graffiti.tree_hash_root().0,
+            self.proposer_slashings.tree_hash_root().0,
+            self.attester_slashings.tree_hash_root().0,
+            self.attestations.tree_hash_root().0,
+            self.deposits.tree_hash_root().0,
+            self.voluntary_exits.tree_hash_root().0,
+            self.sync_aggregate.tree_hash_root().0,
+            self.execution_payload.tree_hash_root().0,
+            self.bls_to_execution_changes.tree_hash_root().0,
+        ];
+        // We want to prove the 10th leaf
+        build_merkle_proof_for_index(leaves, 9)
+    }
+
+    pub fn build_execution_block_hash_proof(&self) -> Vec<B256> {
+        let mut block_hash_proof = self.execution_payload.build_block_hash_proof();
+        let execution_payload_proof = self.build_execution_payload_proof();
+        block_hash_proof.extend(execution_payload_proof);
+        block_hash_proof
+    }
+}
+
 impl BeaconBlockBodyBellatrix {
     pub fn build_execution_payload_proof(&self) -> Vec<B256> {
-        let mut leaves: Vec<[u8; 32]> = vec![
+        let leaves = vec![
             self.randao_reveal.tree_hash_root().0,
             self.eth1_data.tree_hash_root().0,
             self.graffiti.tree_hash_root().0,
@@ -101,23 +128,8 @@ impl BeaconBlockBodyBellatrix {
             self.sync_aggregate.tree_hash_root().0,
             self.execution_payload.tree_hash_root().0,
         ];
-        // We want to add empty leaves to make the tree a power of 2
-        while leaves.len() < 16 {
-            leaves.push([0; 32]);
-        }
-
-        let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
-
         // We want to prove the 10th leaf
-        let indices_to_prove = vec![9];
-        let proof = merkle_tree.proof(&indices_to_prove);
-        let proof_hashes: Vec<B256> = proof
-            .proof_hashes()
-            .iter()
-            .map(|hash| B256::from_slice(hash))
-            .collect();
-
-        proof_hashes
+        build_merkle_proof_for_index(leaves, 9)
     }
 
     pub fn build_execution_block_hash_proof(&self) -> Vec<B256> {

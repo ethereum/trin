@@ -3,7 +3,6 @@ use std::sync::Arc;
 use alloy::primitives::B256;
 use discv5::enr::k256::elliptic_curve::consts::{U1099511627776, U2048, U4, U65536, U8192};
 use jsonrpsee::core::Serialize;
-use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::Deserialize;
 use serde_this_or_that::as_u64;
 use serde_utils;
@@ -23,6 +22,7 @@ use crate::consensus::{
     header::BeaconBlockHeader,
     historical_summaries::HistoricalSummaries,
     participation_flags::ParticipationFlags,
+    proof::build_merkle_proof_for_index,
     pubkey::PubKey,
     sync_committee::SyncCommittee,
 };
@@ -164,7 +164,7 @@ impl BeaconState {
 
 impl BeaconStateDeneb {
     pub fn build_historical_summaries_proof(&self) -> Vec<B256> {
-        let mut leaves: Vec<[u8; 32]> = vec![
+        let leaves = vec![
             self.genesis_time.tree_hash_root().0,
             self.genesis_validators_root.tree_hash_root().0,
             self.slot.tree_hash_root().0,
@@ -194,21 +194,8 @@ impl BeaconStateDeneb {
             self.next_withdrawal_validator_index.tree_hash_root().0,
             self.historical_summaries.tree_hash_root().0,
         ];
-        // We want to add empty leaves to make the tree a power of 2
-        while leaves.len() < 32 {
-            leaves.push([0; 32]);
-        }
 
-        let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
-        let indices_to_prove = vec![27];
-        let proof = merkle_tree.proof(&indices_to_prove);
-        let proog_hashes: Vec<B256> = proof
-            .proof_hashes()
-            .iter()
-            .map(|hash| B256::from_slice(hash))
-            .collect();
-
-        proog_hashes
+        build_merkle_proof_for_index(leaves, 27)
     }
 }
 
@@ -314,21 +301,13 @@ pub struct HistoricalBatch {
 
 impl HistoricalBatch {
     pub fn build_block_root_proof(&self, block_root_index: u64) -> Vec<B256> {
-        // Build block hash proof for sel.block_roots
+        // Build block hash proof for self.block_roots
         let leaves: Vec<[u8; 32]> = self
             .block_roots
             .iter()
             .map(|root| root.tree_hash_root().0)
             .collect();
-
-        let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
-        let indices_to_prove = vec![block_root_index as usize];
-        let proof = merkle_tree.proof(&indices_to_prove);
-        let mut proof_hashes: Vec<B256> = proof
-            .proof_hashes()
-            .iter()
-            .map(|hash| B256::from_slice(hash))
-            .collect();
+        let mut proof_hashes = build_merkle_proof_for_index(leaves, block_root_index as usize);
 
         // To generate proof for block root anchored to the historical batch tree_hash_root, we need
         // to add the self.state_root tree_hash_root to the proof_hashes
