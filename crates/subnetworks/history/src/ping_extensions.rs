@@ -1,5 +1,5 @@
 use ethportal_api::types::ping_extensions::extension_types::Extensions;
-use portalnet::overlay::ping_extensions::PingExtension;
+use portalnet::overlay::ping_extensions::PingExtensions;
 
 pub struct HistoryPingExtensions {}
 
@@ -15,7 +15,7 @@ impl HistoryPingExtensions {
     pub const BASE_EXTENSIONS: &[Extensions] = &[Extensions::HistoryRadius];
 }
 
-impl PingExtension for HistoryPingExtensions {
+impl PingExtensions for HistoryPingExtensions {
     fn is_supported(&self, extension: Extensions) -> bool {
         Self::SUPPORT_EXTENSIONS.contains(&extension)
     }

@@ -227,8 +227,8 @@ mod tests {
     #[case("15537392")]
     #[case("15537393")]
     fn decode_encode_more_headers_with_proofs(#[case] filename: &str) {
-        let file = fs::read_to_string(format!("../validation/src/assets/fluffy/{filename}.yaml",))
-            .unwrap();
+        let file =
+            fs::read_to_string(format!("../validation/src/assets/fluffy/{filename}.yaml")).unwrap();
         let yaml: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let actual_hwp = yaml.get("content_value").unwrap().as_str().unwrap();
         let hwp = HeaderWithProof::from_ssz_bytes(&hex_decode(actual_hwp).unwrap()).unwrap();

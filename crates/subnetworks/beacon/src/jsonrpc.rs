@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use discv5::enr::NodeId;
+use discv5::{enr::NodeId, Enr};
 use ethportal_api::{
     types::{
         content_value::ContentValue,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
-        ping_extensions::decode::DecodedExtension,
+        ping_extensions::{decode::PingExtension, ping_payload::PingPayload},
         portal::{AcceptInfo, FindNodesInfo, GetContentInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
     },
@@ -73,7 +73,7 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
         BeaconEndpoint::TraceOffer(enr, content_key, content_value) => {
             trace_offer(network, enr, content_key, content_value).await
         }
-        BeaconEndpoint::Ping(enr) => ping(network, enr).await,
+        BeaconEndpoint::Ping(enr, ping_payload) => ping(network, enr, ping_payload).await,
         BeaconEndpoint::RoutingTableInfo => {
             serde_json::to_value(network.overlay.routing_table_info())
                 .map_err(|err| err.to_string())
@@ -396,19 +396,39 @@ async fn trace_offer(
 /// Constructs a JSON call for the Ping method.
 async fn ping(
     network: Arc<BeaconNetwork>,
-    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+    enr: Enr,
+    ping_payload: Option<PingPayload>,
 ) -> Result<Value, String> {
-    match network.overlay.send_ping(enr).await {
+    let payload = network
+        .overlay
+        .decode_ping_payload(ping_payload)
+        .map_err(|err| match err {
+            OverlayRequestError::PayloadTypeNotSupported { message, reason } => {
+                let err = json!({
+                    "message": message,
+                    "reason": reason,
+                });
+                err.to_string()
+            }
+            OverlayRequestError::FailedToDecodePayload { message } => {
+                let err = json!({
+                    "message": message,
+                });
+                err.to_string()
+            }
+            _ => format!("Received unexpected error: {err:?}"),
+        })?;
+    match network.overlay.send_ping(enr, payload).await {
         Ok(pong) => {
-            let data_radius =
-                match DecodedExtension::decode_extension(pong.payload_type, pong.payload) {
-                    Ok(DecodedExtension::Capabilities(capabilities)) => *capabilities.data_radius,
-                    err => return Err(format!("Failed to decode capabilities: {err:?}")),
-                };
+            let payload = match PingExtension::decode_ssz(pong.payload_type, pong.payload) {
+                Ok(payload) => payload,
+                err => return Err(format!("Failed to decode capabilities: {err:?}")),
+            };
 
             Ok(json!(PongInfo {
                 enr_seq: pong.enr_seq,
-                data_radius,
+                payload_type: pong.payload_type,
+                payload: json!(payload),
             }))
         }
         Err(msg) => Err(format!("Ping request timeout: {msg:?}")),

@@ -1,5 +1,6 @@
 use alloy::primitives::{Bytes, U256};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use ssz_types::{typenum, BitList};
 
 use super::query_trace::QueryTrace;
@@ -52,7 +53,8 @@ pub type DataRadius = U256;
 #[serde(rename_all = "camelCase")]
 pub struct PongInfo {
     pub enr_seq: u64,
-    pub data_radius: DataRadius,
+    pub payload_type: u16,
+    pub payload: Value,
 }
 
 pub type FindNodesInfo = Vec<Enr>;

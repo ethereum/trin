@@ -74,7 +74,7 @@ use crate::{
         command::OverlayCommand,
         config::FindContentConfig,
         errors::OverlayRequestError,
-        ping_extensions::PingExtension,
+        ping_extensions::PingExtensions,
         request::{
             ActiveOutgoingRequest, OverlayRequest, OverlayRequestId, OverlayResponse,
             RequestDirection,
@@ -110,7 +110,7 @@ impl<
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
         TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
-        TPingExtensions: 'static + PingExtension + Send + Sync,
+        TPingExtensions: 'static + PingExtensions + Send + Sync,
     > OverlayService<TContentKey, TMetric, TValidator, TStore, TPingExtensions>
 {
     /// Spawns the overlay network service.
@@ -2382,7 +2382,7 @@ where
     TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
     TStore: ContentStore<Key = TContentKey>,
-    TPingExtensions: PingExtension,
+    TPingExtensions: PingExtensions,
 {
     fn from(
         service: &OverlayService<TContentKey, TMetric, TValidator, TStore, TPingExtensions>,
