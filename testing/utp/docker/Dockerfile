@@ -1,4 +1,4 @@
-FROM rust:1.81.0-bullseye AS builder
+FROM rust:1.85.0-bullseye AS builder
 
 RUN apt-get update \
  && apt-get install clang -y \

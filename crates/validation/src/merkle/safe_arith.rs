@@ -1,6 +1,6 @@
-///
-/// Code sourced from:
-/// https://github.com/sigp/lighthouse/blob/bf533c8e42/consensus/safe_arith/src/lib.rs
+//!
+//! Code sourced from:
+//! https://github.com/sigp/lighthouse/blob/bf533c8e42/consensus/safe_arith/src/lib.rs
 
 /// Extension trait for iterators, providing a safe replacement for `sum`.
 pub trait SafeArithIter<T> {
