@@ -79,6 +79,7 @@ This step directs Ansible to use the current master version of trin. Read [about
         - regular nodes: all remaining ips
     - `ssh ubuntu@$IP_ADDR`
     - check logs, ignoring DEBUG: `sudo docker logs trin -n 1000 | grep -v DEBUG`
+    - for glados logins, use `ssh devops@$IP_ADDR` instead
 - Check monitoring tools to see if network health is the same or better as before deployment. Glados might lag for 10-15 minutes, so keep checking back.
 
 ### Communicate

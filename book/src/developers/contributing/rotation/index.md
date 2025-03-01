@@ -21,15 +21,15 @@ There are some daily tasks, and some transition tasks: Kickoff on Monday & Hando
 
 Unlike your code-heavy weeks, this can be an interruption-heavy week. Although it's often good practice to not get distracted by inbound messages while coding, this week is the opposite: as soon as you see new messages (like on Discord), jump into it.
 
-### Kickoff
+### First time ever as Flamingo
+
+Read through the "Setup" section of the [Deployment Instructions](../releases/deployment.md) and follow the steps to make sure that your PGP and SSH keys are in place and ready for a deployment.
+
+### Kickoff: first day of Flamingo week
 
 Have a discussion with the previous Flamingo on any ongoing issues or in-progress tasks. This is crucial to get a quick understanding of the state of the network and any in-progress tasks to resume.
 
 Make sure your status is "online" in Discord. Make sure you're tagged under the `trin-flamingo` role (ping discord Admin). Put on your favorite pink shirt. Watch a [silly flamingo video](https://www.youtube.com/watch?v=gWNWtbPEWw0). Fly.
-
-### First
-
-Read through the "Setup" section of the [Deployment Instructions](../releases/deployment.md) and follow the steps to make sure that your PGP and SSH keys are in place and ready for a deployment.
 
 ### Daily
 
@@ -90,7 +90,7 @@ When you get to the end of your checklist, here are ideas for what to work on ne
 - Add new integration tools (eg~ portal-hive -> Discord bot?)
 - Scratch your own itch! What do you wish was easier? Now is the time to build it.
 
-### Handoff
+### Handoff: last day of Flamingo week
 
 Look back at your week as Flamingo and summarize it in notes if needed. Prepare for a kickoff discussion with the next Flamingo and update them on your work from previous week.
 
