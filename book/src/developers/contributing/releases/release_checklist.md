@@ -26,14 +26,8 @@ Cargo.toml, and run `cargo update` to update the workspace lockfile. Commit and
 merge these changes to trin. Then run:
 
 ```bash
-cd ethportal-api
-cargo publish --no-verify
+cargo publish -p ethportal-api
 ```
-
-We would like to get rid of the no-verify ASAP, but for now Cargo.lock is
-causing issues that we have no other workaround for. `cargo publish` generates
-a new lock file, and then complains that the lockfile is new. See this
-[StackOverflow post](https://stackoverflow.com/questions/79276315/how-to-build-a-cargo-lock-file-for-a-package-within-a-workspace).
 
 ## Release Trin
 
