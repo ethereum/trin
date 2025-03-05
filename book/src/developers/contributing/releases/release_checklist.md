@@ -21,9 +21,14 @@ group discussion and decision.
 
 ## Release dependencies
 
-For now, that's just ethportal-api. Manually bump the version in the
-Cargo.toml, and run `cargo update` to update the workspace lockfile. Commit and
-merge these changes to trin. Then run:
+For now, that's just ethportal-api, plus the whole workspace. Steps to release:
+
+1. Bump the version in that crate's Cargo.toml (pay attention to whether there are any API changes that require a major version bump)
+2. Bump the version in the workspace Cargo.toml
+3. Run `cargo update` to update the workspace lockfile
+4. Get a review on whether the version number changes are appropriate
+5. Merge the combined PR into master
+6. Publish the ethportal-api release with:
 
 ```bash
 cargo publish -p ethportal-api
