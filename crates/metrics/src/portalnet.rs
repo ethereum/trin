@@ -1,10 +1,7 @@
 use lazy_static::lazy_static;
 use prometheus_exporter::prometheus::default_registry;
 
-use crate::{
-    bridge::BridgeMetrics, history_migration::HistoryMigrationMetrics, overlay::OverlayMetrics,
-    storage::StorageMetrics,
-};
+use crate::{bridge::BridgeMetrics, overlay::OverlayMetrics, storage::StorageMetrics};
 
 // We use lazy_static to ensure that the metrics registry is initialized only once, for each
 // runtime. This is important because the registry is a global singleton, and if it is
@@ -22,7 +19,6 @@ pub struct PortalnetMetrics {
     bridge: BridgeMetrics,
     overlay: OverlayMetrics,
     storage: StorageMetrics,
-    history_migration: HistoryMigrationMetrics,
 }
 
 impl PortalnetMetrics {
@@ -31,12 +27,10 @@ impl PortalnetMetrics {
         let overlay = OverlayMetrics::new(registry)?;
         let storage = StorageMetrics::new(registry)?;
         let bridge = BridgeMetrics::new(registry)?;
-        let history_migration = HistoryMigrationMetrics::new(registry)?;
         Ok(Self {
             overlay,
             storage,
             bridge,
-            history_migration,
         })
     }
 
@@ -50,9 +44,5 @@ impl PortalnetMetrics {
 
     pub fn bridge(&self) -> BridgeMetrics {
         self.bridge.clone()
-    }
-
-    pub fn history_migration(&self) -> HistoryMigrationMetrics {
-        self.history_migration.clone()
     }
 }
