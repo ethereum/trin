@@ -20,7 +20,10 @@ use ethportal_api::{
         distance::{Distance, Metric},
         enr::Enr,
         network::Subnetwork,
-        ping_extensions::extensions::type_0::ClientInfoRadiusCapabilities,
+        ping_extensions::{
+            decode::PingExtension, extension_types::Extensions,
+            extensions::type_0::ClientInfoRadiusCapabilities, ping_payload::PingPayload,
+        },
         portal::PutContentInfo,
         portal_wire::{
             Accept, Content, FindContent, FindNodes, Message, Nodes, OfferTrace, Ping, Pong,
@@ -39,7 +42,9 @@ use trin_storage::{ContentStore, ShouldWeStoreContent};
 use trin_validation::validator::{ValidationResult, Validator};
 use utp_rs::socket::UtpSocket;
 
-use super::{ping_extensions::PingExtension, service::OverlayService};
+use super::{
+    errors::PayloadTypeNotSupportedReason, ping_extensions::PingExtensions, service::OverlayService,
+};
 use crate::{
     bootnodes::Bootnode,
     discovery::{Discovery, UtpPeer},
@@ -99,7 +104,7 @@ impl<
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
         TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
-        TPingExtensions: 'static + PingExtension + Send + Sync,
+        TPingExtensions: 'static + PingExtensions + Send + Sync,
     > OverlayProtocol<TContentKey, TMetric, TValidator, TStore, TPingExtensions>
 {
     pub async fn new(
@@ -370,17 +375,65 @@ impl<
         enr
     }
 
+    /// Decode the `Ping` payload and return the decoded `PingExtension`.
+    pub fn decode_ping_payload(
+        &self,
+        ping_payload: Option<PingPayload>,
+    ) -> Result<Option<PingExtension>, OverlayRequestError> {
+        Ok(match ping_payload {
+            Some(payload) => {
+                let Ok(extension_type) = Extensions::try_from(payload.payload_type) else {
+                    return Err(OverlayRequestError::PayloadTypeNotSupported {
+                        message: "Payload type not supported".to_string(),
+                        reason: PayloadTypeNotSupportedReason::Client,
+                    });
+                };
+
+                if !self.ping_extensions.is_supported(extension_type) {
+                    return Err(OverlayRequestError::PayloadTypeNotSupported {
+                        message: "Payload type not supported".to_string(),
+                        reason: PayloadTypeNotSupportedReason::Subnetwork,
+                    });
+                }
+
+                match PingExtension::decode_json(payload.payload_type, payload.payload) {
+                    Ok(payload) => Some(payload),
+                    Err(err) => {
+                        return Err(OverlayRequestError::FailedToDecodePayload {
+                            message: format!("Failed to decode payload: {err:?}"),
+                        })
+                    }
+                }
+            }
+            None => None,
+        })
+    }
+
     /// Sends a `Ping` request to `enr`.
-    pub async fn send_ping(&self, enr: Enr) -> Result<Pong, OverlayRequestError> {
+    pub async fn send_ping(
+        &self,
+        enr: Enr,
+        payload: Option<PingExtension>,
+    ) -> Result<Pong, OverlayRequestError> {
         // Construct the request.
         let enr_seq = self.discovery.local_enr().seq();
         let data_radius = self.data_radius();
-        let payload =
-            ClientInfoRadiusCapabilities::new(data_radius, self.ping_extensions.raw_extensions())
-                .into();
+
+        let (payload_type, payload) = match payload {
+            Some(payload) => (payload.payload_type(), payload.into()),
+            None => (
+                0,
+                ClientInfoRadiusCapabilities::new(
+                    data_radius,
+                    self.ping_extensions.raw_extensions(),
+                )
+                .into(),
+            ),
+        };
+
         let request = Ping {
             enr_seq,
-            payload_type: 0,
+            payload_type,
             payload,
         };
 
@@ -694,7 +747,7 @@ impl<
             .collect();
         for bootnode in bootnodes {
             debug!(alias = %bootnode.alias, protocol = %self.protocol, "Attempting to bond with bootnode");
-            let ping_result = self.send_ping(bootnode.enr.clone()).await;
+            let ping_result = self.send_ping(bootnode.enr.clone(), None).await;
 
             match ping_result {
                 Ok(_) => {

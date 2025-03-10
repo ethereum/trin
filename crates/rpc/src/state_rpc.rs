@@ -3,6 +3,7 @@ use ethportal_api::{
     types::{
         enr::Enr,
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
+        ping_extensions::ping_payload::PingPayload,
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
@@ -64,8 +65,8 @@ impl StateNetworkApiServer for StateNetworkApi {
     }
 
     /// Send a PING message to the designated node and wait for a PONG response
-    async fn ping(&self, enr: Enr) -> RpcResult<PongInfo> {
-        let endpoint = StateEndpoint::Ping(enr);
+    async fn ping(&self, enr: Enr, ping_payload: Option<PingPayload>) -> RpcResult<PongInfo> {
+        let endpoint = StateEndpoint::Ping(enr, ping_payload);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

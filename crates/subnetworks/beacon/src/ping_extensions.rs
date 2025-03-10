@@ -1,5 +1,5 @@
 use ethportal_api::types::ping_extensions::extension_types::Extensions;
-use portalnet::overlay::ping_extensions::PingExtension;
+use portalnet::overlay::ping_extensions::PingExtensions;
 
 pub struct BeaconPingExtensions {}
 
@@ -15,7 +15,7 @@ impl BeaconPingExtensions {
     pub const BASE_EXTENSIONS: &[Extensions] = &[Extensions::BasicRadius];
 }
 
-impl PingExtension for BeaconPingExtensions {
+impl PingExtensions for BeaconPingExtensions {
     fn is_supported(&self, extension: Extensions) -> bool {
         Self::SUPPORT_EXTENSIONS.contains(&extension)
     }

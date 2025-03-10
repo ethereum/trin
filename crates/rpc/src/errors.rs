@@ -1,6 +1,7 @@
 use std::io;
 
 use ethportal_api::{types::query_trace::QueryTrace, ContentValueError};
+use portalnet::overlay::errors::PayloadTypeNotSupportedReason;
 use reth_ipc::server::IpcServerStartError;
 use serde::{Deserialize, Serialize};
 
@@ -47,6 +48,15 @@ pub enum RpcServeError {
         message: String,
         trace: Option<Box<QueryTrace>>,
     },
+    /// PayloadTypeNotSupported
+    #[error("Payload type not supported: {message}")]
+    PayloadTypeNotSupported {
+        message: String,
+        reason: PayloadTypeNotSupportedReason,
+    },
+    /// FailedToDecodePayload
+    #[error("Failed to decode payload: {message}")]
+    FailedToDecodePayload { message: String },
 }
 
 impl From<RpcServeError> for ErrorObjectOwned {
@@ -61,6 +71,12 @@ impl From<RpcServeError> for ErrorObjectOwned {
             RpcServeError::MethodNotFound(method) => ErrorObject::owned(-32601, method, None::<()>),
             RpcServeError::ContentNotFound { message, trace } => {
                 ErrorObject::owned(-39001, message, Some(trace))
+            }
+            RpcServeError::PayloadTypeNotSupported { message, reason } => {
+                ErrorObject::owned(-39004, message, Some(reason.to_string()))
+            }
+            RpcServeError::FailedToDecodePayload { message } => {
+                ErrorObject::owned(-39005, message, None::<()>)
             }
         }
     }
@@ -78,6 +94,36 @@ impl From<ContentNotFoundJsonError> for RpcServeError {
         RpcServeError::ContentNotFound {
             message: e.message,
             trace: e.trace.map(Box::new),
+        }
+    }
+}
+
+/// The JSON format of the "PayloadTypeNotSupported" error.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PayloadTypeNotSupportedJsonError {
+    pub message: String,
+    pub reason: PayloadTypeNotSupportedReason,
+}
+
+impl From<PayloadTypeNotSupportedJsonError> for RpcServeError {
+    fn from(err: PayloadTypeNotSupportedJsonError) -> Self {
+        RpcServeError::PayloadTypeNotSupported {
+            message: err.message,
+            reason: err.reason,
+        }
+    }
+}
+
+/// The JSON format of the "FailedToDecodePayload" error.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailedToDecodePayloadJsonError {
+    pub message: String,
+}
+
+impl From<FailedToDecodePayloadJsonError> for RpcServeError {
+    fn from(err: FailedToDecodePayloadJsonError) -> Self {
+        RpcServeError::FailedToDecodePayload {
+            message: err.message,
         }
     }
 }

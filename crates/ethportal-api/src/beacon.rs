@@ -12,6 +12,7 @@ use crate::{
         },
         content_key::beacon::BeaconContentKey,
         enr::Enr,
+        ping_extensions::ping_payload::PingPayload,
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
@@ -55,7 +56,7 @@ pub trait BeaconNetworkApi {
 
     /// Send a PING message to the designated node and wait for a PONG response
     #[method(name = "beaconPing")]
-    async fn ping(&self, enr: Enr) -> RpcResult<PongInfo>;
+    async fn ping(&self, enr: Enr, ping_payload: Option<PingPayload>) -> RpcResult<PongInfo>;
 
     /// Get the finalized state root of the finalized beacon header.
     #[method(name = "beaconFinalizedStateRoot")]

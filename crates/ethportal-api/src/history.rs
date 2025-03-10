@@ -5,6 +5,7 @@ use crate::{
     types::{
         content_key::history::HistoryContentKey,
         enr::Enr,
+        ping_extensions::ping_payload::PingPayload,
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
@@ -44,7 +45,7 @@ pub trait HistoryNetworkApi {
 
     /// Send a PING message to the designated node and wait for a PONG response
     #[method(name = "historyPing")]
-    async fn ping(&self, enr: Enr) -> RpcResult<PongInfo>;
+    async fn ping(&self, enr: Enr, ping_payload: Option<PingPayload>) -> RpcResult<PongInfo>;
 
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the
     /// designated peer and wait for a response
