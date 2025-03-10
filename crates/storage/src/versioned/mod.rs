@@ -18,11 +18,6 @@ pub use utils::create_store;
 #[derive(Clone, Debug, Display, Eq, PartialEq, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 pub enum ContentType {
-    /// Corresponds to the history network content.
-    ///
-    /// This type is deprecated and  `HistoryEternal` or should be used instead.
-    /// See https://github.com/ethereum/trin/issues/1666".
-    History,
     /// Corresponds to the state network content.
     State,
     /// Corresponds to the non-ephemeral history network content.
