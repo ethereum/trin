@@ -36,7 +36,7 @@ pub async fn test_offer(peertest: &Peertest, target: &Client) {
         .unwrap();
 
     // Check that ACCEPT response sent by bootnode accepted the offered content
-    assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
+    assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x01");
 
     // Check if the stored content value in bootnode's DB matches the offered
     assert_eq!(
@@ -71,7 +71,7 @@ pub async fn test_offer_with_trace(peertest: &Peertest, target: &Client) {
 
     // check that the result of the offer is true for a valid transfer
     if let OfferTrace::Success(accepted_keys) = result {
-        assert_eq!(hex_encode(accepted_keys.into_bytes()), "0x03");
+        assert_eq!(hex_encode(accepted_keys.into_bytes()), "0x01");
     } else {
         panic!("Offer failed");
     }
