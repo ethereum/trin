@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy::primitives::U256;
+use alloy::primitives::{Bytes, U256};
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
 use bimap::BiHashMap;
@@ -19,6 +19,7 @@ use thiserror::Error;
 use validator::ValidationError;
 
 use super::{
+    accept_code::{AcceptCode, AcceptCodeList},
     bytes::ByteList1100,
     ping_extensions::extension_types::PingExtensionType,
     protocol_versions::{
@@ -599,8 +600,8 @@ pub struct PopulatedOfferWithResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OfferTrace {
-    /// Offer was successful, all accepted content keys in bitlist were transferred
-    Success(BitList<typenum::U64>),
+    /// Offer was successful, all accepted content keys in bytelist were transferred
+    Success(AcceptCodeList),
     /// Peer is not interested in any of the offered content keys
     Declined,
     /// This offer failed, perhaps locally or from a timeout or transfer failure
@@ -618,7 +619,61 @@ impl From<PopulatedOfferWithResult> for Offer {
 #[derive(Debug, PartialEq, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Accept {
     pub connection_id: u16,
-    pub content_keys: BitList<typenum::U64>,
+    pub content_keys: Bytes,
+}
+
+impl Accept {
+    pub fn new(
+        protocol_version: ProtocolVersion,
+        connection_id: u16,
+        content_keys: AcceptCodeList,
+    ) -> anyhow::Result<Self> {
+        let content_keys = if protocol_version.is_v1_enabled() {
+            Bytes::from(content_keys.as_ssz_bytes())
+        } else {
+            let mut v0_content_keys = BitList::<typenum::U64>::with_capacity(content_keys.len())
+                .map_err(|err| anyhow!("Failed to initialize v0 accept codes list {err:?}"))?;
+            for (index, accept_code) in content_keys.iter().enumerate() {
+                v0_content_keys
+                    .set(index, accept_code == &AcceptCode::Accepted)
+                    .map_err(|err| {
+                        anyhow!("Failed to set accept code at index: {index} {err:?}")
+                    })?;
+            }
+            Bytes::from(v0_content_keys.as_ssz_bytes())
+        };
+
+        Ok(Self {
+            connection_id,
+            content_keys,
+        })
+    }
+
+    pub fn decode_accept_code_list(
+        protocol_version: ProtocolVersion,
+        raw_content_keys: Bytes,
+    ) -> anyhow::Result<AcceptCodeList> {
+        if protocol_version.is_v1_enabled() {
+            Ok(AcceptCodeList::from_ssz_bytes(&raw_content_keys)
+                .map_err(|err| anyhow!("Failed to decode v1 accept codes list {err:?}"))?)
+        } else {
+            let v0_content_keys = BitList::<typenum::U64>::from_ssz_bytes(&raw_content_keys)
+                .map_err(|err| anyhow!("Failed to decode v0 accept codes list {err:?}"))?;
+            let mut accept_code_list = AcceptCodeList::with_capacity(v0_content_keys.len())
+                .map_err(|err| anyhow!("Failed to initialize AcceptCodeList {err:?}"))?;
+            for (index, bit) in v0_content_keys.iter().enumerate() {
+                let accept_code = if bit {
+                    AcceptCode::Accepted
+                } else {
+                    AcceptCode::Declined
+                };
+                accept_code_list.set(index, accept_code).map_err(|err| {
+                    anyhow!("Failed to set accept code at index: {index} {err:?}")
+                })?;
+            }
+            Ok(accept_code_list)
+        }
+    }
 }
 
 impl From<Accept> for Value {
@@ -640,6 +695,7 @@ mod test {
     use test_log::test;
 
     use super::*;
+    use crate::types::accept_code::AcceptCode;
 
     #[test]
     fn subnetwork_invalid() {
@@ -789,17 +845,20 @@ mod test {
     #[test]
     fn message_encoding_accept() {
         let connection_id = u16::from_le_bytes([0x01, 0x02]);
-        let mut content_keys = BitList::with_capacity(8).unwrap();
-        content_keys.set(0, true).unwrap();
-        let accept = Accept {
-            connection_id,
-            content_keys,
-        };
+        let mut content_keys = AcceptCodeList::with_capacity(8).unwrap();
+        content_keys.set(0, AcceptCode::Accepted).unwrap();
+        content_keys.set(2, AcceptCode::AlreadyStored).unwrap();
+        content_keys.set(3, AcceptCode::NotWithinRadius).unwrap();
+        content_keys.set(4, AcceptCode::RateLimited).unwrap();
+        content_keys
+            .set(5, AcceptCode::InboundTransferInProgress)
+            .unwrap();
+        let accept = Accept::new(ProtocolVersion::V1, connection_id, content_keys).unwrap();
         let accept = Message::Accept(accept);
 
         let encoded: Vec<u8> = accept.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x070102060000000101";
+        let expected_encoded = "0x070102060000000001020304050101";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -809,19 +868,16 @@ mod test {
     #[test]
     fn maximum_accept_items() {
         let connection_id = u16::from_le_bytes([0x01, 0x02]);
-        // Specs say that the bitlist should be able to hold up to 64 bits
-        let mut content_keys = BitList::with_capacity(64).unwrap();
-        content_keys.set(63, true).unwrap();
-        content_keys.set(0, true).unwrap();
-        let accept = Accept {
-            connection_id,
-            content_keys,
-        };
+        // Specs say that the bytelist should be able to hold up to 64 bits
+        let mut content_keys = AcceptCodeList::with_capacity(64).unwrap();
+        content_keys.set(63, AcceptCode::Accepted).unwrap();
+        content_keys.set(0, AcceptCode::Accepted).unwrap();
+        let accept = Accept::new(ProtocolVersion::V1, connection_id, content_keys).unwrap();
         let accept = Message::Accept(accept);
 
         let encoded: Vec<u8> = accept.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x07010206000000010000000000008001";
+        let expected_encoded = "0x0701020600000000010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010100";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -832,12 +888,13 @@ mod test {
             content_keys,
         }) = decoded
         {
+            let content_keys = AcceptCodeList::from_ssz_bytes(&content_keys).unwrap();
             assert_eq!(decoded_connection_id, connection_id);
             assert_eq!(content_keys.len(), 64);
-            assert!(content_keys.get(0).unwrap());
-            assert!(!content_keys.get(1).unwrap());
-            assert!(!content_keys.get(62).unwrap());
-            assert!(content_keys.get(63).unwrap());
+            assert_eq!(content_keys.get(0).unwrap(), AcceptCode::Accepted);
+            assert_eq!(content_keys.get(1).unwrap(), AcceptCode::Declined);
+            assert_eq!(content_keys.get(62).unwrap(), AcceptCode::Declined);
+            assert_eq!(content_keys.get(63).unwrap(), AcceptCode::Accepted);
         } else {
             panic!("Expected Accept message, but got {decoded:?}");
         }
@@ -845,7 +902,7 @@ mod test {
 
     #[test]
     fn too_many_accept_items() {
-        match BitList::with_capacity(65) {
+        match AcceptCodeList::with_capacity(65) {
             Err(OutOfBounds { i: _i, len }) => {
                 // TODO: assert this after https://github.com/sigp/ethereum_ssz/pull/33 is merged
                 // assert_eq!(i, 65);
@@ -853,10 +910,7 @@ mod test {
             }
             Err(_) => panic!("Expected OutOfBounds error"),
             Ok(content_keys) => {
-                let accept = Accept {
-                    connection_id: 0,
-                    content_keys,
-                };
+                let accept = Accept::new(ProtocolVersion::V1, 0, content_keys).unwrap();
                 panic!("Expected OutOfBounds error, but got {accept:?}");
             }
         }

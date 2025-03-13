@@ -1,8 +1,8 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use ethportal_api::{
-    jsonrpsee::async_client::Client, version::APP_NAME, ContentValue, Discv5ApiClient,
-    HistoryNetworkApiClient,
+    jsonrpsee::async_client::Client, types::network::Network, version::APP_NAME, ContentValue,
+    Discv5ApiClient, HistoryNetworkApiClient,
 };
 use tracing::info;
 use trin::cli::TrinConfig;
@@ -15,7 +15,7 @@ use crate::{
     },
     Peertest,
 };
-pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
+pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client, network: Network) {
     info!("Testing Gossip with tracing");
 
     let _ = HistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone(), None, None)
@@ -40,7 +40,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     );
 
     // Spin up a fresh client, not connected to existing peertest
-    let (fresh_ipc_path, trin_config) = fresh_node_config();
+    let (fresh_ipc_path, trin_config) = fresh_node_config(network);
     let _test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
     let fresh_target = reth_ipc::client::IpcClientBuilder::default()
         .build(&fresh_ipc_path)
@@ -81,7 +81,11 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     assert_eq!(result.transferred.len(), 0);
 }
 
-pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client) {
+pub async fn test_gossip_dropped_with_offer(
+    peertest: &Peertest,
+    target: &Client,
+    network: Network,
+) {
     info!("Testing gossip of dropped content after an offer message.");
 
     // connect target to network
@@ -90,7 +94,7 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
         .unwrap();
 
     // Spin up a fresh client, not connected to existing peertest
-    let (fresh_ipc_path, trin_config) = fresh_node_config();
+    let (fresh_ipc_path, trin_config) = fresh_node_config(network);
     let _test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
     let fresh_target = reth_ipc::client::IpcClientBuilder::default()
         .build(&fresh_ipc_path)
@@ -246,7 +250,11 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
     );
 }
 
-pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: &Client) {
+pub async fn test_gossip_dropped_with_find_content(
+    peertest: &Peertest,
+    target: &Client,
+    network: Network,
+) {
     info!("Testing gossip of dropped content after a find content message.");
 
     // connect target to network
@@ -255,7 +263,7 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
         .unwrap();
 
     // Spin up a fresh client, not connected to existing peertest
-    let (fresh_ipc_path, trin_config) = fresh_node_config();
+    let (fresh_ipc_path, trin_config) = fresh_node_config(network);
     let _test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
     let fresh_target = reth_ipc::client::IpcClientBuilder::default()
         .build(&fresh_ipc_path)
@@ -355,7 +363,7 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
     );
 }
 
-fn fresh_node_config() -> (String, TrinConfig) {
+fn fresh_node_config(network: Network) -> (String, TrinConfig) {
     // Spin up a fresh client, not connected to existing peertest
     let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     // Use an uncommon port for the peertest to avoid clashes.
@@ -364,6 +372,8 @@ fn fresh_node_config() -> (String, TrinConfig) {
     let fresh_ipc_path = format!("/tmp/trin-jsonrpc-{test_discovery_port}.ipc");
     let trin_config = TrinConfig::new_from([
         APP_NAME,
+        "--network",
+        &network.to_string(),
         "--portal-subnetworks",
         "history",
         "--external-address",

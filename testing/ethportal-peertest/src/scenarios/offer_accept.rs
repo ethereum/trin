@@ -10,7 +10,7 @@ use ethportal_api::{
 };
 use portal_bridge::api::execution::construct_proof;
 use portalnet::constants::DEFAULT_UTP_TRANSFER_LIMIT;
-use ssz::Decode;
+use ssz::{Decode, Encode};
 use tracing::info;
 
 use crate::{
@@ -36,7 +36,7 @@ pub async fn test_offer(peertest: &Peertest, target: &Client) {
         .unwrap();
 
     // Check that ACCEPT response sent by bootnode accepted the offered content
-    assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
+    assert_eq!(hex_encode(result.content_keys.as_ssz_bytes()), "0x00");
 
     // Check if the stored content value in bootnode's DB matches the offered
     assert_eq!(
@@ -71,7 +71,7 @@ pub async fn test_offer_with_trace(peertest: &Peertest, target: &Client) {
 
     // check that the result of the offer is true for a valid transfer
     if let OfferTrace::Success(accepted_keys) = result {
-        assert_eq!(hex_encode(accepted_keys.into_bytes()), "0x03");
+        assert_eq!(hex_encode(accepted_keys.as_ssz_bytes()), "0x00");
     } else {
         panic!("Offer failed");
     }

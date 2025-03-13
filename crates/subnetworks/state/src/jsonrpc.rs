@@ -314,8 +314,8 @@ async fn offer(
             .overlay
             .send_offer(enr, content_items)
             .await
-            .map(|accept| AcceptInfo {
-                content_keys: accept.content_keys,
+            .map(|accept_code_list| AcceptInfo {
+                content_keys: accept_code_list,
             }),
     )
 }
