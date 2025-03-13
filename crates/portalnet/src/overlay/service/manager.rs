@@ -21,6 +21,7 @@ use discv5::{
 use ethportal_api::{
     generate_random_node_id,
     types::{
+        accept_code::{AcceptCode, AcceptCodeList},
         distance::{Distance, Metric},
         enr::{Enr, SszEnr},
         network::Subnetwork,
@@ -39,7 +40,6 @@ use parking_lot::{Mutex, RwLock};
 use rand::Rng;
 use smallvec::SmallVec;
 use ssz::Encode;
-use ssz_types::BitList;
 use tokio::{
     sync::{
         broadcast,
@@ -994,8 +994,8 @@ impl<
             "Handling Offer message",
         );
 
-        let mut requested_keys =
-            BitList::with_capacity(request.content_keys.len()).map_err(|_| {
+        let mut requested_keys = AcceptCodeList::with_capacity(request.content_keys.len())
+            .map_err(|_| {
                 OverlayRequestError::AcceptError(
                     "Unable to initialize bitlist for requested keys.".to_owned(),
                 )
@@ -1014,6 +1014,10 @@ impl<
         let permit = match self.utp_controller.get_inbound_semaphore() {
             Some(permit) => permit,
             None => {
+                requested_keys
+                    .0
+                    .iter_mut()
+                    .for_each(|accept_code| *accept_code = AcceptCode::RateLimited);
                 return Ok(Accept {
                     connection_id: 0,
                     content_keys: requested_keys,
@@ -1043,25 +1047,30 @@ impl<
         })?;
         for (i, key) in content_keys.iter().enumerate() {
             // Accept content if within radius and not already present in the data store.
-            let mut accept = self
+            let accept = self
                 .store
                 .lock()
                 .is_key_within_radius_and_unavailable(key)
-                .map(|value| matches!(value, ShouldWeStoreContent::Store))
                 .map_err(|err| {
                     OverlayRequestError::AcceptError(format!(
                         "Unable to check content availability {err}"
                     ))
                 })?;
-            if accept {
-                // accept all keys that are successfully added to the queue
-                if self.accept_queue.write().add_key_to_queue(key, &enr) {
-                    accepted_keys.push(key.clone());
-                } else {
-                    accept = false;
+            let accept_code = match accept {
+                ShouldWeStoreContent::Store => {
+                    // accept all keys that are successfully added to the queue
+                    if self.accept_queue.write().add_key_to_queue(key, &enr) {
+                        accepted_keys.push(key.clone());
+                        AcceptCode::Accepted
+                    } else {
+                        AcceptCode::InboundTransferInProgress
+                    }
                 }
-            }
-            requested_keys.set(i, accept).map_err(|err| {
+                ShouldWeStoreContent::NotWithinRadius => AcceptCode::NotWithinRadius,
+                ShouldWeStoreContent::AlreadyStored => AcceptCode::AlreadyStored,
+            };
+
+            requested_keys.set(i, accept_code).map_err(|err| {
                 OverlayRequestError::AcceptError(format!(
                     "Unable to set requested keys bits: {err:?}"
                 ))
@@ -1070,7 +1079,7 @@ impl<
 
         // If no content keys were accepted, then return an Accept with a connection ID value of
         // zero.
-        if requested_keys.is_zero() {
+        if requested_keys.all_declined() {
             return Ok(Accept {
                 connection_id: 0,
                 content_keys: requested_keys,
@@ -1416,7 +1425,7 @@ impl<
 
         // Do not initialize uTP stream if remote node doesn't have interest in the offered content
         // keys
-        if response.content_keys.is_zero() {
+        if response.content_keys.all_declined() {
             if let Some(tx) = gossip_result_tx {
                 let _ = tx.send(OfferTrace::Declined);
             }
@@ -1444,14 +1453,14 @@ impl<
                     .content_keys
                     .iter()
                     .zip(offer.content_items)
-                    .filter(|(is_accepted, _item)| *is_accepted)
+                    .filter(|(is_accepted, _item)| **is_accepted == AcceptCode::Accepted)
                     .map(|(_is_accepted, (_key, val))| val)
                     .collect()),
                 Request::PopulatedOfferWithResult(offer) => Ok(response_clone
                     .content_keys
                     .iter()
                     .zip(vec![offer.content_item])
-                    .filter(|(is_accepted, _item)| *is_accepted)
+                    .filter(|(is_accepted, _item)| **is_accepted == AcceptCode::Accepted)
                     .map(|(_is_accepted, (_key, val))| val)
                     .collect()),
                 // Unreachable because of early return at top of method:
@@ -1909,13 +1918,13 @@ impl<
 
         let mut content_items: Vec<RawContentValue> = Vec::new();
 
-        for (i, key) in accept_message
+        for (accept_code, key) in accept_message
             .content_keys
             .clone()
             .iter()
             .zip(content_keys_offered.iter())
         {
-            if i {
+            if *accept_code == AcceptCode::Accepted {
                 match store.lock().get(key) {
                     Ok(content) => match content {
                         Some(content) => content_items.push(content),
