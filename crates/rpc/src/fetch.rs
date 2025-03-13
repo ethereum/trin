@@ -3,7 +3,10 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::{
-    errors::{ContentNotFoundJsonError, RpcServeError},
+    errors::{
+        ContentNotFoundJsonError, FailedToDecodePayloadJsonError, PayloadTypeNotSupportedJsonError,
+        RpcServeError,
+    },
     serde::from_value,
 };
 
@@ -38,6 +41,18 @@ where
                     return Err(err.into());
                 }
             }
+            if msg.contains("Payload type not supported") {
+                if let Ok(err) = serde_json::from_str::<PayloadTypeNotSupportedJsonError>(&msg) {
+                    return Err(err.into());
+                }
+            }
+
+            if msg.contains("Failed to decode payload") {
+                if let Ok(err) = serde_json::from_str::<FailedToDecodePayloadJsonError>(&msg) {
+                    return Err(err.into());
+                }
+            }
+
             Err(RpcServeError::Message(msg))
         }
     }

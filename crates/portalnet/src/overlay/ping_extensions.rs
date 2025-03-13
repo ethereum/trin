@@ -1,6 +1,6 @@
 use ethportal_api::types::ping_extensions::extension_types::Extensions;
 
-pub trait PingExtension {
+pub trait PingExtensions {
     /// Returns true if the extension is supported by the clients subnetwork.
     fn is_supported(&self, extension: Extensions) -> bool;
 
@@ -17,7 +17,7 @@ pub trait PingExtension {
 
 pub struct MockPingExtension {}
 
-impl PingExtension for MockPingExtension {
+impl PingExtensions for MockPingExtension {
     fn is_supported(&self, _extension: Extensions) -> bool {
         true
     }
