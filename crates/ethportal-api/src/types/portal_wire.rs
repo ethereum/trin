@@ -13,11 +13,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use super::bytes::ByteList1100;
+use super::bytes::{ByteList1100, ByteList64};
 use crate::{
     types::{
         enr::{Enr, SszEnr},
@@ -546,8 +545,8 @@ pub struct PopulatedOfferWithResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OfferTrace {
-    /// Offer was successful, all accepted content keys in bitlist were transferred
-    Success(BitList<typenum::U64>),
+    /// Offer was successful, all accepted content keys in bytelist were transferred
+    Success(ByteList64),
     /// Peer is not interested in any of the offered content keys
     Declined,
     /// This offer failed, perhaps locally or from a timeout or transfer failure
@@ -565,7 +564,7 @@ impl From<PopulatedOfferWithResult> for Offer {
 #[derive(Debug, PartialEq, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Accept {
     pub connection_id: u16,
-    pub content_keys: BitList<typenum::U64>,
+    pub content_keys: ByteList64,
 }
 
 impl From<Accept> for Value {
@@ -587,6 +586,7 @@ mod test {
     use test_log::test;
 
     use super::*;
+    use crate::types::bytes::{AcceptCode, ByteList64};
 
     #[test]
     fn subnetwork_invalid() {
@@ -736,8 +736,14 @@ mod test {
     #[test]
     fn message_encoding_accept() {
         let connection_id = u16::from_le_bytes([0x01, 0x02]);
-        let mut content_keys = BitList::with_capacity(8).unwrap();
-        content_keys.set(0, true).unwrap();
+        let mut content_keys = ByteList64::with_capacity(8).unwrap();
+        content_keys.set(0, AcceptCode::Accepted).unwrap();
+        content_keys.set(2, AcceptCode::AlreadyStored).unwrap();
+        content_keys
+            .set(3, AcceptCode::InboundTransferInProgress)
+            .unwrap();
+        content_keys.set(4, AcceptCode::RateLimited).unwrap();
+        content_keys.set(5, AcceptCode::NotWithinRadius).unwrap();
         let accept = Accept {
             connection_id,
             content_keys,
@@ -746,7 +752,7 @@ mod test {
 
         let encoded: Vec<u8> = accept.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x070102060000000101";
+        let expected_encoded = "0x070102060000000100020304050000";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -756,10 +762,10 @@ mod test {
     #[test]
     fn maximum_accept_items() {
         let connection_id = u16::from_le_bytes([0x01, 0x02]);
-        // Specs say that the bitlist should be able to hold up to 64 bits
-        let mut content_keys = BitList::with_capacity(64).unwrap();
-        content_keys.set(63, true).unwrap();
-        content_keys.set(0, true).unwrap();
+        // Specs say that the bytelist should be able to hold up to 64 bits
+        let mut content_keys = ByteList64::with_capacity(64).unwrap();
+        content_keys.set(63, AcceptCode::Accepted).unwrap();
+        content_keys.set(0, AcceptCode::Accepted).unwrap();
         let accept = Accept {
             connection_id,
             content_keys,
@@ -768,7 +774,7 @@ mod test {
 
         let encoded: Vec<u8> = accept.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x07010206000000010000000000008001";
+        let expected_encoded = "0x0701020600000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -781,10 +787,10 @@ mod test {
         {
             assert_eq!(decoded_connection_id, connection_id);
             assert_eq!(content_keys.len(), 64);
-            assert!(content_keys.get(0).unwrap());
-            assert!(!content_keys.get(1).unwrap());
-            assert!(!content_keys.get(62).unwrap());
-            assert!(content_keys.get(63).unwrap());
+            assert_eq!(content_keys.get(0).unwrap(), AcceptCode::Accepted);
+            assert_eq!(content_keys.get(1).unwrap(), AcceptCode::Declined);
+            assert_eq!(content_keys.get(62).unwrap(), AcceptCode::Declined);
+            assert_eq!(content_keys.get(63).unwrap(), AcceptCode::Accepted);
         } else {
             panic!("Expected Accept message, but got {decoded:?}");
         }
@@ -792,7 +798,7 @@ mod test {
 
     #[test]
     fn too_many_accept_items() {
-        match BitList::with_capacity(65) {
+        match ByteList64::with_capacity(65) {
             Err(OutOfBounds { i: _i, len }) => {
                 // TODO: assert this after https://github.com/sigp/ethereum_ssz/pull/33 is merged
                 // assert_eq!(i, 65);

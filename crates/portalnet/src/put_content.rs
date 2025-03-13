@@ -191,7 +191,7 @@ pub async fn trace_propagate_put_content_cross_thread<
         match rx.await {
             Ok(res) => {
                 if let Ok(Response::Accept(accept)) = res {
-                    if !accept.content_keys.is_zero() {
+                    if !accept.content_keys.is_not_one() {
                         // update put content result with peer marked as accepting the content
                         put_content_result.accepted.push(enr.clone());
                     }

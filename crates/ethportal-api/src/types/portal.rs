@@ -1,8 +1,7 @@
 use alloy::primitives::{Bytes, U256};
 use serde::{Deserialize, Serialize};
-use ssz_types::{typenum, BitList};
 
-use super::query_trace::QueryTrace;
+use super::{bytes::ByteList64, query_trace::QueryTrace};
 use crate::{types::enr::Enr, OverlayContentKey};
 
 /// The SSZ encoded representation of content key.
@@ -63,7 +62,7 @@ pub const MAX_CONTENT_KEYS_PER_OFFER: usize = 64;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AcceptInfo {
-    pub content_keys: BitList<typenum::U64>,
+    pub content_keys: ByteList64,
 }
 
 /// Response for PutContent endpoint
