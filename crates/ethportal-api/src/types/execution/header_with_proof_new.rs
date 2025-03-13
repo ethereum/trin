@@ -252,19 +252,22 @@ pub fn build_block_proof_historical_summaries(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use std::fs;
-
     use serde_json::Value;
     use serde_yaml::Value as YamlValue;
     use ssz::Decode;
 
     use super::*;
-    use crate::utils::bytes::{hex_decode, hex_encode};
+    use crate::{
+        test_utils::read_file_from_tests_submodule,
+        utils::bytes::{hex_decode, hex_encode},
+    };
 
     #[test_log::test]
     fn decode_encode_headers_with_proof() {
-        let file =
-            fs::read_to_string("../validation/src/assets/fluffy/1000001-1000010.json").unwrap();
+        let file = read_file_from_tests_submodule(
+            "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
+        )
+        .unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let hwps = json.as_object().unwrap();
         for (block_number, obj) in hwps {
@@ -282,9 +285,17 @@ mod tests {
     #[case("14764013")]
     #[case("15537392")]
     #[case("15537393")]
+    #[case("15539558")]
+    #[case("15547621")]
+    #[case("15555729")]
+    #[case("17034870")]
+    #[case("17042287")]
+    #[case("17062257")]
     fn decode_encode_more_headers_with_proofs(#[case] filename: &str) {
-        let file = fs::read_to_string(format!("../validation/src/assets/fluffy/{filename}.yaml",))
-            .unwrap();
+        let file = read_file_from_tests_submodule(format!(
+            "tests/mainnet/history/headers_with_proof/{filename}.yaml"
+        ))
+        .unwrap();
         let yaml: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let actual_hwp = yaml.get("content_value").unwrap().as_str().unwrap();
         let hwp = HeaderWithProof::from_ssz_bytes(&hex_decode(actual_hwp).unwrap()).unwrap();
