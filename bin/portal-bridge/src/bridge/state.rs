@@ -268,7 +268,7 @@ impl StateBridge {
             .last_fetched_block()
             .await?
             .header
-            .hash();
+            .hash_slow();
 
         let walk_diff =
             TrieWalker::new_partial_trie(root_with_trie_diff.root, root_with_trie_diff.trie_diff)?;

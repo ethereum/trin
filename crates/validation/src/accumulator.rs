@@ -1,10 +1,12 @@
 use std::path::PathBuf;
 
-use alloy::primitives::{B256, U256};
+use alloy::{
+    consensus::Header,
+    primitives::{B256, U256},
+};
 use anyhow::anyhow;
 use ethportal_api::types::execution::{
-    accumulator::EpochAccumulator, header::Header,
-    header_with_proof::BlockProofHistoricalHashesAccumulator,
+    accumulator::EpochAccumulator, header_with_proof::BlockProofHistoricalHashesAccumulator,
 };
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
@@ -66,7 +68,7 @@ impl PreMergeAccumulator {
         // Validate header hash matches historical hash from epoch accumulator
         let hr_index = (header.number % EPOCH_SIZE) as usize;
         let header_record = epoch_acc[hr_index];
-        if header_record.block_hash != header.hash() {
+        if header_record.block_hash != header.hash_slow() {
             return Err(anyhow!(
                 "Block hash doesn't match historical header hash found in epoch acc."
             ));

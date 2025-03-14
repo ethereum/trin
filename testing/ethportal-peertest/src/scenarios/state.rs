@@ -50,7 +50,7 @@ pub async fn test_state_gossip_contract_bytecode(peertest: &Peertest, target: &C
 async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &PeertestNode) {
     // Make sure that peer has block header
     let history_content_key =
-        HistoryContentKey::new_block_header_by_hash(fixture.block_header.hash());
+        HistoryContentKey::new_block_header_by_hash(fixture.block_header.hash_slow());
 
     let proof = match fixture.block_header.number {
         0..MERGE_BLOCK_NUMBER => BlockHeaderProof::HistoricalHashes(Default::default()),

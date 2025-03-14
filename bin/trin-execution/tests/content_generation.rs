@@ -128,7 +128,7 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
         let walk_diff = TrieWalker::new_partial_trie(root_hash, changed_nodes)?;
         for account_proof in walk_diff {
-            let block_hash = block.header.hash();
+            let block_hash = block.header.hash_slow();
 
             // check account content key/value
             let content_key =

@@ -1,4 +1,7 @@
-use alloy::primitives::{Address, B256, U256};
+use alloy::{
+    eips::eip4895::Withdrawal as Eip4895Withdrawal,
+    primitives::{Address, B256, U256},
+};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz::Decode;
@@ -143,6 +146,17 @@ pub struct Withdrawal {
     pub address: Address,
     #[serde(deserialize_with = "as_u64")]
     pub amount: u64,
+}
+
+impl From<&Withdrawal> for Eip4895Withdrawal {
+    fn from(withdrawal: &Withdrawal) -> Self {
+        Self {
+            index: withdrawal.index,
+            validator_index: withdrawal.validator_index,
+            address: withdrawal.address,
+            amount: withdrawal.amount,
+        }
+    }
 }
 
 #[superstruct(

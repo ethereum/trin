@@ -12,9 +12,9 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-alloy = { workspace = true, features = ["consensus", "rlp", "rpc-types-eth", "serde"] }
+alloy = { workspace = true, features = ["consensus", "eips", "k256", "rlp", "rpc-types-eth", "serde"] }
 alloy-rlp.workspace = true
-alloy-rpc-types-eth = { version = "0.11.1", default-features = false, features = ["serde"] }
+alloy-rpc-types-eth = { version = "0.12", default-features = false, features = ["serde"] }
 anyhow.workspace = true
 base64 = "0.13.0"
 bimap = "0.6.3"

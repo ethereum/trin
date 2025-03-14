@@ -41,7 +41,7 @@ pub use types::{
     },
     discv5::*,
     enr::*,
-    execution::{block_body::*, header::*, receipts::*},
+    execution::{block_body::*, receipts::*},
     node_id::*,
     portal::{RawContentKey, RawContentValue},
 };

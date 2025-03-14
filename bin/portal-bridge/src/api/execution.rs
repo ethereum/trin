@@ -1,21 +1,22 @@
 use std::sync::Arc;
 
-use alloy::primitives::B256;
+use alloy::{
+    consensus::{BlockBody as AlloyBlockBody, Header},
+    eips::eip4895::Withdrawals,
+    primitives::B256,
+};
 use anyhow::{anyhow, bail};
 use ethportal_api::{
     types::{
         execution::{
             accumulator::EpochAccumulator,
-            block_body::{
-                BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
-                SHANGHAI_TIMESTAMP,
-            },
+            block_body::{BlockBody, MERGE_TIMESTAMP, SHANGHAI_TIMESTAMP},
             header_with_proof::{BlockHeaderProof, HeaderWithProof},
         },
         jsonrpc::{params::Params, request::JsonRequest},
     },
     utils::bytes::{hex_decode, hex_encode},
-    Header, HistoryContentKey, HistoryContentValue, Receipts,
+    HistoryContentKey, HistoryContentValue, Receipts,
 };
 use futures::future::join_all;
 use serde_json::{json, Value};
@@ -108,7 +109,7 @@ impl ExecutionApi {
         };
         // Construct header by hash content key / value pair.
         let header_by_hash_content_key =
-            HistoryContentKey::new_block_header_by_hash(full_header.header.hash());
+            HistoryContentKey::new_block_header_by_hash(full_header.header.hash_slow());
         // Construct header by number content key / value pair.
         let header_by_number_content_key =
             HistoryContentKey::new_block_header_by_number(full_header.header.number);
@@ -141,34 +142,46 @@ impl ExecutionApi {
     ) -> anyhow::Result<(HistoryContentKey, HistoryContentValue)> {
         let block_body = self.get_trusted_block_body(full_header).await?;
         block_body.validate_against_header(&full_header.header)?;
-        let content_key = HistoryContentKey::new_block_body(full_header.header.hash());
+        let content_key = HistoryContentKey::new_block_body(full_header.header.hash_slow());
         let content_value = HistoryContentValue::BlockBody(block_body);
         Ok((content_key, content_value))
     }
 
     /// Return an unvalidated block body for the given FullHeader.
     async fn get_trusted_block_body(&self, full_header: &FullHeader) -> anyhow::Result<BlockBody> {
-        let txs = full_header.txs.clone();
+        let transactions = full_header.txs.clone();
         if full_header.header.timestamp > SHANGHAI_TIMESTAMP {
             if !full_header.uncles.is_empty() {
                 bail!("Invalid block: Shanghai block contains uncles");
             }
             let withdrawals = match full_header.withdrawals.clone() {
-                Some(val) => val,
+                Some(val) => Some(Withdrawals(val)),
                 None => bail!("Invalid block: Shanghai block missing withdrawals"),
             };
-            Ok(BlockBody::Shanghai(BlockBodyShanghai { txs, withdrawals }))
+            Ok(BlockBody(AlloyBlockBody {
+                transactions,
+                ommers: vec![],
+                withdrawals,
+            }))
         } else if full_header.header.timestamp > MERGE_TIMESTAMP {
             if !full_header.uncles.is_empty() {
                 bail!("Invalid block: Merge block contains uncles");
             }
-            Ok(BlockBody::Merge(BlockBodyMerge { txs }))
+            Ok(BlockBody(AlloyBlockBody {
+                transactions,
+                ommers: vec![],
+                withdrawals: None,
+            }))
         } else {
-            let uncles = match full_header.uncles.len() {
+            let ommers = match full_header.uncles.len() {
                 0 => vec![],
                 _ => self.get_trusted_uncles(&full_header.uncles).await?,
             };
-            Ok(BlockBody::Legacy(BlockBodyLegacy { txs, uncles }))
+            Ok(BlockBody(AlloyBlockBody {
+                transactions,
+                ommers,
+                withdrawals: None,
+            }))
         }
     }
 
@@ -212,14 +225,14 @@ impl ExecutionApi {
         };
 
         // Validate Receipts
-        let receipts_root = receipts.root()?;
+        let receipts_root = receipts.root();
         if receipts_root != full_header.header.receipts_root {
             bail!(
                 "Receipts root doesn't match header receipts root: {receipts_root:?} - {:?}",
                 full_header.header.receipts_root
             );
         }
-        let content_key = HistoryContentKey::new_block_receipts(full_header.header.hash());
+        let content_key = HistoryContentKey::new_block_receipts(full_header.header.hash_slow());
         let content_value = HistoryContentValue::Receipts(receipts);
         Ok((content_key, content_value))
     }

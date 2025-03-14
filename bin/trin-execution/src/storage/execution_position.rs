@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
 use alloy::{
-    consensus::EMPTY_ROOT_HASH,
+    consensus::{Header, EMPTY_ROOT_HASH},
     rlp::{Decodable, RlpDecodable, RlpEncodable},
 };
-use ethportal_api::Header;
 use revm_primitives::B256;
 use rocksdb::DB as RocksDB;
 use serde::{Deserialize, Serialize};
