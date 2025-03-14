@@ -1,4 +1,4 @@
-use alloy::primitives::B256;
+use alloy::{consensus::Header, primitives::B256};
 use jsonrpsee::core::Serialize;
 use serde::Deserialize;
 use ssz::SszDecoderBuilder;
@@ -6,17 +6,14 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
 use tree_hash::TreeHash;
 
-use crate::{
-    types::{
-        bytes::ByteList1024,
-        consensus::{
-            beacon_block::{BeaconBlockBellatrix, BeaconBlockCapella},
-            beacon_state::HistoricalBatch,
-            proof::build_merkle_proof_for_index,
-        },
-        execution::block_body::{MERGE_TIMESTAMP, SHANGHAI_TIMESTAMP},
+use crate::types::{
+    bytes::ByteList1024,
+    consensus::{
+        beacon_block::{BeaconBlockBellatrix, BeaconBlockCapella},
+        beacon_state::HistoricalBatch,
+        proof::build_merkle_proof_for_index,
     },
-    Header,
+    execution::block_body::{MERGE_TIMESTAMP, SHANGHAI_TIMESTAMP},
 };
 
 /// The accumulator proof for EL BlockHeader for the pre-merge blocks.
@@ -151,9 +148,10 @@ pub struct BlockProofHistoricalSummaries {
 
 pub mod ssz_header {
 
-    use crate::{types::bytes::ByteList2048, Header};
+    use crate::types::bytes::ByteList2048;
 
     pub mod encode {
+        use alloy::consensus::Header;
         use ssz::Encode;
 
         use super::*;
@@ -178,6 +176,7 @@ pub mod ssz_header {
     }
 
     pub mod decode {
+        use alloy::consensus::Header;
         use alloy_rlp::Decodable;
         use ssz::Decode;
 

@@ -167,7 +167,7 @@ impl StateValidator {
 mod tests {
     use std::path::PathBuf;
 
-    use alloy::{primitives::Bytes, rlp::Decodable};
+    use alloy::{consensus::Header, primitives::Bytes, rlp::Decodable};
     use anyhow::Result;
     use ethportal_api::{
         types::{
@@ -175,7 +175,7 @@ mod tests {
             jsonrpc::{endpoints::HistoryEndpoint, json_rpc_mock::MockJsonRpcBuilder},
             portal::GetContentInfo,
         },
-        Header, HistoryContentKey, HistoryContentValue, OverlayContentKey,
+        HistoryContentKey, HistoryContentValue, OverlayContentKey,
     };
     use serde::Deserialize;
     use serde_yaml::Value;
@@ -198,7 +198,7 @@ mod tests {
         let history_jsonrpc_tx = MockJsonRpcBuilder::new()
             .with_response(
                 HistoryEndpoint::GetContent(HistoryContentKey::new_block_header_by_hash(
-                    header.hash(),
+                    header.hash_slow(),
                 )),
                 GetContentInfo {
                     content: history_content_value.encode(),

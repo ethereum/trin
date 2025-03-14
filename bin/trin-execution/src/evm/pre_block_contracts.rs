@@ -1,6 +1,5 @@
-use alloy::eips::eip4788;
+use alloy::{consensus::Header, eips::eip4788};
 use anyhow::anyhow;
-use ethportal_api::Header;
 use revm::{db::State, DatabaseCommit, Evm};
 use revm_primitives::{SpecId, TxEnv, TxKind, U256};
 use trin_evm::spec_id::get_spec_id;

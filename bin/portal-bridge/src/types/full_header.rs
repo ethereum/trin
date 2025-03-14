@@ -1,12 +1,9 @@
 use std::sync::Arc;
 
-use alloy::primitives::B256;
+use alloy::{consensus::Header, primitives::B256};
 use anyhow::{anyhow, ensure};
 use ethportal_api::types::execution::{
-    accumulator::EpochAccumulator,
-    header::{Header, TxHashes},
-    transaction::Transaction,
-    withdrawal::Withdrawal,
+    accumulator::EpochAccumulator, transaction::Transaction, withdrawal::Withdrawal,
 };
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
@@ -45,7 +42,7 @@ impl<'de> Deserialize<'de> for FullHeaderBatch {
 pub struct FullHeader {
     pub header: Header,
     pub txs: Vec<Transaction>,
-    pub tx_hashes: TxHashes,
+    pub tx_hashes: Vec<B256>,
     pub uncles: Vec<B256>,
     pub epoch_acc: Option<Arc<EpochAccumulator>>,
     pub withdrawals: Option<Vec<Withdrawal>>,
@@ -59,7 +56,7 @@ impl TryFrom<Value> for FullHeader {
     fn try_from(val: Value) -> anyhow::Result<Self> {
         let header: Header = serde_json::from_value(val.clone())?;
         let uncles: Vec<B256> = serde_json::from_value(val["uncles"].clone())?;
-        let tx_hashes: TxHashes = serde_json::from_value(val["transactions"].clone())?;
+        let tx_hashes: Vec<B256> = serde_json::from_value(val["transactions"].clone())?;
         let txs: Vec<Transaction> = serde_json::from_value(val["transactions"].clone())?;
         let withdrawals = match val["withdrawals"].clone() {
             Value::Null => None,
@@ -90,7 +87,7 @@ impl FullHeader {
             let header_record = &epoch_acc[header_index as usize];
 
             // Validate Header
-            let actual_header_hash = self.header.hash();
+            let actual_header_hash = self.header.hash_slow();
 
             ensure!(
                 header_record.block_hash == actual_header_hash,
@@ -100,10 +97,10 @@ impl FullHeader {
             );
         }
         ensure!(
-            self.txs.len() == self.tx_hashes.hashes.len(),
+            self.txs.len() == self.tx_hashes.len(),
             "txs.len() != tx_hashes.hashes.len(): {} != {}",
             self.txs.len(),
-            self.tx_hashes.hashes.len()
+            self.tx_hashes.len()
         );
         Ok(())
     }
@@ -127,7 +124,7 @@ mod tests {
         let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
         let header: Header = serde_json::from_value(body["result"].clone()).unwrap();
         assert_eq!(full_header.txs.len(), 19);
-        assert_eq!(full_header.tx_hashes.hashes.len(), 19);
+        assert_eq!(full_header.tx_hashes.len(), 19);
         assert_eq!(full_header.uncles.len(), 1);
         assert_eq!(full_header.header, header);
     }
@@ -203,7 +200,7 @@ mod tests {
             // this block has no uncles, aka an empty uncles root is calculated.
             // there's no need to validate deserialization of uncles, since they're just a
             // vector of Header, which are already tested above
-            assert_eq!(block_body.uncles_root(), full_header.header.uncles_hash);
+            assert_eq!(block_body.uncles_root(), full_header.header.ommers_hash);
         }
     }
 }

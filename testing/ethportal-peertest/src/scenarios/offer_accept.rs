@@ -340,16 +340,17 @@ pub async fn test_offer_concurrent_utp_transfer_limit(peertest: &Peertest, targe
     let tuples = era1.take(limit).collect::<Vec<_>>();
     let body_keys: Vec<HistoryContentKey> = tuples
         .iter()
-        .map(|tuple| HistoryContentKey::new_block_body(tuple.header.header.hash()))
+        .map(|tuple| HistoryContentKey::new_block_body(tuple.header.header.hash_slow()))
         .collect();
     let receipts_keys: Vec<HistoryContentKey> = tuples
         .iter()
-        .map(|tuple| HistoryContentKey::new_block_receipts(tuple.header.header.hash()))
+        .map(|tuple| HistoryContentKey::new_block_receipts(tuple.header.header.hash_slow()))
         .collect();
 
     // store headers for validation
     for tuple in tuples.clone() {
-        let header_key = HistoryContentKey::new_block_header_by_hash(tuple.header.header.hash());
+        let header_key =
+            HistoryContentKey::new_block_header_by_hash(tuple.header.header.hash_slow());
         let header_value = HistoryContentValue::BlockHeaderWithProof(
             construct_proof(tuple.header.header.clone(), &epoch_acc)
                 .await
@@ -367,10 +368,10 @@ pub async fn test_offer_concurrent_utp_transfer_limit(peertest: &Peertest, targe
     // collect body and receipts to offer
     let mut test_data: Vec<(HistoryContentKey, Bytes)> = vec![];
     for tuple in tuples {
-        let body_key = HistoryContentKey::new_block_body(tuple.header.header.hash());
+        let body_key = HistoryContentKey::new_block_body(tuple.header.header.hash_slow());
         let body_value = HistoryContentValue::BlockBody(tuple.body.body.clone());
         test_data.push((body_key.clone(), body_value.encode()));
-        let receipts_key = HistoryContentKey::new_block_receipts(tuple.header.header.hash());
+        let receipts_key = HistoryContentKey::new_block_receipts(tuple.header.header.hash_slow());
         let receipts_value = HistoryContentValue::Receipts(tuple.receipts.receipts.clone());
         test_data.push((receipts_key.clone(), receipts_value.encode()));
     }

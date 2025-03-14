@@ -3,13 +3,16 @@ use std::{
     sync::Arc,
 };
 
-use alloy::{consensus::EMPTY_ROOT_HASH, rlp::Decodable};
+use alloy::{
+    consensus::{Header, EMPTY_ROOT_HASH},
+    rlp::Decodable,
+};
 use anyhow::ensure;
 use e2store::e2ss::{
     AccountEntry, AccountOrStorageEntry, E2SSWriter, StorageEntry, StorageItem, MAX_STORAGE_ITEMS,
 };
 use eth_trie::{EthTrie, Trie};
-use ethportal_api::{types::state_trie::account_state::AccountState, Header};
+use ethportal_api::types::state_trie::account_state::AccountState;
 use parking_lot::Mutex;
 use revm_primitives::{B256, KECCAK_EMPTY, U256};
 use tracing::info;

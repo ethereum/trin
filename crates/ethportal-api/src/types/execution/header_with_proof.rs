@@ -1,11 +1,11 @@
-use alloy::{primitives::B256, rlp::Decodable};
+use alloy::{consensus::Header, primitives::B256, rlp::Decodable};
 use jsonrpsee::core::Serialize;
 use serde::Deserialize;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector};
 
-use crate::{types::bytes::ByteList2048, Header};
+use crate::types::bytes::ByteList2048;
 
 /// A block header with accumulator proof.
 /// Type definition:

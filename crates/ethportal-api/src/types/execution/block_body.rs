@@ -1,6 +1,7 @@
 use std::vec;
 
 use alloy::{
+    consensus::Header,
     primitives::{keccak256, B256},
     rlp::{self, Decodable, Encodable},
 };
@@ -10,10 +11,7 @@ use serde::Deserialize;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::Encode;
 
-use super::{
-    header::Header,
-    transaction::{Transaction, TransactionWithRlpHeader},
-};
+use super::transaction::{Transaction, TransactionWithRlpHeader};
 use crate::{
     types::execution::withdrawal::Withdrawal, utils::roots::calculate_merkle_patricia_root,
 };
@@ -82,10 +80,10 @@ impl BlockBody {
     pub fn validate_against_header(&self, header: &Header) -> anyhow::Result<()> {
         // Validate uncles root
         let uncles_root = self.uncles_root();
-        if uncles_root != header.uncles_hash {
+        if uncles_root != header.ommers_hash {
             bail!(
                 "Block body uncles root doesn't match header uncles root: {uncles_root:?} - {:?}",
-                header.uncles_hash
+                header.ommers_hash
             );
         }
         // Validate txs root
