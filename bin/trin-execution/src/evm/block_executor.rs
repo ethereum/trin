@@ -3,11 +3,11 @@ use std::{
     time::{Duration, Instant},
 };
 
+use alloy::consensus::Header;
 use anyhow::ensure;
 use eth_trie::{RootWithTrieDiff, Trie};
-use ethportal_api::{
-    types::{execution::transaction::Transaction, state_trie::account_state::AccountState},
-    Header,
+use ethportal_api::types::{
+    execution::transaction::Transaction, state_trie::account_state::AccountState,
 };
 use revm::{
     db::{states::bundle_state::BundleRetention, State},
@@ -192,7 +192,7 @@ impl BlockExecutor<'_> {
         stop_timer(cumulative_transaction_timer);
 
         ensure!(
-            block_gas_used == block.header.gas_used.to::<u64>(),
+            block_gas_used == block.header.gas_used,
             "Block gas used mismatch at {} != {}",
             block_gas_used,
             block.header.gas_used
@@ -244,7 +244,7 @@ impl BlockExecutor<'_> {
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["insert_blockhash"]);
         self.evm.db().database.db.put(
             keccak256(B256::from(U256::from(header.number))),
-            header.hash(),
+            header.hash_slow(),
         )?;
         if header.number >= BLOCKHASH_SERVE_WINDOW {
             self.evm

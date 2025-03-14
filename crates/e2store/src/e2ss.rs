@@ -33,11 +33,12 @@ use std::{
 };
 
 use alloy::{
+    consensus::Header,
     primitives::{hex, B256, U256},
     rlp::{Decodable, RlpDecodable, RlpEncodable},
 };
 use anyhow::{bail, ensure};
-use ethportal_api::types::{execution::header::Header, state_trie::account_state::AccountState};
+use ethportal_api::types::state_trie::account_state::AccountState;
 
 use crate::{
     e2store::{
@@ -316,7 +317,6 @@ impl TryFrom<StorageEntry> for Entry {
 
 #[cfg(test)]
 mod tests {
-    use alloy::primitives::{Address, Bloom, B64};
     use trin_utils::dir::create_temp_test_dir;
 
     use super::*;
@@ -329,26 +329,8 @@ mod tests {
 
         // create fake execution block header
         let header = Header {
-            parent_hash: B256::default(),
-            uncles_hash: B256::default(),
-            author: Address::random(),
-            state_root: B256::default(),
-            transactions_root: B256::default(),
-            receipts_root: B256::default(),
-            logs_bloom: Bloom::default(),
-            difficulty: U256::default(),
             number: 5_000_000,
-            gas_limit: U256::default(),
-            gas_used: U256::default(),
-            timestamp: u64::default(),
-            extra_data: Vec::default(),
-            mix_hash: Some(B256::default()),
-            nonce: Some(B64::default()),
-            base_fee_per_gas: None,
-            withdrawals_root: None,
-            blob_gas_used: None,
-            excess_blob_gas: None,
-            parent_beacon_block_root: None,
+            ..Default::default()
         };
 
         // create a new e2store file and write some data to it

@@ -1,8 +1,7 @@
 use std::io::{Read, Write};
 
-use alloy::rlp::Decodable;
+use alloy::{consensus::Header, rlp::Decodable};
 use anyhow::ensure;
-use ethportal_api::Header;
 
 use crate::e2store::types::Entry;
 

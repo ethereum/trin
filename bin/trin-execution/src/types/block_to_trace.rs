@@ -5,7 +5,8 @@ use std::{
     str::FromStr,
 };
 
-use ethportal_api::{types::execution::transaction::Transaction, Header};
+use alloy::consensus::Header;
+use ethportal_api::types::execution::transaction::Transaction;
 
 #[derive(Clone, Debug, PartialEq, Default, Eq)]
 pub enum BlockToTrace {

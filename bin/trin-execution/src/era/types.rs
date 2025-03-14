@@ -1,7 +1,5 @@
-use ethportal_api::{
-    types::execution::{transaction::Transaction, withdrawal::Withdrawal},
-    Header,
-};
+use alloy::consensus::Header;
+use ethportal_api::types::execution::{transaction::Transaction, withdrawal::Withdrawal};
 use revm_primitives::{Address, SpecId, TxEnv};
 use trin_evm::{spec_id::get_spec_block_number, tx_env_modifier::TxEnvModifier};
 

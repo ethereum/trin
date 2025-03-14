@@ -3,6 +3,7 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use alloy::{
+    consensus::Header,
     primitives::{Bytes, U256},
     providers::{DynProvider, IpcConnect, Provider, ProviderBuilder},
     rpc::{
@@ -15,7 +16,7 @@ use ethportal_api::{
     types::execution::{block_body::BlockBody, header_with_proof_new::HeaderWithProof},
     utils::bytes::hex_encode,
     version::APP_NAME,
-    ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
+    ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use jsonrpsee::async_client::Client;
 use portalnet::constants::{DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
@@ -146,7 +147,7 @@ async fn test_eth_get_block_by_number() {
     // Store block in server
     assert!(native_client
         .store(
-            HistoryContentKey::new_block_body(hwp.header.hash()),
+            HistoryContentKey::new_block_body(hwp.header.hash_slow()),
             HistoryContentValue::BlockBody(body.clone()).encode(),
         )
         .await
@@ -247,7 +248,7 @@ async fn test_eth_get_block_by_hash() {
     let (web3_server, web3_client, native_client) = setup_web3_server().await;
 
     let (hwp, body) = get_full_block_14764013();
-    let block_hash = hwp.header.hash();
+    let block_hash = hwp.header.hash_slow();
 
     // Store header with proof in server
     assert!(native_client
@@ -308,7 +309,7 @@ async fn test_eth_get_block_by_hash_hydrated() {
     let (web3_server, web3_client, native_client) = setup_web3_server().await;
 
     let (hwp, _body) = get_full_block_14764013();
-    let block_hash = hwp.header.hash();
+    let block_hash = hwp.header.hash_slow();
 
     // Store header with proof in server
     assert!(native_client
@@ -337,19 +338,19 @@ async fn test_eth_get_block_by_hash_hydrated() {
 
 fn assert_header(actual: &RpcHeader, expected: &Header) {
     assert_eq!(actual.number, expected.number);
-    assert_eq!(actual.hash, expected.hash());
+    assert_eq!(actual.hash, expected.hash_slow());
     assert_eq!(actual.parent_hash, expected.parent_hash);
-    assert_eq!(Some(actual.nonce), expected.nonce);
-    assert_eq!(actual.ommers_hash, expected.uncles_hash);
+    assert_eq!(actual.nonce, expected.nonce);
+    assert_eq!(actual.ommers_hash, expected.ommers_hash);
     assert_eq!(actual.logs_bloom, expected.logs_bloom);
-    assert_eq!(actual.beneficiary, expected.author);
+    assert_eq!(actual.beneficiary, expected.beneficiary);
     assert_eq!(actual.state_root, expected.state_root);
     assert_eq!(actual.transactions_root, expected.transactions_root);
     assert_eq!(actual.receipts_root, expected.receipts_root);
     assert_eq!(actual.extra_data, expected.extra_data);
-    assert_eq!(Some(actual.mix_hash), expected.mix_hash);
-    assert_eq!(actual.gas_used, expected.gas_used.to::<u64>());
-    assert_eq!(actual.gas_limit, expected.gas_limit.to::<u64>());
+    assert_eq!(actual.mix_hash, expected.mix_hash);
+    assert_eq!(actual.gas_used, expected.gas_used);
+    assert_eq!(actual.gas_limit, expected.gas_limit);
     assert_eq!(actual.difficulty, expected.difficulty);
     assert_eq!(actual.timestamp, expected.timestamp);
 }

@@ -1,9 +1,10 @@
 use alloy::{
+    consensus::Header,
     primitives::{Address, Bytes, B256, U256},
     rlp::{self, Encodable},
     rpc::types::{
-        Block, BlockId, BlockNumberOrTag, BlockTransactions, TransactionRequest, Withdrawal,
-        Withdrawals,
+        Block, BlockId, BlockNumberOrTag, BlockTransactions, Header as RpcHeader,
+        TransactionRequest, Withdrawal, Withdrawals,
     },
 };
 use ethportal_api::{
@@ -19,7 +20,7 @@ use ethportal_api::{
         },
         portal::GetContentInfo,
     },
-    ContentValue, EthApiServer, Header, HistoryContentKey, HistoryContentValue,
+    ContentValue, EthApiServer, HistoryContentKey, HistoryContentValue,
 };
 use revm::primitives::ExecutionResult;
 use tokio::sync::mpsc;
@@ -125,14 +126,14 @@ impl EthApiServer for EthApi {
 
         // If gas limit is not set, set it to block's limit
         if transaction.gas.is_none() {
-            transaction.gas = Some(evm_block_state.block_header().gas_limit.to());
+            transaction.gas = Some(evm_block_state.block_header().gas_limit);
         }
         // If gas price is not set, set it to base fee
         if transaction.gas_price.is_none() {
             transaction.gas_price = evm_block_state
                 .block_header()
                 .base_fee_per_gas
-                .map(|base_fee| base_fee.to());
+                .map(|base_fee| base_fee as u128);
         }
 
         let result_and_state = execute_transaction(
@@ -214,10 +215,14 @@ impl EthApi {
             ));
         }
 
-        let body = self.fetch_block_body(header.hash()).await?;
+        let body = self.fetch_block_body(header.hash_slow()).await?;
         let transactions =
             BlockTransactions::Hashes(body.transactions().iter().map(Transaction::hash).collect());
-        let uncles = body.uncles().iter().map(|uncle| uncle.hash()).collect();
+        let uncles = body
+            .uncles()
+            .iter()
+            .map(|uncle| uncle.hash_slow())
+            .collect();
         let withdrawals = body
             .withdrawals()
             .map(|withdrawals| withdrawals.iter().map(Withdrawal::from).collect())
@@ -245,7 +250,7 @@ impl EthApi {
 
         // Combine header and block body into the single json representation of the block.
         let block = Block {
-            header: header.to_rpc_header(Some(U256::from(size))),
+            header: RpcHeader::new(header).with_size(Some(U256::from(size))),
             transactions,
             uncles,
             withdrawals,
