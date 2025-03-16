@@ -21,7 +21,7 @@ use discv5::{
 use ethportal_api::{
     generate_random_node_id,
     types::{
-        bytes::{AcceptCode, ByteList64},
+        accept_code::{AcceptCode, AcceptCodeList},
         distance::{Distance, Metric},
         enr::{Enr, SszEnr},
         network::Subnetwork,
@@ -994,8 +994,8 @@ impl<
             "Handling Offer message",
         );
 
-        let mut requested_keys =
-            ByteList64::with_capacity(request.content_keys.len()).map_err(|_| {
+        let mut requested_keys = AcceptCodeList::with_capacity(request.content_keys.len())
+            .map_err(|_| {
                 OverlayRequestError::AcceptError(
                     "Unable to initialize bitlist for requested keys.".to_owned(),
                 )
@@ -1017,7 +1017,7 @@ impl<
                 requested_keys
                     .0
                     .iter_mut()
-                    .for_each(|byte| *byte = AcceptCode::RateLimited.into());
+                    .for_each(|accept_code| *accept_code = AcceptCode::RateLimited);
                 return Ok(Accept {
                     connection_id: 0,
                     content_keys: requested_keys,
@@ -1079,7 +1079,7 @@ impl<
 
         // If no content keys were accepted, then return an Accept with a connection ID value of
         // zero.
-        if requested_keys.is_not_one() {
+        if requested_keys.all_declined() {
             return Ok(Accept {
                 connection_id: 0,
                 content_keys: requested_keys,
@@ -1415,7 +1415,7 @@ impl<
 
         // Do not initialize uTP stream if remote node doesn't have interest in the offered content
         // keys
-        if response.content_keys.is_not_one() {
+        if response.content_keys.all_declined() {
             if let Some(tx) = gossip_result_tx {
                 let _ = tx.send(OfferTrace::Declined);
             }
@@ -1443,18 +1443,14 @@ impl<
                     .content_keys
                     .iter()
                     .zip(offer.content_items)
-                    .filter(|(is_accepted, _item)| {
-                        AcceptCode::from(**is_accepted) == AcceptCode::Accepted
-                    })
+                    .filter(|(is_accepted, _item)| **is_accepted == AcceptCode::Accepted)
                     .map(|(_is_accepted, (_key, val))| val)
                     .collect()),
                 Request::PopulatedOfferWithResult(offer) => Ok(response_clone
                     .content_keys
                     .iter()
                     .zip(vec![offer.content_item])
-                    .filter(|(is_accepted, _item)| {
-                        AcceptCode::from(**is_accepted) == AcceptCode::Accepted
-                    })
+                    .filter(|(is_accepted, _item)| **is_accepted == AcceptCode::Accepted)
                     .map(|(_is_accepted, (_key, val))| val)
                     .collect()),
                 // Unreachable because of early return at top of method:
@@ -1912,13 +1908,13 @@ impl<
 
         let mut content_items: Vec<RawContentValue> = Vec::new();
 
-        for (i, key) in accept_message
+        for (accept_code, key) in accept_message
             .content_keys
             .clone()
             .iter()
             .zip(content_keys_offered.iter())
         {
-            if AcceptCode::from(*i) == AcceptCode::Accepted {
+            if *accept_code == AcceptCode::Accepted {
                 match store.lock().get(key) {
                     Ok(content) => match content {
                         Some(content) => content_items.push(content),
