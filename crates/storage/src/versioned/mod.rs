@@ -1,3 +1,4 @@
+mod ephemeral_v1;
 mod id_indexed_v1;
 pub mod sql;
 pub mod store;
@@ -43,6 +44,8 @@ pub enum StoreVersion {
     /// The content from different subnetwork (expressed with `ContentType`)
     /// uses different table. Implementation: [IdIndexedV1Store].
     IdIndexedV1,
+    /// The store  designed for storing ephemeral headers, bodies and receipts.
+    EphemeralV1,
 }
 
 impl FromSql for StoreVersion {
