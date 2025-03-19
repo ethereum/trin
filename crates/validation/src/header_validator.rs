@@ -2,7 +2,7 @@ use alloy::primitives::B256;
 use anyhow::anyhow;
 use ethportal_api::{
     consensus::historical_summaries::HistoricalSummaries,
-    types::execution::header_with_proof_new::{
+    types::execution::header_with_proof::{
         BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummaries, HeaderWithProof,
     },
     Header,
@@ -224,7 +224,7 @@ mod test {
     use ethportal_api::{
         types::execution::{
             accumulator::EpochAccumulator,
-            header_with_proof_new::{BlockHeaderProof, HeaderWithProof},
+            header_with_proof::{BlockHeaderProof, HeaderWithProof},
         },
         utils::bytes::{hex_decode, hex_encode},
         HistoryContentKey, OverlayContentKey,

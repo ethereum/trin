@@ -171,7 +171,7 @@ mod tests {
     use anyhow::Result;
     use ethportal_api::{
         types::{
-            execution::header_with_proof_new::{BlockHeaderProof, HeaderWithProof},
+            execution::header_with_proof::{BlockHeaderProof, HeaderWithProof},
             jsonrpc::{endpoints::HistoryEndpoint, json_rpc_mock::MockJsonRpcBuilder},
             portal::GetContentInfo,
         },

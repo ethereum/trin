@@ -4,7 +4,7 @@ use alloy::primitives::{B256, U256};
 use anyhow::anyhow;
 use ethportal_api::types::execution::{
     accumulator::EpochAccumulator, header::Header,
-    header_with_proof_new::BlockProofHistoricalHashesAccumulator,
+    header_with_proof::BlockProofHistoricalHashesAccumulator,
 };
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
