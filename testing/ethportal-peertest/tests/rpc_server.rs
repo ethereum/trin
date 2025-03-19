@@ -12,7 +12,7 @@ use alloy::{
     transports::RpcError,
 };
 use ethportal_api::{
-    types::execution::{block_body::BlockBody, header_with_proof_new::HeaderWithProof},
+    types::execution::{block_body::BlockBody, header_with_proof::HeaderWithProof},
     utils::bytes::hex_encode,
     version::APP_NAME,
     ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,

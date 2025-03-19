@@ -10,7 +10,7 @@ use ethportal_api::{
                 BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
                 SHANGHAI_TIMESTAMP,
             },
-            header_with_proof_new::{BlockHeaderProof, HeaderWithProof},
+            header_with_proof::{BlockHeaderProof, HeaderWithProof},
         },
         jsonrpc::{params::Params, request::JsonRequest},
     },

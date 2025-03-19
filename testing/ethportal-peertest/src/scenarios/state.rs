@@ -1,6 +1,6 @@
 use ethportal_api::{
     jsonrpsee::async_client::Client,
-    types::execution::header_with_proof_new::{
+    types::execution::header_with_proof::{
         BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummaries, HeaderWithProof,
     },
     ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
