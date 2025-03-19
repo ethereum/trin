@@ -16,7 +16,7 @@ impl TryFrom<&Entry> for HeaderEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x03,
+            entry.header.type_ == 0x0300,
             "invalid header entry: incorrect header type"
         );
         ensure!(
@@ -40,6 +40,6 @@ impl TryFrom<HeaderEntry> for Entry {
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
         let encoded = encoder.into_inner()?;
-        Ok(Entry::new(0x03, encoded))
+        Ok(Entry::new(0x0300, encoded))
     }
 }

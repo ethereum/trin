@@ -181,7 +181,7 @@ pub struct CompressedSignedBeaconBlock {
 impl CompressedSignedBeaconBlock {
     pub fn try_from(entry: &Entry, fork: ForkName) -> Result<Self, anyhow::Error> {
         ensure!(
-            entry.header.type_ == 0x01,
+            entry.header.type_ == 0x0100,
             "invalid compressed signed beacon block entry: incorrect header type"
         );
 
@@ -205,8 +205,7 @@ impl TryInto<Entry> for CompressedSignedBeaconBlock {
         let _ = snappy_encoder.write(&ssz_encoded)?;
         let snappy_encoded = snappy_encoder.into_inner()?;
 
-        let header = 0x01;
-        Ok(Entry::new(header, snappy_encoded))
+        Ok(Entry::new(0x0100, snappy_encoded))
     }
 }
 
@@ -218,7 +217,7 @@ pub struct CompressedBeaconState {
 impl CompressedBeaconState {
     fn try_from(entry: &Entry, fork: ForkName) -> Result<Self, anyhow::Error> {
         ensure!(
-            entry.header.type_ == 0x02,
+            entry.header.type_ == 0x0200,
             "invalid compressed beacon state entry: incorrect header type"
         );
 
@@ -242,8 +241,7 @@ impl TryInto<Entry> for CompressedBeaconState {
         let _ = snappy_encoder.write(&ssz_encoded)?;
         let snappy_encoded = snappy_encoder.into_inner()?;
 
-        let header = 0x02;
-        Ok(Entry::new(header, snappy_encoded))
+        Ok(Entry::new(0x0200, snappy_encoded))
     }
 }
 
@@ -263,7 +261,7 @@ impl TryFrom<&Entry> for SlotIndexBlockEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x3269,
+            entry.header.type_ == 0x6932,
             "invalid slot index entry: incorrect header type"
         );
         ensure!(
@@ -296,7 +294,7 @@ impl TryInto<Entry> for SlotIndexBlockEntry {
         }
         buf.extend_from_slice(&self.slot_index.count.to_le_bytes());
 
-        Ok(Entry::new(0x3269, buf))
+        Ok(Entry::new(0x6932, buf))
     }
 }
 
@@ -348,7 +346,7 @@ impl TryFrom<&Entry> for SlotIndexStateEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x3269,
+            entry.header.type_ == 0x6932,
             "invalid slot index entry: incorrect header type"
         );
         ensure!(
@@ -381,7 +379,7 @@ impl TryInto<Entry> for SlotIndexStateEntry {
         }
         buf.extend_from_slice(&self.slot_index.count.to_le_bytes());
 
-        Ok(Entry::new(0x3269, buf))
+        Ok(Entry::new(0x6932, buf))
     }
 }
 

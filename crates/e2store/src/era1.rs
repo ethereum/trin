@@ -23,13 +23,13 @@ use crate::{
 // era1 := Version | block-tuple* | other-entries* | Accumulator | BlockIndex
 // block-tuple :=  CompressedHeader | CompressedBody | CompressedReceipts | TotalDifficulty
 // -----
-// Version            = { type: 0x3265, data: nil }
-// CompressedHeader   = { type: 0x03,   data: snappyFramed(rlp(header)) }
-// CompressedBody     = { type: 0x04,   data: snappyFramed(rlp(body)) }
-// CompressedReceipts = { type: 0x05,   data: snappyFramed(rlp(receipts)) }
-// TotalDifficulty    = { type: 0x06,   data: uint256(header.total_difficulty) }
-// Accumulator        = { type: 0x07,   data: hash_tree_root(List(HeaderRecord, 8192)) }
-// BlockIndex         = { type: 0x3266, data: block-index }
+// Version            = { type: 0x6532, data: nil }
+// CompressedHeader   = { type: 0x0300,   data: snappyFramed(rlp(header)) }
+// CompressedBody     = { type: 0x0400,   data: snappyFramed(rlp(body)) }
+// CompressedReceipts = { type: 0x0500,   data: snappyFramed(rlp(receipts)) }
+// TotalDifficulty    = { type: 0x0600,   data: uint256(header.total_difficulty) }
+// Accumulator        = { type: 0x0700,   data: hash_tree_root(List(HeaderRecord, 8192)) }
+// BlockIndex         = { type: 0x6632, data: block-index }
 
 pub const BLOCK_TUPLE_COUNT: usize = 8192;
 const ERA1_ENTRY_COUNT: usize = BLOCK_TUPLE_COUNT * 4 + 3;
@@ -186,7 +186,7 @@ impl TryFrom<&Entry> for BodyEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x04,
+            entry.header.type_ == 0x0400,
             "invalid body entry: incorrect header type"
         );
         ensure!(
@@ -210,7 +210,7 @@ impl TryInto<Entry> for BodyEntry {
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
         let encoded = encoder.into_inner()?;
-        Ok(Entry::new(0x04, encoded))
+        Ok(Entry::new(0x0400, encoded))
     }
 }
 
@@ -224,7 +224,7 @@ impl TryFrom<&Entry> for ReceiptsEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x05,
+            entry.header.type_ == 0x0500,
             "invalid receipts entry: incorrect header type"
         );
         ensure!(
@@ -248,7 +248,7 @@ impl TryInto<Entry> for ReceiptsEntry {
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
         let encoded = encoder.into_inner()?;
-        Ok(Entry::new(0x05, encoded))
+        Ok(Entry::new(0x0500, encoded))
     }
 }
 
@@ -262,7 +262,7 @@ impl TryFrom<&Entry> for TotalDifficultyEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x06,
+            entry.header.type_ == 0x0600,
             "invalid total difficulty entry: incorrect header type"
         );
         ensure!(
@@ -286,7 +286,7 @@ impl TryInto<Entry> for TotalDifficultyEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        Ok(Entry::new(0x06, self.total_difficulty.to_be_bytes_vec()))
+        Ok(Entry::new(0x0600, self.total_difficulty.to_be_bytes_vec()))
     }
 }
 
@@ -300,7 +300,7 @@ impl TryFrom<&Entry> for AccumulatorEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x07,
+            entry.header.type_ == 0x0700,
             "invalid accumulator entry: incorrect header type"
         );
         ensure!(
@@ -325,7 +325,7 @@ impl TryInto<Entry> for AccumulatorEntry {
 
     fn try_into(self) -> Result<Entry, Self::Error> {
         let value = self.accumulator.as_slice().to_vec();
-        Ok(Entry::new(0x07, value))
+        Ok(Entry::new(0x0700, value))
     }
 }
 
@@ -341,7 +341,7 @@ impl TryFrom<&Entry> for BlockIndexEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x3266,
+            entry.header.type_ == 0x6632,
             "invalid block index entry: incorrect header type"
         );
         ensure!(
@@ -376,7 +376,7 @@ impl TryInto<Entry> for BlockIndexEntry {
             .iter()
             .flat_map(|i| i.to_le_bytes().to_vec())
             .collect::<Vec<u8>>();
-        Ok(Entry::new(0x3266, encoded))
+        Ok(Entry::new(0x6632, encoded))
     }
 }
 
