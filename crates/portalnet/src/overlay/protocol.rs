@@ -29,8 +29,8 @@ use ethportal_api::{
         },
         portal::PutContentInfo,
         portal_wire::{
-            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, OfferTrace,
-            Ping, Pong, PopulatedOffer, PopulatedOfferWithResult, Request, Response,
+            Accept, Content, FindContent, FindNodes, Message, Nodes, OfferTrace, Ping, Pong,
+            PopulatedOffer, PopulatedOfferWithResult, Request, Response,
         },
     },
     utils::bytes::hex_encode,
@@ -377,29 +377,33 @@ impl<
     }
 
     /// Generate a default payload for a respective payload type.
-    pub fn default_payload(
+    pub fn default_ping_extension(
         &self,
         payload_type: PingExtensionType,
-    ) -> Result<CustomPayload, OverlayRequestError> {
+    ) -> Result<PingExtension, OverlayRequestError> {
         Ok(match payload_type {
-            PingExtensionType::Capabilities => ClientInfoRadiusCapabilities::new(
-                self.data_radius(),
-                self.ping_extensions.raw_extensions(),
-            )
-            .into(),
-            PingExtensionType::BasicRadius => BasicRadius {
-                data_radius: self.data_radius(),
+            PingExtensionType::Capabilities => {
+                PingExtension::Capabilities(ClientInfoRadiusCapabilities::new(
+                    self.data_radius(),
+                    self.ping_extensions.supported_extensions().to_vec(),
+                ))
             }
-            .into(),
-            PingExtensionType::HistoryRadius => HistoryRadius {
+            PingExtensionType::BasicRadius => PingExtension::BasicRadius(BasicRadius {
+                data_radius: self.data_radius(),
+            }),
+            PingExtensionType::HistoryRadius => PingExtension::HistoryRadius(HistoryRadius {
                 data_radius: self.data_radius(),
                 ephemeral_header_count: 0,
-            }
-            .into(),
+            }),
             PingExtensionType::Error => return Err(OverlayRequestError::Failure(
                 "Can't create error message for ping, the Error payload can only be used by pong"
                     .to_string(),
             )),
+            PingExtensionType::NonSupportedExtension(non_supported_extension) => {
+                return Err(OverlayRequestError::Failure(format!(
+                    "Function was provided with non supported extension type: {non_supported_extension}"
+                )))
+            }
         })
     }
 
@@ -410,35 +414,24 @@ impl<
         payload_type: Option<PingExtensionType>,
         payload: Option<PingExtension>,
     ) -> Result<Pong, OverlayRequestError> {
-        // Construct the request.
-        let enr_seq = self.discovery.local_enr().seq();
-        let data_radius = self.data_radius();
-
-        let (payload_type, payload) = match (payload_type, payload) {
-            (Some(payload_type), Some(payload)) => {
-                if payload_type != payload.payload_type() {
-                    return Err(OverlayRequestError::InvalidRequest(
-                        "Payload type mismatch".into(),
-                    ));
-                }
-                (payload_type, payload.into())
+        if let (Some(payload_type), Some(payload)) = (payload_type, &payload) {
+            if payload_type != payload.ping_extension_type() {
+                return Err(OverlayRequestError::InvalidRequest(
+                    "Payload type mismatch".into(),
+                ));
             }
-            (Some(payload_type), None) => (payload_type, self.default_payload(payload_type)?),
-            (None, Some(payload)) => (payload.payload_type(), payload.into()),
-            (None, None) => (
-                PingExtensionType::Capabilities,
-                ClientInfoRadiusCapabilities::new(
-                    data_radius,
-                    self.ping_extensions.raw_extensions(),
-                )
-                .into(),
-            ),
+        }
+
+        let payload_type = payload_type.unwrap_or(PingExtensionType::Capabilities);
+        let ping_extension = match payload {
+            Some(payload) => payload,
+            None => self.default_ping_extension(payload_type)?,
         };
 
         let request = Ping {
-            enr_seq,
-            payload_type: u16::from(payload_type),
-            payload,
+            enr_seq: self.discovery.local_enr().seq(),
+            payload_type,
+            payload: ping_extension.into(),
         };
 
         let direction = RequestDirection::Outgoing { destination: enr };

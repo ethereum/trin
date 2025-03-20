@@ -83,7 +83,7 @@ mod tests {
     use super::*;
     use crate::{
         types::{
-            ping_extensions::decode::PingExtension,
+            ping_extensions::{decode::PingExtension, extension_types::PingExtensionType},
             portal_wire::{Message, Pong},
         },
         utils::bytes::{hex_decode, hex_encode},
@@ -95,7 +95,8 @@ mod tests {
         let ping_error = PingError::new(error_code);
         let custom_payload = CustomPayload::from(ping_error.clone());
 
-        let decoded_extension = PingExtension::decode_ssz(65535, custom_payload).unwrap();
+        let decoded_extension =
+            PingExtension::decode_ssz(PingExtensionType::Error, custom_payload).unwrap();
 
         if let PingExtension::Error(decoded_ping_error) = decoded_extension {
             assert_eq!(ping_error, decoded_ping_error);
@@ -135,7 +136,7 @@ mod tests {
         let payload = CustomPayload::from(basic_radius);
         let pong = Pong {
             enr_seq: 1,
-            payload_type: 65535,
+            payload_type: PingExtensionType::Error,
             payload,
         };
         let pong = Message::Pong(pong);

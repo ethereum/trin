@@ -35,7 +35,7 @@ mod tests {
     use crate::{
         types::{
             distance::Distance,
-            ping_extensions::decode::PingExtension,
+            ping_extensions::{decode::PingExtension, extension_types::PingExtensionType},
             portal_wire::{Message, Ping, Pong},
         },
         utils::bytes::{hex_decode, hex_encode},
@@ -47,7 +47,8 @@ mod tests {
         let history_radius = HistoryRadius::new(data_radius, 42);
         let custom_payload = CustomPayload::from(history_radius.clone());
 
-        let decoded_extension = PingExtension::decode_ssz(2, custom_payload).unwrap();
+        let decoded_extension =
+            PingExtension::decode_ssz(PingExtensionType::HistoryRadius, custom_payload).unwrap();
 
         if let PingExtension::HistoryRadius(decoded_history_radius) = decoded_extension {
             assert_eq!(history_radius, decoded_history_radius);
@@ -74,7 +75,7 @@ mod tests {
         let payload = CustomPayload::from(history_radius);
         let ping = Ping {
             enr_seq: 1,
-            payload_type: 2,
+            payload_type: PingExtensionType::HistoryRadius,
             payload,
         };
         let ping = Message::Ping(ping);
@@ -96,7 +97,7 @@ mod tests {
         let payload = CustomPayload::from(history_radius);
         let pong = Pong {
             enr_seq: 1,
-            payload_type: 2,
+            payload_type: PingExtensionType::HistoryRadius,
             payload,
         };
         let pong = Message::Pong(pong);

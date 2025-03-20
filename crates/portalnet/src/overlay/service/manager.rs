@@ -2454,7 +2454,9 @@ mod tests {
         content_key::overlay::IdentityContentKey,
         distance::XorMetric,
         enr::generate_random_remote_enr,
-        ping_extensions::extensions::type_0::ClientInfoRadiusCapabilities,
+        ping_extensions::{
+            extension_types::PingExtensionType, extensions::type_0::ClientInfoRadiusCapabilities,
+        },
         portal_wire::{Ping, Pong, MAINNET},
     };
     use kbucket::KBucketsTable;
@@ -2594,10 +2596,10 @@ mod tests {
 
         let ping = Ping {
             enr_seq: source.seq() + 1,
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
-                service.ping_extensions.raw_extensions(),
+                service.ping_extensions.supported_extensions().to_vec(),
             )
             .into(),
         };
@@ -2644,10 +2646,10 @@ mod tests {
 
         let ping = Ping {
             enr_seq: source.seq(),
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
-                service.ping_extensions.raw_extensions(),
+                service.ping_extensions.supported_extensions().to_vec(),
             )
             .into(),
         };
@@ -2710,10 +2712,10 @@ mod tests {
 
         let pong = Pong {
             enr_seq: source.seq() + 1,
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
-                service.ping_extensions.raw_extensions(),
+                service.ping_extensions.supported_extensions().to_vec(),
             )
             .into(),
         };
@@ -2759,10 +2761,10 @@ mod tests {
 
         let pong = Pong {
             enr_seq: source.seq(),
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
-                service.ping_extensions.raw_extensions(),
+                service.ping_extensions.supported_extensions().to_vec(),
             )
             .into(),
         };

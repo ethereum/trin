@@ -33,13 +33,9 @@ pub async fn test_ping_no_specified_ping_payload(
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
-    .unwrap_or_else(|_| panic!("Ping failed {subnetwork}"));
+    .expect("Ping failed {subnetwork}");
 
-    let radius = match PingExtension::decode_json(
-        PingExtensionType::try_from(result.payload_type)
-            .unwrap_or_else(|err| panic!("Failed to convert payload type {err:?}")),
-        result.payload,
-    ) {
+    let radius = match PingExtension::decode_json(result.payload_type, result.payload) {
         Ok(PingExtension::Capabilities(payload)) => payload.data_radius,
         _ => panic!("Unexpected ping extension"),
     };
@@ -55,27 +51,27 @@ pub async fn test_ping_capabilities_payload(target: &Client, peertest: &Peertest
     let result = HistoryNetworkApiClient::ping(
         target,
         bootnode_enr,
-        Some(0),
+        Some(PingExtensionType::Capabilities),
         Some(json!(ClientInfoRadiusCapabilities::new(
             Distance::MAX,
-            vec![0, 2]
+            vec![
+                PingExtensionType::Capabilities,
+                PingExtensionType::HistoryRadius
+            ]
         ))),
     )
     .await
-    .unwrap_or_else(|_| panic!("Ping failed"));
+    .expect("Ping failed");
 
-    let client_info_radius_capabilities = match PingExtension::decode_json(
-        PingExtensionType::try_from(result.payload_type)
-            .unwrap_or_else(|err| panic!("Failed to convert payload type {err:?}")),
-        result.payload,
-    ) {
-        Ok(PingExtension::Capabilities(payload)) => payload,
-        _ => panic!("Unexpected ping extension"),
-    };
+    let client_info_radius_capabilities =
+        match PingExtension::decode_json(result.payload_type, result.payload) {
+            Ok(PingExtension::Capabilities(payload)) => payload,
+            _ => panic!("Unexpected ping extension"),
+        };
 
     assert_eq!(client_info_radius_capabilities.data_radius, Distance::MAX);
     assert_eq!(
-        client_info_radius_capabilities.capabilities().unwrap(),
+        client_info_radius_capabilities.capabilities.to_vec(),
         vec![
             PingExtensionType::Capabilities,
             PingExtensionType::HistoryRadius,
@@ -92,17 +88,14 @@ pub async fn test_ping_basic_radius_payload(target: &Client, peertest: &Peertest
     let result = StateNetworkApiClient::ping(
         target,
         bootnode_enr,
-        Some(1),
+        Some(PingExtensionType::BasicRadius),
         Some(json!(BasicRadius::new(Distance::MAX))),
     )
     .await
-    .unwrap_or_else(|_| panic!("Ping failed"));
+    .expect("Ping failed");
 
-    let basic_radius = match PingExtension::decode_json(
-        PingExtensionType::try_from(result.payload_type)
-            .unwrap_or_else(|err| panic!("Failed to convert payload type {err:?}")),
-        result.payload.clone(),
-    ) {
+    let basic_radius = match PingExtension::decode_json(result.payload_type, result.payload.clone())
+    {
         Ok(PingExtension::BasicRadius(payload)) => payload,
         _ => panic!(
             "Unexpected ping extension {:?} {:?}",
@@ -121,17 +114,13 @@ pub async fn test_ping_history_radius_payload(target: &Client, peertest: &Peerte
     let result = HistoryNetworkApiClient::ping(
         target,
         bootnode_enr,
-        Some(2),
+        Some(PingExtensionType::HistoryRadius),
         Some(json!(HistoryRadius::new(Distance::MAX, 0))),
     )
     .await
-    .unwrap_or_else(|_| panic!("Ping failed"));
+    .expect("Ping failed");
 
-    let history_radius = match PingExtension::decode_json(
-        PingExtensionType::try_from(result.payload_type)
-            .unwrap_or_else(|err| panic!("Failed to convert payload type {err:?}")),
-        result.payload,
-    ) {
+    let history_radius = match PingExtension::decode_json(result.payload_type, result.payload) {
         Ok(PingExtension::HistoryRadius(payload)) => payload,
         _ => panic!("Unexpected ping extension"),
     };
@@ -147,7 +136,7 @@ pub async fn test_ping_invalid_payload_type_client(target: &Client, peertest: &P
     let error = StateNetworkApiClient::ping(
         target,
         bootnode_enr,
-        Some(4444),
+        Some(PingExtensionType::NonSupportedExtension(4444)),
         Some(json!(BasicRadius::new(Distance::MAX))),
     )
     .await
@@ -164,7 +153,7 @@ pub async fn test_ping_invalid_payload_type_subnetwork(target: &Client, peertest
     let error = StateNetworkApiClient::ping(
         target,
         bootnode_enr,
-        Some(2),
+        Some(PingExtensionType::HistoryRadius),
         Some(json!(BasicRadius::new(Distance::MAX))),
     )
     .await
@@ -178,10 +167,15 @@ pub async fn test_ping_invalid_payload_type_subnetwork(target: &Client, peertest
 pub async fn test_ping_failed_to_decode_payload(target: &Client, peertest: &Peertest) {
     info!("Testing ping with invalid payload");
     let bootnode_enr = peertest.bootnode.enr.clone();
-    let error = StateNetworkApiClient::ping(target, bootnode_enr, Some(0), Some(json!({})))
-        .await
-        .unwrap_err()
-        .to_string();
+    let error = StateNetworkApiClient::ping(
+        target,
+        bootnode_enr,
+        Some(PingExtensionType::Capabilities),
+        Some(json!({})),
+    )
+    .await
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("Failed to decode payload"));
     assert!(error.contains("-39005"));
 }

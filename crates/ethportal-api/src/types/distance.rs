@@ -4,8 +4,6 @@ use alloy::primitives::U256;
 use serde::{Deserialize, Serialize};
 use ssz_derive::{Decode, Encode};
 
-pub type DataRadius = U256;
-
 /// Represents a distance between two keys in the DHT key space.
 #[derive(
     Copy,

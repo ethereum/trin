@@ -6,6 +6,7 @@ use crate::{
     types::{
         content_key::state::StateContentKey,
         enr::Enr,
+        ping_extensions::extension_types::PingExtensionType,
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
@@ -48,7 +49,7 @@ pub trait StateNetworkApi {
     async fn ping(
         &self,
         enr: Enr,
-        payload_type: Option<u16>,
+        payload_type: Option<PingExtensionType>,
         payload: Option<Value>,
     ) -> RpcResult<PongInfo>;
 

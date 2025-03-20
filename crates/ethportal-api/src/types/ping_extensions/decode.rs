@@ -44,52 +44,34 @@ impl From<PingExtension> for CustomPayload {
 }
 
 impl PingExtension {
-    pub fn decode_ssz(payload_type: u16, payload: CustomPayload) -> anyhow::Result<Self> {
-        let Ok(extension_type) = PingExtensionType::try_from(payload_type) else {
-            bail!("Failed to decode extension type {payload_type}");
-        };
-
-        match extension_type {
+    pub fn decode_ssz(
+        extension_type: PingExtensionType,
+        payload: CustomPayload,
+    ) -> anyhow::Result<Self> {
+        let ping_extension = match extension_type {
             PingExtensionType::Capabilities => {
-                let capabilities = ClientInfoRadiusCapabilities::from_ssz_bytes(&payload.payload)
-                    .map_err(|err| {
-                    anyhow!(
-                        "Failed to decode ClientInfoRadiusCapabilities: {err:?}, payload: {:?}",
-                        hex_encode(&*payload.payload)
-                    )
-                })?;
-                Ok(PingExtension::Capabilities(capabilities))
+                ClientInfoRadiusCapabilities::from_ssz_bytes(&payload.payload)
+                    .map(PingExtension::Capabilities)
             }
             PingExtensionType::BasicRadius => {
-                let basic_radius =
-                    BasicRadius::from_ssz_bytes(&payload.payload).map_err(|err| {
-                        anyhow!(
-                            "Failed to decode BasicRadius: {err:?}, payload: {:?}",
-                            hex_encode(&*payload.payload)
-                        )
-                    })?;
-                Ok(PingExtension::BasicRadius(basic_radius))
+                BasicRadius::from_ssz_bytes(&payload.payload).map(PingExtension::BasicRadius)
             }
             PingExtensionType::HistoryRadius => {
-                let history_radius =
-                    HistoryRadius::from_ssz_bytes(&payload.payload).map_err(|err| {
-                        anyhow!(
-                            "Failed to decode HistoryRadius: {err:?}, payload: {:?}",
-                            hex_encode(&*payload.payload)
-                        )
-                    })?;
-                Ok(PingExtension::HistoryRadius(history_radius))
+                HistoryRadius::from_ssz_bytes(&payload.payload).map(PingExtension::HistoryRadius)
             }
             PingExtensionType::Error => {
-                let error = PingError::from_ssz_bytes(&payload.payload).map_err(|err| {
-                    anyhow!(
-                        "Failed to decode PingError: {err:?}, payload: {:?}",
-                        hex_encode(&*payload.payload)
-                    )
-                })?;
-                Ok(PingExtension::Error(error))
+                PingError::from_ssz_bytes(&payload.payload).map(PingExtension::Error)
             }
-        }
+            PingExtensionType::NonSupportedExtension(non_supported_extension) => {
+                bail!("Non supported extension type: {non_supported_extension}")
+            }
+        };
+        ping_extension.map_err(|err| {
+            anyhow!(
+                "Failed to decode ping extension {extension_type}: {err:?}, payload: {:?}",
+                hex_encode(&*payload.payload)
+            )
+        })
     }
 
     pub fn decode_json(extension_type: PingExtensionType, payload: Value) -> anyhow::Result<Self> {
@@ -115,10 +97,13 @@ impl PingExtension {
                     .map_err(|err| anyhow!("Failed to decode PingError: {err:?}"))?;
                 Ok(PingExtension::Error(error))
             }
+            PingExtensionType::NonSupportedExtension(non_supported_extension) => {
+                bail!("Non supported extension type: {non_supported_extension}")
+            }
         }
     }
 
-    pub fn payload_type(&self) -> PingExtensionType {
+    pub fn ping_extension_type(&self) -> PingExtensionType {
         match self {
             PingExtension::Capabilities(_) => PingExtensionType::Capabilities,
             PingExtension::BasicRadius(_) => PingExtensionType::BasicRadius,

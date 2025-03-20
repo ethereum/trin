@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ssz_types::{typenum, BitList};
 
-use super::query_trace::QueryTrace;
+use super::{ping_extensions::extension_types::PingExtensionType, query_trace::QueryTrace};
 use crate::{types::enr::Enr, OverlayContentKey};
 
 /// The SSZ encoded representation of content key.
@@ -53,7 +53,7 @@ pub type DataRadius = U256;
 #[serde(rename_all = "camelCase")]
 pub struct PongInfo {
     pub enr_seq: u64,
-    pub payload_type: u16,
+    pub payload_type: PingExtensionType,
     pub payload: Value,
 }
 

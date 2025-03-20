@@ -3,7 +3,7 @@ use ethportal_api::{
     types::{
         enr::Enr,
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
-        ping_extensions::consts::STATE_SUPPORTED_EXTENSIONS,
+        ping_extensions::{consts::STATE_SUPPORTED_EXTENSIONS, extension_types::PingExtensionType},
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
@@ -70,7 +70,7 @@ impl StateNetworkApiServer for StateNetworkApi {
     async fn ping(
         &self,
         enr: Enr,
-        payload_type: Option<u16>,
+        payload_type: Option<PingExtensionType>,
         payload: Option<Value>,
     ) -> RpcResult<PongInfo> {
         let (payload_type, payload) =

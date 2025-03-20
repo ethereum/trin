@@ -12,8 +12,7 @@ use ssz_types::{
 
 use crate::{
     types::{
-        distance::Distance,
-        ping_extensions::extension_types::{ExtensionError, PingExtensionType},
+        distance::Distance, ping_extensions::extension_types::PingExtensionType,
         portal_wire::CustomPayload,
     },
     version::{
@@ -27,11 +26,11 @@ use crate::{
 pub struct ClientInfoRadiusCapabilities {
     pub client_info: Option<ClientInfo>,
     pub data_radius: Distance,
-    capabilities: VariableList<u16, U400>,
+    pub capabilities: VariableList<PingExtensionType, U400>,
 }
 
 impl ClientInfoRadiusCapabilities {
-    pub fn new(radius: Distance, capabilities: Vec<u16>) -> Self {
+    pub fn new(radius: Distance, capabilities: Vec<PingExtensionType>) -> Self {
         Self {
             client_info: Some(ClientInfo::trin_client_info()),
             data_radius: radius,
@@ -42,20 +41,13 @@ impl ClientInfoRadiusCapabilities {
     pub fn new_with_client_info(
         client_info: Option<ClientInfo>,
         radius: Distance,
-        capabilities: Vec<u16>,
+        capabilities: Vec<PingExtensionType>,
     ) -> Self {
         Self {
             client_info,
             data_radius: radius,
             capabilities: VariableList::from(capabilities),
         }
-    }
-
-    pub fn capabilities(&self) -> Result<Vec<PingExtensionType>, ExtensionError> {
-        self.capabilities
-            .iter()
-            .map(|&value| PingExtensionType::try_from(value))
-            .collect::<Result<Vec<_>, _>>()
     }
 }
 
@@ -98,11 +90,11 @@ impl Decode for ClientInfoRadiusCapabilities {
         let mut builder = SszDecoderBuilder::new(bytes);
         builder.register_type::<VariableList<u8, U200>>()?;
         builder.register_type::<U256>()?;
-        builder.register_type::<VariableList<u16, U400>>()?;
+        builder.register_type::<VariableList<PingExtensionType, U400>>()?;
         let mut decoder = builder.build()?;
         let client_info: VariableList<u8, U200> = decoder.decode_next()?;
         let data_radius: U256 = decoder.decode_next()?;
-        let capabilities: VariableList<u16, U400> = decoder.decode_next()?;
+        let capabilities: VariableList<PingExtensionType, U400> = decoder.decode_next()?;
 
         let string = String::from_utf8(client_info.to_vec()).map_err(|_| {
             ssz::DecodeError::BytesInvalid(format!("Invalid utf8 string: {client_info:?}"))
@@ -244,12 +236,17 @@ mod tests {
     #[test]
     fn test_client_info_radius_capabilities() {
         let radius = Distance::from(U256::from(42));
-        let capabilities = vec![0, 1, 2, 3];
+        let capabilities = vec![
+            PingExtensionType::Capabilities,
+            PingExtensionType::BasicRadius,
+            PingExtensionType::HistoryRadius,
+        ];
         let client_info_radius_capabilities =
             ClientInfoRadiusCapabilities::new(radius, capabilities);
         let custom_payload = CustomPayload::from(client_info_radius_capabilities.clone());
 
-        let decoded_extension = PingExtension::decode_ssz(0, custom_payload).unwrap();
+        let decoded_extension =
+            PingExtension::decode_ssz(PingExtensionType::Capabilities, custom_payload).unwrap();
 
         if let PingExtension::Capabilities(decoded_client_info_radius_capabilities) =
             decoded_extension
@@ -292,7 +289,11 @@ mod tests {
         let data_radius = Distance::from(U256::MAX - U256::from(1));
         let client_info =
             ClientInfo::from_str("trin/v0.1.1-b61fdc5c/linux-x86_64/rustc1.81.0").unwrap();
-        let capabilities = vec![0, 1, 65535];
+        let capabilities = vec![
+            PingExtensionType::Capabilities,
+            PingExtensionType::BasicRadius,
+            PingExtensionType::Error,
+        ];
         let capabilities_payload = ClientInfoRadiusCapabilities::new_with_client_info(
             Some(client_info),
             data_radius,
@@ -301,7 +302,7 @@ mod tests {
         let payload = CustomPayload::from(capabilities_payload);
         let ping = Ping {
             enr_seq: 1,
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload,
         };
         let ping = Message::Ping(ping);
@@ -318,13 +319,17 @@ mod tests {
     #[test]
     fn message_encoding_ping_capabilities_without_client_info() {
         let data_radius = Distance::from(U256::MAX - U256::from(1));
-        let capabilities = vec![0, 1, 65535];
+        let capabilities = vec![
+            PingExtensionType::Capabilities,
+            PingExtensionType::BasicRadius,
+            PingExtensionType::Error,
+        ];
         let capabilities_payload =
             ClientInfoRadiusCapabilities::new_with_client_info(None, data_radius, capabilities);
         let payload = CustomPayload::from(capabilities_payload);
         let ping = Ping {
             enr_seq: 1,
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload,
         };
         let ping = Message::Ping(ping);
@@ -343,7 +348,11 @@ mod tests {
         let data_radius = Distance::from(U256::MAX - U256::from(1));
         let client_info =
             ClientInfo::from_str("trin/v0.1.1-b61fdc5c/linux-x86_64/rustc1.81.0").unwrap();
-        let capabilities = vec![0, 1, 65535];
+        let capabilities = vec![
+            PingExtensionType::Capabilities,
+            PingExtensionType::BasicRadius,
+            PingExtensionType::Error,
+        ];
         let capabilities_payload = ClientInfoRadiusCapabilities::new_with_client_info(
             Some(client_info),
             data_radius,
@@ -352,7 +361,7 @@ mod tests {
         let payload = CustomPayload::from(capabilities_payload);
         let pong = Pong {
             enr_seq: 1,
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload,
         };
         let pong = Message::Pong(pong);
@@ -369,13 +378,17 @@ mod tests {
     #[test]
     fn message_encoding_pong_capabilities_without_client_info() {
         let data_radius = Distance::from(U256::MAX - U256::from(1));
-        let capabilities = vec![0, 1, 65535];
+        let capabilities = vec![
+            PingExtensionType::Capabilities,
+            PingExtensionType::BasicRadius,
+            PingExtensionType::Error,
+        ];
         let capabilities_payload =
             ClientInfoRadiusCapabilities::new_with_client_info(None, data_radius, capabilities);
         let payload = CustomPayload::from(capabilities_payload);
         let pong = Pong {
             enr_seq: 1,
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload,
         };
         let pong = Message::Pong(pong);

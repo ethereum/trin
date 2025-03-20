@@ -1,7 +1,6 @@
 use std::io;
 
 use ethportal_api::{types::query_trace::QueryTrace, ContentValueError};
-use portalnet::overlay::errors::PayloadTypeNotSupportedReason;
 use reth_ipc::server::IpcServerStartError;
 use serde::{Deserialize, Serialize};
 
@@ -49,16 +48,19 @@ pub enum RpcServeError {
         trace: Option<Box<QueryTrace>>,
     },
     /// PayloadTypeNotSupported
-    #[error("Payload type not supported: {message}")]
+    /// The client or subnetwork doesn't support this payload type.
+    #[error("Ping payload type not supported: {message}")]
     PayloadTypeNotSupported {
         message: String,
         reason: PayloadTypeNotSupportedReason,
     },
     /// FailedToDecodePayload
-    #[error("Failed to decode payload: {message}")]
+    /// Failed to decode the ping payload from the payload type.
+    #[error("Failed to decode ping payload: {message}")]
     FailedToDecodePayload { message: String },
     /// PayloadTypeRequired
-    #[error("Payload type required: {message}")]
+    /// The payload type is required if the payload is specified.
+    #[error("Ping payload type required: {message}")]
     PayloadTypeRequired { message: String },
 }
 
@@ -124,4 +126,14 @@ pub enum WsHttpSamePortError {
         /// Ws modules.
         ws_modules: Vec<PortalRpcModule>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
+pub enum PayloadTypeNotSupportedReason {
+    /// The client doesn't support this payload type.
+    #[error("client")]
+    Client,
+    /// The subnetwork doesn't support this payload type.
+    #[error("subnetwork")]
+    Subnetwork,
 }

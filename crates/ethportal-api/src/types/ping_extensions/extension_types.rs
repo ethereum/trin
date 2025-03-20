@@ -1,5 +1,6 @@
 use std::fmt::{self};
 
+use serde::{Deserialize, Serialize};
 use ssz::{Decode, Encode};
 
 #[derive(PartialEq, Debug, Clone, Copy, Eq)]
@@ -8,18 +9,17 @@ pub enum PingExtensionType {
     BasicRadius,
     HistoryRadius,
     Error,
+    NonSupportedExtension(u16),
 }
 
-impl TryFrom<u16> for PingExtensionType {
-    type Error = ExtensionError;
-
-    fn try_from(value: u16) -> Result<Self, ExtensionError> {
+impl From<u16> for PingExtensionType {
+    fn from(value: u16) -> Self {
         match value {
-            0 => Ok(PingExtensionType::Capabilities),
-            1 => Ok(PingExtensionType::BasicRadius),
-            2 => Ok(PingExtensionType::HistoryRadius),
-            65535 => Ok(PingExtensionType::Error),
-            _ => Err(ExtensionError::NonSupportedExtension(value)),
+            0 => PingExtensionType::Capabilities,
+            1 => PingExtensionType::BasicRadius,
+            2 => PingExtensionType::HistoryRadius,
+            65535 => PingExtensionType::Error,
+            n => PingExtensionType::NonSupportedExtension(n),
         }
     }
 }
@@ -31,6 +31,7 @@ impl From<PingExtensionType> for u16 {
             PingExtensionType::BasicRadius => 1,
             PingExtensionType::HistoryRadius => 2,
             PingExtensionType::Error => 65535,
+            PingExtensionType::NonSupportedExtension(n) => n,
         }
     }
 }
@@ -42,6 +43,9 @@ impl fmt::Display for PingExtensionType {
             PingExtensionType::BasicRadius => write!(f, "BasicRadius"),
             PingExtensionType::HistoryRadius => write!(f, "HistoryRadius"),
             PingExtensionType::Error => write!(f, "Error"),
+            PingExtensionType::NonSupportedExtension(n) => {
+                write!(f, "NonSupportedExtension({n})")
+            }
         }
     }
 }
@@ -58,6 +62,10 @@ impl Encode for PingExtensionType {
     fn ssz_bytes_len(&self) -> usize {
         2
     }
+
+    fn ssz_fixed_len() -> usize {
+        2
+    }
 }
 
 impl Decode for PingExtensionType {
@@ -67,11 +75,28 @@ impl Decode for PingExtensionType {
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
         let value = u16::from_ssz_bytes(bytes)?;
-        PingExtensionType::try_from(value).map_err(|_| ssz::DecodeError::NoMatchingVariant)
+        Ok(PingExtensionType::from(value))
+    }
+
+    fn ssz_fixed_len() -> usize {
+        2
     }
 }
 
-#[derive(Debug)]
-pub enum ExtensionError {
-    NonSupportedExtension(u16),
+impl Serialize for PingExtensionType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        u16::from(*self).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for PingExtensionType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        u16::deserialize(deserializer).map(PingExtensionType::from)
+    }
 }

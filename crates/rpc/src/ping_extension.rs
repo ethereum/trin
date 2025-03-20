@@ -1,24 +1,24 @@
 use ethportal_api::types::ping_extensions::{
     decode::PingExtension, extension_types::PingExtensionType,
 };
-use portalnet::overlay::errors::PayloadTypeNotSupportedReason;
 use serde_json::Value;
 
-use crate::errors::RpcServeError;
+use crate::errors::{PayloadTypeNotSupportedReason, RpcServeError};
 
 pub fn parse_ping_payload(
     supported_extensions: &[PingExtensionType],
-    payload_type: Option<u16>,
+    payload_type: Option<PingExtensionType>,
     payload: Option<Value>,
 ) -> Result<(Option<PingExtensionType>, Option<PingExtension>), RpcServeError> {
     let payload_type = match payload_type {
         Some(payload_type) => {
-            let payload_type = PingExtensionType::try_from(payload_type).map_err(|err| {
-                RpcServeError::PayloadTypeNotSupported {
-                    message: format!("Payload type not supported {err:?}"),
+            if let PingExtensionType::NonSupportedExtension(non_supported_extension) = payload_type
+            {
+                return Err(RpcServeError::PayloadTypeNotSupported {
+                    message: format!("Payload type not supported {non_supported_extension}"),
                     reason: PayloadTypeNotSupportedReason::Client,
-                }
-            })?;
+                });
+            };
             if !supported_extensions.contains(&payload_type) {
                 return Err(RpcServeError::PayloadTypeNotSupported {
                     message: format!("Payload type not supported {payload_type} "),
@@ -39,7 +39,8 @@ pub fn parse_ping_payload(
         ),
         (None, Some(_)) => {
             return Err(RpcServeError::PayloadTypeRequired {
-                message: "If the payload is specified the payload type must be as well".to_string(),
+                message: "If the 'payload' is specified the 'payloadType' must be as well"
+                    .to_string(),
             })
         }
         _ => None,

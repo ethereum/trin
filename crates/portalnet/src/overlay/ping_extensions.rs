@@ -11,11 +11,11 @@ pub trait PingExtensions {
         extensions: &[PingExtensionType],
     ) -> Option<PingExtensionType>;
 
-    /// Returns the extensions by their u16 type id that are supported by the clients subnetwork.
-    fn raw_extensions(&self) -> Vec<u16>;
+    /// Returns the extensions that are supported by the clients subnetwork.
+    fn supported_extensions(&self) -> &[PingExtensionType];
 }
 
-pub struct MockPingExtension {}
+pub struct MockPingExtension;
 
 impl PingExtensions for MockPingExtension {
     fn is_supported(&self, _extension: PingExtensionType) -> bool {
@@ -29,7 +29,10 @@ impl PingExtensions for MockPingExtension {
         Some(PingExtensionType::HistoryRadius)
     }
 
-    fn raw_extensions(&self) -> Vec<u16> {
-        vec![0, 1]
+    fn supported_extensions(&self) -> &[PingExtensionType] {
+        &[
+            PingExtensionType::Capabilities,
+            PingExtensionType::BasicRadius,
+        ]
     }
 }

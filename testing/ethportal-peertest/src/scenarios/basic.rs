@@ -5,6 +5,7 @@ use ethportal_api::{
     types::{
         distance::Distance,
         network::Subnetwork,
+        ping_extensions::extension_types::PingExtensionType,
         portal_wire::{Message, Ping},
     },
     utils::bytes::hex_encode,
@@ -111,7 +112,7 @@ pub async fn test_discv5_talk_req(target: &Client, peertest: &Peertest) {
     let data_radius = U256::MAX.as_ssz_bytes();
     let request = Message::Ping(Ping {
         enr_seq: 1,
-        payload_type: 1,
+        payload_type: PingExtensionType::BasicRadius,
         payload: data_radius.clone().into(),
     })
     .as_ssz_bytes();

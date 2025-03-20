@@ -30,10 +30,7 @@ impl PingExtensions for BeaconPingExtensions {
         None
     }
 
-    fn raw_extensions(&self) -> Vec<u16> {
+    fn supported_extensions(&self) -> &[PingExtensionType] {
         Self::SUPPORTED_EXTENSIONS
-            .iter()
-            .map(|e| u16::from(*e))
-            .collect()
     }
 }

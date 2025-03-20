@@ -3,7 +3,9 @@ use ethportal_api::{
     types::{
         enr::Enr,
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
-        ping_extensions::consts::HISTORY_SUPPORTED_EXTENSIONS,
+        ping_extensions::{
+            consts::HISTORY_SUPPORTED_EXTENSIONS, extension_types::PingExtensionType,
+        },
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
@@ -70,7 +72,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     async fn ping(
         &self,
         enr: Enr,
-        payload_type: Option<u16>,
+        payload_type: Option<PingExtensionType>,
         payload: Option<Value>,
     ) -> RpcResult<PongInfo> {
         let (payload_type, payload) =

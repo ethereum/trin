@@ -10,7 +10,7 @@ use ethportal_api::{
         },
         enr::Enr,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
-        ping_extensions::consts::STATE_SUPPORTED_EXTENSIONS,
+        ping_extensions::{consts::STATE_SUPPORTED_EXTENSIONS, extension_types::PingExtensionType},
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
@@ -84,7 +84,7 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     async fn ping(
         &self,
         enr: Enr,
-        payload_type: Option<u16>,
+        payload_type: Option<PingExtensionType>,
         payload: Option<Value>,
     ) -> RpcResult<PongInfo> {
         let (payload_type, payload) =

@@ -4589,7 +4589,6 @@ dependencies = [
  "rand 0.8.5",
  "rstest",
  "serde",
- "serde_json",
  "serial_test",
  "smallvec",
  "ssz_types",

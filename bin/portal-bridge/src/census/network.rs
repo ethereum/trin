@@ -6,9 +6,7 @@ use ethportal_api::{
     generate_random_node_ids,
     jsonrpsee::http_client::HttpClient,
     types::{
-        network::Subnetwork,
-        ping_extensions::{decode::PingExtension, extension_types::PingExtensionType},
-        portal::PongInfo,
+        network::Subnetwork, ping_extensions::decode::PingExtension, portal::PongInfo,
         portal_wire::OfferTrace,
     },
     BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, StateNetworkApiClient,
@@ -256,23 +254,12 @@ impl Network {
             return LivenessResult::Fail;
         };
 
-        let payload_type = match PingExtensionType::try_from(pong_info.payload_type) {
-            Ok(payload_type) => payload_type,
-            Err(err) => {
-                warn!(
-                    subnetwork = %self.subnetwork,
-                    "liveness_check: failed to parse payload type: {err:?}",
-                );
-                return LivenessResult::Fail;
-            }
-        };
-
-        let radius = match PingExtension::decode_json(payload_type, pong_info.payload) {
+        let radius = match PingExtension::decode_json(pong_info.payload_type, pong_info.payload) {
             Ok(PingExtension::Capabilities(payload)) => payload.data_radius,
             _ => {
                 warn!(
                     subnetwork = %self.subnetwork,
-                    "liveness_check: received unsupported ping extension: {}", payload_type,
+                    "liveness_check: received unexpected ping extension: {}", pong_info.payload_type,
                 );
                 return LivenessResult::Fail;
             }
