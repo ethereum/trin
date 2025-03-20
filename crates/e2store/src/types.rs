@@ -4,7 +4,7 @@ use alloy::rlp::Decodable;
 use anyhow::ensure;
 use ethportal_api::Header;
 
-use crate::e2store::types::Entry;
+use crate::{e2store::types::Entry, entry_types};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct HeaderEntry {
@@ -16,7 +16,7 @@ impl TryFrom<&Entry> for HeaderEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x0300,
+            entry.header.type_ == entry_types::COMPRESSED_HEADER,
             "invalid header entry: incorrect header type"
         );
         ensure!(
@@ -40,6 +40,6 @@ impl TryFrom<HeaderEntry> for Entry {
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
         let encoded = encoder.into_inner()?;
-        Ok(Entry::new(0x0300, encoded))
+        Ok(Entry::new(entry_types::COMPRESSED_HEADER, encoded))
     }
 }

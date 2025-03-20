@@ -15,6 +15,7 @@ use crate::{
         memory::E2StoreMemory,
         types::{Entry, VersionEntry},
     },
+    entry_types,
     types::HeaderEntry,
 };
 
@@ -186,7 +187,7 @@ impl TryFrom<&Entry> for BodyEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x0400,
+            entry.header.type_ == entry_types::COMPRESSED_BODY,
             "invalid body entry: incorrect header type"
         );
         ensure!(
@@ -210,7 +211,7 @@ impl TryInto<Entry> for BodyEntry {
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
         let encoded = encoder.into_inner()?;
-        Ok(Entry::new(0x0400, encoded))
+        Ok(Entry::new(entry_types::COMPRESSED_BODY, encoded))
     }
 }
 
@@ -224,7 +225,7 @@ impl TryFrom<&Entry> for ReceiptsEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x0500,
+            entry.header.type_ == entry_types::COMPRESSED_RECEIPTS,
             "invalid receipts entry: incorrect header type"
         );
         ensure!(
@@ -248,7 +249,7 @@ impl TryInto<Entry> for ReceiptsEntry {
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
         let encoded = encoder.into_inner()?;
-        Ok(Entry::new(0x0500, encoded))
+        Ok(Entry::new(entry_types::COMPRESSED_RECEIPTS, encoded))
     }
 }
 
@@ -262,7 +263,7 @@ impl TryFrom<&Entry> for TotalDifficultyEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x0600,
+            entry.header.type_ == entry_types::TOTAL_DIFFICULTY,
             "invalid total difficulty entry: incorrect header type"
         );
         ensure!(
@@ -286,7 +287,10 @@ impl TryInto<Entry> for TotalDifficultyEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        Ok(Entry::new(0x0600, self.total_difficulty.to_be_bytes_vec()))
+        Ok(Entry::new(
+            entry_types::TOTAL_DIFFICULTY,
+            self.total_difficulty.to_be_bytes_vec(),
+        ))
     }
 }
 
@@ -300,7 +304,7 @@ impl TryFrom<&Entry> for AccumulatorEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x0700,
+            entry.header.type_ == entry_types::ACCUMULATOR,
             "invalid accumulator entry: incorrect header type"
         );
         ensure!(
@@ -325,7 +329,7 @@ impl TryInto<Entry> for AccumulatorEntry {
 
     fn try_into(self) -> Result<Entry, Self::Error> {
         let value = self.accumulator.as_slice().to_vec();
-        Ok(Entry::new(0x0700, value))
+        Ok(Entry::new(entry_types::ACCUMULATOR, value))
     }
 }
 

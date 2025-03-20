@@ -1,6 +1,8 @@
 use anyhow::{anyhow, ensure};
 use ssz_derive::{Decode, Encode};
 
+use crate::entry_types;
+
 /// Represents an e2store `Entry`
 #[derive(Default, Debug, Eq, PartialEq, Clone)]
 pub struct Entry {
@@ -116,7 +118,7 @@ pub struct VersionEntry {
 impl Default for VersionEntry {
     fn default() -> Self {
         Self {
-            version: Entry::new(0x6532, vec![]),
+            version: Entry::new(entry_types::VERSION, vec![]),
         }
     }
 }
@@ -126,7 +128,7 @@ impl TryFrom<&Entry> for VersionEntry {
 
     fn try_from(entry: &Entry) -> anyhow::Result<Self> {
         ensure!(
-            entry.header.type_ == 0x6532,
+            entry.header.type_ == entry_types::VERSION,
             "invalid version entry: incorrect header type"
         );
         ensure!(

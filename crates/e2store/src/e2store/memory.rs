@@ -69,6 +69,7 @@ mod test {
     use ethportal_api::utils::bytes::{hex_decode, hex_encode};
 
     use super::*;
+    use crate::entry_types;
 
     // test cases sourced from: https://github.com/ethereum/go-ethereum/pull/26621/
 
@@ -88,7 +89,7 @@ mod test {
     fn test_entry_beef() {
         let expected = "0x2a00020000000000beef";
         let entry = Entry::deserialize(&hex_decode(expected).unwrap()).unwrap();
-        assert_eq!(entry.header.type_, 0x2a00); // 4200
+        assert_eq!(entry.header.type_, 0x2a00); // 10752
         assert_eq!(entry.header.length, 2);
         assert_eq!(entry.header.reserved, 0);
         assert_eq!(entry.value, vec![0xbe, 0xef]);
@@ -105,7 +106,10 @@ mod test {
         assert_eq!(file.entries[0].header.length, 2);
         assert_eq!(file.entries[0].header.reserved, 0);
         assert_eq!(file.entries[0].value, vec![0xbe, 0xef]);
-        assert_eq!(file.entries[1].header.type_, 0x0900); // 2304
+        assert_eq!(
+            file.entries[1].header.type_,
+            entry_types::COMPRESSED_STORAGE
+        ); // 2304
         assert_eq!(file.entries[1].header.length, 4);
         assert_eq!(file.entries[1].header.reserved, 0);
         assert_eq!(file.entries[1].value, vec![0xab, 0xcd, 0xab, 0xcd]);
