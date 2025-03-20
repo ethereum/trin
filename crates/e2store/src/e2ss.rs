@@ -12,10 +12,10 @@
 //! e2ss := Version | CompressedHeader | account*
 //! account :=  CompressedAccount | CompressedStorage*
 //!
-//! Version             = { type: 0x3265, data: nil }
-//! CompressedHeader    = { type: 0x03,   data: snappyFramed(rlp(header)) }
-//! CompressedAccount   = { type: 0x08,   data: snappyFramed(rlp(Account)) }
-//! CompressedStorage   = { type: 0x09,   data: snappyFramed(rlp(Vec<StorageItem>)) }
+//! Version             = { type: 0x6532, data: nil }
+//! CompressedHeader    = { type: 0x0300,   data: snappyFramed(rlp(header)) }
+//! CompressedAccount   = { type: 0x0800,   data: snappyFramed(rlp(Account)) }
+//! CompressedStorage   = { type: 0x0900,   data: snappyFramed(rlp(Vec<StorageItem>)) }
 //!
 //! Account             = { address_hash, AccountState, raw_bytecode, storage_entry_count }
 //! AccountState        = { nonce, balance, storage_root, code_hash }
@@ -44,6 +44,7 @@ use crate::{
         stream::{E2StoreStreamReader, E2StoreStreamWriter},
         types::{Entry, VersionEntry},
     },
+    entry_types,
     types::HeaderEntry,
     utils::underlying_io_error_kind,
 };
@@ -230,7 +231,7 @@ impl TryFrom<&Entry> for AccountEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x08,
+            entry.header.type_ == entry_types::COMPRESSED_ACCOUNT,
             "invalid account entry: incorrect account type"
         );
         ensure!(
@@ -257,7 +258,7 @@ impl TryFrom<AccountEntry> for Entry {
             "FrameEncoder should write whole rlp encoding"
         );
         let encoded = encoder.into_inner()?;
-        Ok(Entry::new(0x08, encoded))
+        Ok(Entry::new(entry_types::COMPRESSED_ACCOUNT, encoded))
     }
 }
 
@@ -283,7 +284,7 @@ impl TryFrom<&Entry> for StorageEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x09,
+            entry.header.type_ == entry_types::COMPRESSED_STORAGE,
             "invalid storage entry: incorrect storage type"
         );
         ensure!(
@@ -310,7 +311,7 @@ impl TryFrom<StorageEntry> for Entry {
             "FrameEncoder should write whole rlp encoding"
         );
         let encoded = encoder.into_inner()?;
-        Ok(Entry::new(0x09, encoded))
+        Ok(Entry::new(entry_types::COMPRESSED_STORAGE, encoded))
     }
 }
 

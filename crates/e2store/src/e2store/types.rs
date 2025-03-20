@@ -1,6 +1,8 @@
 use anyhow::{anyhow, ensure};
 use ssz_derive::{Decode, Encode};
 
+use crate::entry_types;
+
 /// Represents an e2store `Entry`
 #[derive(Default, Debug, Eq, PartialEq, Clone)]
 pub struct Entry {
@@ -83,7 +85,7 @@ impl Header {
 
     /// Write to a byte slice.
     fn write(&self, buf: &mut [u8]) {
-        buf[0..2].copy_from_slice(&self.type_.to_le_bytes());
+        buf[0..2].copy_from_slice(&self.type_.to_be_bytes());
         buf[2..6].copy_from_slice(&self.length.to_le_bytes());
         buf[6..8].copy_from_slice(&self.reserved.to_le_bytes());
     }
@@ -93,7 +95,7 @@ impl Header {
         if bytes.len() != Header::SERIALIZED_SIZE as usize {
             return Err(anyhow!("invalid header size: {}", bytes.len()));
         }
-        let type_ = u16::from_le_bytes([bytes[0], bytes[1]]);
+        let type_ = u16::from_be_bytes([bytes[0], bytes[1]]);
         let length = u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]);
         let reserved = u16::from_le_bytes([bytes[6], bytes[7]]);
         ensure!(
@@ -116,7 +118,7 @@ pub struct VersionEntry {
 impl Default for VersionEntry {
     fn default() -> Self {
         Self {
-            version: Entry::new(0x3265, vec![]),
+            version: Entry::new(entry_types::VERSION, vec![]),
         }
     }
 }
@@ -126,7 +128,7 @@ impl TryFrom<&Entry> for VersionEntry {
 
     fn try_from(entry: &Entry) -> anyhow::Result<Self> {
         ensure!(
-            entry.header.type_ == 0x3265,
+            entry.header.type_ == entry_types::VERSION,
             "invalid version entry: incorrect header type"
         );
         ensure!(
