@@ -43,7 +43,6 @@ impl Encode for BlockBody {
         // Portal has 2 types of block bodies - pre and post Shanghai fork.
         // The difference is that post Shanghai block bodies contain withdrawals.
         if self.withdrawals().is_some() {
-            println!("Shanghai block body");
             let offset = <Vec<Vec<u8>> as Encode>::ssz_fixed_len()
                 + <Vec<u8> as Encode>::ssz_fixed_len()
                 + <Vec<Vec<u8>> as Encode>::ssz_fixed_len();

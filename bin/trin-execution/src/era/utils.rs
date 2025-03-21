@@ -32,13 +32,9 @@ pub fn process_era1_file(raw_era1: Vec<u8>, epoch_index: u64) -> anyhow::Result<
                     })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let uncles = match body.body.withdrawals() {
-            Some(_) => Some(body.body.0.ommers),
-            None => None,
-        };
         blocks.push(ProcessedBlock {
             header: header.header,
-            uncles,
+            uncles: Some(body.body.0.ommers),
             withdrawals: None,
             transactions: transactions_with_recovered_senders,
         });
