@@ -6,8 +6,12 @@ use alloy::{
 };
 use bytes::Buf;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tree_hash::TreeHash;
 
-use crate::utils::bytes::{hex_decode, hex_encode};
+use crate::{
+    types::consensus::execution_payload::{ExecutionPayloadBellatrix, ExecutionPayloadCapella},
+    utils::bytes::{hex_decode, hex_encode},
+};
 
 /// A block header.
 #[derive(Debug, Clone, Eq, Deserialize, Serialize)]
@@ -306,6 +310,63 @@ impl PartialEq for Header {
             && self.blob_gas_used == other.blob_gas_used
             && self.excess_blob_gas == other.excess_blob_gas
             && self.parent_beacon_block_root == other.parent_beacon_block_root
+    }
+}
+
+impl From<ExecutionPayloadBellatrix> for Header {
+    fn from(payload: ExecutionPayloadBellatrix) -> Self {
+        let transactions_root = payload.transactions.tree_hash_root();
+        Self {
+            parent_hash: payload.parent_hash,
+            uncles_hash: B256::default(), // double check
+            author: payload.fee_recipient,
+            state_root: payload.state_root,
+            transactions_root,
+            receipts_root: payload.receipts_root,
+            logs_bloom: Bloom::from_slice(payload.logs_bloom.to_vec().as_slice()),
+            difficulty: U256::from(0), // double check
+            number: payload.block_number,
+            gas_limit: U256::from(payload.gas_limit),
+            gas_used: U256::from(payload.gas_used),
+            timestamp: payload.timestamp,
+            extra_data: payload.extra_data.to_vec(),
+            mix_hash: None,
+            nonce: None,
+            base_fee_per_gas: Some(payload.base_fee_per_gas),
+            withdrawals_root: None,
+            blob_gas_used: None,
+            excess_blob_gas: None,
+            parent_beacon_block_root: None,
+        }
+    }
+}
+
+impl From<ExecutionPayloadCapella> for Header {
+    fn from(payload: ExecutionPayloadCapella) -> Self {
+        let transactions_root = payload.transactions.tree_hash_root();
+        let withdrawals_root = Some(payload.withdrawals.tree_hash_root());
+        Self {
+            parent_hash: payload.parent_hash,
+            uncles_hash: B256::default(), // double check
+            author: payload.fee_recipient,
+            state_root: payload.state_root,
+            transactions_root,
+            receipts_root: payload.receipts_root,
+            logs_bloom: Bloom::from_slice(payload.logs_bloom.to_vec().as_slice()),
+            difficulty: U256::from(0), // double check
+            number: payload.block_number,
+            gas_limit: U256::from(payload.gas_limit),
+            gas_used: U256::from(payload.gas_used),
+            timestamp: payload.timestamp,
+            extra_data: payload.extra_data.to_vec(),
+            mix_hash: None,
+            nonce: None,
+            base_fee_per_gas: Some(payload.base_fee_per_gas),
+            withdrawals_root,
+            blob_gas_used: None,
+            excess_blob_gas: None,
+            parent_beacon_block_root: None,
+        }
     }
 }
 
