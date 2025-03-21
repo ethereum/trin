@@ -47,12 +47,12 @@ impl Node {
     }
 
     /// Compares the capabilities of the node with the given capabilities.
-    /// Returns true if the capabilities are the same.
-    pub fn compare_capabilities(&self, capabilities: &[PingExtensionType]) -> bool {
+    /// Returns true if the capabilities are different.
+    pub fn is_capabilities_different(&self, capabilities: &[PingExtensionType]) -> bool {
         if let Some(node_capabilities) = &self.capabilities {
-            capabilities.iter().all(|c| node_capabilities.contains(c))
+            capabilities != node_capabilities.as_slice()
         } else {
-            false
+            true
         }
     }
 

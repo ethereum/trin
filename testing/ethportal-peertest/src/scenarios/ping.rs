@@ -6,7 +6,9 @@ use ethportal_api::{
             decode::PingExtension,
             extension_types::PingExtensionType,
             extensions::{
-                type_0::ClientInfoRadiusCapabilities, type_1::BasicRadius, type_2::HistoryRadius,
+                type_0::{ClientInfo, ClientInfoRadiusCapabilities},
+                type_1::BasicRadius,
+                type_2::HistoryRadius,
             },
         },
     },
@@ -187,4 +189,89 @@ pub async fn test_ping_cross_network(mainnet_target: &Client, angelfood_node: &P
     {
         panic!("Expected ping to fail as mainnet/angelfood history nodes shouldn't be able to communicate {pong:?}");
     };
+}
+
+pub async fn test_ping_capabilities_payload_type(target: &Client, peertest: &Peertest) {
+    info!("Testing ping with capabilities payload type");
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let bootnode_sequence = bootnode_enr.seq();
+    let result = StateNetworkApiClient::ping(
+        target,
+        bootnode_enr,
+        Some(PingExtensionType::Capabilities),
+        None,
+    )
+    .await
+    .expect("Ping failed");
+
+    let capabilities_payload =
+        match PingExtension::decode_json(result.payload_type, result.payload.clone()) {
+            Ok(PingExtension::Capabilities(payload)) => payload,
+            _ => panic!(
+                "Unexpected ping extension {:?} {:?}",
+                result.payload_type, result.payload
+            ),
+        };
+
+    assert_eq!(capabilities_payload.data_radius, Distance::MAX);
+    assert_eq!(
+        capabilities_payload.client_info,
+        Some(ClientInfo::trin_client_info())
+    );
+    assert_eq!(capabilities_payload.capabilities.len(), 3);
+    assert_eq!(result.enr_seq, bootnode_sequence);
+}
+
+pub async fn test_ping_basic_radius_payload_type(target: &Client, peertest: &Peertest) {
+    info!("Testing ping with basic radius payload type");
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let bootnode_sequence = bootnode_enr.seq();
+    let result = StateNetworkApiClient::ping(
+        target,
+        bootnode_enr,
+        Some(PingExtensionType::BasicRadius),
+        None,
+    )
+    .await
+    .expect("Ping failed");
+
+    let basic_radius = match PingExtension::decode_json(result.payload_type, result.payload.clone())
+    {
+        Ok(PingExtension::BasicRadius(payload)) => payload,
+        _ => panic!(
+            "Unexpected ping extension {:?} {:?}",
+            result.payload_type, result.payload
+        ),
+    };
+
+    assert_eq!(basic_radius.data_radius, Distance::MAX);
+    assert_eq!(result.enr_seq, bootnode_sequence);
+}
+
+pub async fn test_ping_history_radius_payload_type(target: &Client, peertest: &Peertest) {
+    info!("Testing ping with history radius payload type");
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let bootnode_sequence = bootnode_enr.seq();
+    let result = HistoryNetworkApiClient::ping(
+        target,
+        bootnode_enr,
+        Some(PingExtensionType::HistoryRadius),
+        None,
+    )
+    .await
+    .expect("Ping failed");
+
+    let history_radius =
+        match PingExtension::decode_json(result.payload_type, result.payload.clone()) {
+            Ok(PingExtension::HistoryRadius(payload)) => payload,
+            _ => panic!(
+                "Unexpected ping extension {:?} {:?}",
+                result.payload_type, result.payload
+            ),
+        };
+
+    assert_eq!(history_radius.data_radius, Distance::MAX);
+    // todo: update this when the default value is changed
+    assert_eq!(history_radius.ephemeral_header_count, 0);
+    assert_eq!(result.enr_seq, bootnode_sequence);
 }

@@ -76,6 +76,9 @@ async fn peertest_stateless() {
     peertest::scenarios::ping::test_ping_invalid_payload_type_client(&target, &peertest).await;
     peertest::scenarios::ping::test_ping_invalid_payload_type_subnetwork(&target, &peertest).await;
     peertest::scenarios::ping::test_ping_failed_to_decode_payload(&target, &peertest).await;
+    peertest::scenarios::ping::test_ping_capabilities_payload_type(&target, &peertest).await;
+    peertest::scenarios::ping::test_ping_basic_radius_payload_type(&target, &peertest).await;
+    peertest::scenarios::ping::test_ping_history_radius_payload_type(&target, &peertest).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
 }

@@ -10,7 +10,7 @@ pub fn handle_capabilities(
 ) -> Option<Node> {
     let capabilities = radius_capabilities.capabilities;
     if node.data_radius != radius_capabilities.data_radius
-        || node.compare_capabilities(&capabilities)
+        || node.is_capabilities_different(&capabilities)
     {
         node.set_data_radius(radius_capabilities.data_radius);
         node.set_capabilities(capabilities.to_vec());
