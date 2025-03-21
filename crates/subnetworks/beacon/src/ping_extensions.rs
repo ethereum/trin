@@ -14,10 +14,6 @@ impl BeaconPingExtensions {
 }
 
 impl PingExtensions for BeaconPingExtensions {
-    fn is_supported(&self, extension: PingExtensionType) -> bool {
-        Self::SUPPORTED_EXTENSIONS.contains(&extension)
-    }
-
     fn latest_mutually_supported_base_extension(
         &self,
         extensions: &[PingExtensionType],

@@ -2,7 +2,9 @@ use ethportal_api::types::ping_extensions::extension_types::PingExtensionType;
 
 pub trait PingExtensions {
     /// Returns true if the extension is supported by the clients subnetwork.
-    fn is_supported(&self, extension: PingExtensionType) -> bool;
+    fn is_supported(&self, extension: PingExtensionType) -> bool {
+        self.supported_extensions().contains(&extension)
+    }
 
     /// Returns the newest extension that is supported by both clients, used for extended ping
     /// responses.
