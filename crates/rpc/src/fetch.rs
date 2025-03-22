@@ -38,6 +38,7 @@ where
                     return Err(err.into());
                 }
             }
+
             Err(RpcServeError::Message(msg))
         }
     }

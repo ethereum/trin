@@ -1,6 +1,7 @@
 use alloy::primitives::B256;
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
+use serde_json::Value;
 
 use crate::{
     consensus::header::BeaconBlockHeader,
@@ -12,6 +13,7 @@ use crate::{
         },
         content_key::beacon::BeaconContentKey,
         enr::Enr,
+        ping_extensions::extension_types::PingExtensionType,
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
@@ -55,7 +57,12 @@ pub trait BeaconNetworkApi {
 
     /// Send a PING message to the designated node and wait for a PONG response
     #[method(name = "beaconPing")]
-    async fn ping(&self, enr: Enr) -> RpcResult<PongInfo>;
+    async fn ping(
+        &self,
+        enr: Enr,
+        payload_type: Option<PingExtensionType>,
+        payload: Option<Value>,
+    ) -> RpcResult<PongInfo>;
 
     /// Get the finalized state root of the finalized beacon header.
     #[method(name = "beaconFinalizedStateRoot")]

@@ -47,20 +47,39 @@ pub enum RpcServeError {
         message: String,
         trace: Option<Box<QueryTrace>>,
     },
+    /// PingPayloadTypeNotSupported
+    /// The client or subnetwork doesn't support this payload type.
+    #[error("Ping payload type not supported: {message}")]
+    PingPayloadTypeNotSupported {
+        message: String,
+        reason: PingPayloadTypeNotSupportedReason,
+    },
+    /// FailedToDecodePingPayload
+    /// Failed to decode the ping payload from the payload type.
+    #[error("Failed to decode ping payload: {message}")]
+    FailedToDecodePingPayload { message: String },
+    /// PingPayloadTypeRequired
+    /// The payload type is required if the payload is specified.
+    #[error("Ping payload type required: {message}")]
+    PingPayloadTypeRequired { message: String },
 }
 
 impl From<RpcServeError> for ErrorObjectOwned {
-    fn from(e: RpcServeError) -> Self {
-        match e {
-            // -32099 is a custom error code for a server error
-            // see: https://www.jsonrpc.org/specification#error_object
-            // It's a bit of a cop-out, until we implement more specific errors, being
-            // sure not to conflict with the standard Ethereum error codes:
-            // https://docs.infura.io/networks/ethereum/json-rpc-methods#error-codes
-            RpcServeError::Message(msg) => ErrorObject::owned(-32099, msg, None::<()>),
+    fn from(err: RpcServeError) -> Self {
+        match err {
+            RpcServeError::Message(message) => ErrorObject::owned(-32099, message, None::<()>),
             RpcServeError::MethodNotFound(method) => ErrorObject::owned(-32601, method, None::<()>),
             RpcServeError::ContentNotFound { message, trace } => {
                 ErrorObject::owned(-39001, message, Some(trace))
+            }
+            RpcServeError::PingPayloadTypeNotSupported { message, reason } => {
+                ErrorObject::owned(-39004, message, Some(reason.to_string()))
+            }
+            RpcServeError::FailedToDecodePingPayload { message } => {
+                ErrorObject::owned(-39005, message, None::<()>)
+            }
+            RpcServeError::PingPayloadTypeRequired { message } => {
+                ErrorObject::owned(-39006, message, None::<()>)
             }
         }
     }
@@ -107,4 +126,14 @@ pub enum WsHttpSamePortError {
         /// Ws modules.
         ws_modules: Vec<PortalRpcModule>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
+pub enum PingPayloadTypeNotSupportedReason {
+    /// The client doesn't support this payload type.
+    #[error("client")]
+    Client,
+    /// The subnetwork doesn't support this payload type.
+    #[error("subnetwork")]
+    Subnetwork,
 }
