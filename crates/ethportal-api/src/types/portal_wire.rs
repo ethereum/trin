@@ -17,7 +17,7 @@ use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use super::bytes::ByteList1100;
+use super::{bytes::ByteList1100, ping_extensions::extension_types::PingExtensionType};
 use crate::{
     types::{
         enr::{Enr, SszEnr},
@@ -338,7 +338,7 @@ impl TryFrom<Message> for Response {
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Ping {
     pub enr_seq: u64,
-    pub payload_type: u16,
+    pub payload_type: PingExtensionType,
     pub payload: CustomPayload,
 }
 
@@ -357,7 +357,7 @@ impl fmt::Display for Ping {
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Pong {
     pub enr_seq: u64,
-    pub payload_type: u16,
+    pub payload_type: PingExtensionType,
     pub payload: CustomPayload,
 }
 

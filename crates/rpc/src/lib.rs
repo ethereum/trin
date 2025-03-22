@@ -11,6 +11,7 @@ mod eth_rpc;
 mod evm_state;
 mod fetch;
 mod history_rpc;
+mod ping_extension;
 mod rpc_server;
 mod serde;
 mod state_rpc;

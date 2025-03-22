@@ -18,7 +18,7 @@ use crate::{
 pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     info!("Testing Gossip with tracing");
 
-    let _ = HistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone())
+    let _ = HistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone(), None, None)
         .await
         .unwrap();
     let (content_key, content_value) = fixture_header_by_hash();
@@ -49,7 +49,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     let fresh_enr = fresh_target.node_info().await.unwrap().enr;
 
     // connect to new node
-    let _ = HistoryNetworkApiClient::ping(target, fresh_enr)
+    let _ = HistoryNetworkApiClient::ping(target, fresh_enr, None, None)
         .await
         .unwrap();
 
@@ -85,7 +85,7 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
     info!("Testing gossip of dropped content after an offer message.");
 
     // connect target to network
-    let _ = HistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone())
+    let _ = HistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone(), None, None)
         .await
         .unwrap();
 
@@ -168,13 +168,18 @@ pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client
     .is_err());
 
     // connect fresh target to network
-    let _ = HistoryNetworkApiClient::ping(&fresh_target, target.node_info().await.unwrap().enr)
+    let _ = HistoryNetworkApiClient::ping(
+        &fresh_target,
+        target.node_info().await.unwrap().enr,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.bootnode.enr.clone(), None, None)
         .await
         .unwrap();
-    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.bootnode.enr.clone())
-        .await
-        .unwrap();
-    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.nodes[0].enr.clone())
+    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.nodes[0].enr.clone(), None, None)
         .await
         .unwrap();
 
@@ -245,7 +250,7 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
     info!("Testing gossip of dropped content after a find content message.");
 
     // connect target to network
-    let _ = HistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone())
+    let _ = HistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone(), None, None)
         .await
         .unwrap();
 
@@ -289,13 +294,18 @@ pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: 
     assert!(store_result);
 
     // connect fresh target to network
-    let _ = HistoryNetworkApiClient::ping(&fresh_target, target.node_info().await.unwrap().enr)
+    let _ = HistoryNetworkApiClient::ping(
+        &fresh_target,
+        target.node_info().await.unwrap().enr,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.bootnode.enr.clone(), None, None)
         .await
         .unwrap();
-    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.bootnode.enr.clone())
-        .await
-        .unwrap();
-    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.nodes[0].enr.clone())
+    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.nodes[0].enr.clone(), None, None)
         .await
         .unwrap();
 

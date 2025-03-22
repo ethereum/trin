@@ -1,31 +1,19 @@
-use ethportal_api::types::{
-    network::Subnetwork,
-    ping_extensions::extensions::{
-        type_0::ClientInfoRadiusCapabilities, type_1::BasicRadius, type_2::HistoryRadius,
-    },
+use ethportal_api::types::ping_extensions::extensions::{
+    type_0::ClientInfoRadiusCapabilities, type_1::BasicRadius, type_2::HistoryRadius,
 };
-use tracing::warn;
 
 use crate::types::node::Node;
 
 pub fn handle_capabilities(
     radius_capabilities: ClientInfoRadiusCapabilities,
     mut node: Node,
-    protocol: Subnetwork,
 ) -> Option<Node> {
-    let Ok(capabilities) = radius_capabilities.capabilities() else {
-        warn!(
-            protocol = %protocol,
-            request.source = %node.enr.node_id(),
-            "Capabilities weren't decoded correctly",
-        );
-        return None;
-    };
+    let capabilities = radius_capabilities.capabilities;
     if node.data_radius != radius_capabilities.data_radius
-        || node.compare_capabilities(&capabilities)
+        || node.is_capabilities_different(&capabilities)
     {
         node.set_data_radius(radius_capabilities.data_radius);
-        node.set_capabilities(capabilities);
+        node.set_capabilities(capabilities.to_vec());
         return Some(node);
     }
     None

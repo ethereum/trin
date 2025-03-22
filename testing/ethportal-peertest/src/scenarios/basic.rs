@@ -5,6 +5,7 @@ use ethportal_api::{
     types::{
         distance::Distance,
         network::Subnetwork,
+        ping_extensions::extension_types::PingExtensionType,
         portal_wire::{Message, Ping},
     },
     utils::bytes::hex_encode,
@@ -16,7 +17,7 @@ use jsonrpsee::async_client::Client;
 use ssz::Encode;
 use tracing::info;
 
-use crate::{utils::fixture_header_by_hash, Peertest, PeertestNode};
+use crate::{utils::fixture_header_by_hash, Peertest};
 
 pub async fn test_web3_client_version(target: &Client) {
     info!("Testing web3_clientVersion");
@@ -111,7 +112,7 @@ pub async fn test_discv5_talk_req(target: &Client, peertest: &Peertest) {
     let data_radius = U256::MAX.as_ssz_bytes();
     let request = Message::Ping(Ping {
         enr_seq: 1,
-        payload_type: 1,
+        payload_type: PingExtensionType::BasicRadius,
         payload: data_radius.clone().into(),
     })
     .as_ssz_bytes();
@@ -277,33 +278,6 @@ pub async fn test_lookup_enr(subnetwork: Subnetwork, peertest: &Peertest) {
     .await
     .unwrap();
     assert_eq!(result, peertest.nodes[0].enr);
-}
-
-pub async fn test_ping(subnetwork: Subnetwork, target: &Client, peertest: &Peertest) {
-    info!("Testing ping for {subnetwork}");
-    let bootnode_enr = peertest.bootnode.enr.clone();
-    let bootnode_sequence = bootnode_enr.seq();
-    let result = match subnetwork {
-        Subnetwork::Beacon => BeaconNetworkApiClient::ping(target, bootnode_enr),
-        Subnetwork::History => HistoryNetworkApiClient::ping(target, bootnode_enr),
-        Subnetwork::State => StateNetworkApiClient::ping(target, bootnode_enr),
-        _ => panic!("Unexpected subnetwork: {subnetwork}"),
-    }
-    .await
-    .unwrap_or_else(|_| panic!("Ping failed {subnetwork}"));
-    assert_eq!(
-        result.data_radius,
-        U256::from_be_slice(Distance::MAX.as_ssz_bytes().as_slice())
-    );
-    assert_eq!(result.enr_seq, bootnode_sequence);
-}
-
-pub async fn test_ping_cross_network(mainnet_target: &Client, angelfood_node: &PeertestNode) {
-    info!("Testing ping for history cross mainnet and angelfood discv5 protocol id");
-    let angelfood_enr = angelfood_node.enr.clone();
-    if let Ok(pong) = HistoryNetworkApiClient::ping(mainnet_target, angelfood_enr).await {
-        panic!("Expected ping to fail as mainnet/angelfood history nodes shouldn't be able to communicate {pong:?}");
-    };
 }
 
 pub async fn test_find_nodes(subnetwork: Subnetwork, target: &Client, peertest: &Peertest) {

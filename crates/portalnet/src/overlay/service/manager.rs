@@ -74,7 +74,7 @@ use crate::{
         command::OverlayCommand,
         config::FindContentConfig,
         errors::OverlayRequestError,
-        ping_extensions::PingExtension,
+        ping_extensions::PingExtensions,
         request::{
             ActiveOutgoingRequest, OverlayRequest, OverlayRequestId, OverlayResponse,
             RequestDirection,
@@ -110,7 +110,7 @@ impl<
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
         TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
-        TPingExtensions: 'static + PingExtension + Send + Sync,
+        TPingExtensions: 'static + PingExtensions + Send + Sync,
     > OverlayService<TContentKey, TMetric, TValidator, TStore, TPingExtensions>
 {
     /// Spawns the overlay network service.
@@ -2382,7 +2382,7 @@ where
     TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
     TStore: ContentStore<Key = TContentKey>,
-    TPingExtensions: PingExtension,
+    TPingExtensions: PingExtensions,
 {
     fn from(
         service: &OverlayService<TContentKey, TMetric, TValidator, TStore, TPingExtensions>,
@@ -2454,7 +2454,9 @@ mod tests {
         content_key::overlay::IdentityContentKey,
         distance::XorMetric,
         enr::generate_random_remote_enr,
-        ping_extensions::extensions::type_0::ClientInfoRadiusCapabilities,
+        ping_extensions::{
+            extension_types::PingExtensionType, extensions::type_0::ClientInfoRadiusCapabilities,
+        },
         portal_wire::{Ping, Pong, MAINNET},
     };
     use kbucket::KBucketsTable;
@@ -2594,10 +2596,10 @@ mod tests {
 
         let ping = Ping {
             enr_seq: source.seq() + 1,
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
-                service.ping_extensions.raw_extensions(),
+                service.ping_extensions.supported_extensions().to_vec(),
             )
             .into(),
         };
@@ -2644,10 +2646,10 @@ mod tests {
 
         let ping = Ping {
             enr_seq: source.seq(),
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
-                service.ping_extensions.raw_extensions(),
+                service.ping_extensions.supported_extensions().to_vec(),
             )
             .into(),
         };
@@ -2710,10 +2712,10 @@ mod tests {
 
         let pong = Pong {
             enr_seq: source.seq() + 1,
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
-                service.ping_extensions.raw_extensions(),
+                service.ping_extensions.supported_extensions().to_vec(),
             )
             .into(),
         };
@@ -2759,10 +2761,10 @@ mod tests {
 
         let pong = Pong {
             enr_seq: source.seq(),
-            payload_type: 0,
+            payload_type: PingExtensionType::Capabilities,
             payload: ClientInfoRadiusCapabilities::new(
                 data_radius,
-                service.ping_extensions.raw_extensions(),
+                service.ping_extensions.supported_extensions().to_vec(),
             )
             .into(),
         };

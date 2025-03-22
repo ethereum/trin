@@ -1,8 +1,12 @@
 use discv5::enr::NodeId;
 
 use crate::{
-    types::enr::Enr, BeaconContentKey, BeaconContentValue, HistoryContentKey, HistoryContentValue,
-    StateContentKey, StateContentValue,
+    types::{
+        enr::Enr,
+        ping_extensions::{decode::PingExtension, extension_types::PingExtensionType},
+    },
+    BeaconContentKey, BeaconContentValue, HistoryContentKey, HistoryContentValue, StateContentKey,
+    StateContentValue,
 };
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
@@ -17,8 +21,8 @@ pub enum Discv5Endpoint {
 pub enum StateEndpoint {
     /// params: None
     RoutingTableInfo,
-    /// params: [enr]
-    Ping(Enr),
+    /// params: [enr, payload_type, payload]
+    Ping(Enr, Option<PingExtensionType>, Option<PingExtension>),
     /// params: [enr]
     AddEnr(Enr),
     /// params: [node_id]
@@ -82,8 +86,8 @@ pub enum HistoryEndpoint {
     Offer(Enr, Vec<(HistoryContentKey, HistoryContentValue)>),
     /// params: [enr, content_key, content_value]
     TraceOffer(Enr, HistoryContentKey, HistoryContentValue),
-    /// params: [enr]
-    Ping(Enr),
+    /// params: [enr, payload_type, payload]
+    Ping(Enr, Option<PingExtensionType>, Option<PingExtension>),
     /// params: content_key
     GetContent(HistoryContentKey),
     /// params: content_key
@@ -138,8 +142,8 @@ pub enum BeaconEndpoint {
     Offer(Enr, Vec<(BeaconContentKey, BeaconContentValue)>),
     /// params: [enr, content_key, content_value]
     TraceOffer(Enr, BeaconContentKey, BeaconContentValue),
-    /// params: enr
-    Ping(Enr),
+    /// params: [enr, payload_type, payload]
+    Ping(Enr, Option<PingExtensionType>, Option<PingExtension>),
     /// params: content_key
     GetContent(BeaconContentKey),
     /// params: content_key
