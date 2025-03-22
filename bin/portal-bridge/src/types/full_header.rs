@@ -205,7 +205,10 @@ mod tests {
             // this block has no uncles, aka an empty uncles root is calculated.
             // there's no need to validate deserialization of uncles, since they're just a
             // vector of Header, which are already tested above
-            assert_eq!(block_body.uncles_root(), full_header.header.ommers_hash);
+            assert_eq!(
+                block_body.calculate_ommers_root(),
+                full_header.header.ommers_hash
+            );
         }
     }
 }

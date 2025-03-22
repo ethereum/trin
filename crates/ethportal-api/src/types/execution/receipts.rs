@@ -2,9 +2,8 @@ use alloy::{
     consensus::{proofs::calculate_receipt_root, ReceiptEnvelope},
     eips::{Decodable2718, Encodable2718},
     primitives::B256,
-    rlp::{Decodable, Encodable, Header as RlpHeader},
 };
-use bytes::BufMut;
+use alloy_rlp::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
@@ -12,7 +11,7 @@ use serde_json::Value;
 const MAX_TRANSACTION_COUNT: usize = 16384;
 
 /// Represents the `Receipts` datatype used by the chain history wire protocol
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct Receipts {
     pub receipt_list: Vec<ReceiptEnvelope>,
 }
@@ -20,33 +19,6 @@ pub struct Receipts {
 impl Receipts {
     pub fn root(&self) -> B256 {
         calculate_receipt_root(&self.receipt_list)
-    }
-}
-
-impl Encodable for Receipts {
-    fn encode(&self, out: &mut dyn BufMut) {
-        let mut list = Vec::<u8>::new();
-        for receipt in &self.receipt_list {
-            receipt.encode(&mut list);
-        }
-        let header = RlpHeader {
-            list: true,
-            payload_length: list.len(),
-        };
-        header.encode(out);
-        out.put_slice(list.as_slice());
-    }
-}
-
-impl Decodable for Receipts {
-    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
-        let mut bytes = RlpHeader::decode_bytes(buf, true)?;
-        let mut receipt_list: Vec<ReceiptEnvelope> = vec![];
-        let payload_view = &mut bytes;
-        while !payload_view.is_empty() {
-            receipt_list.push(ReceiptEnvelope::decode(payload_view)?);
-        }
-        Ok(Self { receipt_list })
     }
 }
 
@@ -119,6 +91,7 @@ mod tests {
         consensus::{Eip658Value, Receipt, TxReceipt},
         primitives::{Address, Bytes, Log, LogData},
     };
+    use alloy_rlp::Decodable;
     use serde_json::json;
     use ssz::{Decode, Encode};
 

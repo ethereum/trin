@@ -163,11 +163,11 @@ async fn test_eth_get_block_by_number() {
 
     assert_header(&block.header, &hwp.header);
     assert_eq!(block.header.size, Some(U256::from(8086)));
-    assert_eq!(block.transactions.len(), body.transactions().len());
+    assert_eq!(block.transactions.len(), body.transactions.len());
     assert_eq!(block.uncles.len(), 1);
     assert_eq!(
         block.withdrawals.unwrap_or_default().len(),
-        body.withdrawals().unwrap_or_default().len()
+        body.withdrawals.clone().unwrap_or_default().len()
     );
 
     let BlockTransactions::Hashes(hashes) = block.transactions else {
@@ -279,11 +279,11 @@ async fn test_eth_get_block_by_hash() {
 
     assert_header(&block.header, &hwp.header);
     assert_eq!(block.header.size, Some(U256::from(8086)));
-    assert_eq!(block.transactions.len(), body.transactions().len());
+    assert_eq!(block.transactions.len(), body.transactions.len());
     assert_eq!(block.uncles.len(), 1);
     assert_eq!(
         block.withdrawals.unwrap_or_default().len(),
-        body.withdrawals().unwrap_or_default().len()
+        body.withdrawals.clone().unwrap_or_default().len()
     );
 
     let BlockTransactions::Hashes(hashes) = block.transactions else {

@@ -1,5 +1,5 @@
 use alloy::{
-    eips::eip4895::Withdrawal as Eip4895Withdrawal,
+    eips::eip4895::Withdrawal as AlloyWithdrawal,
     primitives::{Address, B256, U256},
 };
 use serde::{Deserialize, Serialize};
@@ -148,7 +148,7 @@ pub struct Withdrawal {
     pub amount: u64,
 }
 
-impl From<&Withdrawal> for Eip4895Withdrawal {
+impl From<&Withdrawal> for AlloyWithdrawal {
     fn from(withdrawal: &Withdrawal) -> Self {
         Self {
             index: withdrawal.index,

@@ -212,18 +212,10 @@ impl EthApi {
         }
 
         let body = self.fetch_block_body(header.hash_slow()).await?;
-        let transactions = BlockTransactions::Hashes(
-            body.transactions()
-                .iter()
-                .map(|tx| *tx.hash())
-                .collect::<Vec<_>>(),
-        );
-        let uncles = body
-            .uncles()
-            .iter()
-            .map(|uncle| uncle.hash_slow())
-            .collect();
-        let withdrawals = body.withdrawals();
+        let transactions =
+            BlockTransactions::Hashes(body.transactions().map(|tx| *tx.hash()).collect::<Vec<_>>());
+        let uncles = body.ommers.iter().map(|uncle| uncle.hash_slow()).collect();
+        let withdrawals = body.withdrawals.clone();
 
         // Calculate block size:
         //   len(rlp(header, transactions, uncles, withdrawals))

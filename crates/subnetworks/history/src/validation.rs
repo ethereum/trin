@@ -75,7 +75,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .recursive_find_header_by_hash_with_proof(B256::from(key.block_hash))
                     .await?
                     .header;
-                let actual_uncles_root = block_body.uncles_root();
+                let actual_uncles_root = block_body.calculate_ommers_root();
                 if actual_uncles_root != trusted_header.ommers_hash {
                     return Err(anyhow!(
                         "Content validation failed: Invalid uncles root. Found: {:?} - Expected: {:?}",

@@ -171,7 +171,7 @@ fn decode_transactions(transactions: &Transactions) -> anyhow::Result<Vec<TxEnve
     transactions
         .into_par_iter()
         .map(|raw_tx| {
-            TxEnvelope::decode(&mut raw_tx.to_vec().as_slice())
+            TxEnvelope::decode(&mut &**raw_tx)
                 .map_err(|err| anyhow::anyhow!("Failed decoding transaction rlp: {err:?}"))
         })
         .collect::<anyhow::Result<Vec<_>>>()

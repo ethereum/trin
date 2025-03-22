@@ -22,7 +22,7 @@ pub fn process_era1_file(raw_era1: Vec<u8>, epoch_index: u64) -> anyhow::Result<
     for BlockTuple { header, body, .. } in Era1::iter_tuples(raw_era1) {
         let transactions_with_recovered_senders = body
             .body
-            .transactions()
+            .transactions
             .par_iter()
             .map(|tx| {
                 tx.recover_signer()
