@@ -418,24 +418,18 @@ impl<
         ping_extension_type: Option<PingExtensionType>,
         ping_extension: Option<PingExtension>,
     ) -> Result<Pong, OverlayRequestError> {
-        if ping_extension_type.is_none() && ping_extension.is_some() {
-            return Err(OverlayRequestError::InvalidRequest(
-                "`ping_extension_type`, must be specified if `ping_extension` is specified".into(),
-            ));
-        }
-
-        if let (Some(ping_extension_type), Some(ping_extension)) =
-            (ping_extension_type, &ping_extension)
-        {
-            if ping_extension_type != ping_extension.ping_extension_type() {
-                return Err(OverlayRequestError::InvalidRequest(
-                    "Payload type mismatch".into(),
-                ));
+        let ping_extension = match (ping_extension_type, ping_extension) {
+            (Some(ping_extension_type), Some(ping_extension)) => {
+                if ping_extension_type != ping_extension.ping_extension_type() {
+                    return Err(OverlayRequestError::InvalidRequest(
+                        "Payload type mismatch".into(),
+                    ));
+                }
+                ping_extension
             }
-        }
-
-        let ping_extension = ping_extension
-            .unwrap_or(self.default_ping_extension(ping_extension_type.unwrap_or_default())?);
+            (ping_extension_type, None) => self.default_ping_extension(ping_extension_type.unwrap_or_default())?,
+            (None, Some(ping_extension)) => return Err(OverlayRequestError::InvalidRequest(format!("`ping_extension_type`, must be specified if `ping_extension` is specified, received {ping_extension:?}"))),
+        };
 
         let request = Ping {
             enr_seq: self.discovery.local_enr().seq(),

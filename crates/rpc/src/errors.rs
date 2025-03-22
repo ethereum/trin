@@ -1,4 +1,8 @@
-use std::io;
+use core::fmt;
+use std::{
+    fmt::{Display, Formatter},
+    io,
+};
 
 use ethportal_api::{types::query_trace::QueryTrace, ContentValueError};
 use reth_ipc::server::IpcServerStartError;
@@ -128,12 +132,19 @@ pub enum WsHttpSamePortError {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PingPayloadTypeNotSupportedReason {
     /// The client doesn't support this payload type.
-    #[error("client")]
     Client,
     /// The subnetwork doesn't support this payload type.
-    #[error("subnetwork")]
     Subnetwork,
+}
+
+impl Display for PingPayloadTypeNotSupportedReason {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            PingPayloadTypeNotSupportedReason::Client => write!(f, "client"),
+            PingPayloadTypeNotSupportedReason::Subnetwork => write!(f, "subnetwork"),
+        }
+    }
 }
