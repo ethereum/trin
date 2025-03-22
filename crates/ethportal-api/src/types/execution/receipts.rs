@@ -2,9 +2,8 @@ use alloy::{
     consensus::{proofs::calculate_receipt_root, ReceiptEnvelope},
     eips::{Decodable2718, Encodable2718},
     primitives::B256,
-    rlp::{Decodable, Encodable, Header as RlpHeader},
 };
-use bytes::BufMut;
+use alloy_rlp::{RlpDecodableWrapper, RlpEncodableWrapper};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
@@ -12,41 +11,12 @@ use serde_json::Value;
 const MAX_TRANSACTION_COUNT: usize = 16384;
 
 /// Represents the `Receipts` datatype used by the chain history wire protocol
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Receipts {
-    pub receipt_list: Vec<ReceiptEnvelope>,
-}
+#[derive(Debug, Clone, PartialEq, Eq, RlpEncodableWrapper, RlpDecodableWrapper)]
+pub struct Receipts(pub Vec<ReceiptEnvelope>);
 
 impl Receipts {
     pub fn root(&self) -> B256 {
-        calculate_receipt_root(&self.receipt_list)
-    }
-}
-
-impl Encodable for Receipts {
-    fn encode(&self, out: &mut dyn BufMut) {
-        let mut list = Vec::<u8>::new();
-        for receipt in &self.receipt_list {
-            receipt.encode(&mut list);
-        }
-        let header = RlpHeader {
-            list: true,
-            payload_length: list.len(),
-        };
-        header.encode(out);
-        out.put_slice(list.as_slice());
-    }
-}
-
-impl Decodable for Receipts {
-    fn decode(buf: &mut &[u8]) -> alloy::rlp::Result<Self> {
-        let mut bytes = RlpHeader::decode_bytes(buf, true)?;
-        let mut receipt_list: Vec<ReceiptEnvelope> = vec![];
-        let payload_view = &mut bytes;
-        while !payload_view.is_empty() {
-            receipt_list.push(ReceiptEnvelope::decode(payload_view)?);
-        }
-        Ok(Self { receipt_list })
+        calculate_receipt_root(&self.0)
     }
 }
 
@@ -58,7 +28,7 @@ impl ssz::Encode for Receipts {
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
         let encoded_receipts: Vec<Vec<u8>> = self
-            .receipt_list
+            .0
             .iter()
             .map(|receipt| receipt.encoded_2718())
             .collect();
@@ -87,9 +57,7 @@ impl ssz::Decode for Receipts {
                     "Receipt list contains invalid receipts: {e:?}",
                 ))
             })?;
-        Ok(Self {
-            receipt_list: receipts,
-        })
+        Ok(Self(receipts))
     }
 }
 
@@ -104,9 +72,7 @@ impl<'de> Deserialize<'de> for Receipts {
         let result = obj["result"].take();
         let results: Vec<ReceiptEnvelope> =
             serde_json::from_value(result).map_err(serde::de::Error::custom)?;
-        Ok(Self {
-            receipt_list: results,
-        })
+        Ok(Self(results))
     }
 }
 
@@ -119,6 +85,7 @@ mod tests {
         consensus::{Eip658Value, Receipt, TxReceipt},
         primitives::{Address, Bytes, Log, LogData},
     };
+    use alloy_rlp::Decodable;
     use serde_json::json;
     use ssz::{Decode, Encode};
 
@@ -167,29 +134,27 @@ mod tests {
 
     #[test_log::test]
     fn calculate_receipts_root() {
-        let receipts = Receipts {
-            receipt_list: vec![
-                Decodable::decode(&mut hex_decode(RECEIPT_0).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_1).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_2).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_3).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_4).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_5).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_6).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_7).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_8).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_9).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_10).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_11).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_12).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_13).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_14).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_15).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_16).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_17).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_18).unwrap().as_slice()).unwrap(),
-            ],
-        };
+        let receipts = Receipts(vec![
+            Decodable::decode(&mut hex_decode(RECEIPT_0).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_1).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_2).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_3).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_4).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_5).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_6).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_7).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_8).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_9).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_10).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_11).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_12).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_13).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_14).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_15).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_16).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_17).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_18).unwrap().as_slice()).unwrap(),
+        ]);
         assert_eq!(
             hex_encode(receipts.root()),
             EXPECTED_RECEIPTS_ROOT.to_owned()
@@ -198,29 +163,27 @@ mod tests {
 
     #[test_log::test]
     fn ssz_encoding_decoding_receipts() {
-        let receipts = Receipts {
-            receipt_list: vec![
-                Decodable::decode(&mut hex_decode(RECEIPT_0).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_1).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_2).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_3).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_4).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_5).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_6).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_7).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_8).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_9).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_10).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_11).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_12).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_13).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_14).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_15).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_16).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_17).unwrap().as_slice()).unwrap(),
-                Decodable::decode(&mut hex_decode(RECEIPT_18).unwrap().as_slice()).unwrap(),
-            ],
-        };
+        let receipts = Receipts(vec![
+            Decodable::decode(&mut hex_decode(RECEIPT_0).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_1).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_2).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_3).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_4).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_5).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_6).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_7).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_8).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_9).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_10).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_11).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_12).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_13).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_14).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_15).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_16).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_17).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(RECEIPT_18).unwrap().as_slice()).unwrap(),
+        ]);
         let encoded = receipts.as_ssz_bytes();
 
         let expected: Vec<u8> =

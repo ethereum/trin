@@ -218,9 +218,7 @@ impl ExecutionApi {
     ) -> anyhow::Result<(HistoryContentKey, HistoryContentValue)> {
         // Build receipts
         let receipts = match full_header.txs.len() {
-            0 => Receipts {
-                receipt_list: vec![],
-            },
+            0 => Receipts(vec![]),
             _ => self.get_trusted_receipts(full_header.header.number).await?,
         };
 
