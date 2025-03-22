@@ -1,8 +1,9 @@
-use alloy::{primitives::U256, rpc::types::TransactionRequest};
-use ethportal_api::types::execution::transaction::{
-    AccessListTransaction, BlobTransaction, EIP1559Transaction, LegacyTransaction, ToAddress,
+use alloy::{
+    consensus::{TxEip1559, TxEip2930, TxEip4844, TxLegacy},
+    primitives::U256,
+    rpc::types::TransactionRequest,
 };
-use revm_primitives::{AccessListItem, SpecId, TransactTo, TxEnv};
+use revm_primitives::{AccessListItem, SpecId, TransactTo, TxEnv, TxKind};
 
 use super::spec_id::get_spec_id;
 
@@ -10,45 +11,44 @@ pub trait TxEnvModifier {
     fn modify(&self, block_number: u64, tx_env: &mut TxEnv);
 }
 
-impl TxEnvModifier for LegacyTransaction {
+impl TxEnvModifier for TxLegacy {
     fn modify(&self, block_number: u64, tx_env: &mut TxEnv) {
-        tx_env.gas_limit = self.gas.to::<u64>();
+        tx_env.gas_limit = self.gas_limit;
         tx_env.gas_price = U256::from(self.gas_price);
         tx_env.gas_priority_fee = None;
         tx_env.transact_to = match self.to {
-            ToAddress::Exists(to) => TransactTo::Call(to),
-            ToAddress::Empty => TransactTo::Create,
+            TxKind::Call(to) => TransactTo::Call(to),
+            TxKind::Create => TransactTo::Create,
         };
         tx_env.value = self.value;
-        tx_env.data = alloy::primitives::Bytes(self.data.clone());
+        tx_env.data = self.input.clone();
         tx_env.chain_id = if get_spec_id(block_number).is_enabled_in(SpecId::SPURIOUS_DRAGON) {
             Some(1)
         } else {
             None
         };
-        tx_env.nonce = Some(self.nonce.to::<u64>());
+        tx_env.nonce = Some(self.nonce);
         tx_env.access_list.clear();
         tx_env.blob_hashes.clear();
         tx_env.max_fee_per_blob_gas.take();
     }
 }
 
-impl TxEnvModifier for EIP1559Transaction {
+impl TxEnvModifier for TxEip1559 {
     fn modify(&self, _block_number: u64, tx_env: &mut TxEnv) {
-        tx_env.gas_limit = self.gas_limit.to::<u64>();
-        tx_env.gas_price = self.max_fee_per_gas;
-        tx_env.gas_priority_fee = Some(self.max_priority_fee_per_gas);
+        tx_env.gas_limit = self.gas_limit;
+        tx_env.gas_price = U256::from(self.max_fee_per_gas);
+        tx_env.gas_priority_fee = Some(U256::from(self.max_priority_fee_per_gas));
         tx_env.transact_to = match self.to {
-            ToAddress::Exists(to) => TransactTo::Call(to),
-            ToAddress::Empty => TransactTo::Create,
+            TxKind::Call(to) => TransactTo::Call(to),
+            TxKind::Create => TransactTo::Create,
         };
         tx_env.value = self.value;
-        tx_env.data = alloy::primitives::Bytes(self.data.clone());
-        tx_env.chain_id = Some(self.chain_id.to::<u64>());
-        tx_env.nonce = Some(self.nonce.to::<u64>());
+        tx_env.data = self.input.clone();
+        tx_env.chain_id = Some(self.chain_id);
+        tx_env.nonce = Some(self.nonce);
         tx_env.access_list = self
             .access_list
-            .list
             .iter()
             .map(|l| AccessListItem {
                 address: l.address,
@@ -60,22 +60,21 @@ impl TxEnvModifier for EIP1559Transaction {
     }
 }
 
-impl TxEnvModifier for AccessListTransaction {
+impl TxEnvModifier for TxEip2930 {
     fn modify(&self, _block_number: u64, tx_env: &mut TxEnv) {
-        tx_env.gas_limit = self.gas_limit.to::<u64>();
-        tx_env.gas_price = self.gas_price;
+        tx_env.gas_limit = self.gas_limit;
+        tx_env.gas_price = U256::from(self.gas_price);
         tx_env.gas_priority_fee = None;
         tx_env.transact_to = match self.to {
-            ToAddress::Exists(to) => TransactTo::Call(to),
-            ToAddress::Empty => TransactTo::Create,
+            TxKind::Call(to) => TransactTo::Call(to),
+            TxKind::Create => TransactTo::Create,
         };
         tx_env.value = self.value;
-        tx_env.data = alloy::primitives::Bytes(self.data.clone());
-        tx_env.chain_id = Some(self.chain_id.to::<u64>());
-        tx_env.nonce = Some(self.nonce.to::<u64>());
+        tx_env.data = self.input.clone();
+        tx_env.chain_id = Some(self.chain_id);
+        tx_env.nonce = Some(self.nonce);
         tx_env.access_list = self
             .access_list
-            .list
             .iter()
             .map(|l| AccessListItem {
                 address: l.address,
@@ -87,22 +86,18 @@ impl TxEnvModifier for AccessListTransaction {
     }
 }
 
-impl TxEnvModifier for BlobTransaction {
+impl TxEnvModifier for TxEip4844 {
     fn modify(&self, _block_number: u64, tx_env: &mut TxEnv) {
-        tx_env.gas_limit = self.gas_limit.to::<u64>();
-        tx_env.gas_price = self.max_fee_per_gas;
-        tx_env.gas_priority_fee = Some(self.max_priority_fee_per_gas);
-        tx_env.transact_to = match self.to {
-            ToAddress::Exists(to) => TransactTo::Call(to),
-            ToAddress::Empty => TransactTo::Create,
-        };
+        tx_env.gas_limit = self.gas_limit;
+        tx_env.gas_price = U256::from(self.max_fee_per_gas);
+        tx_env.gas_priority_fee = Some(U256::from(self.max_priority_fee_per_gas));
+        tx_env.transact_to = TransactTo::Call(self.to);
         tx_env.value = self.value;
-        tx_env.data = alloy::primitives::Bytes(self.data.clone());
-        tx_env.chain_id = Some(self.chain_id.to::<u64>());
-        tx_env.nonce = Some(self.nonce.to::<u64>());
+        tx_env.data = self.input.clone();
+        tx_env.chain_id = Some(self.chain_id);
+        tx_env.nonce = Some(self.nonce);
         tx_env.access_list = self
             .access_list
-            .list
             .iter()
             .map(|l| AccessListItem {
                 address: l.address,
@@ -152,23 +147,21 @@ impl TxEnvModifier for TransactionRequest {
 
 #[cfg(test)]
 mod tests {
-    use alloy::primitives::{bytes::Bytes, U64};
-    use revm_primitives::TxEnv;
+    use alloy::primitives::bytes::Bytes;
+    use revm_primitives::{TxEnv, TxKind};
 
     use super::*;
 
     #[test]
     fn test_legacy_tx_env_modifier() {
-        let tx = LegacyTransaction {
-            nonce: U256::from(1),
-            gas_price: U256::from(1),
-            gas: U256::from(1),
-            to: ToAddress::Exists(Default::default()),
+        let tx = TxLegacy {
+            nonce: 1,
+            gas_price: 1,
+            gas_limit: 1,
+            to: TxKind::Call(Default::default()),
             value: U256::from(1),
-            data: Bytes::from(vec![1, 2, 3]),
-            v: U64::from(1),
-            r: U256::from(1),
-            s: U256::from(1),
+            input: revm_primitives::Bytes(Bytes::from(vec![1, 2, 3])),
+            chain_id: None,
         };
         let mut tx_env = TxEnv::default();
         tx.modify(0, &mut tx_env);
@@ -182,19 +175,16 @@ mod tests {
 
     #[test]
     fn test_eip1559_tx_env_modifier() {
-        let tx = EIP1559Transaction {
-            nonce: U256::from(1),
-            max_fee_per_gas: U256::from(1),
-            max_priority_fee_per_gas: U256::from(1),
-            gas_limit: U256::from(1),
-            to: ToAddress::Exists(Default::default()),
+        let tx = TxEip1559 {
+            nonce: 1,
+            max_fee_per_gas: 1,
+            max_priority_fee_per_gas: 1,
+            gas_limit: 1,
+            to: TxKind::Call(Default::default()),
             value: U256::from(1),
-            data: Bytes::from(vec![1, 2, 3]),
-            chain_id: U256::from(1),
+            input: revm_primitives::Bytes(Bytes::from(vec![1, 2, 3])),
+            chain_id: 1,
             access_list: Default::default(),
-            y_parity: U64::from(1),
-            r: U256::from(1),
-            s: U256::from(1),
         };
         let mut tx_env = TxEnv::default();
         tx.modify(0, &mut tx_env);
@@ -211,18 +201,15 @@ mod tests {
 
     #[test]
     fn test_access_list_tx_env_modifier() {
-        let tx = AccessListTransaction {
-            nonce: U256::from(1),
-            gas_price: U256::from(1),
-            gas_limit: U256::from(1),
-            to: ToAddress::Exists(Default::default()),
+        let tx = TxEip2930 {
+            nonce: 1,
+            gas_price: 1,
+            gas_limit: 1,
+            to: TxKind::Call(Default::default()),
             value: U256::from(1),
-            data: Bytes::from(vec![1, 2, 3]),
-            chain_id: U256::from(1),
+            input: revm_primitives::Bytes(Bytes::from(vec![1, 2, 3])),
+            chain_id: 1,
             access_list: Default::default(),
-            y_parity: U64::from(1),
-            r: U256::from(1),
-            s: U256::from(1),
         };
         let mut tx_env = TxEnv::default();
         tx.modify(0, &mut tx_env);
@@ -238,21 +225,18 @@ mod tests {
 
     #[test]
     fn test_blob_tx_env_modifier() {
-        let tx = BlobTransaction {
-            nonce: U256::from(1),
-            max_fee_per_gas: U256::from(1),
-            max_priority_fee_per_gas: U256::from(1),
-            max_fee_per_blob_gas: U256::from(1),
-            gas_limit: U256::from(1),
-            to: ToAddress::Exists(Default::default()),
+        let tx = TxEip4844 {
+            nonce: 1,
+            max_fee_per_gas: 1,
+            max_priority_fee_per_gas: 1,
+            max_fee_per_blob_gas: 1,
+            gas_limit: 1,
+            to: Default::default(),
             value: U256::from(1),
-            data: Bytes::from(vec![1, 2, 3]),
-            chain_id: U256::from(1),
+            input: revm_primitives::Bytes(Bytes::from(vec![1, 2, 3])),
+            chain_id: 1,
             access_list: Default::default(),
             blob_versioned_hashes: Default::default(),
-            y_parity: U64::from(1),
-            r: U256::from(1),
-            s: U256::from(1),
         };
         let mut tx_env = TxEnv::default();
         tx.modify(0, &mut tx_env);

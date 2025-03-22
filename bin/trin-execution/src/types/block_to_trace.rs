@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use ethportal_api::{types::execution::transaction::Transaction, Header};
+use alloy::consensus::{Header, TxEnvelope};
 
 #[derive(Clone, Debug, PartialEq, Default, Eq)]
 pub enum BlockToTrace {
@@ -31,7 +31,7 @@ impl BlockToTrace {
         &self,
         root_dir: &Path,
         header: &Header,
-        tx: &Transaction,
+        tx: &TxEnvelope,
     ) -> std::io::Result<Option<Box<dyn Write>>> {
         let block_number = header.number;
         if self.should_trace(block_number) {

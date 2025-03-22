@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use alloy::primitives::B256;
+use alloy::{consensus::Header, primitives::B256};
 use anyhow::{anyhow, ensure};
 use ethportal_api::{
     types::execution::{
-        block_body::BlockBody, header::Header, header_with_proof::HeaderWithProof,
-        receipts::Receipts,
+        block_body::BlockBody, header_with_proof::HeaderWithProof, receipts::Receipts,
     },
     utils::bytes::hex_encode,
     HistoryContentKey,
@@ -33,7 +32,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
                         anyhow!("Header by hash content has invalid encoding: {err:?}")
                     })?;
-                let header_hash = header_with_proof.header.hash();
+                let header_hash = header_with_proof.header.hash_slow();
                 ensure!(
                     header_hash == B256::from(key.block_hash),
                     "Content validation failed: Invalid header hash. Found: {header_hash:?} - Expected: {:?}",
@@ -76,15 +75,15 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .recursive_find_header_by_hash_with_proof(B256::from(key.block_hash))
                     .await?
                     .header;
-                let actual_uncles_root = block_body.uncles_root();
-                if actual_uncles_root != trusted_header.uncles_hash {
+                let actual_uncles_root = block_body.calculate_ommers_root();
+                if actual_uncles_root != trusted_header.ommers_hash {
                     return Err(anyhow!(
                         "Content validation failed: Invalid uncles root. Found: {:?} - Expected: {:?}",
                         actual_uncles_root,
-                        trusted_header.uncles_hash
+                        trusted_header.ommers_hash
                     ));
                 }
-                let actual_txs_root = block_body.transactions_root()?;
+                let actual_txs_root = block_body.transactions_root();
                 if actual_txs_root != trusted_header.transactions_root {
                     return Err(anyhow!(
                         "Content validation failed: Invalid transactions root. Found: {:?} - Expected: {:?}",
@@ -105,7 +104,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .recursive_find_header_by_hash_with_proof(B256::from(key.block_hash))
                     .await?
                     .header;
-                let actual_receipts_root = receipts.root()?;
+                let actual_receipts_root = receipts.root();
                 if actual_receipts_root != trusted_header.receipts_root {
                     return Err(anyhow!(
                         "Content validation failed: Invalid receipts root. Found: {:?} - Expected: {:?}",
@@ -122,7 +121,6 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use alloy::primitives::U256;
     use ethportal_api::utils::bytes::hex_decode;
     use serde_json::Value;
     use ssz::Encode;
@@ -150,7 +148,7 @@ mod tests {
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key =
-            HistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash());
+            HistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash_slow());
         chain_history_validator
             .validate_content(&content_key, &header_with_proof_ssz)
             .await
@@ -170,7 +168,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash());
+        let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash_slow());
         chain_history_validator
             .validate_content(&content_key, &content_value)
             .await
@@ -186,12 +184,12 @@ mod tests {
 
         // set invalid block gaslimit
         // valid gaslimit = 3141592
-        header.header.gas_limit = U256::from(3141591);
+        header.header.gas_limit = 3141591;
 
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash());
+        let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash_slow());
         chain_history_validator
             .validate_content(&content_key, &content_value)
             .await
@@ -242,7 +240,7 @@ mod tests {
 
         // set invalid block gaslimit
         // valid gaslimit = 3141592
-        header.header.gas_limit = U256::from(3141591);
+        header.header.gas_limit = 3141591;
 
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();

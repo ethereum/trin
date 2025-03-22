@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use alloy::{primitives::Bytes, rlp::Decodable};
+use alloy::{consensus::Header, primitives::Bytes, rlp::Decodable};
 use anyhow::Result;
 use ethportal_api::{
     types::{
@@ -12,8 +12,8 @@ use ethportal_api::{
         execution::header_with_proof::HeaderWithProof,
     },
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, BlockBodyKey, BlockReceiptsKey,
-    ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
-    RawContentValue, StateContentKey, StateContentValue, StateNetworkApiClient,
+    ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient, RawContentValue,
+    StateContentKey, StateContentValue, StateNetworkApiClient,
 };
 use futures::{Future, TryFutureExt};
 use serde::Deserializer;
@@ -223,7 +223,7 @@ fn read_binary_history_fixture(
             match dependent_type {
                 DependentType::BlockBody => {
                     let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
-                        block_hash: header_content_value.header.hash().0,
+                        block_hash: header_content_value.header.hash_slow().0,
                     });
                     let content_value =
                         HistoryContentValue::decode(&content_key, &dependent_value).unwrap();
@@ -231,7 +231,7 @@ fn read_binary_history_fixture(
                 }
                 DependentType::Receipts => {
                     let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
-                        block_hash: header_content_value.header.hash().0,
+                        block_hash: header_content_value.header.hash_slow().0,
                     });
                     let content_value =
                         HistoryContentValue::decode(&content_key, &dependent_value).unwrap();
@@ -241,7 +241,7 @@ fn read_binary_history_fixture(
         }
         None => {
             let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
-                block_hash: header_content_value.header.hash().0,
+                block_hash: header_content_value.header.hash_slow().0,
             });
             let content_value = HistoryContentValue::BlockHeaderWithProof(header_content_value);
             (content_key, content_value)

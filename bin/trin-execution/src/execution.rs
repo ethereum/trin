@@ -3,10 +3,12 @@ use std::{
     sync::Arc,
 };
 
-use alloy::primitives::B256;
+use alloy::{
+    consensus::{Header, TxEnvelope},
+    primitives::B256,
+};
 use anyhow::ensure;
 use eth_trie::{RootWithTrieDiff, Trie};
-use ethportal_api::{types::execution::transaction::Transaction, Header};
 use revm::inspectors::TracerEip3155;
 use tokio::sync::{oneshot::Receiver, Mutex};
 use tracing::{info, warn};
@@ -148,7 +150,7 @@ impl TrinExecution {
         Ok(root_with_trie_diff)
     }
 
-    fn create_tracer(&self, header: &Header, tx: &Transaction) -> Option<TracerEip3155> {
+    fn create_tracer(&self, header: &Header, tx: &TxEnvelope) -> Option<TracerEip3155> {
         self.config
             .block_to_trace
             .create_trace_writer(&self.data_directory, header, tx)

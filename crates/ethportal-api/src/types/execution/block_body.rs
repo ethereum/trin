@@ -1,56 +1,53 @@
-use std::vec;
+use std::{ops::Deref, vec};
 
 use alloy::{
-    primitives::{keccak256, B256},
-    rlp::{self, Decodable, Encodable},
+    consensus::{
+        proofs::calculate_transaction_root, BlockBody as AlloyBlockBody, Header, TxEnvelope,
+    },
+    eips::{
+        eip4895::{Withdrawal, Withdrawals},
+        Decodable2718, Encodable2718,
+    },
+    primitives::B256,
+    rlp::Decodable,
 };
+use alloy_rlp::{RlpDecodableWrapper, RlpEncodableWrapper};
 use anyhow::{anyhow, bail};
-use bytes::Buf;
 use serde::Deserialize;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
-use ssz_derive::Encode;
-
-use super::{
-    header::Header,
-    transaction::{Transaction, TransactionWithRlpHeader},
-};
-use crate::{
-    types::execution::withdrawal::Withdrawal, utils::roots::calculate_merkle_patricia_root,
-};
 
 pub const SHANGHAI_TIMESTAMP: u64 = 1681338455;
 // block 15537393 timestamp
 pub const MERGE_TIMESTAMP: u64 = 1663224162;
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Encode)]
-#[ssz(enum_behaviour = "transparent")]
-pub enum BlockBody {
-    Legacy(BlockBodyLegacy),
-    Merge(BlockBodyMerge),
-    Shanghai(BlockBodyShanghai),
-}
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, RlpEncodableWrapper, RlpDecodableWrapper)]
+pub struct BlockBody(pub AlloyBlockBody<TxEnvelope>);
 
-impl Encodable for BlockBody {
-    fn encode(&self, out: &mut dyn bytes::BufMut) {
-        match self {
-            BlockBody::Legacy(body) => body.encode(out),
-            BlockBody::Merge(body) => body.encode(out),
-            BlockBody::Shanghai(body) => body.encode(out),
-        };
+impl Deref for BlockBody {
+    type Target = AlloyBlockBody<TxEnvelope>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
-impl Decodable for BlockBody {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        if let Ok(val) = BlockBodyLegacy::decode(buf) {
-            Ok(BlockBody::Legacy(val))
-        } else if let Ok(val) = BlockBodyMerge::decode(buf) {
-            Ok(BlockBody::Merge(val))
-        } else if let Ok(val) = BlockBodyShanghai::decode(buf) {
-            Ok(BlockBody::Shanghai(val))
+impl Encode for BlockBody {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        // Portal has 2 types of block bodies - pre and post Shanghai fork.
+        // The difference is that post Shanghai block bodies contain withdrawals.
+        if self.withdrawals.is_some() {
+            self.ssz_encode_post_shanghai(buf);
         } else {
-            Err(rlp::Error::Custom("Invalid block body rlp"))
+            self.ssz_encode_pre_shanghai(buf);
         }
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        self.as_ssz_bytes().len()
     }
 }
 
@@ -59,17 +56,11 @@ impl ssz::Decode for BlockBody {
         false
     }
 
-    fn ssz_fixed_len() -> usize {
-        0
-    }
-
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        if let Ok(val) = BlockBodyLegacy::from_ssz_bytes(bytes) {
-            Ok(BlockBody::Legacy(val))
-        } else if let Ok(val) = BlockBodyMerge::from_ssz_bytes(bytes) {
-            Ok(BlockBody::Merge(val))
-        } else if let Ok(val) = BlockBodyShanghai::from_ssz_bytes(bytes) {
-            Ok(BlockBody::Shanghai(val))
+        if let Ok(val) = BlockBody::ssz_decode_pre_shanghai(bytes) {
+            Ok(val)
+        } else if let Ok(val) = BlockBody::ssz_decode_post_shanghai(bytes) {
+            Ok(val)
         } else {
             Err(ssz::DecodeError::BytesInvalid(
                 anyhow!("Invalid block body ssz bytes").to_string(),
@@ -81,24 +72,23 @@ impl ssz::Decode for BlockBody {
 impl BlockBody {
     pub fn validate_against_header(&self, header: &Header) -> anyhow::Result<()> {
         // Validate uncles root
-        let uncles_root = self.uncles_root();
-        if uncles_root != header.uncles_hash {
+        let uncles_root = self.calculate_ommers_root();
+        if uncles_root != header.ommers_hash {
             bail!(
                 "Block body uncles root doesn't match header uncles root: {uncles_root:?} - {:?}",
-                header.uncles_hash
+                header.ommers_hash
             );
         }
         // Validate txs root
-        let txs_root = self.transactions_root()?;
+        let txs_root = self.transactions_root();
         if txs_root != header.transactions_root {
             bail!(
                 "Block body txs root doesn't match header txs root: {txs_root:?} - {:?}",
                 header.transactions_root
             );
         }
-        if let Self::Shanghai(_) = self {
-            // Validate withdrawals root
-            let actual = self.withdrawals_root()?;
+
+        if let Some(actual) = self.calculate_withdrawals_root() {
             let expected = match header.withdrawals_root {
                 Some(val) => val,
                 None => bail!("Block header does not have withdrawals root"),
@@ -112,345 +102,96 @@ impl BlockBody {
         Ok(())
     }
 
-    pub fn transactions(&self) -> &[Transaction] {
-        match self {
-            BlockBody::Legacy(body) => &body.txs,
-            BlockBody::Merge(body) => &body.txs,
-            BlockBody::Shanghai(body) => &body.txs,
-        }
+    pub fn transactions_root(&self) -> B256 {
+        calculate_transaction_root(&self.transactions)
     }
 
-    pub fn transactions_root(&self) -> anyhow::Result<B256> {
-        calculate_merkle_patricia_root(self.transactions())
-    }
-
-    /// Returns reference to uncle headers.
-    pub fn uncles(&self) -> &[Header] {
-        match self {
-            BlockBody::Legacy(body) => &body.uncles,
-            BlockBody::Merge(_) => &[],
-            BlockBody::Shanghai(_) => &[],
-        }
-    }
-
-    pub fn uncles_root(&self) -> B256 {
-        let encoded_uncles = alloy_rlp::encode(self.uncles().to_vec());
-        keccak256(&encoded_uncles)
-    }
-
-    /// Returns reference to block's withdrawals.
-    ///
-    /// Returns None pre Shanghai fork.
-    pub fn withdrawals(&self) -> Option<&[Withdrawal]> {
-        match self {
-            BlockBody::Legacy(_) => None,
-            BlockBody::Merge(_) => None,
-            BlockBody::Shanghai(body) => Some(&body.withdrawals),
-        }
-    }
-
-    pub fn withdrawals_root(&self) -> anyhow::Result<B256> {
-        let Some(withdrawals) = self.withdrawals() else {
-            bail!("Block body doesn't have withdrawals");
-        };
-        calculate_merkle_patricia_root(withdrawals)
-    }
-}
-
-fn rlp_encode_transaction_list_with_header(out: &mut dyn bytes::BufMut, txs: &[Transaction]) {
-    txs.iter()
-        .cloned()
-        .map(TransactionWithRlpHeader)
-        .collect::<Vec<_>>()
-        .encode(out);
-}
-
-fn rlp_decode_transaction_list_with_header(buf: &mut &[u8]) -> rlp::Result<Vec<Transaction>> {
-    let txs = Vec::<TransactionWithRlpHeader>::decode(buf)?;
-    Ok(txs.into_iter().map(|tx| tx.0).collect())
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct BlockBodyLegacy {
-    pub txs: Vec<Transaction>,
-    pub uncles: Vec<Header>,
-}
-
-impl Encodable for BlockBodyLegacy {
-    fn encode(&self, out: &mut dyn bytes::BufMut) {
-        let mut list = Vec::<u8>::new();
-        rlp_encode_transaction_list_with_header(&mut list, &self.txs);
-        self.uncles.encode(&mut list);
-        let header = rlp::Header {
-            list: true,
-            payload_length: list.len(),
-        };
-        header.encode(out);
-        out.put_slice(list.as_slice());
-    }
-}
-
-impl Decodable for BlockBodyLegacy {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        let mut payload_view = rlp::Header::decode_bytes(buf, /* is_list= */ true)?;
-        let payload_length = payload_view.remaining();
-
-        let txs = rlp_decode_transaction_list_with_header(&mut payload_view)?;
-        let uncles = Vec::<Header>::decode(&mut payload_view)?;
-
-        if payload_view.has_remaining() {
-            let consumed = payload_length - payload_view.remaining();
-            return Err(rlp::Error::ListLengthMismatch {
-                expected: payload_length,
-                got: consumed,
-            });
-        }
-
-        Ok(Self { txs, uncles })
-    }
-}
-
-impl ssz::Encode for BlockBodyLegacy {
-    // note: MAX_LENGTH attributes (defined in portal history spec) are not currently enforced
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
+    fn ssz_encode_pre_shanghai(&self, buf: &mut Vec<u8>) {
         let offset =
             <Vec<Vec<u8>> as Encode>::ssz_fixed_len() + <Vec<u8> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy::rlp::encode).collect();
-        let rlp_uncles: Vec<u8> = alloy::rlp::encode(&self.uncles);
+        let encoded_txs: Vec<Vec<u8>> = self
+            .transactions()
+            .map(|transaction| transaction.encoded_2718())
+            .collect();
+        let rlp_uncles: Vec<u8> = alloy::rlp::encode(&self.0.ommers);
         encoder.append(&encoded_txs);
         encoder.append(&rlp_uncles);
         encoder.finalize();
     }
 
-    fn ssz_bytes_len(&self) -> usize {
-        self.as_ssz_bytes().len()
-    }
-}
-
-impl ssz::Decode for BlockBodyLegacy {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+    fn ssz_decode_pre_shanghai(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
         let mut builder = SszDecoderBuilder::new(bytes);
         builder.register_type::<Vec<Vec<u8>>>()?;
         builder.register_type::<Vec<u8>>()?;
         let mut decoder = builder.build()?;
-        let txs: Vec<Vec<u8>> = decoder.decode_next()?;
-        let uncles: Vec<u8> = decoder.decode_next()?;
-        let txs: Vec<Transaction> = txs
+        let transactions: Vec<Vec<u8>> = decoder.decode_next()?;
+        let ommers: Vec<u8> = decoder.decode_next()?;
+        let transactions: Vec<TxEnvelope> = transactions
             .iter()
-            .map(|bytes| Decodable::decode(&mut bytes.as_slice()))
-            .collect::<Result<Vec<Transaction>, _>>()
+            .map(|bytes| TxEnvelope::decode_2718(&mut bytes.as_slice()))
+            .collect::<Result<Vec<TxEnvelope>, _>>()
             .map_err(|e| {
                 ssz::DecodeError::BytesInvalid(format!(
                     "Legacy block body contains invalid txs: {e:?}",
                 ))
             })?;
-        let uncles: Vec<Header> = Decodable::decode(&mut uncles.as_slice()).map_err(|e| {
+        let ommers: Vec<Header> = Decodable::decode(&mut ommers.as_slice()).map_err(|e| {
             ssz::DecodeError::BytesInvalid(format!("Legacy block body contains invalid txs: {e:?}"))
         })?;
-        Ok(Self { txs, uncles })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct BlockBodyMerge {
-    pub txs: Vec<Transaction>,
-}
-
-impl Encodable for BlockBodyMerge {
-    fn encode(&self, out: &mut dyn bytes::BufMut) {
-        let mut list = Vec::<u8>::new();
-        rlp_encode_transaction_list_with_header(&mut list, &self.txs);
-        let header = rlp::Header {
-            list: true,
-            payload_length: list.len(),
-        };
-        header.encode(out);
-        out.put_slice(list.as_slice());
-    }
-}
-
-impl Decodable for BlockBodyMerge {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        let mut payload_view = rlp::Header::decode_bytes(buf, /* is_list= */ true)?;
-        let payload_length = payload_view.remaining();
-
-        let txs = rlp_decode_transaction_list_with_header(&mut payload_view)?;
-
-        if payload_view.has_remaining() {
-            let consumed = payload_length - payload_view.remaining();
-            return Err(rlp::Error::ListLengthMismatch {
-                expected: payload_length,
-                got: consumed,
-            });
-        }
-
-        Ok(Self { txs })
-    }
-}
-
-impl ssz::Encode for BlockBodyMerge {
-    // note: MAX_LENGTH attributes (defined in portal history spec) are not currently enforced
-    fn is_ssz_fixed_len() -> bool {
-        false
+        Ok(Self(AlloyBlockBody {
+            transactions,
+            ommers,
+            withdrawals: None,
+        }))
     }
 
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let offset =
-            <Vec<Vec<u8>> as Encode>::ssz_fixed_len() + <Vec<u8> as Encode>::ssz_fixed_len();
-        let mut encoder = SszEncoder::container(buf, offset);
-        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy::rlp::encode).collect();
-        let empty_uncles: Vec<Header> = vec![];
-        let rlp_uncles: Vec<u8> = alloy::rlp::encode(empty_uncles);
-        encoder.append(&encoded_txs);
-        encoder.append(&rlp_uncles);
-        encoder.finalize();
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        self.as_ssz_bytes().len()
-    }
-}
-
-impl ssz::Decode for BlockBodyMerge {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let mut builder = SszDecoderBuilder::new(bytes);
-        builder.register_type::<Vec<Vec<u8>>>()?;
-        builder.register_type::<Vec<u8>>()?;
-        let mut decoder = builder.build()?;
-        let txs: Vec<Vec<u8>> = decoder.decode_next()?;
-        let uncles: Vec<u8> = decoder.decode_next()?;
-        let txs: Vec<Transaction> = txs
-            .iter()
-            .map(|bytes| Decodable::decode(&mut bytes.as_slice()))
-            .collect::<Result<Vec<Transaction>, _>>()
-            .map_err(|e| {
-                ssz::DecodeError::BytesInvalid(format!(
-                    "Merge block body contains invalid txs: {e:?}",
-                ))
-            })?;
-        let uncles: Vec<Header> = Decodable::decode(&mut uncles.as_slice()).map_err(|e| {
-            ssz::DecodeError::BytesInvalid(format!("Merge block body contains invalid txs: {e:?}"))
-        })?;
-        if !uncles.is_empty() {
-            return Err(ssz::DecodeError::BytesInvalid(
-                "Merge block body should not have uncles".to_string(),
-            ));
-        }
-        Ok(Self { txs })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct BlockBodyShanghai {
-    pub txs: Vec<Transaction>,
-    // post-shanghai block bodies are expected to have empty uncles, but we skip that here
-    // and simply encode an empty list during the encoding/decoding process
-    pub withdrawals: Vec<Withdrawal>,
-}
-
-impl Encodable for BlockBodyShanghai {
-    fn encode(&self, out: &mut dyn bytes::BufMut) {
-        let mut list = Vec::<u8>::new();
-        rlp_encode_transaction_list_with_header(&mut list, &self.txs);
-        self.withdrawals.encode(&mut list);
-        let header = rlp::Header {
-            list: true,
-            payload_length: list.len(),
-        };
-        header.encode(out);
-        out.put_slice(list.as_slice());
-    }
-}
-
-impl Decodable for BlockBodyShanghai {
-    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
-        let mut payload_view = rlp::Header::decode_bytes(buf, /* is_list= */ true)?;
-        let payload_length = payload_view.remaining();
-
-        let txs = rlp_decode_transaction_list_with_header(&mut payload_view)?;
-        let withdrawals = Vec::<Withdrawal>::decode(&mut payload_view)?;
-
-        if payload_view.has_remaining() {
-            let consumed = payload_length - payload_view.remaining();
-            return Err(rlp::Error::ListLengthMismatch {
-                expected: payload_length,
-                got: consumed,
-            });
-        }
-
-        Ok(Self { txs, withdrawals })
-    }
-}
-
-impl ssz::Encode for BlockBodyShanghai {
-    // note: MAX_LENGTH attributes (defined in portal history spec) are not currently enforced
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
+    fn ssz_encode_post_shanghai(&self, buf: &mut Vec<u8>) {
         let offset = <Vec<Vec<u8>> as Encode>::ssz_fixed_len()
             + <Vec<u8> as Encode>::ssz_fixed_len()
             + <Vec<Vec<u8>> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy::rlp::encode).collect();
+        let encoded_txs: Vec<Vec<u8>> = self
+            .transactions()
+            .map(|transaction| transaction.encoded_2718())
+            .collect();
         let empty_uncles: Vec<Header> = vec![];
         let rlp_uncles: Vec<u8> = alloy::rlp::encode(empty_uncles);
-        let encoded_withdrawals: Vec<Vec<u8>> =
-            self.withdrawals.iter().map(alloy::rlp::encode).collect();
+        let encoded_withdrawals: Vec<Vec<u8>> = match &self.withdrawals {
+            Some(withdrawals) => withdrawals.0.iter().map(alloy::rlp::encode).collect(),
+            None => vec![],
+        };
         encoder.append(&encoded_txs);
         encoder.append(&rlp_uncles);
         encoder.append(&encoded_withdrawals);
         encoder.finalize();
     }
 
-    fn ssz_bytes_len(&self) -> usize {
-        self.as_ssz_bytes().len()
-    }
-}
-
-impl ssz::Decode for BlockBodyShanghai {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+    fn ssz_decode_post_shanghai(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
         let mut builder = SszDecoderBuilder::new(bytes);
         builder.register_type::<Vec<Vec<u8>>>()?;
         builder.register_type::<Vec<u8>>()?;
         builder.register_type::<Vec<Vec<u8>>>()?;
         let mut decoder = builder.build()?;
-        let txs: Vec<Vec<u8>> = decoder.decode_next()?;
-        let uncles: Vec<u8> = decoder.decode_next()?;
+        let transactions: Vec<Vec<u8>> = decoder.decode_next()?;
+        let ommers: Vec<u8> = decoder.decode_next()?;
         let withdrawals: Vec<Vec<u8>> = decoder.decode_next()?;
-        let txs: Vec<Transaction> = txs
+        let transactions: Vec<TxEnvelope> = transactions
             .iter()
-            .map(|bytes| Decodable::decode(&mut bytes.as_slice()))
-            .collect::<Result<Vec<Transaction>, _>>()
+            .map(|bytes| TxEnvelope::decode_2718(&mut bytes.as_slice()))
+            .collect::<Result<Vec<TxEnvelope>, _>>()
             .map_err(|e| {
                 ssz::DecodeError::BytesInvalid(format!(
-                    "Shanghai block body contains invalid txs: {e:?}",
+                    "Shanghai block body contains invalid transactions: {e:?}",
                 ))
             })?;
         // shanghai block bodies are expected to have empty uncles
-        let uncles: Vec<Header> = Decodable::decode(&mut uncles.as_slice()).map_err(|e| {
+        let ommers: Vec<Header> = Decodable::decode(&mut ommers.as_slice()).map_err(|e| {
             ssz::DecodeError::BytesInvalid(format!(
                 "Shanghai block body contains invalid txs: {e:?}",
             ))
         })?;
-        if !uncles.is_empty() {
+        if !ommers.is_empty() {
             return Err(ssz::DecodeError::BytesInvalid(
                 "Shanghai block body should not have uncles".to_string(),
             ));
@@ -464,14 +205,17 @@ impl ssz::Decode for BlockBodyShanghai {
                     "Shanghai block body contains invalid withdrawals: {e:?}",
                 ))
             })?;
-        Ok(Self { txs, withdrawals })
+        Ok(Self(AlloyBlockBody {
+            transactions,
+            ommers,
+            withdrawals: Some(Withdrawals(withdrawals)),
+        }))
     }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use alloy::primitives::U256;
     use rstest::rstest;
     use ssz::{Decode, Encode};
 
@@ -490,17 +234,19 @@ mod tests {
     #[case(TX17, 1544975)]
     // EIP1559 w/ populated access list
     #[case(TX6, 41942)]
-    fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u32) {
+    fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u64) {
+        use alloy_rpc_types_eth::TransactionTrait;
+
         let tx_rlp = hex_decode(tx).unwrap();
-        let tx = Transaction::decode(&mut tx_rlp.as_slice()).expect("error decoding tx");
-        let expected_nonce = U256::from(expected_nonce);
+        let tx = TxEnvelope::decode(&mut tx_rlp.as_slice()).expect("error decoding tx");
         match &tx {
-            Transaction::Legacy(tx) => assert_eq!(tx.nonce, expected_nonce),
-            Transaction::AccessList(tx) => assert_eq!(tx.nonce, expected_nonce),
-            Transaction::EIP1559(tx) => assert_eq!(tx.nonce, expected_nonce),
-            Transaction::Blob(tx) => assert_eq!(tx.nonce, expected_nonce),
+            TxEnvelope::Legacy(tx) => assert_eq!(tx.tx().nonce(), expected_nonce),
+            TxEnvelope::Eip2930(tx) => assert_eq!(tx.tx().nonce(), expected_nonce),
+            TxEnvelope::Eip1559(tx) => assert_eq!(tx.tx().nonce(), expected_nonce),
+            TxEnvelope::Eip4844(tx) => assert_eq!(tx.tx().nonce(), expected_nonce),
+            TxEnvelope::Eip7702(tx) => assert_eq!(tx.tx().nonce(), expected_nonce),
         }
-        let encoded_tx = alloy::rlp::encode(&tx);
+        let encoded_tx = tx.encoded_2718();
         assert_eq!(hex_encode(tx_rlp), hex_encode(encoded_tx));
     }
 
@@ -509,56 +255,55 @@ mod tests {
         let block_body = get_14764013_block_body();
         let expected_tx_root =
             "0x18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7".to_owned();
-        assert_eq!(
-            hex_encode(block_body.transactions_root().unwrap()),
-            expected_tx_root
-        );
+        assert_eq!(hex_encode(block_body.transactions_root()), expected_tx_root);
     }
 
     #[test_log::test]
-    fn block_body_validates_uncles_root() {
+    fn block_body_validates_calculate_ommers_root() {
         let block_body = get_14764013_block_body();
         let expected_uncles_root =
             "0x58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191".to_owned();
-        assert_eq!(hex_encode(block_body.uncles_root()), expected_uncles_root);
+        assert_eq!(
+            hex_encode(block_body.calculate_ommers_root()),
+            expected_uncles_root
+        );
     }
 
     #[test_log::test]
     fn block_body_roots_invalidates_transactions_root() {
         let block_body = get_14764013_block_body();
         // invalid txs
-        let invalid_txs = &block_body.transactions()[..1];
-        let invalid_block_body = BlockBody::Legacy(BlockBodyLegacy {
-            txs: invalid_txs.to_vec(),
-            uncles: block_body.uncles().to_vec(),
+        let invalid_txs = &block_body.transactions[..1];
+        let invalid_block_body = BlockBody(AlloyBlockBody {
+            transactions: invalid_txs.to_vec(),
+            ommers: block_body.ommers.to_vec(),
+            withdrawals: None,
         });
 
         let expected_tx_root =
             "0x18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7".to_owned();
         assert_ne!(
             expected_tx_root,
-            hex_encode(invalid_block_body.transactions_root().unwrap())
+            hex_encode(invalid_block_body.transactions_root())
         );
     }
 
     #[test_log::test]
-    fn block_body_roots_invalidates_uncles_root() {
+    fn block_body_roots_invalidates_calculate_ommers_root() {
         let block_body = get_14764013_block_body();
         // invalid uncles
-        let invalid_uncles = vec![
-            block_body.uncles()[0].clone(),
-            block_body.uncles()[0].clone(),
-        ];
-        let invalid_block_body = BlockBody::Legacy(BlockBodyLegacy {
-            txs: block_body.transactions().to_vec(),
-            uncles: invalid_uncles,
+        let invalid_uncles = vec![block_body.ommers[0].clone(), block_body.ommers[0].clone()];
+        let invalid_block_body = BlockBody(AlloyBlockBody {
+            transactions: block_body.transactions.to_vec(),
+            ommers: invalid_uncles,
+            withdrawals: None,
         });
 
         let expected_uncles_root =
             "0x58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191".to_owned();
         assert_ne!(
             expected_uncles_root,
-            hex_encode(invalid_block_body.uncles_root())
+            hex_encode(invalid_block_body.calculate_ommers_root())
         );
     }
 
@@ -584,16 +329,17 @@ mod tests {
         assert_eq!(withdrawals[0].index, 1666861);
         assert_eq!(withdrawals[0].validator_index, 487850);
         assert_eq!(withdrawals[0].amount, 12341278);
-        let block_body = BlockBody::Shanghai(BlockBodyShanghai {
-            txs: vec![],
-            withdrawals,
+        let block_body = BlockBody(AlloyBlockBody {
+            transactions: vec![],
+            ommers: vec![],
+            withdrawals: Some(Withdrawals(withdrawals)),
         });
         let expected_withdrawals_root = B256::from_slice(
             &hex_decode("0x413f0935d01b220feb4c062960d0a859d1f58448af55dd1434ed9c98a91ee1db")
                 .unwrap(),
         );
         assert_eq!(
-            block_body.withdrawals_root().unwrap(),
+            block_body.calculate_withdrawals_root().unwrap(),
             expected_withdrawals_root
         );
     }
@@ -602,10 +348,10 @@ mod tests {
     fn shanghai_block_body_round_trip() {
         // block 17139055
         let raw = std::fs::read("../../test_assets/mainnet/block_body_17139055.bin").unwrap();
-        let body = BlockBodyShanghai::from_ssz_bytes(&raw).unwrap();
-        assert_eq!(body.withdrawals.len(), 16);
+        let body: BlockBody = BlockBody::ssz_decode_post_shanghai(&raw).unwrap();
+        assert_eq!(body.withdrawals.clone().unwrap().len(), 16);
         let withdrawals: Vec<Withdrawal> = serde_json::from_str(&shanghai_withdrawals()).unwrap();
-        assert_eq!(withdrawals, body.withdrawals);
+        assert_eq!(withdrawals, body.withdrawals.clone().unwrap().0);
         let encoded = body.as_ssz_bytes();
         assert_eq!(encoded, raw);
     }
@@ -614,21 +360,21 @@ mod tests {
     fn shanghai_block_body_transaction_hashes() {
         // block 17139055
         let raw = std::fs::read("../../test_assets/mainnet/block_body_17139055.bin").unwrap();
-        let body = BlockBodyShanghai::from_ssz_bytes(&raw).unwrap();
-        assert_eq!(body.txs.len(), 117);
+        let body = BlockBody::ssz_decode_post_shanghai(&raw).unwrap();
+        assert_eq!(body.transactions.len(), 117);
         // Select a few transactions to compare against hashes from a block explorer:
         // Test first and last txs
         assert_eq!(
-            hex_encode(body.txs[0].hash()),
+            hex_encode(body.transactions[0].tx_hash()),
             "0xd28604b0f3bd36be5db040a675ce277ecaf416f7abcfe6f001b9d5dbab877e16"
         );
         assert_eq!(
-            hex_encode(body.txs[116].hash()),
+            hex_encode(body.transactions[116].tx_hash()),
             "0x632f4acb4fea95e02afe056ed517db9966783eba32a70df0eb095eb229173972"
         );
         // Test a legacy tx
         assert_eq!(
-            hex_encode(body.txs[12].hash()),
+            hex_encode(body.transactions[12].tx_hash()),
             "0xe820644c796256e0e192b426b9116e98644434ffeb802d9c722ada05098666ca"
         );
         // No legacy access list transactions are available in this block, but having tested with
@@ -640,7 +386,7 @@ mod tests {
     }
 
     fn get_14764013_block_body() -> BlockBody {
-        let txs: Vec<Transaction> = vec![
+        let transactions: Vec<TxEnvelope> = vec![
             Decodable::decode(&mut hex_decode(TX1).unwrap().as_slice()).unwrap(),
             Decodable::decode(&mut hex_decode(TX2).unwrap().as_slice()).unwrap(),
             Decodable::decode(&mut hex_decode(TX3).unwrap().as_slice()).unwrap(),
@@ -661,9 +407,13 @@ mod tests {
             Decodable::decode(&mut hex_decode(TX18).unwrap().as_slice()).unwrap(),
             Decodable::decode(&mut hex_decode(TX19).unwrap().as_slice()).unwrap(),
         ];
-        let uncles: Vec<Header> =
+        let ommers: Vec<Header> =
             Decodable::decode(&mut hex_decode(UNCLE).unwrap().as_slice()).unwrap();
-        BlockBody::Legacy(BlockBodyLegacy { txs, uncles })
+        BlockBody(AlloyBlockBody {
+            transactions,
+            ommers,
+            withdrawals: None,
+        })
     }
 
     // Encoded transactions generated from block 14764013

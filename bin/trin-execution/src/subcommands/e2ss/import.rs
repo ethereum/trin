@@ -1,9 +1,9 @@
 use std::{path::Path, sync::Arc};
 
+use alloy::consensus::Header;
 use anyhow::{ensure, Error};
 use e2store::e2ss::{AccountEntry, AccountOrStorageEntry, E2SSReader, StorageItem};
 use eth_trie::{EthTrie, Trie};
-use ethportal_api::Header;
 use revm_primitives::{keccak256, B256, U256};
 use tracing::info;
 
@@ -144,7 +144,7 @@ impl StateImporter {
             let block = era_manager.get_next_block().await?;
             self.evm_db.db.put(
                 keccak256(B256::from(U256::from(block.header.number))),
-                block.header.hash(),
+                block.header.hash_slow(),
             )?
         }
 

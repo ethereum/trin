@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use alloy::{
+    consensus::Header,
     primitives::{keccak256, Address, Bytes, B256, U256},
     rlp::Decodable,
 };
@@ -17,7 +18,7 @@ use ethportal_api::{
             trie_traversal::{NodeTraversal, TraversalError, TraversalResult},
         },
     },
-    ContentValue, ContentValueError, Header, OverlayContentKey, StateContentKey, StateContentValue,
+    ContentValue, ContentValueError, OverlayContentKey, StateContentKey, StateContentValue,
 };
 use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
 use tokio::sync::mpsc;
