@@ -28,11 +28,11 @@ pub fn process_block_rewards(block: &ProcessedBlock, beneficiaries: &mut HashMap
 
     if let Some(uncles) = &block.uncles {
         for uncle in uncles.iter() {
-            *beneficiaries.entry(uncle.author).or_default() +=
+            *beneficiaries.entry(uncle.beneficiary).or_default() +=
                 ((8 + uncle.number - block.header.number) as u128 * base_block_reward) >> 3;
         }
 
-        *beneficiaries.entry(block.header.author).or_default() +=
+        *beneficiaries.entry(block.header.beneficiary).or_default() +=
             base_block_reward + (base_block_reward >> 5) * uncles.len() as u128;
     }
 }

@@ -1,25 +1,22 @@
 use alloy::{
+    consensus::{Block, Header},
     primitives::{Address, Bytes, B256, U256},
-    rlp::{self, Encodable},
     rpc::types::{
-        Block, BlockId, BlockNumberOrTag, BlockTransactions, TransactionRequest, Withdrawal,
-        Withdrawals,
+        Block as RpcBlock, BlockId, BlockNumberOrTag, BlockTransactions, Header as RpcHeader,
+        TransactionRequest,
     },
 };
 use ethportal_api::{
     jsonrpsee::types::{error::CALL_EXECUTION_FAILED_CODE, ErrorObjectOwned},
     types::{
-        execution::{
-            block_body::BlockBody,
-            transaction::{Transaction, TransactionWithRlpHeader},
-        },
+        execution::block_body::BlockBody,
         jsonrpc::{
             endpoints::HistoryEndpoint,
             request::{HistoryJsonRpcRequest, StateJsonRpcRequest},
         },
         portal::GetContentInfo,
     },
-    ContentValue, EthApiServer, Header, HistoryContentKey, HistoryContentValue,
+    ContentValue, EthApiServer, HistoryContentKey, HistoryContentValue,
 };
 use revm::primitives::ExecutionResult;
 use tokio::sync::mpsc;
@@ -63,7 +60,7 @@ impl EthApiServer for EthApi {
         &self,
         block_number_or_tag: BlockNumberOrTag,
         hydrated_transactions: bool,
-    ) -> RpcResult<Block> {
+    ) -> RpcResult<RpcBlock> {
         let header = self.fetch_header_by_number(block_number_or_tag).await?;
         Ok(self.fetch_block(header, hydrated_transactions).await?)
     }
@@ -72,7 +69,7 @@ impl EthApiServer for EthApi {
         &self,
         block_hash: B256,
         hydrated_transactions: bool,
-    ) -> RpcResult<Block> {
+    ) -> RpcResult<RpcBlock> {
         let header = self.fetch_header_by_hash(block_hash).await?;
         Ok(self.fetch_block(header, hydrated_transactions).await?)
     }
@@ -125,14 +122,14 @@ impl EthApiServer for EthApi {
 
         // If gas limit is not set, set it to block's limit
         if transaction.gas.is_none() {
-            transaction.gas = Some(evm_block_state.block_header().gas_limit.to());
+            transaction.gas = Some(evm_block_state.block_header().gas_limit);
         }
         // If gas price is not set, set it to base fee
         if transaction.gas_price.is_none() {
             transaction.gas_price = evm_block_state
                 .block_header()
                 .base_fee_per_gas
-                .map(|base_fee| base_fee.to());
+                .map(|base_fee| base_fee as u128);
         }
 
         let result_and_state = execute_transaction(
@@ -207,45 +204,27 @@ impl EthApi {
         &self,
         header: Header,
         hydrated_transactions: bool,
-    ) -> Result<Block, RpcServeError> {
+    ) -> Result<RpcBlock, RpcServeError> {
         if hydrated_transactions {
             return Err(RpcServeError::Message(
                 "replying with all transaction bodies is not supported yet".to_string(),
             ));
         }
 
-        let body = self.fetch_block_body(header.hash()).await?;
+        let body = self.fetch_block_body(header.hash_slow()).await?;
         let transactions =
-            BlockTransactions::Hashes(body.transactions().iter().map(Transaction::hash).collect());
-        let uncles = body.uncles().iter().map(|uncle| uncle.hash()).collect();
-        let withdrawals = body
-            .withdrawals()
-            .map(|withdrawals| withdrawals.iter().map(Withdrawal::from).collect())
-            .map(Withdrawals::new);
+            BlockTransactions::Hashes(body.transactions().map(|tx| *tx.hash()).collect::<Vec<_>>());
+        let uncles = body.ommers.iter().map(|uncle| uncle.hash_slow()).collect();
+        let withdrawals = body.withdrawals.clone();
 
         // Calculate block size:
         //   len(rlp(header, transactions, uncles, withdrawals))
         // Note: transactions are encoded with header
-        let size = {
-            let payload_size = header.length()
-                + body
-                    .transactions()
-                    .iter()
-                    .cloned()
-                    .map(TransactionWithRlpHeader)
-                    .collect::<Vec<_>>()
-                    .length()
-                + rlp::list_length(body.uncles())
-                + match body.withdrawals() {
-                    Some(withdrawals) => rlp::list_length(withdrawals),
-                    None => 0,
-                };
-            payload_size + rlp::length_of_length(payload_size)
-        };
+        let size = Block::rlp_length_for(&header, &body.0);
 
         // Combine header and block body into the single json representation of the block.
-        let block = Block {
-            header: header.to_rpc_header(Some(U256::from(size))),
+        let block = RpcBlock {
+            header: RpcHeader::new(header).with_size(Some(U256::from(size))),
             transactions,
             uncles,
             withdrawals,

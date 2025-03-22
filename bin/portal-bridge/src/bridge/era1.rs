@@ -364,7 +364,7 @@ impl Era1Bridge {
         );
         let mut gossip_header_by_hash = true;
         if hunt {
-            let header_hash = block_tuple.header.header.hash();
+            let header_hash = block_tuple.header.header.hash_slow();
             let header_content_key = HistoryContentKey::new_block_header_by_hash(header_hash);
             let header_content_info = portal_client.get_content(header_content_key.clone()).await;
             if header_content_info.is_ok() {
@@ -456,7 +456,7 @@ impl Era1Bridge {
         }
         let mut gossip_body = true;
         if hunt {
-            let body_hash = block_tuple.header.header.hash();
+            let body_hash = block_tuple.header.header.hash_slow();
             let body_content_key = HistoryContentKey::new_block_body(body_hash);
             let body_content_info = portal_client.get_content(body_content_key.clone()).await;
             if body_content_info.is_ok() {
@@ -495,7 +495,7 @@ impl Era1Bridge {
         }
         let mut gossip_receipts = true;
         if hunt {
-            let receipts_hash = block_tuple.header.header.hash();
+            let receipts_hash = block_tuple.header.header.hash_slow();
             let receipts_content_key = HistoryContentKey::new_block_receipts(receipts_hash);
             let receipts_content_info = portal_client
                 .get_content(receipts_content_key.clone())
@@ -554,7 +554,7 @@ impl Era1Bridge {
         let header_record = &epoch_acc[header_index as usize];
 
         // Validate Header
-        let actual_header_hash = header.hash();
+        let actual_header_hash = header.hash_slow();
 
         ensure!(
             header_record.block_hash == actual_header_hash,
@@ -570,7 +570,7 @@ impl Era1Bridge {
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
         // Construct HistoryContentKey for block header by hash and gossip it
-        let content_key = HistoryContentKey::new_block_header_by_hash(header.hash());
+        let content_key = HistoryContentKey::new_block_header_by_hash(header.hash_slow());
         gossip_history_content(portal_client, content_key, content_value, block_stats).await?;
 
         Ok(())
@@ -593,7 +593,7 @@ impl Era1Bridge {
         let header_record = &epoch_acc[header_index as usize];
 
         // Validate Header
-        let actual_header_hash = header.hash();
+        let actual_header_hash = header.hash_slow();
 
         ensure!(
             header_record.block_hash == actual_header_hash,
@@ -626,7 +626,7 @@ impl Era1Bridge {
         );
         let header = block_tuple.header.header;
         // Construct HistoryContentKey
-        let content_key = HistoryContentKey::new_block_body(header.hash());
+        let content_key = HistoryContentKey::new_block_body(header.hash_slow());
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockBody(block_tuple.body.body);
         gossip_history_content(portal_client, content_key, content_value, block_stats).await
@@ -643,7 +643,7 @@ impl Era1Bridge {
         );
         let header = block_tuple.header.header;
         // Construct HistoryContentKey
-        let content_key = HistoryContentKey::new_block_receipts(header.hash());
+        let content_key = HistoryContentKey::new_block_receipts(header.hash_slow());
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::Receipts(block_tuple.receipts.receipts);
         gossip_history_content(portal_client, content_key, content_value, block_stats).await

@@ -3,11 +3,12 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use alloy::{
+    consensus::Header,
     primitives::{Bytes, U256},
     providers::{DynProvider, IpcConnect, Provider, ProviderBuilder},
     rpc::{
         client::ClientBuilder,
-        types::{BlockNumberOrTag, BlockTransactions, BlockTransactionsKind, Header as RpcHeader},
+        types::{BlockNumberOrTag, BlockTransactions, Header as RpcHeader},
     },
     transports::RpcError,
 };
@@ -15,7 +16,7 @@ use ethportal_api::{
     types::execution::{block_body::BlockBody, header_with_proof::HeaderWithProof},
     utils::bytes::hex_encode,
     version::APP_NAME,
-    ContentValue, Header, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
+    ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use jsonrpsee::async_client::Client;
 use portalnet::constants::{DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
@@ -146,7 +147,7 @@ async fn test_eth_get_block_by_number() {
     // Store block in server
     assert!(native_client
         .store(
-            HistoryContentKey::new_block_body(hwp.header.hash()),
+            HistoryContentKey::new_block_body(hwp.header.hash_slow()),
             HistoryContentValue::BlockBody(body.clone()).encode(),
         )
         .await
@@ -155,18 +156,18 @@ async fn test_eth_get_block_by_number() {
     // The meat of the test is here:
     // Retrieve block over json-rpc
     let block = web3_client
-        .get_block_by_number(block_number.into(), BlockTransactionsKind::Hashes)
+        .get_block_by_number(block_number.into())
         .await
         .expect("request to get block failed")
         .expect("specified block not found");
 
     assert_header(&block.header, &hwp.header);
     assert_eq!(block.header.size, Some(U256::from(8086)));
-    assert_eq!(block.transactions.len(), body.transactions().len());
+    assert_eq!(block.transactions.len(), body.transactions.len());
     assert_eq!(block.uncles.len(), 1);
     assert_eq!(
         block.withdrawals.unwrap_or_default().len(),
-        body.withdrawals().unwrap_or_default().len()
+        body.withdrawals.clone().unwrap_or_default().len()
     );
 
     let BlockTransactions::Hashes(hashes) = block.transactions else {
@@ -205,7 +206,8 @@ async fn test_eth_get_block_by_number_hydrated() {
         .unwrap());
 
     let response = web3_client
-        .get_block_by_number(block_number.into(), BlockTransactionsKind::Full)
+        .get_block_by_number(block_number.into())
+        .full()
         .await;
 
     let err = match response {
@@ -226,7 +228,7 @@ async fn test_eth_get_block_by_tag() {
     let (web3_server, web3_client, _native_client) = setup_web3_server().await;
 
     let response = web3_client
-        .get_block_by_number(BlockNumberOrTag::Latest, BlockTransactionsKind::Hashes)
+        .get_block_by_number(BlockNumberOrTag::Latest)
         .await;
 
     let err = match response {
@@ -247,7 +249,7 @@ async fn test_eth_get_block_by_hash() {
     let (web3_server, web3_client, native_client) = setup_web3_server().await;
 
     let (hwp, body) = get_full_block_14764013();
-    let block_hash = hwp.header.hash();
+    let block_hash = hwp.header.hash_slow();
 
     // Store header with proof in server
     assert!(native_client
@@ -270,18 +272,18 @@ async fn test_eth_get_block_by_hash() {
     // The meat of the test is here:
     // Retrieve block over json-rpc
     let block = web3_client
-        .get_block_by_hash(block_hash, BlockTransactionsKind::Hashes)
+        .get_block_by_hash(block_hash)
         .await
         .expect("request to get block failed")
         .expect("specified block not found");
 
     assert_header(&block.header, &hwp.header);
     assert_eq!(block.header.size, Some(U256::from(8086)));
-    assert_eq!(block.transactions.len(), body.transactions().len());
+    assert_eq!(block.transactions.len(), body.transactions.len());
     assert_eq!(block.uncles.len(), 1);
     assert_eq!(
         block.withdrawals.unwrap_or_default().len(),
-        body.withdrawals().unwrap_or_default().len()
+        body.withdrawals.clone().unwrap_or_default().len()
     );
 
     let BlockTransactions::Hashes(hashes) = block.transactions else {
@@ -308,7 +310,7 @@ async fn test_eth_get_block_by_hash_hydrated() {
     let (web3_server, web3_client, native_client) = setup_web3_server().await;
 
     let (hwp, _body) = get_full_block_14764013();
-    let block_hash = hwp.header.hash();
+    let block_hash = hwp.header.hash_slow();
 
     // Store header with proof in server
     assert!(native_client
@@ -319,9 +321,7 @@ async fn test_eth_get_block_by_hash_hydrated() {
         .await
         .unwrap());
 
-    let response = web3_client
-        .get_block_by_hash(block_hash, BlockTransactionsKind::Full)
-        .await;
+    let response = web3_client.get_block_by_hash(block_hash).full().await;
 
     let err = match response {
         Err(RpcError::ErrorResp(err)) => err,
@@ -337,19 +337,19 @@ async fn test_eth_get_block_by_hash_hydrated() {
 
 fn assert_header(actual: &RpcHeader, expected: &Header) {
     assert_eq!(actual.number, expected.number);
-    assert_eq!(actual.hash, expected.hash());
+    assert_eq!(actual.hash, expected.hash_slow());
     assert_eq!(actual.parent_hash, expected.parent_hash);
-    assert_eq!(Some(actual.nonce), expected.nonce);
-    assert_eq!(actual.ommers_hash, expected.uncles_hash);
+    assert_eq!(actual.nonce, expected.nonce);
+    assert_eq!(actual.ommers_hash, expected.ommers_hash);
     assert_eq!(actual.logs_bloom, expected.logs_bloom);
-    assert_eq!(actual.beneficiary, expected.author);
+    assert_eq!(actual.beneficiary, expected.beneficiary);
     assert_eq!(actual.state_root, expected.state_root);
     assert_eq!(actual.transactions_root, expected.transactions_root);
     assert_eq!(actual.receipts_root, expected.receipts_root);
     assert_eq!(actual.extra_data, expected.extra_data);
-    assert_eq!(Some(actual.mix_hash), expected.mix_hash);
-    assert_eq!(actual.gas_used, expected.gas_used.to::<u64>());
-    assert_eq!(actual.gas_limit, expected.gas_limit.to::<u64>());
+    assert_eq!(actual.mix_hash, expected.mix_hash);
+    assert_eq!(actual.gas_used, expected.gas_used);
+    assert_eq!(actual.gas_limit, expected.gas_limit);
     assert_eq!(actual.difficulty, expected.difficulty);
     assert_eq!(actual.timestamp, expected.timestamp);
 }

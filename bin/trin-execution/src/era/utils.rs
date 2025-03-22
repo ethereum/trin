@@ -6,7 +6,6 @@ use e2store::{
     era::Era,
     era1::{BlockTuple, Era1, BLOCK_TUPLE_COUNT},
 };
-use ethportal_api::BlockBody;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use reqwest::Client;
 use tokio::time::sleep;
@@ -23,23 +22,19 @@ pub fn process_era1_file(raw_era1: Vec<u8>, epoch_index: u64) -> anyhow::Result<
     for BlockTuple { header, body, .. } in Era1::iter_tuples(raw_era1) {
         let transactions_with_recovered_senders = body
             .body
-            .transactions()
+            .transactions
             .par_iter()
             .map(|tx| {
-                tx.get_transaction_sender_address()
+                tx.recover_signer()
                     .map(|sender_address| TransactionsWithSender {
                         transaction: tx.clone(),
                         sender_address,
                     })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let uncles = match body.body {
-            BlockBody::Legacy(legacy_body) => Some(legacy_body.uncles.clone()),
-            _ => None,
-        };
         blocks.push(ProcessedBlock {
             header: header.header,
-            uncles,
+            uncles: Some(body.body.0.ommers),
             withdrawals: None,
             transactions: transactions_with_recovered_senders,
         });

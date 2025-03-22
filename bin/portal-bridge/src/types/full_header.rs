@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
-use alloy::primitives::B256;
-use anyhow::{anyhow, ensure};
-use ethportal_api::types::execution::{
-    accumulator::EpochAccumulator,
-    header::{Header, TxHashes},
-    transaction::Transaction,
-    withdrawal::Withdrawal,
+use alloy::{
+    consensus::{Header, TxEnvelope},
+    eips::eip4895::Withdrawal,
+    primitives::B256,
 };
+use anyhow::{anyhow, ensure};
+use ethportal_api::types::execution::accumulator::EpochAccumulator;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 use trin_validation::constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER};
@@ -44,8 +43,8 @@ impl<'de> Deserialize<'de> for FullHeaderBatch {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FullHeader {
     pub header: Header,
-    pub txs: Vec<Transaction>,
-    pub tx_hashes: TxHashes,
+    pub txs: Vec<TxEnvelope>,
+    pub tx_hashes: Vec<B256>,
     pub uncles: Vec<B256>,
     pub epoch_acc: Option<Arc<EpochAccumulator>>,
     pub withdrawals: Option<Vec<Withdrawal>>,
@@ -59,8 +58,8 @@ impl TryFrom<Value> for FullHeader {
     fn try_from(val: Value) -> anyhow::Result<Self> {
         let header: Header = serde_json::from_value(val.clone())?;
         let uncles: Vec<B256> = serde_json::from_value(val["uncles"].clone())?;
-        let tx_hashes: TxHashes = serde_json::from_value(val["transactions"].clone())?;
-        let txs: Vec<Transaction> = serde_json::from_value(val["transactions"].clone())?;
+        let txs: Vec<TxEnvelope> = serde_json::from_value(val["transactions"].clone())?;
+        let tx_hashes: Vec<B256> = txs.iter().map(|tx| *tx.hash()).collect();
         let withdrawals = match val["withdrawals"].clone() {
             Value::Null => None,
             _ => serde_json::from_value(val["withdrawals"].clone())?,
@@ -90,7 +89,7 @@ impl FullHeader {
             let header_record = &epoch_acc[header_index as usize];
 
             // Validate Header
-            let actual_header_hash = self.header.hash();
+            let actual_header_hash = self.header.hash_slow();
 
             ensure!(
                 header_record.block_hash == actual_header_hash,
@@ -100,10 +99,10 @@ impl FullHeader {
             );
         }
         ensure!(
-            self.txs.len() == self.tx_hashes.hashes.len(),
+            self.txs.len() == self.tx_hashes.len(),
             "txs.len() != tx_hashes.hashes.len(): {} != {}",
             self.txs.len(),
-            self.tx_hashes.hashes.len()
+            self.tx_hashes.len()
         );
         Ok(())
     }
@@ -111,9 +110,8 @@ impl FullHeader {
 
 #[cfg(test)]
 mod tests {
-    use ethportal_api::types::execution::block_body::{
-        BlockBody, BlockBodyLegacy, BlockBodyShanghai,
-    };
+    use alloy::{consensus::BlockBody as AlloyBlockBody, eips::eip4895::Withdrawals};
+    use ethportal_api::types::execution::block_body::BlockBody;
     use serde_json::Value;
     use ssz::{Decode, Encode};
 
@@ -127,7 +125,7 @@ mod tests {
         let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
         let header: Header = serde_json::from_value(body["result"].clone()).unwrap();
         assert_eq!(full_header.txs.len(), 19);
-        assert_eq!(full_header.tx_hashes.hashes.len(), 19);
+        assert_eq!(full_header.tx_hashes.len(), 19);
         assert_eq!(full_header.uncles.len(), 1);
         assert_eq!(full_header.header, header);
     }
@@ -138,9 +136,10 @@ mod tests {
             std::fs::read_to_string("../../test_assets/mainnet/block_17034871_value.json").unwrap();
         let body: Value = serde_json::from_str(&body).unwrap();
         let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
-        let block_body = BlockBody::Shanghai(BlockBodyShanghai {
-            txs: full_header.txs.clone(),
-            withdrawals: full_header.withdrawals.unwrap(),
+        let block_body = BlockBody(AlloyBlockBody {
+            transactions: full_header.txs.clone(),
+            ommers: vec![],
+            withdrawals: full_header.withdrawals.map(Withdrawals),
         });
         let header: Header = serde_json::from_value(body["result"].clone()).unwrap();
         block_body.validate_against_header(&header).unwrap();
@@ -152,9 +151,10 @@ mod tests {
             std::fs::read_to_string("../../test_assets/mainnet/block_17034873_value.json").unwrap();
         let body: Value = serde_json::from_str(&body).unwrap();
         let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
-        let block_body = BlockBody::Shanghai(BlockBodyShanghai {
-            txs: full_header.txs.clone(),
-            withdrawals: full_header.withdrawals.unwrap(),
+        let block_body = BlockBody(AlloyBlockBody {
+            transactions: full_header.txs.clone(),
+            ommers: vec![],
+            withdrawals: full_header.withdrawals.map(Withdrawals),
         });
         let header: Header = serde_json::from_value(body["result"].clone()).unwrap();
         block_body.validate_against_header(&header).unwrap();
@@ -172,9 +172,10 @@ mod tests {
         let body: Value = serde_json::from_str(&body).unwrap();
         let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
         let header: Header = serde_json::from_value(body["result"].clone()).unwrap();
-        let block_body = BlockBody::Shanghai(BlockBodyShanghai {
-            txs: full_header.txs.clone(),
-            withdrawals: full_header.withdrawals.unwrap(),
+        let block_body = BlockBody(AlloyBlockBody {
+            transactions: full_header.txs.clone(),
+            ommers: vec![],
+            withdrawals: full_header.withdrawals.map(Withdrawals),
         });
         block_body.validate_against_header(&header).unwrap();
         // test ssz roundtrip
@@ -191,19 +192,23 @@ mod tests {
             std::fs::read_to_string("../../test_assets/geth_batch/headers.json").unwrap();
         let full_headers: FullHeaderBatch = serde_json::from_str(&expected).unwrap();
         for full_header in full_headers.headers {
-            let block_body = BlockBody::Legacy(BlockBodyLegacy {
-                txs: full_header.txs,
-                uncles: vec![],
+            let block_body = BlockBody(AlloyBlockBody {
+                transactions: full_header.txs,
+                ommers: vec![],
+                withdrawals: None,
             });
             // test that txs are properly deserialized if tx root is properly calculated
             assert_eq!(
-                block_body.transactions_root().unwrap(),
+                block_body.transactions_root(),
                 full_header.header.transactions_root
             );
             // this block has no uncles, aka an empty uncles root is calculated.
             // there's no need to validate deserialization of uncles, since they're just a
             // vector of Header, which are already tested above
-            assert_eq!(block_body.uncles_root(), full_header.header.uncles_hash);
+            assert_eq!(
+                block_body.calculate_ommers_root(),
+                full_header.header.ommers_hash
+            );
         }
     }
 }

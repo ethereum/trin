@@ -1,11 +1,10 @@
-use alloy::primitives::B256;
+use alloy::{consensus::Header, primitives::B256};
 use anyhow::anyhow;
 use ethportal_api::{
     consensus::historical_summaries::HistoricalSummaries,
     types::execution::header_with_proof::{
         BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummaries, HeaderWithProof,
     },
-    Header,
 };
 
 use crate::{
@@ -51,7 +50,7 @@ impl HeaderValidator {
                 let epoch_hash = self.pre_merge_acc.historical_epochs[epoch_index];
 
                 match verify_merkle_proof(
-                    hwp.header.hash(),
+                    hwp.header.hash_slow(),
                     proof,
                     15,
                     gen_index as usize,
@@ -65,7 +64,7 @@ impl HeaderValidator {
             }
             BlockHeaderProof::HistoricalRoots(proof) => self.verify_post_merge_pre_capella_header(
                 hwp.header.number,
-                hwp.header.hash(),
+                hwp.header.hash_slow(),
                 proof,
             ),
             BlockHeaderProof::HistoricalSummaries(_) => {
@@ -218,7 +217,7 @@ mod test {
     use std::{fs, path::PathBuf, str::FromStr};
 
     use alloy::{
-        primitives::{Address, Bloom, B256, U256},
+        primitives::{Address, B256},
         rlp::Decodable,
     };
     use ethportal_api::{
@@ -476,25 +475,14 @@ mod test {
     fn generate_random_header(height: &u64) -> Header {
         Header {
             parent_hash: B256::random(),
-            uncles_hash: B256::random(),
-            author: Address::random(),
+            ommers_hash: B256::random(),
+            beneficiary: Address::random(),
             state_root: B256::random(),
             transactions_root: B256::random(),
             receipts_root: B256::random(),
-            logs_bloom: Bloom::ZERO,
-            difficulty: U256::from(1),
             number: *height,
-            gas_limit: U256::from(1),
-            gas_used: U256::from(1),
             timestamp: 1,
-            extra_data: vec![],
-            mix_hash: None,
-            nonce: None,
-            base_fee_per_gas: None,
-            withdrawals_root: None,
-            blob_gas_used: None,
-            excess_blob_gas: None,
-            parent_beacon_block_root: None,
+            ..Default::default()
         }
     }
 
