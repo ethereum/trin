@@ -3,8 +3,9 @@ use std::fmt::{self};
 use serde::{Deserialize, Serialize};
 use ssz::{Decode, Encode};
 
-#[derive(PartialEq, Debug, Clone, Copy, Eq)]
+#[derive(PartialEq, Debug, Clone, Copy, Eq, Default)]
 pub enum PingExtensionType {
+    #[default]
     Capabilities,
     BasicRadius,
     HistoryRadius,

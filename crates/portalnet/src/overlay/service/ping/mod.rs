@@ -69,25 +69,12 @@ impl<
 
         let extension_type = request.payload_type;
 
-        if let PingExtensionType::NonSupportedExtension(non_supported_extension) = extension_type {
-            warn!(
-                protocol = %self.protocol,
-                request.source = %source,
-                request.discv5.id = %request_id,
-                "Received non-supported extension type in ping message: {non_supported_extension:?}",
-            );
-            return self.create_pong(
-                PingExtensionType::Error,
-                PingError::new(ErrorCodes::ExtensionNotSupported).into(),
-            );
-        };
-
         if !self.ping_extensions.is_supported(extension_type) {
             warn!(
                 protocol = %self.protocol,
                 request.source = %source,
                 request.discv5.id = %request_id,
-                "Received non-supported ping extension on this portal subnetwork: {extension_type:?}"
+                "Received unsupported ping extension: {extension_type:?}"
             );
             return self.create_pong(
                 PingExtensionType::Error,

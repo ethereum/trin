@@ -19,22 +19,31 @@ pub trait PingExtensions {
 
 pub struct MockPingExtension;
 
-impl PingExtensions for MockPingExtension {
-    fn is_supported(&self, _extension: PingExtensionType) -> bool {
-        true
-    }
+impl MockPingExtension {
+    pub const SUPPORTED_EXTENSIONS: &[PingExtensionType] = &[
+        PingExtensionType::Capabilities,
+        PingExtensionType::BasicRadius,
+    ];
 
+    /// Base extensions that are required for the core subnetwork to function.
+    /// These must be sorted by latest to oldest
+    pub const BASE_EXTENSIONS: &[PingExtensionType] = &[PingExtensionType::BasicRadius];
+}
+
+impl PingExtensions for MockPingExtension {
     fn latest_mutually_supported_base_extension(
         &self,
-        _extensions: &[PingExtensionType],
+        extensions: &[PingExtensionType],
     ) -> Option<PingExtensionType> {
-        Some(PingExtensionType::HistoryRadius)
+        for base_extension in Self::BASE_EXTENSIONS {
+            if extensions.contains(base_extension) {
+                return Some(*base_extension);
+            }
+        }
+        None
     }
 
     fn supported_extensions(&self) -> &[PingExtensionType] {
-        &[
-            PingExtensionType::Capabilities,
-            PingExtensionType::BasicRadius,
-        ]
+        Self::SUPPORTED_EXTENSIONS
     }
 }

@@ -35,7 +35,7 @@ pub async fn test_ping_no_specified_ping_payload(
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
     .await
-    .expect("Ping failed {subnetwork}");
+    .unwrap_or_else(|err| panic!("Ping should succeed. Subnetwork: {subnetwork}, {err:?}"));
 
     let radius = match PingExtension::decode_json(result.payload_type, result.payload) {
         Ok(PingExtension::Capabilities(payload)) => payload.data_radius,
@@ -63,7 +63,7 @@ pub async fn test_ping_capabilities_payload(target: &Client, peertest: &Peertest
         ))),
     )
     .await
-    .expect("Ping failed");
+    .expect("Ping should succeed");
 
     let client_info_radius_capabilities =
         match PingExtension::decode_json(result.payload_type, result.payload) {
@@ -94,7 +94,7 @@ pub async fn test_ping_basic_radius_payload(target: &Client, peertest: &Peertest
         Some(json!(BasicRadius::new(Distance::MAX))),
     )
     .await
-    .expect("Ping failed");
+    .expect("Ping should succeed");
 
     let basic_radius = match PingExtension::decode_json(result.payload_type, result.payload.clone())
     {
@@ -120,7 +120,7 @@ pub async fn test_ping_history_radius_payload(target: &Client, peertest: &Peerte
         Some(json!(HistoryRadius::new(Distance::MAX, 0))),
     )
     .await
-    .expect("Ping failed");
+    .expect("Ping should succeed");
 
     let history_radius = match PingExtension::decode_json(result.payload_type, result.payload) {
         Ok(PingExtension::HistoryRadius(payload)) => payload,
@@ -202,7 +202,7 @@ pub async fn test_ping_capabilities_payload_type(target: &Client, peertest: &Pee
         None,
     )
     .await
-    .expect("Ping failed");
+    .expect("Ping should succeed");
 
     let capabilities_payload =
         match PingExtension::decode_json(result.payload_type, result.payload.clone()) {
@@ -233,7 +233,7 @@ pub async fn test_ping_basic_radius_payload_type(target: &Client, peertest: &Pee
         None,
     )
     .await
-    .expect("Ping failed");
+    .expect("Ping should succeed");
 
     let basic_radius = match PingExtension::decode_json(result.payload_type, result.payload.clone())
     {
@@ -259,7 +259,7 @@ pub async fn test_ping_history_radius_payload_type(target: &Client, peertest: &P
         None,
     )
     .await
-    .expect("Ping failed");
+    .expect("Ping should succeed");
 
     let history_radius =
         match PingExtension::decode_json(result.payload_type, result.payload.clone()) {

@@ -47,21 +47,21 @@ pub enum RpcServeError {
         message: String,
         trace: Option<Box<QueryTrace>>,
     },
-    /// PayloadTypeNotSupported
+    /// PingPayloadTypeNotSupported
     /// The client or subnetwork doesn't support this payload type.
     #[error("Ping payload type not supported: {message}")]
-    PayloadTypeNotSupported {
+    PingPayloadTypeNotSupported {
         message: String,
-        reason: PayloadTypeNotSupportedReason,
+        reason: PingPayloadTypeNotSupportedReason,
     },
-    /// FailedToDecodePayload
+    /// FailedToDecodePingPayload
     /// Failed to decode the ping payload from the payload type.
     #[error("Failed to decode ping payload: {message}")]
-    FailedToDecodePayload { message: String },
-    /// PayloadTypeRequired
+    FailedToDecodePingPayload { message: String },
+    /// PingPayloadTypeRequired
     /// The payload type is required if the payload is specified.
     #[error("Ping payload type required: {message}")]
-    PayloadTypeRequired { message: String },
+    PingPayloadTypeRequired { message: String },
 }
 
 impl From<RpcServeError> for ErrorObjectOwned {
@@ -72,13 +72,13 @@ impl From<RpcServeError> for ErrorObjectOwned {
             RpcServeError::ContentNotFound { message, trace } => {
                 ErrorObject::owned(-39001, message, Some(trace))
             }
-            RpcServeError::PayloadTypeNotSupported { message, reason } => {
+            RpcServeError::PingPayloadTypeNotSupported { message, reason } => {
                 ErrorObject::owned(-39004, message, Some(reason.to_string()))
             }
-            RpcServeError::FailedToDecodePayload { message } => {
+            RpcServeError::FailedToDecodePingPayload { message } => {
                 ErrorObject::owned(-39005, message, None::<()>)
             }
-            RpcServeError::PayloadTypeRequired { message } => {
+            RpcServeError::PingPayloadTypeRequired { message } => {
                 ErrorObject::owned(-39006, message, None::<()>)
             }
         }
@@ -129,7 +129,7 @@ pub enum WsHttpSamePortError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
-pub enum PayloadTypeNotSupportedReason {
+pub enum PingPayloadTypeNotSupportedReason {
     /// The client doesn't support this payload type.
     #[error("client")]
     Client,

@@ -376,12 +376,12 @@ impl<
         enr
     }
 
-    /// Generate a default payload for a respective payload type.
+    /// Generate a default ping extension for a respective type.
     pub fn default_ping_extension(
         &self,
-        payload_type: PingExtensionType,
+        ping_extension_type: PingExtensionType,
     ) -> Result<PingExtension, OverlayRequestError> {
-        Ok(match payload_type {
+        Ok(match ping_extension_type {
             PingExtensionType::Capabilities => {
                 PingExtension::Capabilities(ClientInfoRadiusCapabilities::new(
                     self.data_radius(),
@@ -408,29 +408,38 @@ impl<
     }
 
     /// Sends a `Ping` request to `enr`.
+    ///
+    /// Fails if
+    /// - `ping_extension_type` is not specified and `ping_extension` is specified
+    /// - `ping_extension_type` and `ping_extension` do not match types
     pub async fn send_ping(
         &self,
         enr: Enr,
-        payload_type: Option<PingExtensionType>,
-        payload: Option<PingExtension>,
+        ping_extension_type: Option<PingExtensionType>,
+        ping_extension: Option<PingExtension>,
     ) -> Result<Pong, OverlayRequestError> {
-        if let (Some(payload_type), Some(payload)) = (payload_type, &payload) {
-            if payload_type != payload.ping_extension_type() {
+        if ping_extension_type.is_none() && ping_extension.is_some() {
+            return Err(OverlayRequestError::InvalidRequest(
+                "`ping_extension_type`, must be specified if `ping_extension` is specified".into(),
+            ));
+        }
+
+        if let (Some(ping_extension_type), Some(ping_extension)) =
+            (ping_extension_type, &ping_extension)
+        {
+            if ping_extension_type != ping_extension.ping_extension_type() {
                 return Err(OverlayRequestError::InvalidRequest(
                     "Payload type mismatch".into(),
                 ));
             }
         }
 
-        let payload_type = payload_type.unwrap_or(PingExtensionType::Capabilities);
-        let ping_extension = match payload {
-            Some(payload) => payload,
-            None => self.default_ping_extension(payload_type)?,
-        };
+        let ping_extension = ping_extension
+            .unwrap_or(self.default_ping_extension(ping_extension_type.unwrap_or_default())?);
 
         let request = Ping {
             enr_seq: self.discovery.local_enr().seq(),
-            payload_type,
+            payload_type: ping_extension.ping_extension_type(),
             payload: ping_extension.into(),
         };
 

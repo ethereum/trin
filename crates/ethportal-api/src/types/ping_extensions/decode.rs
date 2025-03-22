@@ -75,32 +75,23 @@ impl PingExtension {
     }
 
     pub fn decode_json(extension_type: PingExtensionType, payload: Value) -> anyhow::Result<Self> {
-        match extension_type {
+        let ping_extension = match extension_type {
             PingExtensionType::Capabilities => {
-                let capabilities = serde_json::from_value(payload).map_err(|err| {
-                    anyhow!("Failed to decode ClientInfoRadiusCapabilities: {err:?}")
-                })?;
-                Ok(PingExtension::Capabilities(capabilities))
+                serde_json::from_value(payload).map(PingExtension::Capabilities)
             }
             PingExtensionType::BasicRadius => {
-                let basic_radius = serde_json::from_value(payload)
-                    .map_err(|err| anyhow!("Failed to decode BasicRadius: {err:?}"))?;
-                Ok(PingExtension::BasicRadius(basic_radius))
+                serde_json::from_value(payload).map(PingExtension::BasicRadius)
             }
             PingExtensionType::HistoryRadius => {
-                let history_radius = serde_json::from_value(payload)
-                    .map_err(|err| anyhow!("Failed to decode HistoryRadius: {err:?}"))?;
-                Ok(PingExtension::HistoryRadius(history_radius))
+                serde_json::from_value(payload).map(PingExtension::HistoryRadius)
             }
-            PingExtensionType::Error => {
-                let error = serde_json::from_value(payload)
-                    .map_err(|err| anyhow!("Failed to decode PingError: {err:?}"))?;
-                Ok(PingExtension::Error(error))
-            }
+            PingExtensionType::Error => serde_json::from_value(payload).map(PingExtension::Error),
             PingExtensionType::NonSupportedExtension(non_supported_extension) => {
                 bail!("Non supported extension type: {non_supported_extension}")
             }
-        }
+        };
+        ping_extension
+            .map_err(|err| anyhow!("Failed to decode ping extension {extension_type}: {err:?} "))
     }
 
     pub fn ping_extension_type(&self) -> PingExtensionType {
