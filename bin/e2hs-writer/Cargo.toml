@@ -24,7 +24,6 @@ portal-bridge.workspace = true
 reqwest.workspace = true
 rstest.workspace = true
 serde_yaml.workspace = true
-sha2.workspace = true
 ssz_types.workspace = true
 tokio.workspace = true
 tracing.workspace = true

@@ -219,14 +219,12 @@ impl ExecutionApi {
     ) -> anyhow::Result<Receipts> {
         // Build receipts
         let receipts = match tx_count {
-            0 => Receipts {
-                receipt_list: vec![],
-            },
+            0 => Receipts(vec![]),
             _ => self.get_trusted_receipts(block_number).await?,
         };
 
         // Validate Receipts
-        let actual_receipts_root = receipts.root()?;
+        let actual_receipts_root = receipts.root();
         if actual_receipts_root != receipts_root {
             bail!(
                 "Receipts root doesn't match header receipts root: {actual_receipts_root:?} - {receipts_root:?}",

@@ -1,6 +1,10 @@
 use std::{path::PathBuf, sync::Arc};
 
-use alloy::primitives::B256;
+use alloy::{
+    consensus::BlockBody as AlloyBlockBody,
+    eips::eip4895::{Withdrawal, Withdrawals},
+    primitives::B256,
+};
 use anyhow::{anyhow, bail};
 use async_stream::stream;
 use e2store::era1::Era1;
@@ -8,7 +12,7 @@ use ethportal_api::types::{
     consensus::beacon_state::HistoricalBatch,
     execution::{
         accumulator::EpochAccumulator,
-        block_body::{BlockBody, BlockBodyMerge},
+        block_body::BlockBody,
         header_with_proof::{
             BlockHeaderProof, BlockProofHistoricalHashesAccumulator, BlockProofHistoricalRoots,
             BlockProofHistoricalSummaries, HeaderWithProof,
@@ -18,9 +22,9 @@ use ethportal_api::types::{
 };
 use futures::Stream;
 use portal_bridge::{api::execution::ExecutionApi, bridge::utils::lookup_epoch_acc};
-use ssz::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
 use tree_hash::TreeHash;
+use trin_execution::era::beacon::decode_transactions;
 use trin_validation::{
     accumulator::PreMergeAccumulator,
     constants::{CANCUN_BLOCK_NUMBER, EPOCH_SIZE, MERGE_BLOCK_NUMBER, SHANGHAI_BLOCK_NUMBER},
@@ -28,7 +32,10 @@ use trin_validation::{
 };
 use url::Url;
 
-use crate::provider::EraProvider;
+use crate::{
+    provider::EraProvider,
+    utils::{pre_capella_execution_payload_to_header, pre_deneb_execution_payload_to_header},
+};
 
 pub struct AllBlockData {
     pub block: u64,
@@ -125,8 +132,8 @@ impl EpochReader {
             .block
             .message_merge()
             .map_err(|e| anyhow!("Unable to decode merge block: {e:?}"))?;
-        let execution_payload = block.body.execution_payload.clone();
-        let header = execution_payload.clone().into();
+        let payload = block.body.execution_payload.clone();
+        let header = pre_capella_execution_payload_to_header(payload.clone());
         let historical_batch = HistoricalBatch {
             state_roots: era.era_state.state.state_roots().clone(),
             block_roots: era.era_state.state.block_roots().clone(),
@@ -152,17 +159,17 @@ impl EpochReader {
             header,
             proof: BlockHeaderProof::HistoricalRoots(proof),
         };
-        let encoded_transactions = execution_payload.transactions.as_ssz_bytes();
-        let body = BlockBody::Merge(
-            BlockBodyMerge::from_ssz_bytes(&encoded_transactions)
-                .map_err(|e| anyhow!("Unable to decode merge block body: {e:?}"))?,
-        );
+        let body = BlockBody(AlloyBlockBody {
+            transactions: decode_transactions(&payload.transactions)?,
+            ommers: vec![],
+            withdrawals: None,
+        });
         let receipts = self
             .execution_api
             .get_era_receipts(
                 block_number,
-                execution_payload.transactions.len() as u64,
-                execution_payload.receipts_root,
+                payload.transactions.len() as u64,
+                payload.receipts_root,
             )
             .await?;
         Ok(AllBlockData {
@@ -186,8 +193,8 @@ impl EpochReader {
             .block
             .message_capella()
             .map_err(|e| anyhow!("Unable to decode capella block: {e:?}"))?;
-        let execution_payload = block.body.execution_payload.clone();
-        let header = execution_payload.clone().into();
+        let payload = block.body.execution_payload.clone();
+        let header = pre_deneb_execution_payload_to_header(payload.clone());
 
         let historical_batch = HistoricalBatch {
             state_roots: era.era_state.state.state_roots().clone(),
@@ -214,17 +221,19 @@ impl EpochReader {
             header,
             proof: BlockHeaderProof::HistoricalSummaries(proof),
         };
-        let encoded_transactions = execution_payload.transactions.as_ssz_bytes();
-        let body = BlockBody::Merge(
-            BlockBodyMerge::from_ssz_bytes(&encoded_transactions)
-                .map_err(|e| anyhow!("Unable to decode block body: {e:?}"))?,
-        );
+        let withdrawals: Vec<Withdrawal> =
+            payload.withdrawals.iter().map(Withdrawal::from).collect();
+        let body = BlockBody(AlloyBlockBody {
+            transactions: decode_transactions(&payload.transactions)?,
+            ommers: vec![],
+            withdrawals: Some(Withdrawals::new(withdrawals)),
+        });
         let receipts = self
             .execution_api
             .get_era_receipts(
                 block_number,
-                execution_payload.transactions.len() as u64,
-                execution_payload.receipts_root,
+                payload.transactions.len() as u64,
+                payload.receipts_root,
             )
             .await?;
         Ok(AllBlockData {
@@ -268,6 +277,7 @@ mod tests {
         },
     };
     use serde_yaml::Value;
+    use ssz::Decode;
 
     use super::*;
 
@@ -300,11 +310,11 @@ mod tests {
         };
 
         let test_assets_dir =
-            format!("../../crates/ethportal-api/src/assets/test/proofs/{block_number}/");
-        let hb_path = format!("{test_assets_dir}hb.ssz");
+            format!("../../portal-spec-tests/tests/mainnet/history/headers_with_proof/beacon_data/{block_number}");
+        let hb_path = format!("{test_assets_dir}/historical_batch.ssz");
         let hb_raw = std::fs::read(hb_path).unwrap();
         let historical_batch = HistoricalBatch::from_ssz_bytes(&hb_raw).unwrap();
-        let block_path = format!("{test_assets_dir}block.ssz");
+        let block_path = format!("{test_assets_dir}/block.ssz");
         let block_raw = std::fs::read(block_path).unwrap();
         let block = BeaconBlockBellatrix::from_ssz_bytes(&block_raw).unwrap();
         let proof = build_historical_roots_proof(slot, &historical_batch, block);
@@ -356,12 +366,12 @@ mod tests {
         };
 
         let test_assets_dir =
-            format!("../../crates/ethportal-api/src/assets/test/proofs/{block_number}/");
-        let state_path = format!("{test_assets_dir}state.ssz");
+            format!("../../portal-spec-tests/tests/mainnet/history/headers_with_proof/beacon_data/{block_number}");
+        let state_path = format!("{test_assets_dir}/block_roots.ssz");
         let state_raw = std::fs::read(state_path).unwrap();
         let beacon_state = BeaconState::from_ssz_bytes(&state_raw, ForkName::Capella).unwrap();
         let beacon_state = beacon_state.as_capella().unwrap();
-        let block_path = format!("{test_assets_dir}block.ssz");
+        let block_path = format!("{test_assets_dir}/block.ssz");
         let block_raw = std::fs::read(block_path).unwrap();
         let block = BeaconBlockCapella::from_ssz_bytes(&block_raw).unwrap();
         let proof = build_historical_summaries_proof(slot, beacon_state, block);

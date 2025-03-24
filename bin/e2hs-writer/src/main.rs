@@ -4,6 +4,7 @@
 pub mod cli;
 pub mod provider;
 pub mod reader;
+pub mod utils;
 pub mod writer;
 
 use clap::Parser;

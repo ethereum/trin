@@ -2208,7 +2208,6 @@ dependencies = [
  "reqwest",
  "rstest",
  "serde_yaml",
- "sha2",
  "ssz_types",
  "tokio",
  "tracing",

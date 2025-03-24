@@ -8,7 +8,6 @@ use e2store::{
 };
 use ethportal_api::utils::bytes::hex_encode;
 use futures::StreamExt;
-use sha2::{Digest, Sha256};
 use tracing::{debug, info};
 
 use crate::reader::EpochReader;
@@ -62,13 +61,11 @@ impl EpochWriter {
             let length = entry.iter().map(|entry| entry.length() as u64).sum::<u64>();
             offset += length;
         }
-        let starting_number = block_tuples[0]
-            .header_with_proof
-            .header_with_proof
-            .header
-            .number;
+        let starting_header = &block_tuples[0].header_with_proof.header_with_proof.header;
+        let short_hash = starting_header.hash_slow().as_slice()[0..4].to_vec();
+        let short_hash = hex_encode(short_hash);
         let block_index = BlockIndex {
-            starting_number,
+            starting_number: starting_header.number,
             indices,
             count: BLOCK_TUPLE_COUNT as u64,
         };
@@ -79,8 +76,6 @@ impl EpochWriter {
             block_index,
         };
         let raw_e2hs = e2hs.write()?;
-        let short_hash = Sha256::digest(&raw_e2hs).as_slice()[0..4].to_vec();
-        let short_hash = hex_encode(short_hash);
         let e2hs_path = format!(
             "{}/mainnet-{:05}-{}.e2hs",
             self.target_dir,

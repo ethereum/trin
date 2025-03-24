@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn test_e2hs_round_trip() {
-        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-93fc0269.e2hs").unwrap();
+        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-d4e56740.e2hs").unwrap();
         let e2hs = E2HS::deserialize(&raw_e2hs).expect("failed to deserialize e2hs");
         let raw_e2hs2 = e2hs.write().expect("failed to serialize e2hs");
         assert_eq!(raw_e2hs, raw_e2hs2);
@@ -387,7 +387,7 @@ mod tests {
     #[case(100)]
     #[case(8191)]
     fn test_e2hs_block_index(#[case] block_number: u64) {
-        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-93fc0269.e2hs").unwrap();
+        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-d4e56740.e2hs").unwrap();
         let block_tuple = E2HS::get_tuple_by_index(&raw_e2hs, block_number);
         assert_eq!(
             block_tuple
@@ -399,27 +399,31 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_e2hs_block_index_direct_access() {
-        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-93fc0269.e2hs").unwrap();
+    #[rstest::rstest]
+    #[case(0)]
+    #[case(1)]
+    #[case(100)]
+    #[case(8191)]
+    fn test_e2hs_block_index_direct_access(#[case] block_number: u64) {
+        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-d4e56740.e2hs").unwrap();
         let file = E2StoreMemory::deserialize(&raw_e2hs).expect("invalid e2hs file");
         let block_index =
             BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))
                 .expect("invalid block index entry")
                 .block_index;
-        let index_100 = block_index.indices[100];
+        let index = block_index.indices[block_number as usize];
         let header_bytes = raw_e2hs
-            .get((index_100 as usize)..(index_100 as usize + 8))
+            .get((index as usize)..(index as usize + 8))
             .unwrap();
         let header = Header::deserialize(header_bytes).expect("invalid header");
         let hwp_length = header.length as u64;
         let hwp_bytes = raw_e2hs
-            .get((index_100 as usize + 8)..(index_100 as usize + 8 + hwp_length as usize))
+            .get((index as usize + 8)..(index as usize + 8 + hwp_length as usize))
             .unwrap();
         let mut decoder = snap::read::FrameDecoder::new(hwp_bytes);
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf).unwrap();
         let header_with_proof = HeaderWithProof::from_ssz_bytes(&buf).unwrap();
-        assert_eq!(header_with_proof.header.number, 100);
+        assert_eq!(header_with_proof.header.number, block_number);
     }
 }
