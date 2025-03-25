@@ -1,10 +1,8 @@
 use e2store::{
-    e2hs::{
-        BlockIndex, BlockIndexEntry, BlockTuple, BodyEntry, HeaderWithProofEntry, ReceiptsEntry,
-        BLOCK_TUPLE_COUNT, E2HS,
-    },
+    e2hs::{BlockIndexEntry, BlockTuple, HeaderWithProofEntry, BLOCK_TUPLE_COUNT, E2HS},
     e2store::types::{Entry, VersionEntry},
     entry_types::VERSION,
+    era1::{BlockIndex, BodyEntry, ReceiptsEntry},
 };
 use ethportal_api::utils::bytes::hex_encode;
 use futures::StreamExt;

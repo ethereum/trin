@@ -204,8 +204,7 @@ pub fn build_historical_roots_proof(
     historical_batch: &HistoricalBatch,
     beacon_block: BeaconBlockBellatrix,
 ) -> BlockProofHistoricalRoots {
-    // beacon block proof
-    let hb_proof = historical_batch.build_block_root_proof(slot % 8192);
+    let beacon_block_proof = historical_batch.build_block_root_proof(slot % 8192);
 
     // execution block proof
     let mut execution_block_hash_proof = beacon_block.body.build_execution_block_hash_proof();
@@ -213,7 +212,7 @@ pub fn build_historical_roots_proof(
     execution_block_hash_proof.extend(body_root_proof);
 
     BlockProofHistoricalRoots {
-        beacon_block_proof: hb_proof.into(),
+        beacon_block_proof: beacon_block_proof.into(),
         beacon_block_root: beacon_block.tree_hash_root(),
         execution_block_proof: execution_block_hash_proof.into(),
         slot,

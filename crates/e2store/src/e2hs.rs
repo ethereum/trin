@@ -1,13 +1,35 @@
+//! The format for storing history chain data snapshots.
+//!
+//! Filename:
+//!
+//! ```text
+//! <config-name>-<era-number>-<short-hash>.e2hs
+//! ```
+//!
+//! Type Definitions:
+//!
+//! ```text
+//! e2hs := Version | block-tuple* | other-entries* | BlockIndex
+//! block-tuple :=  CompressedHeader | CompressedBody | CompressedReceipts
+//! -----
+//! Version            = { type: 0x6532, data: nil }
+//! CompressedHWP      = { type: 0x0301, data: snappyFramed(ssz(header_with_proof)) }
+//! CompressedBody     = { type: 0x0400, data: snappyFramed(rlp(body)) }
+//! CompressedReceipts = { type: 0x0500, data: snappyFramed(rlp(receipts)) }
+//! BlockIndex         = { type: 0x6232, data: block-index }
+//! ```
+//!
+//! E2HS files must each contain a contiguous sequence of 8192 blocks.
+//! Full file spec can be found here:
+//! https://github.com/eth-clients/e2store-format-specs/blob/main/formats/e2hs.md
+
 use std::{
     fs,
     io::{Read, Write},
 };
 
-use alloy::rlp::Decodable;
-use anyhow::ensure;
-use ethportal_api::types::execution::{
-    block_body::BlockBody, header_with_proof::HeaderWithProof, receipts::Receipts,
-};
+use anyhow::{anyhow, ensure};
+use ethportal_api::types::execution::header_with_proof::HeaderWithProof;
 use ssz::{Decode, Encode};
 
 use crate::{
@@ -16,18 +38,8 @@ use crate::{
         types::{Entry, VersionEntry},
     },
     entry_types,
+    era1::{BlockIndex, BodyEntry, ReceiptsEntry},
 };
-
-// <config-name>-<era-number>-<era-count>-<short-historical-root>.era
-//
-// e2hs := Version | block-tuple* | other-entries* | BlockIndex
-// block-tuple :=  CompressedHeader | CompressedBody | CompressedReceipts
-// -----
-// Version            = { type: 0x6532, data: nil }
-// CompressedHWP      = { type: 0x0301,   data: snappyFramed(ssz(header_with_proof)) }
-// CompressedBody     = { type: 0x04,   data: snappyFramed(rlp(body)) }
-// CompressedReceipts = { type: 0x05,   data: snappyFramed(rlp(receipts)) }
-// BlockIndex         = { type: 0x6232, data: block-index }
 
 pub const BLOCK_TUPLE_COUNT: usize = 8192;
 const E2HS_ENTRY_COUNT: usize = BLOCK_TUPLE_COUNT * 3 + 2;
@@ -47,28 +59,28 @@ impl E2HS {
     /// Function to iterate over block tuples in an e2hs file
     /// this is useful for processing large e2hs files without storing the entire
     /// deserialized e2hs object in memory.
-    pub fn iter_tuples(raw_e2hs: Vec<u8>) -> impl Iterator<Item = BlockTuple> {
-        let file = E2StoreMemory::deserialize(&raw_e2hs).expect("invalid e2hs file");
-        let block_index =
-            BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))
-                .expect("invalid block index entry")
-                .block_index;
-        (0..block_index.count).map(move |i| {
+    pub fn iter_tuples(raw_e2hs: Vec<u8>) -> anyhow::Result<impl Iterator<Item = BlockTuple>> {
+        let file = E2StoreMemory::deserialize(&raw_e2hs)?;
+        let last_entry = file.entries.last().ok_or(anyhow!(
+            "invalid e2hs file found during iter: missing block index entry"
+        ))?;
+        let block_index = BlockIndexEntry::try_from(last_entry)?.block_index;
+        Ok((0..block_index.count).map(move |i| {
             let mut entries: [Entry; 3] = Default::default();
             for (j, entry) in entries.iter_mut().enumerate() {
                 file.entries[i as usize * 3 + j + 1].clone_into(entry);
             }
             BlockTuple::try_from(&entries).expect("invalid block tuple")
-        })
+        }))
     }
 
-    pub fn get_tuple_by_index(raw_e2hs: &[u8], index: u64) -> BlockTuple {
-        let file = E2StoreMemory::deserialize(raw_e2hs).expect("invalid e2hs file");
+    pub fn get_tuple_by_index(raw_e2hs: &[u8], index: u64) -> anyhow::Result<BlockTuple> {
+        let file = E2StoreMemory::deserialize(raw_e2hs)?;
         let mut entries: [Entry; 3] = Default::default();
         for (j, entry) in entries.iter_mut().enumerate() {
             file.entries[index as usize * 3 + j + 1].clone_into(entry);
         }
-        BlockTuple::try_from(&entries).expect("invalid block tuple")
+        BlockTuple::try_from(&entries)
     }
 
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
@@ -82,8 +94,10 @@ impl E2HS {
             )
         );
         let version = VersionEntry::try_from(&file.entries[0])?;
-        let block_index =
-            BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))?;
+        let last_entry = file.entries.last().ok_or(anyhow!(
+            "invalid e2hs file found during iter: missing block index entry"
+        ))?;
+        let block_index = BlockIndexEntry::try_from(last_entry)?;
         let mut block_tuples = vec![];
         let block_tuple_count = block_index.block_index.count as usize;
         for count in 0..block_tuple_count {
@@ -212,82 +226,6 @@ impl TryFrom<HeaderWithProofEntry> for Entry {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct BodyEntry {
-    pub body: BlockBody,
-}
-
-impl TryFrom<&Entry> for BodyEntry {
-    type Error = anyhow::Error;
-
-    fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
-        ensure!(
-            entry.header.type_ == entry_types::COMPRESSED_BODY,
-            "invalid body entry: incorrect header type"
-        );
-        ensure!(
-            entry.header.reserved == 0,
-            "invalid body entry: incorrect header reserved bytes"
-        );
-        let mut decoder = snap::read::FrameDecoder::new(&entry.value[..]);
-        let mut buf: Vec<u8> = vec![];
-        decoder.read_to_end(&mut buf)?;
-        let body = Decodable::decode(&mut buf.as_slice())?;
-        Ok(Self { body })
-    }
-}
-
-impl TryInto<Entry> for BodyEntry {
-    type Error = anyhow::Error;
-
-    fn try_into(self) -> Result<Entry, Self::Error> {
-        let rlp_encoded = alloy::rlp::encode(self.body);
-        let buf: Vec<u8> = vec![];
-        let mut encoder = snap::write::FrameEncoder::new(buf);
-        let _ = encoder.write(&rlp_encoded)?;
-        let encoded = encoder.into_inner()?;
-        Ok(Entry::new(entry_types::COMPRESSED_BODY, encoded))
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct ReceiptsEntry {
-    pub receipts: Receipts,
-}
-
-impl TryFrom<&Entry> for ReceiptsEntry {
-    type Error = anyhow::Error;
-
-    fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
-        ensure!(
-            entry.header.type_ == entry_types::COMPRESSED_RECEIPTS,
-            "invalid receipts entry: incorrect header type"
-        );
-        ensure!(
-            entry.header.reserved == 0,
-            "invalid receipts entry: incorrect header reserved bytes"
-        );
-        let mut decoder = snap::read::FrameDecoder::new(&entry.value[..]);
-        let mut buf: Vec<u8> = vec![];
-        decoder.read_to_end(&mut buf)?;
-        let receipts: Receipts = Decodable::decode(&mut buf.as_slice())?;
-        Ok(Self { receipts })
-    }
-}
-
-impl TryInto<Entry> for ReceiptsEntry {
-    type Error = anyhow::Error;
-
-    fn try_into(self) -> Result<Entry, Self::Error> {
-        let rlp_encoded = alloy::rlp::encode(&self.receipts);
-        let buf: Vec<u8> = vec![];
-        let mut encoder = snap::write::FrameEncoder::new(buf);
-        let _ = encoder.write(&rlp_encoded)?;
-        let encoded = encoder.into_inner()?;
-        Ok(Entry::new(entry_types::COMPRESSED_RECEIPTS, encoded))
-    }
-}
-
 //   block-index := starting-number | index | index | index ... | count
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -340,34 +278,6 @@ impl TryInto<Entry> for BlockIndexEntry {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct BlockIndex {
-    pub starting_number: u64,
-    pub indices: Vec<u64>,
-    pub count: u64,
-}
-
-impl TryFrom<Entry> for BlockIndex {
-    type Error = anyhow::Error;
-
-    fn try_from(entry: Entry) -> Result<Self, Self::Error> {
-        let starting_number = u64::from_le_bytes(entry.value[0..8].try_into()?);
-        let block_tuple_count = (entry.value.len() - 16) / 8;
-        let mut indices = vec![0; block_tuple_count];
-        for (i, index) in indices.iter_mut().enumerate() {
-            *index = u64::from_le_bytes(entry.value[(i * 8 + 8)..(i * 8 + 16)].try_into()?);
-        }
-        let count = u64::from_le_bytes(
-            entry.value[(block_tuple_count * 8 + 8)..(block_tuple_count * 8 + 16)].try_into()?,
-        );
-        Ok(Self {
-            starting_number,
-            indices,
-            count,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,7 +298,7 @@ mod tests {
     #[case(8191)]
     fn test_e2hs_block_index(#[case] block_number: u64) {
         let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-d4e56740.e2hs").unwrap();
-        let block_tuple = E2HS::get_tuple_by_index(&raw_e2hs, block_number);
+        let block_tuple = E2HS::get_tuple_by_index(&raw_e2hs, block_number).unwrap();
         assert_eq!(
             block_tuple
                 .header_with_proof

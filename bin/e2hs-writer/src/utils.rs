@@ -1,16 +1,22 @@
 use alloy::{
-    consensus::Header,
+    consensus::{
+        proofs::{calculate_transaction_root, calculate_withdrawals_root},
+        Header, TxEnvelope,
+    },
+    eips::eip4895::Withdrawal,
     primitives::{Bloom, B64, U256},
 };
 use ethportal_api::types::consensus::execution_payload::{
     ExecutionPayloadBellatrix, ExecutionPayloadCapella,
 };
-use tree_hash::TreeHash;
 use trin_execution::era::beacon::EMPTY_UNCLE_ROOT_HASH;
 
-pub fn pre_capella_execution_payload_to_header(payload: ExecutionPayloadBellatrix) -> Header {
-    let transactions_root = payload.transactions.tree_hash_root();
-    Header {
+pub fn pre_capella_execution_payload_to_header(
+    payload: ExecutionPayloadBellatrix,
+    transactions: &[TxEnvelope],
+) -> anyhow::Result<Header> {
+    let transactions_root = calculate_transaction_root(transactions);
+    Ok(Header {
         parent_hash: payload.parent_hash,
         ommers_hash: EMPTY_UNCLE_ROOT_HASH,
         beneficiary: payload.fee_recipient,
@@ -32,13 +38,17 @@ pub fn pre_capella_execution_payload_to_header(payload: ExecutionPayloadBellatri
         excess_blob_gas: None,
         parent_beacon_block_root: None,
         requests_hash: None,
-    }
+    })
 }
 
-pub fn pre_deneb_execution_payload_to_header(payload: ExecutionPayloadCapella) -> Header {
-    let transactions_root = payload.transactions.tree_hash_root();
-    let withdrawals_root = Some(payload.withdrawals.tree_hash_root());
-    Header {
+pub fn pre_deneb_execution_payload_to_header(
+    payload: ExecutionPayloadCapella,
+    transactions: &[TxEnvelope],
+) -> anyhow::Result<Header> {
+    let transactions_root = calculate_transaction_root(transactions);
+    let withdrawals: Vec<Withdrawal> = payload.withdrawals.iter().map(Withdrawal::from).collect();
+    let withdrawals_root = calculate_withdrawals_root(&withdrawals);
+    Ok(Header {
         parent_hash: payload.parent_hash,
         ommers_hash: EMPTY_UNCLE_ROOT_HASH,
         beneficiary: payload.fee_recipient,
@@ -55,10 +65,10 @@ pub fn pre_deneb_execution_payload_to_header(payload: ExecutionPayloadCapella) -
         mix_hash: payload.prev_randao,
         nonce: B64::ZERO,
         base_fee_per_gas: Some(payload.base_fee_per_gas.to()),
-        withdrawals_root,
+        withdrawals_root: Some(withdrawals_root),
         blob_gas_used: None,
         excess_blob_gas: None,
         parent_beacon_block_root: None,
         requests_hash: None,
-    }
+    })
 }

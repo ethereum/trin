@@ -38,7 +38,7 @@ use crate::{
 };
 
 pub struct AllBlockData {
-    pub block: u64,
+    pub block_number: u64,
     pub header_with_proof: HeaderWithProof,
     pub body: BlockBody,
     pub receipts: Receipts,
@@ -98,11 +98,9 @@ impl EpochReader {
         let block_index = block_number % EPOCH_SIZE;
         let tuple = Era1::get_tuple_by_index(&raw_era1, block_index);
         let header = tuple.header.header;
-        let receipts = tuple.receipts.receipts;
-        let body = tuple.body.body;
-        let epoch_acc = self.epoch_accumulator.clone().unwrap_or_else(|| {
-            panic!("Epoch accumulator not found for pre-merge block: {block_number}")
-        });
+        let epoch_acc = self.epoch_accumulator.clone().ok_or_else(|| {
+            anyhow!("Epoch accumulator not found for pre-merge block: {block_number}")
+        })?;
         let proof = PreMergeAccumulator::construct_proof(&header, &epoch_acc)?;
         let proof = BlockProofHistoricalHashesAccumulator::new(proof.into()).map_err(|e| {
             anyhow!("Unable to convert proof to BlockProofHistoricalHashesAccumulator: {e:?}")
@@ -112,10 +110,10 @@ impl EpochReader {
             proof: BlockHeaderProof::HistoricalHashes(proof),
         };
         Ok(AllBlockData {
-            block: block_number,
+            block_number,
             header_with_proof,
-            body,
-            receipts,
+            body: tuple.body.body,
+            receipts: tuple.receipts.receipts,
         })
     }
 
@@ -125,23 +123,26 @@ impl EpochReader {
             .blocks
             .iter()
             .find(|block| block.block.execution_block_number() == block_number)
-            .unwrap_or_else(|| {
-                panic!("Era file for block #{block_number} not found during pre-capella lookup")
-            });
+            .ok_or_else(|| {
+                anyhow!("Era file for block #{block_number} not found during pre-capella lookup")
+            })?;
         let block = block
             .block
             .message_merge()
             .map_err(|e| anyhow!("Unable to decode merge block: {e:?}"))?;
         let payload = block.body.execution_payload.clone();
-        let header = pre_capella_execution_payload_to_header(payload.clone());
+        let transactions = decode_transactions(&payload.transactions)?;
+        let header = pre_capella_execution_payload_to_header(payload.clone(), &transactions)?;
         let historical_batch = HistoricalBatch {
             state_roots: era.era_state.state.state_roots().clone(),
             block_roots: era.era_state.state.block_roots().clone(),
         };
         let slot = block.slot;
+
         // beacon block proof
-        let hb_proof = historical_batch.build_block_root_proof(slot % EPOCH_SIZE);
-        let beacon_block_proof: FixedVector<B256, typenum::U14> = hb_proof.into();
+        let historical_batch_proof = historical_batch.build_block_root_proof(slot % EPOCH_SIZE);
+        let beacon_block_proof: FixedVector<B256, typenum::U14> = historical_batch_proof.into();
+
         // execution block proof
         let mut execution_block_hash_proof = block.body.build_execution_block_hash_proof();
         let body_root_proof = block.build_body_root_proof();
@@ -155,12 +156,13 @@ impl EpochReader {
             slot,
             execution_block_proof,
         };
+
         let header_with_proof = HeaderWithProof {
             header,
             proof: BlockHeaderProof::HistoricalRoots(proof),
         };
         let body = BlockBody(AlloyBlockBody {
-            transactions: decode_transactions(&payload.transactions)?,
+            transactions,
             ommers: vec![],
             withdrawals: None,
         });
@@ -173,7 +175,7 @@ impl EpochReader {
             )
             .await?;
         Ok(AllBlockData {
-            block: block_number,
+            block_number,
             header_with_proof,
             body,
             receipts,
@@ -186,15 +188,16 @@ impl EpochReader {
             .blocks
             .iter()
             .find(|block| block.block.execution_block_number() == block_number)
-            .unwrap_or_else(|| {
-                panic!("Era file for block #{block_number} not found during pre-deneb lookup")
-            });
+            .ok_or_else(|| {
+                anyhow!("Era file for block #{block_number} not found during pre-deneb lookup")
+            })?;
         let block = block
             .block
             .message_capella()
             .map_err(|e| anyhow!("Unable to decode capella block: {e:?}"))?;
         let payload = block.body.execution_payload.clone();
-        let header = pre_deneb_execution_payload_to_header(payload.clone());
+        let transactions = decode_transactions(&payload.transactions)?;
+        let header = pre_deneb_execution_payload_to_header(payload.clone(), &transactions)?;
 
         let historical_batch = HistoricalBatch {
             state_roots: era.era_state.state.state_roots().clone(),
@@ -224,7 +227,7 @@ impl EpochReader {
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
         let body = BlockBody(AlloyBlockBody {
-            transactions: decode_transactions(&payload.transactions)?,
+            transactions,
             ommers: vec![],
             withdrawals: Some(Withdrawals::new(withdrawals)),
         });
@@ -237,7 +240,7 @@ impl EpochReader {
             )
             .await?;
         Ok(AllBlockData {
-            block: block_number,
+            block_number,
             header_with_proof,
             body,
             receipts,
@@ -255,7 +258,7 @@ impl EpochReader {
             } else if current_block < CANCUN_BLOCK_NUMBER {
                 yield self.get_pre_deneb_block_data(current_block).await;
             } else {
-                panic!("Invalid block number: {current_block}");
+                yield Err(anyhow!("Invalid block number: {current_block}"));
             }
             current_block += 1;
         }
