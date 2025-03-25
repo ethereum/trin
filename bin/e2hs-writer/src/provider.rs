@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, ensure};
 use e2store::{
     era::Era,
     utils::{get_era1_files, get_era_files},
@@ -77,9 +77,10 @@ impl EraProvider {
     }
 
     pub fn get_era1_for_block(&self, block_number: u64) -> anyhow::Result<Arc<Vec<u8>>> {
-        if block_number >= MERGE_BLOCK_NUMBER {
-            bail!("Invalid logic, tried to lookup era1 file for post-merge block");
-        }
+        ensure!(
+            block_number < MERGE_BLOCK_NUMBER,
+            "Invalid logic, tried to lookup era1 file for post-merge block"
+        );
         Ok(match &self.first_source {
             EraSource::PreMerge(era1) => era1.clone(),
             EraSource::PostMerge(_) => {
@@ -89,9 +90,10 @@ impl EraProvider {
     }
 
     pub fn get_era_for_block(&self, block_number: u64) -> anyhow::Result<Arc<Era>> {
-        if block_number < MERGE_BLOCK_NUMBER {
-            bail!("Invalid logic, tried to lookup era file for pre-merge block");
-        }
+        ensure!(
+            block_number >= MERGE_BLOCK_NUMBER,
+            "Invalid logic, tried to lookup era file for pre-merge block"
+        );
         if let EraSource::PostMerge(era) = &self.first_source {
             if era.contains(block_number) {
                 return Ok(era.clone());
@@ -110,9 +112,10 @@ async fn fetch_era_file_for_block(
     http_client: Client,
     block_number: u64,
 ) -> anyhow::Result<Arc<Era>> {
-    if block_number < MERGE_BLOCK_NUMBER {
-        bail!("Invalid logic, tried to lookup era file for pre-merge block");
-    }
+    ensure!(
+        block_number >= MERGE_BLOCK_NUMBER,
+        "Invalid logic, tried to fetch era file for pre-merge block"
+    );
     info!("Starting binary search for era file for block number: {block_number}");
     let era = EraBinarySearch::find_era_file(http_client.clone(), block_number).await?;
     let era_links = get_era_files(&http_client).await?;

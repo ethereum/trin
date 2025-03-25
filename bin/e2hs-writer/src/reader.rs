@@ -5,7 +5,7 @@ use alloy::{
     eips::eip4895::{Withdrawal, Withdrawals},
     primitives::B256,
 };
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, ensure};
 use async_stream::stream;
 use e2store::era1::Era1;
 use ethportal_api::types::{
@@ -56,22 +56,21 @@ pub struct EpochReader {
 
 impl EpochReader {
     pub async fn new(
-        epoch: u64,
+        epoch_index: u64,
         epoch_acc_path: PathBuf,
         el_provider_url: Url,
     ) -> anyhow::Result<Self> {
-        let starting_block = epoch * EPOCH_SIZE;
-        let ending_block = starting_block + EPOCH_SIZE;
         let execution_api = ExecutionApi::new(el_provider_url.clone(), el_provider_url, 10).await?;
         let latest_block = execution_api.get_latest_block_number().await?;
         let maximum_epoch = latest_block / EPOCH_SIZE;
-        if epoch > maximum_epoch {
-            bail!("Epoch {epoch} is greater than the maximum epoch {maximum_epoch}");
-        }
-        let era_provider = EraProvider::new(epoch).await?;
+        ensure!(
+            epoch_index <= maximum_epoch,
+            "Epoch {epoch_index} is greater than the maximum epoch {maximum_epoch}"
+        );
+
+        let starting_block = epoch_index * EPOCH_SIZE;
         let epoch_accumulator = match starting_block < MERGE_BLOCK_NUMBER {
             true => {
-                let epoch_index = starting_block / EPOCH_SIZE;
                 let header_validator = HeaderValidator::new();
                 Some(Arc::new(
                     lookup_epoch_acc(
@@ -86,10 +85,10 @@ impl EpochReader {
         };
         Ok(Self {
             starting_block,
-            ending_block,
+            ending_block: starting_block + EPOCH_SIZE,
             epoch_accumulator,
             execution_api,
-            era_provider,
+            era_provider: EraProvider::new(epoch_index).await?,
         })
     }
 
@@ -98,10 +97,10 @@ impl EpochReader {
         let block_index = block_number % EPOCH_SIZE;
         let tuple = Era1::get_tuple_by_index(&raw_era1, block_index);
         let header = tuple.header.header;
-        let epoch_acc = self.epoch_accumulator.clone().ok_or_else(|| {
-            anyhow!("Epoch accumulator not found for pre-merge block: {block_number}")
-        })?;
-        let proof = PreMergeAccumulator::construct_proof(&header, &epoch_acc)?;
+        let Some(epoch_acc) = &self.epoch_accumulator else {
+            bail!("Epoch accumulator not found for pre-merge block: {block_number}")
+        };
+        let proof = PreMergeAccumulator::construct_proof(&header, epoch_acc)?;
         let proof = BlockProofHistoricalHashesAccumulator::new(proof.into()).map_err(|e| {
             anyhow!("Unable to convert proof to BlockProofHistoricalHashesAccumulator: {e:?}")
         })?;
@@ -139,11 +138,11 @@ impl EpochReader {
         };
         let slot = block.slot;
 
-        // beacon block proof
+        // create beacon block proof
         let historical_batch_proof = historical_batch.build_block_root_proof(slot % EPOCH_SIZE);
         let beacon_block_proof: FixedVector<B256, typenum::U14> = historical_batch_proof.into();
 
-        // execution block proof
+        // create execution block proof
         let mut execution_block_hash_proof = block.body.build_execution_block_hash_proof();
         let body_root_proof = block.build_body_root_proof();
         execution_block_hash_proof.extend(body_root_proof);
@@ -197,17 +196,25 @@ impl EpochReader {
             .map_err(|e| anyhow!("Unable to decode capella block: {e:?}"))?;
         let payload = block.body.execution_payload.clone();
         let transactions = decode_transactions(&payload.transactions)?;
-        let header = pre_deneb_execution_payload_to_header(payload.clone(), &transactions)?;
+        let withdrawals: Vec<Withdrawal> =
+            payload.withdrawals.iter().map(Withdrawal::from).collect();
+        let header = pre_deneb_execution_payload_to_header(
+            payload.clone(),
+            &transactions,
+            withdrawals.clone(),
+        )?;
 
         let historical_batch = HistoricalBatch {
             state_roots: era.era_state.state.state_roots().clone(),
             block_roots: era.era_state.state.block_roots().clone(),
         };
         let slot = block.slot;
-        // beacon block proof
-        let hb_proof = historical_batch.build_block_root_proof(slot % EPOCH_SIZE);
-        let beacon_block_proof: FixedVector<B256, typenum::U13> = hb_proof.into();
-        // execution block proof
+
+        // create beacon block proof
+        let historical_batch_proof = historical_batch.build_block_root_proof(slot % EPOCH_SIZE);
+        let beacon_block_proof: FixedVector<B256, typenum::U13> = historical_batch_proof.into();
+
+        // create execution block proof
         let mut execution_block_hash_proof = block.body.build_execution_block_hash_proof();
         let body_root_proof = block.build_body_root_proof();
         execution_block_hash_proof.extend(body_root_proof);
@@ -224,8 +231,6 @@ impl EpochReader {
             header,
             proof: BlockHeaderProof::HistoricalSummaries(proof),
         };
-        let withdrawals: Vec<Withdrawal> =
-            payload.withdrawals.iter().map(Withdrawal::from).collect();
         let body = BlockBody(AlloyBlockBody {
             transactions,
             ommers: vec![],
@@ -248,20 +253,18 @@ impl EpochReader {
     }
 
     pub fn iter_blocks(self) -> impl Stream<Item = anyhow::Result<AllBlockData>> {
-        let mut current_block = self.starting_block;
         stream! {
-        while current_block < self.ending_block {
-            if current_block < MERGE_BLOCK_NUMBER {
-                yield self.get_pre_merge_block_data(current_block);
-            } else if current_block < SHANGHAI_BLOCK_NUMBER {
-                yield self.get_pre_capella_block_data(current_block).await;
-            } else if current_block < CANCUN_BLOCK_NUMBER {
-                yield self.get_pre_deneb_block_data(current_block).await;
-            } else {
-                yield Err(anyhow!("Invalid block number: {current_block}"));
+            for current_block in self.starting_block..self.ending_block {
+                if current_block < MERGE_BLOCK_NUMBER {
+                    yield self.get_pre_merge_block_data(current_block);
+                } else if current_block < SHANGHAI_BLOCK_NUMBER {
+                    yield self.get_pre_capella_block_data(current_block).await;
+                } else if current_block < CANCUN_BLOCK_NUMBER {
+                    yield self.get_pre_deneb_block_data(current_block).await;
+                } else {
+                    yield Err(anyhow!("Unsupported block number: {current_block}"));
+                }
             }
-            current_block += 1;
-        }
         }
     }
 }
@@ -285,14 +288,16 @@ mod tests {
     use super::*;
 
     #[rstest::rstest]
-    #[case(15539558, 4702208, 575, "block_proofs_bellatrix/beacon_block_proof-15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01.yaml")]
-    #[case(15547621, 4710400, 576, "block_proofs_bellatrix/beacon_block_proof-15547621-96a9313cd506e32893d46c82358569ad242bb32786bd5487833e0f77767aec2a.yaml")]
-    #[case(15555729, 4718592, 577, "block_proofs_bellatrix/beacon_block_proof-15555729-c6fd396d54f61c6d0f1dd3653f81267b0378e9a0d638a229b24586d8fd0bc499.yaml")]
+    // epoch #575
+    #[case(15539558, 4702208, "block_proofs_bellatrix/beacon_block_proof-15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01.yaml")]
+    // epoch #576
+    #[case(15547621, 4710400, "block_proofs_bellatrix/beacon_block_proof-15547621-96a9313cd506e32893d46c82358569ad242bb32786bd5487833e0f77767aec2a.yaml")]
+    // epoch #577
+    #[case(15555729, 4718592, "block_proofs_bellatrix/beacon_block_proof-15555729-c6fd396d54f61c6d0f1dd3653f81267b0378e9a0d638a229b24586d8fd0bc499.yaml")]
     #[tokio::test]
     async fn test_pre_capella_proof_generation(
         #[case] block_number: u64,
         #[case] slot: u64,
-        #[case] _epoch: u64,
         #[case] file_path: &str,
     ) {
         let test_vector = std::fs::read_to_string(format!(
@@ -314,9 +319,9 @@ mod tests {
 
         let test_assets_dir =
             format!("../../portal-spec-tests/tests/mainnet/history/headers_with_proof/beacon_data/{block_number}");
-        let hb_path = format!("{test_assets_dir}/historical_batch.ssz");
-        let hb_raw = std::fs::read(hb_path).unwrap();
-        let historical_batch = HistoricalBatch::from_ssz_bytes(&hb_raw).unwrap();
+        let historical_batch_path = format!("{test_assets_dir}/historical_batch.ssz");
+        let historical_batch_raw = std::fs::read(historical_batch_path).unwrap();
+        let historical_batch = HistoricalBatch::from_ssz_bytes(&historical_batch_raw).unwrap();
         let block_path = format!("{test_assets_dir}/block.ssz");
         let block_raw = std::fs::read(block_path).unwrap();
         let block = BeaconBlockBellatrix::from_ssz_bytes(&block_raw).unwrap();
@@ -329,26 +334,25 @@ mod tests {
     #[case(
         17034870,
         6209538,
-        759,
+        // epoch #759,
         "block_proofs_capella/beacon_block_proof-17034870.yaml"
     )]
     #[case(
         17042287,
         6217730,
-        760,
+        // epoch #760,
         "block_proofs_capella/beacon_block_proof-17042287.yaml"
     )]
     #[case(
         17062257,
         6238210,
-        762,
+        // epoch #762
         "block_proofs_capella/beacon_block_proof-17062257.yaml"
     )]
     #[tokio::test]
     async fn test_pre_deneb_proof_generation(
         #[case] block_number: u64,
         #[case] slot: u64,
-        #[case] _epoch: u64,
         #[case] file_path: &str,
     ) {
         let test_vector = std::fs::read_to_string(format!(

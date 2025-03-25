@@ -44,9 +44,9 @@ pub fn pre_capella_execution_payload_to_header(
 pub fn pre_deneb_execution_payload_to_header(
     payload: ExecutionPayloadCapella,
     transactions: &[TxEnvelope],
+    withdrawals: Vec<Withdrawal>,
 ) -> anyhow::Result<Header> {
     let transactions_root = calculate_transaction_root(transactions);
-    let withdrawals: Vec<Withdrawal> = payload.withdrawals.iter().map(Withdrawal::from).collect();
     let withdrawals_root = calculate_withdrawals_root(&withdrawals);
     Ok(Header {
         parent_hash: payload.parent_hash,

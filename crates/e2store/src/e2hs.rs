@@ -47,7 +47,7 @@ const E2HS_ENTRY_COUNT: usize = BLOCK_TUPLE_COUNT * 3 + 2;
 pub struct E2HS {
     pub version: VersionEntry,
     pub block_tuples: Vec<BlockTuple>,
-    pub block_index: BlockIndexEntry,
+    pub block_index: E2HSBlockIndexEntry,
 }
 
 impl E2HS {
@@ -64,7 +64,7 @@ impl E2HS {
         let last_entry = file.entries.last().ok_or(anyhow!(
             "invalid e2hs file found during iter: missing block index entry"
         ))?;
-        let block_index = BlockIndexEntry::try_from(last_entry)?.block_index;
+        let block_index = E2HSBlockIndexEntry::try_from(last_entry)?.block_index;
         Ok((0..block_index.count).map(move |i| {
             let mut entries: [Entry; 3] = Default::default();
             for (j, entry) in entries.iter_mut().enumerate() {
@@ -97,7 +97,7 @@ impl E2HS {
         let last_entry = file.entries.last().ok_or(anyhow!(
             "invalid e2hs file found during iter: missing block index entry"
         ))?;
-        let block_index = BlockIndexEntry::try_from(last_entry)?;
+        let block_index = E2HSBlockIndexEntry::try_from(last_entry)?;
         let mut block_tuples = vec![];
         let block_tuple_count = block_index.block_index.count as usize;
         for count in 0..block_tuple_count {
@@ -229,11 +229,11 @@ impl TryFrom<HeaderWithProofEntry> for Entry {
 //   block-index := starting-number | index | index | index ... | count
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct BlockIndexEntry {
+pub struct E2HSBlockIndexEntry {
     pub block_index: BlockIndex,
 }
 
-impl TryFrom<&Entry> for BlockIndexEntry {
+impl TryFrom<&Entry> for E2HSBlockIndexEntry {
     type Error = anyhow::Error;
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
@@ -262,7 +262,7 @@ impl TryFrom<&Entry> for BlockIndexEntry {
     }
 }
 
-impl TryInto<Entry> for BlockIndexEntry {
+impl TryInto<Entry> for E2HSBlockIndexEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
@@ -318,7 +318,7 @@ mod tests {
         let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-d4e56740.e2hs").unwrap();
         let file = E2StoreMemory::deserialize(&raw_e2hs).expect("invalid e2hs file");
         let block_index =
-            BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))
+            E2HSBlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))
                 .expect("invalid block index entry")
                 .block_index;
         let index = block_index.indices[block_number as usize];

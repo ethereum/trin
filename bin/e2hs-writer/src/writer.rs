@@ -1,5 +1,5 @@
 use e2store::{
-    e2hs::{BlockIndexEntry, BlockTuple, HeaderWithProofEntry, BLOCK_TUPLE_COUNT, E2HS},
+    e2hs::{BlockTuple, E2HSBlockIndexEntry, HeaderWithProofEntry, BLOCK_TUPLE_COUNT, E2HS},
     e2store::types::{Entry, VersionEntry},
     entry_types::VERSION,
     era1::{BlockIndex, BodyEntry, ReceiptsEntry},
@@ -67,7 +67,7 @@ impl EpochWriter {
             indices,
             count: BLOCK_TUPLE_COUNT as u64,
         };
-        let block_index = BlockIndexEntry { block_index };
+        let block_index = E2HSBlockIndexEntry { block_index };
         let e2hs = E2HS {
             version,
             block_tuples,
