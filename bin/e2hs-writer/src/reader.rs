@@ -198,11 +198,8 @@ impl EpochReader {
         let transactions = decode_transactions(&payload.transactions)?;
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
-        let header = pre_deneb_execution_payload_to_header(
-            payload.clone(),
-            &transactions,
-            withdrawals.clone(),
-        )?;
+        let header =
+            pre_deneb_execution_payload_to_header(payload.clone(), &transactions, &withdrawals)?;
 
         let historical_batch = HistoricalBatch {
             state_roots: era.era_state.state.state_roots().clone(),
