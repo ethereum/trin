@@ -82,7 +82,7 @@ mod tests {
         let mut e2store_stream_writer = E2StoreStreamWriter::create(&tmp_path)?;
 
         let version = VersionEntry::default();
-        e2store_stream_writer.append_entry(&version.clone().into())?;
+        e2store_stream_writer.append_entry(&Entry::from(&version))?;
 
         let value: Vec<u8> = (0..100).map(|_| rng.gen_range(0..20)).collect();
         let entry = Entry::new(0, value);

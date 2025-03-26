@@ -55,7 +55,7 @@ impl EpochWriter {
         let mut indices = vec![];
         for block_tuple in &block_tuples {
             indices.push(offset);
-            let entry: [Entry; 3] = block_tuple.clone().try_into()?;
+            let entry = <[Entry; 3]>::try_from(block_tuple)?;
             let length = entry.iter().map(|entry| entry.length() as u64).sum::<u64>();
             offset += length;
         }

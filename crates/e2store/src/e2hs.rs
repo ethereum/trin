@@ -66,21 +66,14 @@ impl E2HS {
         ))?;
         let block_index = E2HSBlockIndexEntry::try_from(last_entry)?.block_index;
         Ok((0..block_index.count).map(move |i| {
-            let mut entries: [Entry; 3] = Default::default();
-            for (j, entry) in entries.iter_mut().enumerate() {
-                file.entries[i as usize * 3 + j + 1].clone_into(entry);
-            }
-            BlockTuple::try_from(&entries).expect("invalid block tuple")
+            BlockTuple::try_from(&file.entries[i as usize * 3 + 1..i as usize * 3 + 4])
+                .expect("invalid block tuple")
         }))
     }
 
-    pub fn get_tuple_by_index(raw_e2hs: &[u8], index: u64) -> anyhow::Result<BlockTuple> {
+    pub fn get_tuple_by_index(raw_e2hs: &[u8], index: usize) -> anyhow::Result<BlockTuple> {
         let file = E2StoreMemory::deserialize(raw_e2hs)?;
-        let mut entries: [Entry; 3] = Default::default();
-        for (j, entry) in entries.iter_mut().enumerate() {
-            file.entries[index as usize * 3 + j + 1].clone_into(entry);
-        }
-        BlockTuple::try_from(&entries)
+        BlockTuple::try_from(&file.entries[index * 3 + 1..index * 3 + 4])
     }
 
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
@@ -101,11 +94,7 @@ impl E2HS {
         let mut block_tuples = vec![];
         let block_tuple_count = block_index.block_index.count as usize;
         for count in 0..block_tuple_count {
-            let mut entries: [Entry; 3] = Default::default();
-            for (i, entry) in entries.iter_mut().enumerate() {
-                *entry = file.entries[count * 3 + i + 1].clone();
-            }
-            let block_tuple = BlockTuple::try_from(&entries)?;
+            let block_tuple = BlockTuple::try_from(&file.entries[count * 3 + 1..count * 3 + 4])?;
             block_tuples.push(block_tuple);
         }
         Ok(Self {
@@ -117,13 +106,13 @@ impl E2HS {
 
     pub fn write(&self) -> anyhow::Result<Vec<u8>> {
         let mut entries: Vec<Entry> = Vec::with_capacity(E2HS_ENTRY_COUNT);
-        let version_entry: Entry = self.version.clone().into();
+        let version_entry = Entry::from(&self.version);
         entries.push(version_entry);
         for block_tuple in &self.block_tuples {
-            let block_tuple_entries: [Entry; 3] = block_tuple.clone().try_into()?;
+            let block_tuple_entries = <[Entry; 3]>::try_from(block_tuple)?;
             entries.extend(block_tuple_entries);
         }
-        let block_index_entry: Entry = self.block_index.clone().try_into()?;
+        let block_index_entry = Entry::try_from(&self.block_index)?;
         entries.push(block_index_entry);
         ensure!(
             entries.len() == E2HS_ENTRY_COUNT,
@@ -156,10 +145,17 @@ pub struct BlockTuple {
     pub receipts: ReceiptsEntry,
 }
 
-impl TryFrom<&[Entry; 3]> for BlockTuple {
+impl TryFrom<&[Entry]> for BlockTuple {
     type Error = anyhow::Error;
 
-    fn try_from(entries: &[Entry; 3]) -> anyhow::Result<Self> {
+    fn try_from(entries: &[Entry]) -> anyhow::Result<Self> {
+        ensure!(
+            entries.len() == 3,
+            format!(
+                "invalid block tuple entry: incorrect entry count: found {}, expected 3",
+                entries.len()
+            )
+        );
         let header_with_proof = HeaderWithProofEntry::try_from(&entries[0])?;
         let body = BodyEntry::try_from(&entries[1])?;
         let receipts = ReceiptsEntry::try_from(&entries[2])?;
@@ -171,15 +167,14 @@ impl TryFrom<&[Entry; 3]> for BlockTuple {
     }
 }
 
-impl TryInto<[Entry; 3]> for BlockTuple {
+impl TryFrom<&BlockTuple> for [Entry; 3] {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> anyhow::Result<[Entry; 3]> {
-        Ok([
-            self.header_with_proof.try_into()?,
-            self.body.try_into()?,
-            self.receipts.try_into()?,
-        ])
+    fn try_from(value: &BlockTuple) -> anyhow::Result<[Entry; 3]> {
+        let header_with_proof = Entry::try_from(&value.header_with_proof)?;
+        let body = Entry::try_from(&value.body)?;
+        let receipts = Entry::try_from(&value.receipts)?;
+        Ok([header_with_proof, body, receipts])
     }
 }
 
@@ -210,10 +205,10 @@ impl TryFrom<&Entry> for HeaderWithProofEntry {
     }
 }
 
-impl TryFrom<HeaderWithProofEntry> for Entry {
+impl TryFrom<&HeaderWithProofEntry> for Entry {
     type Error = anyhow::Error;
 
-    fn try_from(value: HeaderWithProofEntry) -> Result<Self, Self::Error> {
+    fn try_from(value: &HeaderWithProofEntry) -> Result<Self, Self::Error> {
         let ssz_encoded = value.header_with_proof.as_ssz_bytes();
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
@@ -257,24 +252,24 @@ impl TryFrom<&Entry> for E2HSBlockIndexEntry {
             "invalid block index entry: incorrect value length"
         );
         Ok(Self {
-            block_index: BlockIndex::try_from(entry.clone())?,
+            block_index: BlockIndex::try_from(entry)?,
         })
     }
 }
 
-impl TryInto<Entry> for E2HSBlockIndexEntry {
+impl TryFrom<&E2HSBlockIndexEntry> for Entry {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> Result<Entry, Self::Error> {
+    fn try_from(value: &E2HSBlockIndexEntry) -> anyhow::Result<Self> {
         let mut buf: Vec<u64> = vec![];
-        buf.push(self.block_index.starting_number);
-        buf.extend_from_slice(&self.block_index.indices);
-        buf.push(self.block_index.count);
+        buf.push(value.block_index.starting_number);
+        buf.extend_from_slice(&value.block_index.indices);
+        buf.push(value.block_index.count);
         let encoded = buf
             .iter()
             .flat_map(|i| i.to_le_bytes().to_vec())
             .collect::<Vec<u8>>();
-        Ok(Entry::new(entry_types::BLOCK_INDEX, encoded))
+        Ok(Self::new(entry_types::BLOCK_INDEX, encoded))
     }
 }
 
@@ -296,7 +291,7 @@ mod tests {
     #[case(1)]
     #[case(100)]
     #[case(8191)]
-    fn test_e2hs_block_index(#[case] block_number: u64) {
+    fn test_e2hs_block_index(#[case] block_number: usize) {
         let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-d4e56740.e2hs").unwrap();
         let block_tuple = E2HS::get_tuple_by_index(&raw_e2hs, block_number).unwrap();
         assert_eq!(
@@ -305,7 +300,7 @@ mod tests {
                 .header_with_proof
                 .header
                 .number,
-            block_number
+            block_number as u64
         );
     }
 
