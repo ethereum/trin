@@ -5,7 +5,7 @@ use std::{
 
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
-    HistoryContentKey,
+    HistoryContentKey, HistoryContentValue,
 };
 use futures::future::join_all;
 use tokio::{
@@ -360,7 +360,15 @@ impl HistoryBridge {
         metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
         let timer = metrics.start_process_timer("construct_and_gossip_receipt");
-        let (content_key, content_value) = execution_api.get_receipts(full_header).await?;
+        let receipts = execution_api
+            .get_receipts(
+                full_header.header.number,
+                full_header.txs.len(),
+                full_header.header.receipts_root,
+            )
+            .await?;
+        let content_key = HistoryContentKey::new_block_receipts(full_header.header.hash_slow());
+        let content_value = HistoryContentValue::Receipts(receipts);
         debug!(
             "Built and validated Receipts for Block #{:?}: now gossiping.",
             full_header.header.number

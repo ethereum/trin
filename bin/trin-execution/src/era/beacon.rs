@@ -19,7 +19,7 @@ use revm_primitives::{b256, B256, U256};
 
 use super::types::{ProcessedBlock, TransactionsWithSender};
 
-const EMPTY_UNCLE_ROOT_HASH: B256 =
+pub const EMPTY_UNCLE_ROOT_HASH: B256 =
     b256!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347");
 
 pub trait ProcessBeaconBlock {
@@ -167,7 +167,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
     }
 }
 
-fn decode_transactions(transactions: &Transactions) -> anyhow::Result<Vec<TxEnvelope>> {
+pub fn decode_transactions(transactions: &Transactions) -> anyhow::Result<Vec<TxEnvelope>> {
     transactions
         .into_par_iter()
         .map(|raw_tx| {

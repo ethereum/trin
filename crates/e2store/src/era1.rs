@@ -39,7 +39,7 @@ pub struct Era1 {
     pub version: VersionEntry,
     pub block_tuples: Vec<BlockTuple>,
     pub accumulator: AccumulatorEntry,
-    pub block_index: BlockIndexEntry,
+    pub block_index: Era1BlockIndexEntry,
 }
 
 impl Era1 {
@@ -54,7 +54,7 @@ impl Era1 {
     pub fn iter_tuples(raw_era1: Vec<u8>) -> impl Iterator<Item = BlockTuple> {
         let file = E2StoreMemory::deserialize(&raw_era1).expect("invalid era1 file");
         let block_index =
-            BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))
+            Era1BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))
                 .expect("invalid block index entry")
                 .block_index;
         (0..block_index.count).map(move |i| {
@@ -84,7 +84,7 @@ impl Era1 {
         );
         let version = VersionEntry::try_from(&file.entries[0])?;
         let block_index =
-            BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))?;
+            Era1BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))?;
         let mut block_tuples = vec![];
         let block_tuple_count = block_index.block_index.count as usize;
         for count in 0..block_tuple_count {
@@ -336,11 +336,11 @@ impl TryInto<Entry> for AccumulatorEntry {
 //   block-index := starting-number | index | index | index ... | count
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct BlockIndexEntry {
+pub struct Era1BlockIndexEntry {
     pub block_index: BlockIndex,
 }
 
-impl TryFrom<&Entry> for BlockIndexEntry {
+impl TryFrom<&Entry> for Era1BlockIndexEntry {
     type Error = anyhow::Error;
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
@@ -368,7 +368,7 @@ impl TryFrom<&Entry> for BlockIndexEntry {
     }
 }
 
-impl TryInto<Entry> for BlockIndexEntry {
+impl TryInto<Entry> for Era1BlockIndexEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {

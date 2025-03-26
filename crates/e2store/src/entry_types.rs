@@ -13,6 +13,11 @@ pub const COMPRESSED_BEACON_STATE: u16 = 0x0200;
 /// data: snappyFramed(rlp(header))
 pub const COMPRESSED_HEADER: u16 = 0x0300;
 
+/// Snappy compressed ssz execution header with proof
+///
+/// data: snappyFramed(ssz(header_with_proof))
+pub const COMPRESSED_HEADER_WITH_PROOF: u16 = 0x0301;
+
 /// Snappy compressed rlp execution body
 ///
 /// data: snappyFramed(rlp(body))

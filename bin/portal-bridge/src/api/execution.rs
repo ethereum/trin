@@ -211,28 +211,27 @@ impl ExecutionApi {
         Ok(headers)
     }
 
-    /// Return validated Receipts content key / value for the given FullHeader.
+    /// Return validated Receipts for the given block.
     pub async fn get_receipts(
         &self,
-        full_header: &FullHeader,
-    ) -> anyhow::Result<(HistoryContentKey, HistoryContentValue)> {
+        block_number: u64,
+        tx_count: usize,
+        receipts_root: B256,
+    ) -> anyhow::Result<Receipts> {
         // Build receipts
-        let receipts = match full_header.txs.len() {
+        let receipts = match tx_count {
             0 => Receipts(vec![]),
-            _ => self.get_trusted_receipts(full_header.header.number).await?,
+            _ => self.get_trusted_receipts(block_number).await?,
         };
 
         // Validate Receipts
-        let receipts_root = receipts.root();
-        if receipts_root != full_header.header.receipts_root {
+        let actual_receipts_root = receipts.root();
+        if actual_receipts_root != receipts_root {
             bail!(
-                "Receipts root doesn't match header receipts root: {receipts_root:?} - {:?}",
-                full_header.header.receipts_root
+                "Receipts root doesn't match header receipts root: {actual_receipts_root:?} - {receipts_root:?}",
             );
         }
-        let content_key = HistoryContentKey::new_block_receipts(full_header.header.hash_slow());
-        let content_value = HistoryContentValue::Receipts(receipts);
-        Ok((content_key, content_value))
+        Ok(receipts)
     }
 
     /// Return unvalidated receipts for the given transaction hashes.

@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "bin/e2hs-writer",
     "bin/portal-bridge",
     "bin/trin", 
     "bin/trin-execution",
