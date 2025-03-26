@@ -51,7 +51,7 @@ impl EpochWriter {
         let version = VersionEntry {
             version: Entry::new(VERSION, vec![]),
         };
-        let mut offset = 8;
+        let mut offset = version.version.length() as u64;
         let mut indices = vec![];
         for block_tuple in &block_tuples {
             indices.push(offset);
@@ -60,8 +60,7 @@ impl EpochWriter {
             offset += length;
         }
         let starting_header = &block_tuples[0].header_with_proof.header_with_proof.header;
-        let short_hash = starting_header.hash_slow().as_slice()[0..4].to_vec();
-        let short_hash = hex_encode(short_hash);
+        let short_hash = hex_encode(&starting_header.hash_slow()[..4]);
         let block_index = BlockIndex {
             starting_number: starting_header.number,
             indices,

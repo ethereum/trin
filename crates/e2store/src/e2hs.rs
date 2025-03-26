@@ -116,24 +116,24 @@ impl E2HS {
     }
 
     pub fn write(&self) -> anyhow::Result<Vec<u8>> {
-        let mut entries: Vec<Entry> = vec![];
+        let mut entries: Vec<Entry> = Vec::with_capacity(E2HS_ENTRY_COUNT);
         let version_entry: Entry = self.version.clone().into();
         entries.push(version_entry);
         for block_tuple in &self.block_tuples {
             let block_tuple_entries: [Entry; 3] = block_tuple.clone().try_into()?;
-            entries.extend_from_slice(&block_tuple_entries);
+            entries.extend(block_tuple_entries);
         }
         let block_index_entry: Entry = self.block_index.clone().try_into()?;
         entries.push(block_index_entry);
-        let file = E2StoreMemory { entries };
         ensure!(
-            file.entries.len() == E2HS_ENTRY_COUNT,
+            entries.len() == E2HS_ENTRY_COUNT,
             format!(
                 "invalid e2hs file found during write: incorrect entry count: found {}, expected {}",
-                file.entries.len(),
+                entries.len(),
                 E2HS_ENTRY_COUNT
             )
         );
+        let file = E2StoreMemory { entries };
         let file_length = file.length();
         let mut buf = vec![0; file_length];
         file.write(&mut buf)?;

@@ -167,9 +167,9 @@ impl EpochReader {
         });
         let receipts = self
             .execution_api
-            .get_era_receipts(
+            .get_receipts(
                 block_number,
-                payload.transactions.len() as u64,
+                payload.transactions.len(),
                 payload.receipts_root,
             )
             .await?;
@@ -235,9 +235,9 @@ impl EpochReader {
         });
         let receipts = self
             .execution_api
-            .get_era_receipts(
+            .get_receipts(
                 block_number,
-                payload.transactions.len() as u64,
+                payload.transactions.len(),
                 payload.receipts_root,
             )
             .await?;

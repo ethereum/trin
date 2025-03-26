@@ -211,10 +211,11 @@ impl ExecutionApi {
         Ok(headers)
     }
 
-    pub async fn get_era_receipts(
+    /// Return validated Receipts for the given block.
+    pub async fn get_receipts(
         &self,
         block_number: u64,
-        tx_count: u64,
+        tx_count: usize,
         receipts_root: B256,
     ) -> anyhow::Result<Receipts> {
         // Build receipts
@@ -231,30 +232,6 @@ impl ExecutionApi {
             );
         }
         Ok(receipts)
-    }
-
-    /// Return validated Receipts content key / value for the given FullHeader.
-    pub async fn get_receipts(
-        &self,
-        full_header: &FullHeader,
-    ) -> anyhow::Result<(HistoryContentKey, HistoryContentValue)> {
-        // Build receipts
-        let receipts = match full_header.txs.len() {
-            0 => Receipts(vec![]),
-            _ => self.get_trusted_receipts(full_header.header.number).await?,
-        };
-
-        // Validate Receipts
-        let receipts_root = receipts.root();
-        if receipts_root != full_header.header.receipts_root {
-            bail!(
-                "Receipts root doesn't match header receipts root: {receipts_root:?} - {:?}",
-                full_header.header.receipts_root
-            );
-        }
-        let content_key = HistoryContentKey::new_block_receipts(full_header.header.hash_slow());
-        let content_value = HistoryContentValue::Receipts(receipts);
-        Ok((content_key, content_value))
     }
 
     /// Return unvalidated receipts for the given transaction hashes.
