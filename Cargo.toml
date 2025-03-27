@@ -97,7 +97,7 @@ tree_hash_derive = "0.8.0"
 uds_windows = "1.0.1"
 ureq = { version = "2.5.0", features = ["json"] }
 url = "2.3.1"
-utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.16" }
+utp-rs = "0.1.0-alpha.17"
 
 # Trin workspace crates
 e2store = { path = "crates/e2store" }
