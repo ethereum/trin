@@ -58,21 +58,14 @@ impl Era1 {
                 .expect("invalid block index entry")
                 .block_index;
         (0..block_index.count).map(move |i| {
-            let mut entries: [Entry; 4] = Default::default();
-            for (j, entry) in entries.iter_mut().enumerate() {
-                file.entries[i as usize * 4 + j + 1].clone_into(entry);
-            }
-            BlockTuple::try_from(&entries).expect("invalid block tuple")
+            BlockTuple::try_from(&file.entries[i as usize * 4 + 1..i as usize * 4 + 5])
+                .expect("invalid block tuple")
         })
     }
 
-    pub fn get_tuple_by_index(raw_era1: &[u8], index: u64) -> BlockTuple {
-        let file = E2StoreMemory::deserialize(raw_era1).expect("invalid era1 file");
-        let mut entries: [Entry; 4] = Default::default();
-        for (j, entry) in entries.iter_mut().enumerate() {
-            file.entries[index as usize * 4 + j + 1].clone_into(entry);
-        }
-        BlockTuple::try_from(&entries).expect("invalid block tuple")
+    pub fn get_tuple_by_index(raw_era1: &[u8], index: usize) -> anyhow::Result<BlockTuple> {
+        let file = E2StoreMemory::deserialize(raw_era1)?;
+        BlockTuple::try_from(&file.entries[index * 4 + 1..index * 4 + 5])
     }
 
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
@@ -88,11 +81,7 @@ impl Era1 {
         let mut block_tuples = vec![];
         let block_tuple_count = block_index.block_index.count as usize;
         for count in 0..block_tuple_count {
-            let mut entries: [Entry; 4] = Default::default();
-            for (i, entry) in entries.iter_mut().enumerate() {
-                *entry = file.entries[count * 4 + i + 1].clone();
-            }
-            let block_tuple = BlockTuple::try_from(&entries)?;
+            let block_tuple = BlockTuple::try_from(&file.entries[count * 4 + 1..count * 4 + 5])?;
             block_tuples.push(block_tuple);
         }
         let accumulator_index = (block_tuple_count * 4) + 1;
@@ -108,15 +97,15 @@ impl Era1 {
     #[allow(dead_code)]
     fn write(&self) -> anyhow::Result<Vec<u8>> {
         let mut entries: Vec<Entry> = vec![];
-        let version_entry: Entry = self.version.clone().into();
+        let version_entry = Entry::from(&self.version);
         entries.push(version_entry);
         for block_tuple in &self.block_tuples {
-            let block_tuple_entries: [Entry; 4] = block_tuple.clone().try_into()?;
+            let block_tuple_entries = <[Entry; 4]>::try_from(block_tuple)?;
             entries.extend_from_slice(&block_tuple_entries);
         }
-        let accumulator_entry: Entry = self.accumulator.clone().try_into()?;
+        let accumulator_entry = Entry::from(&self.accumulator);
         entries.push(accumulator_entry);
-        let block_index_entry: Entry = self.block_index.clone().try_into()?;
+        let block_index_entry = Entry::from(&self.block_index);
         entries.push(block_index_entry);
         let file = E2StoreMemory { entries };
         ensure!(
@@ -147,10 +136,15 @@ pub struct BlockTuple {
     pub total_difficulty: TotalDifficultyEntry,
 }
 
-impl TryFrom<&[Entry; 4]> for BlockTuple {
+impl TryFrom<&[Entry]> for BlockTuple {
     type Error = anyhow::Error;
 
-    fn try_from(entries: &[Entry; 4]) -> anyhow::Result<Self> {
+    fn try_from(entries: &[Entry]) -> Result<Self, Self::Error> {
+        ensure!(
+            entries.len() == 4,
+            "invalid block tuple: incorrect number of entries, found {} expected 4",
+            entries.len()
+        );
         let header = HeaderEntry::try_from(&entries[0])?;
         let body = BodyEntry::try_from(&entries[1])?;
         let receipts = ReceiptsEntry::try_from(&entries[2])?;
@@ -164,16 +158,15 @@ impl TryFrom<&[Entry; 4]> for BlockTuple {
     }
 }
 
-impl TryInto<[Entry; 4]> for BlockTuple {
+impl TryFrom<&BlockTuple> for [Entry; 4] {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> anyhow::Result<[Entry; 4]> {
-        Ok([
-            self.header.try_into()?,
-            self.body.try_into()?,
-            self.receipts.try_into()?,
-            self.total_difficulty.try_into()?,
-        ])
+    fn try_from(value: &BlockTuple) -> Result<Self, Self::Error> {
+        let header = Entry::try_from(&value.header)?;
+        let body = Entry::try_from(&value.body)?;
+        let receipts = Entry::try_from(&value.receipts)?;
+        let total_difficulty = Entry::from(&value.total_difficulty);
+        Ok([header, body, receipts, total_difficulty])
     }
 }
 
@@ -202,15 +195,15 @@ impl TryFrom<&Entry> for BodyEntry {
     }
 }
 
-impl TryInto<Entry> for BodyEntry {
-    type Error = anyhow::Error;
+impl TryFrom<&BodyEntry> for Entry {
+    type Error = std::io::Error;
 
-    fn try_into(self) -> Result<Entry, Self::Error> {
-        let rlp_encoded = alloy::rlp::encode(self.body);
+    fn try_from(value: &BodyEntry) -> Result<Self, Self::Error> {
+        let rlp_encoded = alloy::rlp::encode(&value.body);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
-        let encoded = encoder.into_inner()?;
+        let encoded = encoder.into_inner().map_err(|e| e.into_error())?;
         Ok(Entry::new(entry_types::COMPRESSED_BODY, encoded))
     }
 }
@@ -240,15 +233,15 @@ impl TryFrom<&Entry> for ReceiptsEntry {
     }
 }
 
-impl TryInto<Entry> for ReceiptsEntry {
-    type Error = anyhow::Error;
+impl TryFrom<&ReceiptsEntry> for Entry {
+    type Error = std::io::Error;
 
-    fn try_into(self) -> Result<Entry, Self::Error> {
-        let rlp_encoded = alloy::rlp::encode(&self.receipts);
+    fn try_from(value: &ReceiptsEntry) -> Result<Self, Self::Error> {
+        let rlp_encoded = alloy::rlp::encode(&value.receipts);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
-        let encoded = encoder.into_inner()?;
+        let encoded = encoder.into_inner().map_err(|e| e.into_error())?;
         Ok(Entry::new(entry_types::COMPRESSED_RECEIPTS, encoded))
     }
 }
@@ -283,14 +276,10 @@ impl TryFrom<&Entry> for TotalDifficultyEntry {
     }
 }
 
-impl TryInto<Entry> for TotalDifficultyEntry {
-    type Error = anyhow::Error;
-
-    fn try_into(self) -> Result<Entry, Self::Error> {
-        Ok(Entry::new(
-            entry_types::TOTAL_DIFFICULTY,
-            self.total_difficulty.to_be_bytes_vec(),
-        ))
+impl From<&TotalDifficultyEntry> for Entry {
+    fn from(value: &TotalDifficultyEntry) -> Self {
+        let value = value.total_difficulty.to_be_bytes_vec();
+        Entry::new(entry_types::TOTAL_DIFFICULTY, value)
     }
 }
 
@@ -324,12 +313,10 @@ impl TryFrom<&Entry> for AccumulatorEntry {
     }
 }
 
-impl TryInto<Entry> for AccumulatorEntry {
-    type Error = anyhow::Error;
-
-    fn try_into(self) -> Result<Entry, Self::Error> {
-        let value = self.accumulator.as_slice().to_vec();
-        Ok(Entry::new(entry_types::ACCUMULATOR, value))
+impl From<&AccumulatorEntry> for Entry {
+    fn from(value: &AccumulatorEntry) -> Entry {
+        let value = value.accumulator.as_slice().to_vec();
+        Entry::new(entry_types::ACCUMULATOR, value)
     }
 }
 
@@ -363,24 +350,22 @@ impl TryFrom<&Entry> for Era1BlockIndexEntry {
             "invalid block index entry: incorrect value length"
         );
         Ok(Self {
-            block_index: BlockIndex::try_from(entry.clone())?,
+            block_index: BlockIndex::try_from(entry)?,
         })
     }
 }
 
-impl TryInto<Entry> for Era1BlockIndexEntry {
-    type Error = anyhow::Error;
-
-    fn try_into(self) -> Result<Entry, Self::Error> {
+impl From<&Era1BlockIndexEntry> for Entry {
+    fn from(value: &Era1BlockIndexEntry) -> Entry {
         let mut buf: Vec<u64> = vec![];
-        buf.push(self.block_index.starting_number);
-        buf.extend_from_slice(&self.block_index.indices);
-        buf.push(self.block_index.count);
+        buf.push(value.block_index.starting_number);
+        buf.extend_from_slice(&value.block_index.indices);
+        buf.push(value.block_index.count);
         let encoded = buf
             .iter()
             .flat_map(|i| i.to_le_bytes().to_vec())
             .collect::<Vec<u8>>();
-        Ok(Entry::new(0x6632, encoded))
+        Entry::new(0x6632, encoded)
     }
 }
 
@@ -391,10 +376,10 @@ pub struct BlockIndex {
     pub count: u64,
 }
 
-impl TryFrom<Entry> for BlockIndex {
+impl TryFrom<&Entry> for BlockIndex {
     type Error = anyhow::Error;
 
-    fn try_from(entry: Entry) -> Result<Self, Self::Error> {
+    fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         let starting_number = u64::from_le_bytes(entry.value[0..8].try_into()?);
         let block_tuple_count = (entry.value.len() - 16) / 8;
         let mut indices = vec![0; block_tuple_count];

@@ -78,10 +78,10 @@ impl E2SSWriter {
         let mut writer = E2StoreStreamWriter::create(&path)?;
 
         let version = VersionEntry::default();
-        writer.append_entry(&version.clone().into())?;
+        writer.append_entry(&Entry::from(&version))?;
 
         let header = HeaderEntry { header };
-        writer.append_entry(&header.clone().try_into()?)?;
+        writer.append_entry(&Entry::try_from(&header)?)?;
 
         Ok(Self {
             version,

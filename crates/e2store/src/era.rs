@@ -144,17 +144,17 @@ impl Era {
     #[allow(dead_code)]
     fn write(&self) -> anyhow::Result<Vec<u8>> {
         let mut entries: Vec<Entry> = vec![];
-        let version_entry: Entry = self.version.clone().into();
+        let version_entry = Entry::from(&self.version);
         entries.push(version_entry);
         for block in &self.blocks {
-            let block_entry: Entry = block.clone().try_into()?;
+            let block_entry = Entry::try_from(block)?;
             entries.push(block_entry);
         }
-        let era_state_entry: Entry = self.era_state.clone().try_into()?;
+        let era_state_entry = Entry::try_from(&self.era_state)?;
         entries.push(era_state_entry);
-        let slot_index_block_entry: Entry = self.slot_index_block.clone().try_into()?;
+        let slot_index_block_entry = Entry::from(&self.slot_index_block);
         entries.push(slot_index_block_entry);
-        let slot_index_state_entry: Entry = self.slot_index_state.clone().try_into()?;
+        let slot_index_state_entry = Entry::from(&self.slot_index_state);
         entries.push(slot_index_state_entry);
         let file = E2StoreMemory { entries };
 
@@ -198,11 +198,11 @@ impl CompressedSignedBeaconBlock {
     }
 }
 
-impl TryInto<Entry> for CompressedSignedBeaconBlock {
+impl TryFrom<&CompressedSignedBeaconBlock> for Entry {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> Result<Entry, Self::Error> {
-        let ssz_encoded = self.block.as_ssz_bytes();
+    fn try_from(value: &CompressedSignedBeaconBlock) -> Result<Self, Self::Error> {
+        let ssz_encoded = value.block.as_ssz_bytes();
         let buf: Vec<u8> = vec![];
         let mut snappy_encoder = snap::write::FrameEncoder::new(buf);
         let _ = snappy_encoder.write(&ssz_encoded)?;
@@ -237,11 +237,11 @@ impl CompressedBeaconState {
     }
 }
 
-impl TryInto<Entry> for CompressedBeaconState {
+impl TryFrom<&CompressedBeaconState> for Entry {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> Result<Entry, Self::Error> {
-        let ssz_encoded = self.state.as_ssz_bytes();
+    fn try_from(value: &CompressedBeaconState) -> Result<Self, Self::Error> {
+        let ssz_encoded = value.state.as_ssz_bytes();
         let buf: Vec<u8> = vec![];
         let mut snappy_encoder = snap::write::FrameEncoder::new(buf);
         let _ = snappy_encoder.write(&ssz_encoded)?;
@@ -291,19 +291,17 @@ impl TryFrom<&Entry> for SlotIndexBlockEntry {
     }
 }
 
-impl TryInto<Entry> for SlotIndexBlockEntry {
-    type Error = anyhow::Error;
-
-    fn try_into(self) -> Result<Entry, Self::Error> {
+impl From<&SlotIndexBlockEntry> for Entry {
+    fn from(value: &SlotIndexBlockEntry) -> Self {
         let mut buf = vec![];
 
-        buf.extend_from_slice(&self.slot_index.starting_slot.to_le_bytes());
-        for index in &self.slot_index.indices {
+        buf.extend_from_slice(&value.slot_index.starting_slot.to_le_bytes());
+        for index in &value.slot_index.indices {
             buf.extend_from_slice(&index.to_le_bytes());
         }
-        buf.extend_from_slice(&self.slot_index.count.to_le_bytes());
+        buf.extend_from_slice(&value.slot_index.count.to_le_bytes());
 
-        Ok(Entry::new(entry_types::SLOT_INDEX, buf))
+        Entry::new(entry_types::SLOT_INDEX, buf)
     }
 }
 
@@ -376,19 +374,17 @@ impl TryFrom<&Entry> for SlotIndexStateEntry {
     }
 }
 
-impl TryInto<Entry> for SlotIndexStateEntry {
-    type Error = anyhow::Error;
-
-    fn try_into(self) -> Result<Entry, Self::Error> {
+impl From<&SlotIndexStateEntry> for Entry {
+    fn from(value: &SlotIndexStateEntry) -> Self {
         let mut buf = vec![];
 
-        buf.extend_from_slice(&self.slot_index.starting_slot.to_le_bytes());
-        for index in &self.slot_index.indices {
+        buf.extend_from_slice(&value.slot_index.starting_slot.to_le_bytes());
+        for index in &value.slot_index.indices {
             buf.extend_from_slice(&index.to_le_bytes());
         }
-        buf.extend_from_slice(&self.slot_index.count.to_le_bytes());
+        buf.extend_from_slice(&value.slot_index.count.to_le_bytes());
 
-        Ok(Entry::new(entry_types::SLOT_INDEX, buf))
+        Entry::new(entry_types::SLOT_INDEX, buf)
     }
 }
 

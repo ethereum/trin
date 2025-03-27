@@ -149,8 +149,8 @@ impl TryFrom<&Entry> for VersionEntry {
     }
 }
 
-impl From<VersionEntry> for Entry {
-    fn from(val: VersionEntry) -> Self {
-        val.version
+impl From<&VersionEntry> for Entry {
+    fn from(val: &VersionEntry) -> Self {
+        val.version.clone()
     }
 }

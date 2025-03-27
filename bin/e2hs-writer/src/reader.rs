@@ -95,7 +95,7 @@ impl EpochReader {
     fn get_pre_merge_block_data(&self, block_number: u64) -> anyhow::Result<AllBlockData> {
         let raw_era1 = self.era_provider.get_era1_for_block(block_number)?;
         let block_index = block_number % EPOCH_SIZE;
-        let tuple = Era1::get_tuple_by_index(&raw_era1, block_index);
+        let tuple = Era1::get_tuple_by_index(&raw_era1, block_index as usize)?;
         let header = tuple.header.header;
         let Some(epoch_acc) = &self.epoch_accumulator else {
             bail!("Epoch accumulator not found for pre-merge block: {block_number}")
