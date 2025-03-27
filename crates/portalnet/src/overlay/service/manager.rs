@@ -1129,11 +1129,13 @@ impl<
                                 // If the fallback FINDCONTENT task fails, that's fine for now.
                                 // In the future, we might want to cycle through all available
                                 // fallback peers on an error.
-                                let _ = Self::fallback_find_content(
+                                if let Err(err) = Self::fallback_find_content(
                                     content_key.clone(),
                                     utp_processing,
                                 )
-                                .await;
+                                .await {
+                                    debug!(%err, content_key = ?content_key, "Fallback FINDCONTENT task failed, after uTP transfer failed");
+                                }
                             })
                         })
                         .collect();
@@ -1147,17 +1149,20 @@ impl<
             // in payloads that failed to be accepted.
             let content_values = match decode_and_validate_content_payload(&accepted_keys, data) {
                 Ok(content_values) => content_values,
-                Err(_) => {
+                Err(err) => {
+                    debug!(%err, content_keys = ?content_keys_string, "Decoding and validating content payload failed");
                     let handles: Vec<JoinHandle<_>> = content_keys
                         .into_iter()
                         .map(|content_key| {
                             let utp_processing = utp_processing.clone();
                             tokio::spawn(async move {
-                                let _ = Self::fallback_find_content(
+                                if let Err(err) = Self::fallback_find_content(
                                     content_key.clone(),
                                     utp_processing,
                                 )
-                                .await;
+                                .await {
+                                    debug!(%err, content_key = ?content_key, "Fallback FINDCONTENT task failed, decoding and validating content payload failed");
+                                }
                             })
                         })
                         .collect();
@@ -1187,7 +1192,12 @@ impl<
                             None => {
                                 // Spawn a fallback FINDCONTENT task for each content key
                                 // that failed individual processing.
-                                let _ = Self::fallback_find_content(key, utp_processing).await;
+                                if let Err(err) = Self::fallback_find_content(
+                                    key, utp_processing,
+                                )
+                                .await {
+                                    debug!(%err, "Fallback FINDCONTENT task failed, after validating and storing content failed");
+                                }
                                 None
                             }
                         }
