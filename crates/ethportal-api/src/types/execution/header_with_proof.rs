@@ -299,7 +299,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        test_utils::read_file_from_tests_submodule,
+        test_utils::{read_bytes_from_tests_submodule, read_file_from_tests_submodule},
+        types::consensus::{beacon_state::BeaconState, fork::ForkName},
         utils::bytes::{hex_decode, hex_encode},
     };
 
@@ -367,8 +368,8 @@ mod tests {
         #[case] slot: u64,
         #[case] file_path: &str,
     ) {
-        let test_vector = std::fs::read_to_string(format!(
-            "../../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_bellatrix/beacon_block_proof-{file_path}.yaml"
+        let test_vector = read_file_from_tests_submodule(format!(
+            "tests/mainnet/history/headers_with_proof/block_proofs_bellatrix/beacon_block_proof-{file_path}.yaml"
         ))
         .unwrap();
         let test_vector: YamlValue = serde_yaml::from_str(&test_vector).unwrap();
@@ -385,12 +386,13 @@ mod tests {
         };
 
         let test_assets_dir =
-            format!("../../crates/ethportal-api/src/assets/test/proofs/{block_number}",);
-        let historical_batch_path = format!("{test_assets_dir}/historical_batch.ssz");
-        let historical_batch_raw = std::fs::read(historical_batch_path).unwrap();
+            format!("tests/mainnet/history/headers_with_proof/beacon_data/{block_number}");
+        let historical_batch_raw =
+            read_bytes_from_tests_submodule(format!("{test_assets_dir}/historical_batch.ssz",))
+                .unwrap();
         let historical_batch = HistoricalBatch::from_ssz_bytes(&historical_batch_raw).unwrap();
-        let block_path = format!("{test_assets_dir}/block.ssz");
-        let block_raw = std::fs::read(block_path).unwrap();
+        let block_raw =
+            read_bytes_from_tests_submodule(format!("{test_assets_dir}/block.ssz",)).unwrap();
         let block = BeaconBlockBellatrix::from_ssz_bytes(&block_raw).unwrap();
         let actual_proof = build_block_proof_historical_roots(slot, historical_batch, block);
 
@@ -406,8 +408,8 @@ mod tests {
         #[case] block_number: u64,
         #[case] slot: u64,
     ) {
-        let test_vector = std::fs::read_to_string(format!(
-            "../../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/beacon_block_proof-{block_number}.yaml",
+        let test_vector = read_file_from_tests_submodule(format!(
+            "tests/mainnet/history/headers_with_proof/block_proofs_capella/beacon_block_proof-{block_number}.yaml",
         ))
         .unwrap();
         let test_vector: YamlValue = serde_yaml::from_str(&test_vector).unwrap();
@@ -424,13 +426,15 @@ mod tests {
         };
 
         let test_assets_dir =
-            format!("../../crates/ethportal-api/src/assets/test/proofs/{block_number}");
-        let block_roots_path = format!("{test_assets_dir}/block_roots.ssz");
-        let block_roots_raw = std::fs::read(block_roots_path).unwrap();
-        let block_roots: FixedVector<B256, typenum::U8192> =
-            FixedVector::from_ssz_bytes(&block_roots_raw).unwrap();
-        let block_path = format!("{test_assets_dir}/block.ssz");
-        let block_raw = std::fs::read(block_path).unwrap();
+            format!("tests/mainnet/history/headers_with_proof/beacon_data/{block_number}");
+        let beacon_state_raw =
+            read_bytes_from_tests_submodule(format!("{test_assets_dir}/beacon_state.ssz",))
+                .unwrap();
+        let beacon_state =
+            BeaconState::from_ssz_bytes(&beacon_state_raw, ForkName::Capella).unwrap();
+        let block_roots = beacon_state.as_capella().unwrap().block_roots.clone();
+        let block_raw =
+            read_bytes_from_tests_submodule(format!("{test_assets_dir}/block.ssz",)).unwrap();
         let block = BeaconBlockCapella::from_ssz_bytes(&block_raw).unwrap();
         let actual_proof = build_block_proof_historical_summaries(slot, block_roots, block);
 

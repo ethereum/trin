@@ -371,7 +371,7 @@ mod tests {
 
         let test_assets_dir =
             format!("../../portal-spec-tests/tests/mainnet/history/headers_with_proof/beacon_data/{block_number}");
-        let state_path = format!("{test_assets_dir}/block_roots.ssz");
+        let state_path = format!("{test_assets_dir}/beacon_state.ssz");
         let state_raw = std::fs::read(state_path).unwrap();
         let beacon_state = BeaconState::from_ssz_bytes(&state_raw, ForkName::Capella).unwrap();
         let beacon_state = beacon_state.as_capella().unwrap();

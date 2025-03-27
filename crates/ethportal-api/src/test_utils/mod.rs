@@ -11,3 +11,8 @@ pub mod constants;
 pub fn read_file_from_tests_submodule<P: AsRef<Path>>(path: P) -> io::Result<String> {
     fs::read_to_string(PathBuf::from(PORTAL_SPEC_TESTS_SUBMODULE_PATH).join(path))
 }
+
+/// Reads bytes from a "portal-spec-tests" submodule.
+pub fn read_bytes_from_tests_submodule<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
+    fs::read(PathBuf::from(PORTAL_SPEC_TESTS_SUBMODULE_PATH).join(path))
+}
