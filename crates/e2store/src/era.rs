@@ -152,9 +152,9 @@ impl Era {
         }
         let era_state_entry = Entry::try_from(&self.era_state)?;
         entries.push(era_state_entry);
-        let slot_index_block_entry = Entry::try_from(&self.slot_index_block)?;
+        let slot_index_block_entry = Entry::from(&self.slot_index_block);
         entries.push(slot_index_block_entry);
-        let slot_index_state_entry = Entry::try_from(&self.slot_index_state)?;
+        let slot_index_state_entry = Entry::from(&self.slot_index_state);
         entries.push(slot_index_state_entry);
         let file = E2StoreMemory { entries };
 
@@ -291,10 +291,8 @@ impl TryFrom<&Entry> for SlotIndexBlockEntry {
     }
 }
 
-impl TryFrom<&SlotIndexBlockEntry> for Entry {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &SlotIndexBlockEntry) -> Result<Self, Self::Error> {
+impl From<&SlotIndexBlockEntry> for Entry {
+    fn from(value: &SlotIndexBlockEntry) -> Self {
         let mut buf = vec![];
 
         buf.extend_from_slice(&value.slot_index.starting_slot.to_le_bytes());
@@ -303,7 +301,7 @@ impl TryFrom<&SlotIndexBlockEntry> for Entry {
         }
         buf.extend_from_slice(&value.slot_index.count.to_le_bytes());
 
-        Ok(Entry::new(entry_types::SLOT_INDEX, buf))
+        Entry::new(entry_types::SLOT_INDEX, buf)
     }
 }
 
@@ -376,10 +374,8 @@ impl TryFrom<&Entry> for SlotIndexStateEntry {
     }
 }
 
-impl TryFrom<&SlotIndexStateEntry> for Entry {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &SlotIndexStateEntry) -> Result<Self, Self::Error> {
+impl From<&SlotIndexStateEntry> for Entry {
+    fn from(value: &SlotIndexStateEntry) -> Self {
         let mut buf = vec![];
 
         buf.extend_from_slice(&value.slot_index.starting_slot.to_le_bytes());
@@ -388,7 +384,7 @@ impl TryFrom<&SlotIndexStateEntry> for Entry {
         }
         buf.extend_from_slice(&value.slot_index.count.to_le_bytes());
 
-        Ok(Entry::new(entry_types::SLOT_INDEX, buf))
+        Entry::new(entry_types::SLOT_INDEX, buf)
     }
 }
 

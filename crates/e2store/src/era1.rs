@@ -103,9 +103,9 @@ impl Era1 {
             let block_tuple_entries = <[Entry; 4]>::try_from(block_tuple)?;
             entries.extend_from_slice(&block_tuple_entries);
         }
-        let accumulator_entry = Entry::try_from(&self.accumulator)?;
+        let accumulator_entry = Entry::from(&self.accumulator);
         entries.push(accumulator_entry);
-        let block_index_entry = Entry::try_from(&self.block_index)?;
+        let block_index_entry = Entry::from(&self.block_index);
         entries.push(block_index_entry);
         let file = E2StoreMemory { entries };
         ensure!(
@@ -139,7 +139,7 @@ pub struct BlockTuple {
 impl TryFrom<&[Entry]> for BlockTuple {
     type Error = anyhow::Error;
 
-    fn try_from(entries: &[Entry]) -> anyhow::Result<Self> {
+    fn try_from(entries: &[Entry]) -> Result<Self, Self::Error> {
         ensure!(
             entries.len() == 4,
             "invalid block tuple: incorrect number of entries, found {} expected 4",
@@ -161,11 +161,11 @@ impl TryFrom<&[Entry]> for BlockTuple {
 impl TryFrom<&BlockTuple> for [Entry; 4] {
     type Error = anyhow::Error;
 
-    fn try_from(value: &BlockTuple) -> anyhow::Result<[Entry; 4]> {
+    fn try_from(value: &BlockTuple) -> Result<Self, Self::Error> {
         let header = Entry::try_from(&value.header)?;
         let body = Entry::try_from(&value.body)?;
         let receipts = Entry::try_from(&value.receipts)?;
-        let total_difficulty = Entry::try_from(&value.total_difficulty)?;
+        let total_difficulty = Entry::from(&value.total_difficulty);
         Ok([header, body, receipts, total_difficulty])
     }
 }
@@ -196,14 +196,14 @@ impl TryFrom<&Entry> for BodyEntry {
 }
 
 impl TryFrom<&BodyEntry> for Entry {
-    type Error = anyhow::Error;
+    type Error = std::io::Error;
 
     fn try_from(value: &BodyEntry) -> Result<Self, Self::Error> {
         let rlp_encoded = alloy::rlp::encode(&value.body);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
-        let encoded = encoder.into_inner()?;
+        let encoded = encoder.into_inner().map_err(|e| e.into_error())?;
         Ok(Entry::new(entry_types::COMPRESSED_BODY, encoded))
     }
 }
@@ -234,14 +234,14 @@ impl TryFrom<&Entry> for ReceiptsEntry {
 }
 
 impl TryFrom<&ReceiptsEntry> for Entry {
-    type Error = anyhow::Error;
+    type Error = std::io::Error;
 
     fn try_from(value: &ReceiptsEntry) -> Result<Self, Self::Error> {
         let rlp_encoded = alloy::rlp::encode(&value.receipts);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
-        let encoded = encoder.into_inner()?;
+        let encoded = encoder.into_inner().map_err(|e| e.into_error())?;
         Ok(Entry::new(entry_types::COMPRESSED_RECEIPTS, encoded))
     }
 }
@@ -276,12 +276,10 @@ impl TryFrom<&Entry> for TotalDifficultyEntry {
     }
 }
 
-impl TryFrom<&TotalDifficultyEntry> for Entry {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &TotalDifficultyEntry) -> Result<Self, Self::Error> {
+impl From<&TotalDifficultyEntry> for Entry {
+    fn from(value: &TotalDifficultyEntry) -> Self {
         let value = value.total_difficulty.to_be_bytes_vec();
-        Ok(Entry::new(entry_types::TOTAL_DIFFICULTY, value))
+        Entry::new(entry_types::TOTAL_DIFFICULTY, value)
     }
 }
 
@@ -315,12 +313,10 @@ impl TryFrom<&Entry> for AccumulatorEntry {
     }
 }
 
-impl TryFrom<&AccumulatorEntry> for Entry {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &AccumulatorEntry) -> Result<Entry, Self::Error> {
+impl From<&AccumulatorEntry> for Entry {
+    fn from(value: &AccumulatorEntry) -> Entry {
         let value = value.accumulator.as_slice().to_vec();
-        Ok(Entry::new(entry_types::ACCUMULATOR, value))
+        Entry::new(entry_types::ACCUMULATOR, value)
     }
 }
 
@@ -359,10 +355,8 @@ impl TryFrom<&Entry> for Era1BlockIndexEntry {
     }
 }
 
-impl TryFrom<&Era1BlockIndexEntry> for Entry {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &Era1BlockIndexEntry) -> Result<Entry, Self::Error> {
+impl From<&Era1BlockIndexEntry> for Entry {
+    fn from(value: &Era1BlockIndexEntry) -> Entry {
         let mut buf: Vec<u64> = vec![];
         buf.push(value.block_index.starting_number);
         buf.extend_from_slice(&value.block_index.indices);
@@ -371,7 +365,7 @@ impl TryFrom<&Era1BlockIndexEntry> for Entry {
             .iter()
             .flat_map(|i| i.to_le_bytes().to_vec())
             .collect::<Vec<u8>>();
-        Ok(Entry::new(0x6632, encoded))
+        Entry::new(0x6632, encoded)
     }
 }
 

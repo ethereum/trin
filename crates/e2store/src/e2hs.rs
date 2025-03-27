@@ -112,7 +112,7 @@ impl E2HS {
             let block_tuple_entries = <[Entry; 3]>::try_from(block_tuple)?;
             entries.extend(block_tuple_entries);
         }
-        let block_index_entry = Entry::try_from(&self.block_index)?;
+        let block_index_entry = Entry::from(&self.block_index);
         entries.push(block_index_entry);
         ensure!(
             entries.len() == E2HS_ENTRY_COUNT,
@@ -148,7 +148,7 @@ pub struct BlockTuple {
 impl TryFrom<&[Entry]> for BlockTuple {
     type Error = anyhow::Error;
 
-    fn try_from(entries: &[Entry]) -> anyhow::Result<Self> {
+    fn try_from(entries: &[Entry]) -> Result<Self, Self::Error> {
         ensure!(
             entries.len() == 3,
             format!(
@@ -170,7 +170,7 @@ impl TryFrom<&[Entry]> for BlockTuple {
 impl TryFrom<&BlockTuple> for [Entry; 3] {
     type Error = anyhow::Error;
 
-    fn try_from(value: &BlockTuple) -> anyhow::Result<[Entry; 3]> {
+    fn try_from(value: &BlockTuple) -> Result<Self, Self::Error> {
         let header_with_proof = Entry::try_from(&value.header_with_proof)?;
         let body = Entry::try_from(&value.body)?;
         let receipts = Entry::try_from(&value.receipts)?;
@@ -206,14 +206,14 @@ impl TryFrom<&Entry> for HeaderWithProofEntry {
 }
 
 impl TryFrom<&HeaderWithProofEntry> for Entry {
-    type Error = anyhow::Error;
+    type Error = std::io::Error;
 
     fn try_from(value: &HeaderWithProofEntry) -> Result<Self, Self::Error> {
         let ssz_encoded = value.header_with_proof.as_ssz_bytes();
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&ssz_encoded)?;
-        let encoded = encoder.into_inner()?;
+        let encoded = encoder.into_inner().map_err(|e| e.into_error())?;
         Ok(Entry::new(
             entry_types::COMPRESSED_HEADER_WITH_PROOF,
             encoded,
@@ -257,10 +257,8 @@ impl TryFrom<&Entry> for E2HSBlockIndexEntry {
     }
 }
 
-impl TryFrom<&E2HSBlockIndexEntry> for Entry {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &E2HSBlockIndexEntry) -> anyhow::Result<Self> {
+impl From<&E2HSBlockIndexEntry> for Entry {
+    fn from(value: &E2HSBlockIndexEntry) -> Self {
         let mut buf: Vec<u64> = vec![];
         buf.push(value.block_index.starting_number);
         buf.extend_from_slice(&value.block_index.indices);
@@ -269,7 +267,7 @@ impl TryFrom<&E2HSBlockIndexEntry> for Entry {
             .iter()
             .flat_map(|i| i.to_le_bytes().to_vec())
             .collect::<Vec<u8>>();
-        Ok(Self::new(entry_types::BLOCK_INDEX, encoded))
+        Self::new(entry_types::BLOCK_INDEX, encoded)
     }
 }
 
