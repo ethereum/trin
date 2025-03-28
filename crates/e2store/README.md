@@ -25,6 +25,12 @@ e2ss is a format made to store full flat state snapshots, one of our first uses 
 
 TODO: Add chart of snapshot size at every million block interval.
 
+## What is e2hs?
+
+e2hs is an abbreviation for `e2-history-store`
+
+e2hs is a format for storing all of Ethereum's Execution Layer blocks. It contains block headers with proofs, block bodies, and receipts for block history which ranges block 0 to latest minus 8192
+
 ### E2SS analysis tool
 
 Analysis tool that reads e2ss file and prints basic stats about it can be run with:
