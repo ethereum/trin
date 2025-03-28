@@ -19,6 +19,7 @@ use trin_validation::constants::EPOCH_SIZE;
 pub enum BridgeMode {
     #[default]
     Latest,
+    E2HS,
     FourFours(FourFoursMode),
     Backfill(ModeType),
     Single(ModeType),
@@ -46,6 +47,9 @@ impl BridgeMode {
             }
             BridgeMode::Snapshot(_) => {
                 return Err(anyhow!("BridgeMode `snapshot` does not have a block range"))
+            }
+            BridgeMode::E2HS => {
+                return Err(anyhow!("BridgeMode `e2hs` does not have a block range"))
             }
         };
         let (start, end) = match mode_type.clone() {
@@ -83,6 +87,7 @@ impl FromStr for BridgeMode {
         match s {
             "latest" => Ok(BridgeMode::Latest),
             "fourfours" => Ok(BridgeMode::FourFours(FourFoursMode::Random)),
+            "e2hs" => Ok(BridgeMode::E2HS),
             val => {
                 let index = val
                     .find(':')

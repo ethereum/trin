@@ -44,6 +44,12 @@ cargo run -p portal-bridge -- --executable-path ./target/debug/trin --epoch-accu
     - before gossiping a individual piece of content, the bridge will perform a lookup to see if the content is already in the portal network. If it is, the content will not be gossiped.
 - `"--mode fourfours:single_hunter:10:50`: sample size = 10, threshold = 50
     - same as the above hunter mode, but it will only gossip a single era1 file before exiting
+
+#### E2HS Bridge
+
+- `"--mode e2hs --e2hs-range 100-200"`: gossip a block range from #100 to #200 (inclusive) using `E2HS` files as the data source
+- `"--mode e2hs --e2hs-range 1000-10000 --e2hs-randomize"`: randomize the order in which epochs from block range are gossiped
+
 #### Beacon Subnetwork
 
 - `"--mode latest"`: follow the head of the chain and gossip latest blocks
