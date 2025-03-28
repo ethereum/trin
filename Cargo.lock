@@ -2220,7 +2220,7 @@ dependencies = [
 
 [[package]]
 name = "e2store"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "alloy",
  "alloy-rlp",
@@ -2236,6 +2236,7 @@ dependencies = [
  "snap",
  "tokio",
  "tracing",
+ "tracing-subscriber 0.3.19",
  "trin-utils",
  "url",
 ]

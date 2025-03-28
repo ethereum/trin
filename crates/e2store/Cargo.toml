@@ -9,10 +9,10 @@ license.workspace = true
 readme = "README.md"
 repository.workspace = true
 rust-version.workspace = true
-version = "0.2.2"
+version = "0.2.3"
 
 [dependencies]
-alloy = { workspace = true, features = ["rlp"] }
+alloy = { workspace = true, features = ["rlp", "consensus"] }
 alloy-rlp.workspace = true
 anyhow.workspace = true
 clap = { workspace = true, optional = true }
@@ -22,6 +22,7 @@ ethportal-api.workspace = true
 rand.workspace = true
 reqwest.workspace = true
 tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
 scraper.workspace = true
 snap.workspace = true
 url.workspace = true
@@ -31,6 +32,9 @@ rstest.workspace = true
 tokio.workspace = true
 trin-utils.workspace = true
 
+[features]
+e2ss-stats-binary = ["clap", "tracing", "tracing-subscriber"]
 
-
-
+[[bin]]
+name = "e2ss-stats"
+required-features = ["e2ss-stats-binary"]
