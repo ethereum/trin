@@ -32,7 +32,7 @@ struct Stats {
 /// cargo run --release -p e2store --bin e2ss-stats --features e2ss-stats-binary -- <path>
 /// ```
 fn main() -> anyhow::Result<()> {
-    trin_utils::log::init_tracing_logger();
+    tracing_subscriber::fmt().init();
 
     let config = Config::parse();
     let mut reader = E2SSReader::open(&config.path)?;

@@ -7,6 +7,8 @@ E2store is a format originally developed by Nimbus as a framework for building o
 - e2store
 - era
 - era1
+- e2ss
+- e2hs
 
 ## What is era?
 era is a format for storing beacon chain data more information can be found here https://github.com/status-im/nimbus-eth2/blob/stable/docs/e2store.md#era-files
@@ -22,6 +24,12 @@ e2ss is an abbreviation for `e2-state-snapshot`
 e2ss is a format made to store full flat state snapshots, one of our first uses of this will be using to bootstrap Portal State Network bridges. Unlike `.era`/`.era1` e2ss files will only store 1 block's worth of state per file. The reason for this choice is a snapshot of the state is quite large.
 
 TODO: Add chart of snapshot size at every million block interval.
+
+## What is e2hs?
+
+e2hs is an abbreviation for `e2-history-store`
+
+e2hs is a format for storing all of Ethereum's Execution Layer blocks. It contains block headers with proofs, block bodies, and receipts for block history which ranges block 0 to latest minus 8192
 
 ### E2SS analysis tool
 
