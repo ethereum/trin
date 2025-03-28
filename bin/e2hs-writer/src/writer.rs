@@ -60,7 +60,11 @@ impl EpochWriter {
             offset += length;
         }
         let starting_header = &block_tuples[0].header_with_proof.header_with_proof.header;
-        let short_hash = hex_encode(&starting_header.hash_slow()[..4]);
+        let ending_header_hash = &block_tuples[BLOCK_TUPLE_COUNT - 1]
+            .header_with_proof
+            .header_with_proof
+            .header
+            .hash_slow();
         let block_index = BlockIndex {
             starting_number: starting_header.number,
             indices,
@@ -73,6 +77,8 @@ impl EpochWriter {
             block_index,
         };
         let raw_e2hs = e2hs.write()?;
+
+        let short_hash = hex_encode(&ending_header_hash[..4]);
         let e2hs_path = format!(
             "{}/mainnet-{:05}-{}.e2hs",
             self.target_dir,
