@@ -363,8 +363,8 @@ impl Era1Bridge {
             block_tuple.header.header.number
         );
         let mut gossip_header_by_hash = true;
+        let header_hash = block_tuple.header.header.hash_slow();
         if hunt {
-            let header_hash = block_tuple.header.header.hash_slow();
             let header_content_key = HistoryContentKey::new_block_header_by_hash(header_hash);
             let header_content_info = portal_client.get_content(header_content_key.clone()).await;
             if header_content_info.is_ok() {
@@ -456,8 +456,7 @@ impl Era1Bridge {
         }
         let mut gossip_body = true;
         if hunt {
-            let body_hash = block_tuple.header.header.hash_slow();
-            let body_content_key = HistoryContentKey::new_block_body(body_hash);
+            let body_content_key = HistoryContentKey::new_block_body(header_hash);
             let body_content_info = portal_client.get_content(body_content_key.clone()).await;
             if body_content_info.is_ok() {
                 info!(
@@ -495,8 +494,7 @@ impl Era1Bridge {
         }
         let mut gossip_receipts = true;
         if hunt {
-            let receipts_hash = block_tuple.header.header.hash_slow();
-            let receipts_content_key = HistoryContentKey::new_block_receipts(receipts_hash);
+            let receipts_content_key = HistoryContentKey::new_block_receipts(header_hash);
             let receipts_content_info = portal_client
                 .get_content(receipts_content_key.clone())
                 .await;

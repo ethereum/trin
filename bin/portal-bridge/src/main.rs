@@ -5,7 +5,10 @@ use ethportal_api::{
 };
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
-    bridge::{beacon::BeaconBridge, era1::Era1Bridge, history::HistoryBridge, state::StateBridge},
+    bridge::{
+        beacon::BeaconBridge, e2hs::E2HSBridge, era1::Era1Bridge, history::HistoryBridge,
+        state::StateBridge,
+    },
     census::Census,
     cli::BridgeConfig,
     handle::build_trin,
@@ -105,6 +108,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .await?;
             match bridge_config.mode {
+                BridgeMode::E2HS => {
+                    let Some(e2hs_range) = bridge_config.e2hs_range else {
+                        panic!("e2hs_range must be set for E2HS mode");
+                    };
+                    let e2hs_bridge = E2HSBridge::new(
+                        portal_client,
+                        bridge_config.gossip_limit,
+                        e2hs_range,
+                        bridge_config.e2hs_randomize,
+                    )?;
+                    let bridge_handle = tokio::spawn(async move {
+                        e2hs_bridge
+                            .launch()
+                            .instrument(tracing::trace_span!("history(e2hs)"))
+                            .await;
+                    });
+                    bridge_tasks.push(bridge_handle);
+                }
                 BridgeMode::FourFours(_) => {
                     let header_oracle = HeaderOracle::default();
                     let era1_bridge = Era1Bridge::new(

@@ -45,8 +45,9 @@ impl EraProvider {
         let first_source = match starting_block < MERGE_BLOCK_NUMBER {
             true => {
                 let era1_paths = get_era1_files(&http_client).await?;
-                let era1_path = era1_paths.get(&starting_block).ok_or(anyhow!(
-                    "Era1 file not found for block number: {starting_block}",
+                let epoch_index = starting_block / EPOCH_SIZE;
+                let era1_path = era1_paths.get(&epoch_index).ok_or(anyhow!(
+                    "Era1 file not found for epoch index: {epoch_index}",
                 ))?;
                 let raw_era1 = fetch_bytes(http_client.clone(), era1_path).await?;
                 EraSource::PreMerge(Arc::new(raw_era1))
