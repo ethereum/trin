@@ -22,6 +22,7 @@ use trin_utils::cli::{check_private_key_length, network_parser};
 use url::Url;
 
 use crate::{
+    bridge::e2hs::BlockRange,
     census::ENR_OFFER_LIMIT,
     constants::{DEFAULT_GOSSIP_LIMIT, DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
     types::mode::BridgeMode,
@@ -52,6 +53,19 @@ pub struct BridgeConfig {
         default_value = DEFAULT_EPOCH_ACC_PATH
     )]
     pub epoch_acc_path: PathBuf,
+
+    #[arg(
+        long = "e2hs-range",
+        help = "The (inclusive) block range for the E2HS bridge"
+    )]
+    pub e2hs_range: Option<BlockRange>,
+
+    #[arg(
+        long = "e2hs-randomize",
+        help = "Randomize epochs during gossip in E2HS bridge (default: false)",
+        default_value = "false"
+    )]
+    pub e2hs_randomize: bool,
 
     #[arg(
         long = "portal-subnetworks",

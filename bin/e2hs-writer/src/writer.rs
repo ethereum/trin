@@ -6,7 +6,7 @@ use e2store::{
 };
 use ethportal_api::utils::bytes::hex_encode;
 use futures::StreamExt;
-use tracing::{debug, info};
+use tracing::info;
 
 use crate::reader::EpochReader;
 
@@ -27,7 +27,7 @@ impl EpochWriter {
         let mut block_stream = Box::pin(reader.iter_blocks());
 
         while let Some(Ok(block_data)) = block_stream.next().await {
-            debug!(
+            info!(
                 "Writing block {}",
                 block_data.header_with_proof.header.number
             );
