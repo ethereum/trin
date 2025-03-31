@@ -6,9 +6,8 @@ use ethportal_api::types::{enr::Enr, network::Network};
 use crate::{bootnodes::Bootnodes, constants::DEFAULT_UTP_TRANSFER_LIMIT};
 
 /// Capacity of the cache for observed `NodeAddress` values.
-/// Provides capacity for 32 full k-buckets. This capacity will be shared among all active portal
-/// subnetworks.
-pub const NODE_ADDR_CACHE_CAPACITY: usize = discv5::kbucket::MAX_NODES_PER_BUCKET * 32;
+/// Provides capacity for 1000 nodes, to match Discv5's default session_cache_capacity value.
+pub const NODE_ADDR_CACHE_CAPACITY: usize = 1000;
 
 #[derive(Clone)]
 pub struct PortalnetConfig {

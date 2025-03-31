@@ -159,6 +159,11 @@ impl Discovery {
 
         let discv5_config = ConfigBuilder::new(listen_config)
             .request_timeout(Duration::from_secs(3))
+            // Set the session cache capacity to match our node address cache capacity. If our cache
+            // is smaller then the session cache capacity, it can lead to problems where we can't
+            // send replies to nodes that we have a session with, as we wouldn't have enough room in
+            // to store all the Enr's from all of our current established connections.
+            .session_cache_capacity(portal_config.node_addr_cache_capacity)
             .build();
         let discv5 = Discv5::new(enr, enr_key, discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {e}"))?;
