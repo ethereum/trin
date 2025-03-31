@@ -2220,7 +2220,7 @@ dependencies = [
 
 [[package]]
 name = "e2store"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "alloy",
  "alloy-rlp",
@@ -2499,7 +2499,7 @@ dependencies = [
 
 [[package]]
 name = "ethportal-api"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "alloy",
  "alloy-rlp",
