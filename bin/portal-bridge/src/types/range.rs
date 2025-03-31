@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use trin_validation::constants::EPOCH_SIZE;
+
 /// Converts a block range into a mapping of epoch indexes to block ranges.
 ///
 /// An epoch is defined as a range of 8192 blocks, starting at 0.
@@ -12,7 +14,6 @@ use std::collections::HashMap;
 /// HashMap mapping epoch indexes to either None or Some((start_block, end_block))
 pub fn block_range_to_epochs(start_block: u64, end_block: u64) -> HashMap<u64, Option<(u64, u64)>> {
     let mut epoch_map = HashMap::new();
-    const EPOCH_SIZE: u64 = 8192;
 
     // Calculate start and end epochs
     let start_epoch = start_block / EPOCH_SIZE;

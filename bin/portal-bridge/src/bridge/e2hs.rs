@@ -37,26 +37,15 @@ use crate::{
 /// server once we have a proper source for the files.
 fn get_e2hs_file(epoch_index: u64) -> anyhow::Result<String> {
     let e2hs_dir = "./test-e2hs";
-    let all_files = std::fs::read_dir(e2hs_dir)?;
-    let files: Vec<String> = all_files
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            let path_str = path.to_str()?;
-            if path_str.contains(&format!("mainnet-{epoch_index:05}")) {
-                Some(path_str.to_string())
-            } else {
-                None
-            }
-        })
+    let all_files: Vec<String> = std::fs::read_dir(e2hs_dir)?
+        .filter_map(Result::ok)
+        .filter_map(|entry| entry.path().to_str().map(str::to_string))
         .collect();
-    let file_count = files.len();
-    ensure!(
-        file_count == 1,
-        "Expected 1 file for epoch {epoch_index}, found {file_count}"
-    );
-    let file = files.first().expect("to be able to get first file");
-    Ok(file.clone())
+    let e2hs_path = all_files
+        .into_iter()
+        .find(|path| path.contains(&format!("mainnet-{epoch_index:05}")))
+        .ok_or_else(|| anyhow!("Failed to find e2hs file for epoch {epoch_index}"))?;
+    Ok(e2hs_path)
 }
 
 #[derive(Debug)]
@@ -105,12 +94,8 @@ impl E2HSBridge {
 
     async fn gossip_epoch(&self, epoch_index: u64, block_range: Option<(u64, u64)>) {
         match block_range {
-            Some(_) => {
-                info!("Gossiping block range: {block_range:?} from epoch {epoch_index}",);
-            }
-            None => {
-                info!("Gossiping entire epoch {epoch_index}");
-            }
+            Some(_) => info!("Gossiping block range: {block_range:?} from epoch {epoch_index}"),
+            None => info!("Gossiping entire epoch {epoch_index}"),
         }
         let Ok(e2hs_path) = get_e2hs_file(epoch_index) else {
             panic!("Failed to find e2hs file for epoch {epoch_index}");
@@ -143,6 +128,7 @@ impl E2HSBridge {
             self.metrics.report_current_block(block_number as i64);
             let handle = Self::spawn_serve_block_tuple(
                 self.portal_client.clone(),
+                block_number,
                 block_tuple,
                 permit,
                 self.metrics.clone(),
@@ -154,23 +140,20 @@ impl E2HSBridge {
 
     fn spawn_serve_block_tuple(
         portal_client: HttpClient,
+        block_number: u64,
         block_tuple: BlockTuple,
         permit: OwnedSemaphorePermit,
         metrics: BridgeMetricsReporter,
     ) -> JoinHandle<()> {
-        let number = block_tuple
-            .header_with_proof
-            .header_with_proof
-            .header
-            .number;
-        info!("Spawning serve block tuple for block {number}");
-        let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(number)));
+        info!("Spawning serve block tuple for block {block_number}");
+        let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(block_number)));
         tokio::spawn(async move {
             let timer = metrics.start_process_timer("spawn_serve_block_tuple");
             match timeout(
                 SERVE_BLOCK_TIMEOUT,
                 Self::serve_block_tuple(
                     portal_client,
+                    block_number,
                     block_tuple,
                     block_stats.clone(),
                     metrics.clone(),
@@ -179,13 +162,13 @@ impl E2HSBridge {
             .await
             {
                 Ok(Ok(())) => {
-                    info!("Served block {number}");
+                    info!("Served block {block_number}");
                 }
                 Ok(Err(e)) => {
-                    error!("Failed to serve block {number}: {e:?}");
+                    error!("Failed to serve block {block_number}: {e:?}");
                 }
                 Err(_) => {
-                    error!("Timed out serving block {number}");
+                    error!("Timed out serving block {block_number}");
                 }
             }
             metrics.stop_process_timer(timer);
@@ -195,19 +178,13 @@ impl E2HSBridge {
 
     async fn serve_block_tuple(
         portal_client: HttpClient,
+        block_number: u64,
         block_tuple: BlockTuple,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
         metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
-        let header_number = block_tuple
-            .header_with_proof
-            .header_with_proof
-            .header
-            .number;
-
-        info!("Serving block tuple for block #{header_number}");
-
-        let header_hash = block_tuple
+        info!("Serving block tuple for block #{block_number}");
+        let block_hash = block_tuple
             .header_with_proof
             .header_with_proof
             .header
@@ -217,6 +194,7 @@ impl E2HSBridge {
         let timer = metrics.start_process_timer("gossip_header_by_hash");
         match Self::gossip_header_by_hash(
             block_tuple.header_with_proof.header_with_proof.clone(),
+            block_hash,
             portal_client.clone(),
             block_stats.clone(),
         )
@@ -224,11 +202,11 @@ impl E2HSBridge {
         {
             Ok(_) => {
                 metrics.report_gossip_success(true, "header_by_hash");
-                info!("Gossiped header by hash: {header_number}");
+                info!("Gossiped header by hash: {block_number}");
             }
             Err(e) => {
                 metrics.report_gossip_success(false, "header_by_hash");
-                warn!("Failed to gossip header by hash: {header_number} - {e:?}");
+                warn!("Failed to gossip header by hash: {block_number} - {e:?}");
             }
         }
         metrics.stop_process_timer(timer);
@@ -240,6 +218,7 @@ impl E2HSBridge {
         let timer = metrics.start_process_timer("gossip_header_by_number");
         match Self::gossip_header_by_number(
             block_tuple.header_with_proof.header_with_proof.clone(),
+            block_number,
             portal_client.clone(),
             block_stats.clone(),
         )
@@ -247,11 +226,11 @@ impl E2HSBridge {
         {
             Ok(_) => {
                 metrics.report_gossip_success(true, "header_by_number");
-                info!("Gossiped header by number: {header_number}");
+                info!("Gossiped header by number: {block_number}");
             }
             Err(e) => {
                 metrics.report_gossip_success(false, "header_by_number");
-                warn!("Failed to gossip header by number: {header_number} - {e:?}");
+                warn!("Failed to gossip header by number: {block_number} - {e:?}");
             }
         }
         metrics.stop_process_timer(timer);
@@ -260,7 +239,7 @@ impl E2HSBridge {
         let timer = metrics.start_process_timer("gossip_block_body");
         match Self::gossip_body(
             block_tuple.body.body.clone(),
-            header_hash,
+            block_hash,
             portal_client.clone(),
             block_stats.clone(),
         )
@@ -268,11 +247,11 @@ impl E2HSBridge {
         {
             Ok(_) => {
                 metrics.report_gossip_success(true, "block_body");
-                info!("Gossiped body: {header_number}");
+                info!("Gossiped body: {block_number}");
             }
             Err(e) => {
                 metrics.report_gossip_success(false, "block_body");
-                warn!("Failed to gossip body: {header_number} - {e:?}");
+                warn!("Failed to gossip body: {block_number} - {e:?}");
             }
         }
         metrics.stop_process_timer(timer);
@@ -281,7 +260,7 @@ impl E2HSBridge {
         let timer = metrics.start_process_timer("gossip_receipts");
         match Self::gossip_receipts(
             block_tuple.receipts.receipts.clone(),
-            header_hash,
+            block_hash,
             portal_client.clone(),
             block_stats.clone(),
         )
@@ -289,11 +268,11 @@ impl E2HSBridge {
         {
             Ok(_) => {
                 metrics.report_gossip_success(true, "receipts");
-                info!("Gossiped receipts: {header_number}");
+                info!("Gossiped receipts: {block_number}");
             }
             Err(e) => {
                 metrics.report_gossip_success(false, "receipts");
-                warn!("Failed to gossip receipts: {header_number} - {e:?}");
+                warn!("Failed to gossip receipts: {block_number} - {e:?}");
             }
         }
         metrics.stop_process_timer(timer);
@@ -302,11 +281,11 @@ impl E2HSBridge {
 
     async fn gossip_header_by_hash(
         header_with_proof: HeaderWithProof,
+        block_hash: B256,
         portal_client: HttpClient,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
-        let header_hash = header_with_proof.header.hash_slow();
-        let hwp_by_hash_content_key = HistoryContentKey::new_block_header_by_hash(header_hash);
+        let hwp_by_hash_content_key = HistoryContentKey::new_block_header_by_hash(block_hash);
         let hwp_content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
         if let Err(err) = gossip_history_content(
             portal_client,
@@ -316,22 +295,18 @@ impl E2HSBridge {
         )
         .await
         {
-            error!(
-                "Failed to gossip history content key: {:?} - {:?}",
-                hwp_by_hash_content_key, err
-            );
+            error!("Failed to gossip history content key: {hwp_by_hash_content_key:?} - {err:?}");
         }
         Ok(())
     }
 
     async fn gossip_header_by_number(
         header_with_proof: HeaderWithProof,
+        block_number: u64,
         portal_client: HttpClient,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
-        let header_number = header_with_proof.header.number;
-        let hwp_by_number_content_key =
-            HistoryContentKey::new_block_header_by_number(header_number);
+        let hwp_by_number_content_key = HistoryContentKey::new_block_header_by_number(block_number);
         let hwp_content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
         if let Err(err) = gossip_history_content(
             portal_client,
@@ -341,21 +316,18 @@ impl E2HSBridge {
         )
         .await
         {
-            error!(
-                "Failed to gossip history content key: {:?} - {:?}",
-                hwp_by_number_content_key, err
-            );
+            error!("Failed to gossip history content key: {hwp_by_number_content_key:?} - {err:?}");
         }
         Ok(())
     }
 
     async fn gossip_body(
         body: BlockBody,
-        header_hash: B256,
+        block_hash: B256,
         portal_client: HttpClient,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
-        let body_content_key = HistoryContentKey::new_block_body(header_hash);
+        let body_content_key = HistoryContentKey::new_block_body(block_hash);
         let body_content_value = HistoryContentValue::BlockBody(body);
         if let Err(err) = gossip_history_content(
             portal_client,
@@ -365,21 +337,18 @@ impl E2HSBridge {
         )
         .await
         {
-            error!(
-                "Failed to gossip history content key: {:?} - {:?}",
-                body_content_key, err
-            );
+            error!("Failed to gossip history content key: {body_content_key:?} - {err:?}");
         }
         Ok(())
     }
 
     async fn gossip_receipts(
         receipts: Receipts,
-        header_hash: B256,
+        block_hash: B256,
         portal_client: HttpClient,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
-        let receipts_content_key = HistoryContentKey::new_block_receipts(header_hash);
+        let receipts_content_key = HistoryContentKey::new_block_receipts(block_hash);
         let receipts_content_value = HistoryContentValue::Receipts(receipts);
         if let Err(err) = gossip_history_content(
             portal_client,
@@ -389,30 +358,22 @@ impl E2HSBridge {
         )
         .await
         {
-            error!(
-                "Failed to gossip history content key: {:?} - {:?}",
-                receipts_content_key, err
-            );
+            error!("Failed to gossip history content key: {receipts_content_key:?} - {err:?}");
         }
         Ok(())
     }
 
     fn validate_block_tuple(&self, block_tuple: &BlockTuple) -> anyhow::Result<()> {
+        let header_with_proof = &block_tuple.header_with_proof.header_with_proof;
         self.header_validator
-            .validate_header_with_proof(&block_tuple.header_with_proof.header_with_proof)?;
+            .validate_header_with_proof(header_with_proof)?;
+        let body = &block_tuple.body.body;
+        body.validate_against_header(&header_with_proof.header)?;
         let receipts = &block_tuple.receipts.receipts;
-        let receipts_root = receipts.root();
         ensure!(
-            receipts_root
-                == block_tuple
-                    .header_with_proof
-                    .header_with_proof
-                    .header
-                    .receipts_root,
+            receipts.root() == header_with_proof.header.receipts_root,
             "Receipts root mismatch"
         );
-        let body = &block_tuple.body.body;
-        body.validate_against_header(&block_tuple.header_with_proof.header_with_proof.header)?;
         Ok(())
     }
 }
@@ -429,9 +390,7 @@ impl FromStr for BlockRange {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split('-').collect();
-        if parts.len() != 2 {
-            return Err(anyhow!("Invalid block range format"));
-        }
+        ensure!(parts.len() == 2, "Invalid block range format");
         let start = parts[0].parse()?;
         let end = parts[1].parse()?;
         Ok(Self { start, end })
