@@ -332,7 +332,7 @@ impl TryFrom<&Entry> for Era1BlockIndexEntry {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x6632,
+            entry.header.type_ == entry_types::BLOCK_INDEX,
             "invalid block index entry: incorrect header type"
         );
         ensure!(
@@ -365,7 +365,7 @@ impl From<&Era1BlockIndexEntry> for Entry {
             .iter()
             .flat_map(|i| i.to_le_bytes().to_vec())
             .collect::<Vec<u8>>();
-        Entry::new(0x6632, encoded)
+        Entry::new(entry_types::BLOCK_INDEX, encoded)
     }
 }
 
