@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn test_e2hs_round_trip() {
-        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-d4e56740.e2hs").unwrap();
+        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-a6860fef.e2hs").unwrap();
         let e2hs = E2HS::deserialize(&raw_e2hs).expect("failed to deserialize e2hs");
         let raw_e2hs2 = e2hs.write().expect("failed to serialize e2hs");
         assert_eq!(raw_e2hs, raw_e2hs2);
@@ -290,7 +290,7 @@ mod tests {
     #[case(100)]
     #[case(8191)]
     fn test_e2hs_block_index(#[case] block_number: usize) {
-        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-d4e56740.e2hs").unwrap();
+        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-a6860fef.e2hs").unwrap();
         let block_tuple = E2HS::get_tuple_by_index(&raw_e2hs, block_number).unwrap();
         assert_eq!(
             block_tuple
@@ -308,7 +308,7 @@ mod tests {
     #[case(100)]
     #[case(8191)]
     fn test_e2hs_block_index_direct_access(#[case] block_number: u64) {
-        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-d4e56740.e2hs").unwrap();
+        let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-a6860fef.e2hs").unwrap();
         let file = E2StoreMemory::deserialize(&raw_e2hs).expect("invalid e2hs file");
         let block_index =
             E2HSBlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))
