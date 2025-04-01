@@ -53,14 +53,14 @@ pub const COMPRESSED_ACCOUNT: u16 = 0x0800;
 /// StorageItem = { storage_index_hash, value }
 pub const COMPRESSED_STORAGE: u16 = 0x0900;
 
+/// Version
+pub const VERSION: u16 = 0x6532;
+
 /// BlockIndex
 ///
 /// data: block-index
 /// block-index := starting-number | index | index | index ... | count
-pub const BLOCK_INDEX: u16 = 0x6232;
-
-/// Version
-pub const VERSION: u16 = 0x6532;
+pub const BLOCK_INDEX: u16 = 0x6632;
 
 /// SlotIndex
 ///

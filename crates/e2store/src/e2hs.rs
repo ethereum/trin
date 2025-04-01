@@ -16,7 +16,7 @@
 //! CompressedHWP      = { type: 0x0301, data: snappyFramed(ssz(header_with_proof)) }
 //! CompressedBody     = { type: 0x0400, data: snappyFramed(rlp(body)) }
 //! CompressedReceipts = { type: 0x0500, data: snappyFramed(rlp(receipts)) }
-//! BlockIndex         = { type: 0x6232, data: block-index }
+//! BlockIndex         = { type: 0x6632, data: block-index }
 //! ```
 //!
 //! E2HS files must each contain a contiguous sequence of 8192 blocks.
