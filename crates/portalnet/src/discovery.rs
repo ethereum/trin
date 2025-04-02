@@ -162,7 +162,7 @@ impl Discovery {
             // is smaller then the session cache capacity, it can lead to problems where we can't
             // send replies to nodes that we have a session with, as we wouldn't have enough room in
             // to store all the Enr's from all of our current established connections.
-            .session_cache_capacity(portal_config.node_addr_cache_capacity)
+            .session_cache_capacity(portal_config.discv5_session_cache_capacity)
             .build();
         let discv5 = Discv5::new(enr, enr_key, discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {e}"))?;
@@ -179,7 +179,7 @@ impl Discovery {
 
         // We set the cache capacity to double the node address cache capacity pad for
         // inconsistencies between the two caches.
-        let node_addr_cache = LruCache::new(portal_config.node_addr_cache_capacity * 2);
+        let node_addr_cache = LruCache::new(portal_config.discv5_session_cache_capacity * 2);
         let node_addr_cache = Arc::new(RwLock::new(node_addr_cache));
 
         Ok(Self {
@@ -286,8 +286,20 @@ impl Discovery {
     }
 
     /// Looks up the ENR for `node_id`.
+    ///
+    /// First, it checks the cache for the `NodeAddress` and returns the `Enr` if found.
+    /// If not found, it queries the Discv5 routing table for the `node_id` and returns the `Enr` if
+    /// found.
     pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
-        self.discv5.find_enr(node_id)
+        if let Some(enr) = self.cached_node_addr(node_id) {
+            return Some(enr.enr);
+        }
+
+        if let Some(enr) = self.discv5.find_enr(node_id) {
+            return Some(enr);
+        }
+
+        None
     }
 
     /// Adds `enr` to the discv5 routing table.
@@ -429,10 +441,11 @@ impl AsyncUdpSocket<UtpPeer> for Discv5UdpSocket {
         tokio::spawn(async move {
             let enr = match peer_enr {
                 Some(enr) => enr.0,
-                None => match find_enr(&peer_id, &discv5).await {
-                    Ok(enr) => enr,
-                    Err(err) => {
-                        warn!(%err, "unable to send uTP talk request, ENR not found");
+                None => match discv5.find_enr(&peer_id) {
+                    Some(enr) => enr,
+                    None => {
+                        debug!(node_id = %peer_id, "uTP packet to unknown target");
+                        warn!( "unable to send uTP talk request, ENR not found for talk req destination");
                         return;
                     }
                 },
@@ -468,20 +481,4 @@ impl AsyncUdpSocket<UtpPeer> for Discv5UdpSocket {
             None => Err(io::Error::from(io::ErrorKind::NotConnected)),
         }
     }
-}
-
-async fn find_enr(node_id: &NodeId, discv5: &Arc<Discovery>) -> io::Result<Enr> {
-    if let Some(enr) = discv5.cached_node_addr(node_id) {
-        return Ok(enr.enr);
-    }
-
-    if let Some(enr) = discv5.find_enr(node_id) {
-        return Ok(enr);
-    }
-
-    debug!(node_id = %node_id, "uTP packet to unknown target");
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        "ENR not found for talk req destination",
-    ))
 }
