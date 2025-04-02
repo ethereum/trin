@@ -2473,14 +2473,11 @@ mod tests {
     use parking_lot::lock_api::Mutex;
     use rstest::*;
     use serial_test::serial;
-    use tokio::{
-        sync::{mpsc::unbounded_channel, RwLock as TokioRwLock},
-        time::timeout,
-    };
+    use tokio::{sync::mpsc::unbounded_channel, time::timeout};
     use tokio_test::{assert_pending, assert_ready, task};
     use trin_metrics::portalnet::PORTALNET_METRICS;
     use trin_storage::{DistanceFunction, MemoryContentStore};
-    use trin_validation::{oracle::HeaderOracle, validator::MockValidator};
+    use trin_validation::validator::MockValidator;
 
     use super::*;
     use crate::{
@@ -2510,15 +2507,9 @@ mod tests {
         };
         let discovery = Arc::new(Discovery::new(portal_config, MAINNET.clone()).unwrap());
 
-        let header_oracle = HeaderOracle::default();
-        let header_oracle = Arc::new(TokioRwLock::new(header_oracle));
         let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
-        let discv5_utp = crate::discovery::Discv5UdpSocket::new(
-            Arc::clone(&discovery),
-            utp_talk_req_rx,
-            header_oracle,
-            50,
-        );
+        let discv5_utp =
+            crate::discovery::Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
         let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp);
         let metrics = OverlayMetricsReporter {
             overlay_metrics: PORTALNET_METRICS.overlay(),

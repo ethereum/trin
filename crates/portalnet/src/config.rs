@@ -20,7 +20,7 @@ pub struct PortalnetConfig {
     pub node_addr_cache_capacity: usize,
     pub disable_poke: bool,
     pub trusted_block_root: Option<B256>,
-    // the max number of concurrent utp transfers
+    /// the max number of concurrent utp transfers
     pub utp_transfer_limit: usize,
 }
 

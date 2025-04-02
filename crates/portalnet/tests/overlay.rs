@@ -26,11 +26,11 @@ use portalnet::{
     },
 };
 use tokio::{
-    sync::{mpsc, mpsc::unbounded_channel, RwLock as TokioRwLock},
+    sync::{mpsc, mpsc::unbounded_channel},
     time::{self, Duration},
 };
 use trin_storage::{ContentStore, DistanceFunction, MemoryContentStore};
-use trin_validation::{oracle::HeaderOracle, validator::MockValidator};
+use trin_validation::validator::MockValidator;
 use utp_rs::socket::UtpSocket;
 
 async fn init_overlay(
@@ -49,11 +49,8 @@ async fn init_overlay(
     let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
     let store = Arc::new(Mutex::new(store));
 
-    let header_oracle = HeaderOracle::default();
-    let header_oracle = Arc::new(TokioRwLock::new(header_oracle));
     let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
-    let discv5_utp =
-        Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx, header_oracle, 50);
+    let discv5_utp = Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
     let utp_socket = Arc::new(UtpSocket::with_socket(discv5_utp));
 
     let validator = Arc::new(MockValidator {});
