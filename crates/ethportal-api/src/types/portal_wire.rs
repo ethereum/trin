@@ -8,6 +8,7 @@ use alloy::primitives::U256;
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
 use bimap::BiHashMap;
+use discv5::Enr;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -17,10 +18,14 @@ use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use super::{bytes::ByteList1100, ping_extensions::extension_types::PingExtensionType};
+use super::{
+    bytes::ByteList1100,
+    ping_extensions::extension_types::PingExtensionType,
+    protocol_versions::{ProtocolVersion, ProtocolVersionList, ENR_PROTOCOL_VERSION_KEY},
+};
 use crate::{
     types::{
-        enr::{Enr, SszEnr},
+        enr::SszEnr,
         network::{Network, Subnetwork},
     },
     utils::bytes::{hex_decode, hex_encode},
@@ -152,13 +157,18 @@ pub enum DiscoveryRequestError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NetworkSpec {
     network: Network,
-    // mapping of subnetworks to protocol id hex strings
+    /// mapping of subnetworks to protocol id hex strings
     portal_subnetworks: BiHashMap<Subnetwork, String>,
+    supported_protocol_versions: ProtocolVersionList,
 }
 
 impl NetworkSpec {
     pub fn network(&self) -> Network {
         self.network
+    }
+
+    pub fn supported_protocol_versions(&self) -> &ProtocolVersionList {
+        &self.supported_protocol_versions
     }
 
     pub fn get_subnetwork_from_protocol_identifier(&self, hex: &str) -> anyhow::Result<Subnetwork> {
@@ -179,6 +189,28 @@ impl NetworkSpec {
                 "Cannot find protocol identifier for subnetwork: {subnetwork}"
             ))
     }
+
+    pub fn latest_common_protocol_version(
+        &self,
+        enr: &Enr,
+    ) -> anyhow::Result<Option<ProtocolVersion>> {
+        let Some(their_supported_versions) = enr
+            .get_decodable::<ProtocolVersionList>(ENR_PROTOCOL_VERSION_KEY)
+            .transpose()?
+        else {
+            return Ok(Some(ProtocolVersion::V0));
+        };
+
+        // We assume our supported protocol versions are ordered from most old to most recent.
+        // Hence, we iterate in reverse order to find the latest common version.
+        for version in self.supported_protocol_versions.iter().rev() {
+            if their_supported_versions.contains(version) {
+                return Ok(Some(*version));
+            }
+        }
+
+        Ok(None)
+    }
 }
 
 pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
@@ -193,6 +225,7 @@ pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     NetworkSpec {
         portal_subnetworks,
         network: Network::Mainnet,
+        supported_protocol_versions: ProtocolVersionList::new(vec![ProtocolVersion::V0]),
     }
     .into()
 });
@@ -209,6 +242,10 @@ pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     NetworkSpec {
         portal_subnetworks,
         network: Network::Angelfood,
+        supported_protocol_versions: ProtocolVersionList::new(vec![
+            ProtocolVersion::V0,
+            ProtocolVersion::V1,
+        ]),
     }
     .into()
 });

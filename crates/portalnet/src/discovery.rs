@@ -16,7 +16,10 @@ use discv5::{
     ConfigBuilder, Discv5, Event, ListenConfig, QueryError, RequestError, TalkRequest,
 };
 use ethportal_api::{
-    types::{discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec},
+    types::{
+        discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec,
+        protocol_versions::ENR_PROTOCOL_VERSION_KEY,
+    },
     utils::bytes::hex_decode,
     version::get_trin_version,
     NodeInfo,
@@ -146,6 +149,13 @@ impl Discovery {
             let client_info = format!("t {trin_version}");
             // Use "c" as short-hand for "client".
             builder.add_value(ENR_PORTAL_CLIENT_KEY, &client_info.as_bytes());
+
+            // Add clients supported protocol versions to the ENR
+            builder.add_value(
+                ENR_PROTOCOL_VERSION_KEY,
+                network_spec.supported_protocol_versions(),
+            );
+
             builder
                 .build(&enr_key)
                 .map_err(|e| format!("When adding key to servers ENR: {e:?}"))?
@@ -158,10 +168,6 @@ impl Discovery {
 
         let discv5_config = ConfigBuilder::new(listen_config)
             .request_timeout(Duration::from_secs(3))
-            // Set the session cache capacity to match our node address cache capacity. If our cache
-            // is smaller then the session cache capacity, it can lead to problems where we can't
-            // send replies to nodes that we have a session with, as we wouldn't have enough room in
-            // to store all the Enr's from all of our current established connections.
             .session_cache_capacity(portal_config.discv5_session_cache_capacity)
             .build();
         let discv5 = Discv5::new(enr, enr_key, discv5_config)
@@ -177,8 +183,8 @@ impl Discovery {
                 .map_err(|e| format!("Failed to add bootnode enr: {e}"))?;
         }
 
-        // We set the cache capacity to double the node address cache capacity pad for
-        // inconsistencies between the two caches.
+        // Set local NodeAddress cache to twice the size of discv5 session cache to compensate for
+        // inconsistency between them
         let node_addr_cache = LruCache::new(portal_config.discv5_session_cache_capacity * 2);
         let node_addr_cache = Arc::new(RwLock::new(node_addr_cache));
 
