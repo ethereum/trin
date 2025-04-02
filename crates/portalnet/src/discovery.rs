@@ -23,9 +23,8 @@ use ethportal_api::{
 };
 use lru::LruCache;
 use parking_lot::RwLock;
-use tokio::sync::{mpsc, RwLock as TokioRwLock};
+use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
-use trin_validation::oracle::HeaderOracle;
 use utp_rs::{
     peer::{ConnectionPeer, Peer},
     udp::AsyncUdpSocket,
@@ -159,6 +158,11 @@ impl Discovery {
 
         let discv5_config = ConfigBuilder::new(listen_config)
             .request_timeout(Duration::from_secs(3))
+            // Set the session cache capacity to match our node address cache capacity. If our cache
+            // is smaller then the session cache capacity, it can lead to problems where we can't
+            // send replies to nodes that we have a session with, as we wouldn't have enough room in
+            // to store all the Enr's from all of our current established connections.
+            .session_cache_capacity(portal_config.discv5_session_cache_capacity)
             .build();
         let discv5 = Discv5::new(enr, enr_key, discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {e}"))?;
@@ -173,7 +177,9 @@ impl Discovery {
                 .map_err(|e| format!("Failed to add bootnode enr: {e}"))?;
         }
 
-        let node_addr_cache = LruCache::new(portal_config.node_addr_cache_capacity);
+        // We set the cache capacity to double the node address cache capacity pad for
+        // inconsistencies between the two caches.
+        let node_addr_cache = LruCache::new(portal_config.discv5_session_cache_capacity * 2);
         let node_addr_cache = Arc::new(RwLock::new(node_addr_cache));
 
         Ok(Self {
@@ -213,16 +219,6 @@ impl Discovery {
                         let _ = talk_req_tx.send(talk_req).await;
                     }
                     Event::SessionEstablished(enr, socket_addr) => {
-                        // TODO: this is a temporary fix to prevent caching of eth2 nodes
-                        // and will be updated to a more stable solution as soon as it
-                        // validates the theory of what is causing the issue on mainnet.
-                        if enr.get_decodable::<String>(ENR_PORTAL_CLIENT_KEY).is_none() {
-                            debug!(
-                                enr = ?enr,
-                                "discv5 session established with node that does not have a portal client key, not caching"
-                            );
-                            continue;
-                        }
                         if let Some(old) = node_addr_cache.write().put(
                             enr.node_id(),
                             NodeAddress {
@@ -290,8 +286,20 @@ impl Discovery {
     }
 
     /// Looks up the ENR for `node_id`.
+    ///
+    /// First, it checks the cache for the `NodeAddress` and returns the `Enr` if found.
+    /// If not found, it queries the Discv5 routing table for the `node_id` and returns the `Enr` if
+    /// found.
     pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
-        self.discv5.find_enr(node_id)
+        if let Some(enr) = self.cached_node_addr(node_id) {
+            return Some(enr.enr);
+        }
+
+        if let Some(enr) = self.discv5.find_enr(node_id) {
+            return Some(enr);
+        }
+
+        None
     }
 
     /// Adds `enr` to the discv5 routing table.
@@ -363,24 +371,16 @@ impl Discovery {
 pub struct Discv5UdpSocket {
     talk_request_receiver: mpsc::UnboundedReceiver<TalkRequest>,
     discv5: Arc<Discovery>,
-    enr_cache: Arc<TokioRwLock<LruCache<NodeId, Enr>>>,
-    header_oracle: Arc<TokioRwLock<HeaderOracle>>,
 }
 
 impl Discv5UdpSocket {
     pub fn new(
         discv5: Arc<Discovery>,
         talk_request_receiver: mpsc::UnboundedReceiver<TalkRequest>,
-        header_oracle: Arc<TokioRwLock<HeaderOracle>>,
-        enr_cache_capacity: usize,
     ) -> Self {
-        let enr_cache = LruCache::new(enr_cache_capacity);
-        let enr_cache = Arc::new(TokioRwLock::new(enr_cache));
         Self {
             discv5,
             talk_request_receiver,
-            enr_cache,
-            header_oracle,
         }
     }
 }
@@ -437,16 +437,15 @@ impl AsyncUdpSocket<UtpPeer> for Discv5UdpSocket {
         let peer_id = *peer.id();
         let peer_enr = peer.peer().cloned();
         let discv5 = Arc::clone(&self.discv5);
-        let enr_cache = Arc::clone(&self.enr_cache);
-        let header_oracle = Arc::clone(&self.header_oracle);
         let data = buf.to_vec();
         tokio::spawn(async move {
             let enr = match peer_enr {
                 Some(enr) => enr.0,
-                None => match find_enr(&peer_id, &discv5, enr_cache, header_oracle).await {
-                    Ok(enr) => enr,
-                    Err(err) => {
-                        warn!(%err, "unable to send uTP talk request, ENR not found");
+                None => match discv5.find_enr(&peer_id) {
+                    Some(enr) => enr,
+                    None => {
+                        debug!(node_id = %peer_id, "uTP packet to unknown target");
+                        warn!( "unable to send uTP talk request, ENR not found for talk req destination");
                         return;
                     }
                 },
@@ -482,55 +481,4 @@ impl AsyncUdpSocket<UtpPeer> for Discv5UdpSocket {
             None => Err(io::Error::from(io::ErrorKind::NotConnected)),
         }
     }
-}
-
-async fn find_enr(
-    node_id: &NodeId,
-    discv5: &Arc<Discovery>,
-    enr_cache: Arc<TokioRwLock<LruCache<NodeId, Enr>>>,
-    header_oracle: Arc<TokioRwLock<HeaderOracle>>,
-) -> io::Result<Enr> {
-    if let Some(cached_enr) = enr_cache.write().await.get(node_id).cloned() {
-        return Ok(cached_enr);
-    }
-
-    if let Some(enr) = discv5.find_enr(node_id) {
-        enr_cache.write().await.put(*node_id, enr.clone());
-        return Ok(enr);
-    }
-
-    if let Some(enr) = discv5.cached_node_addr(node_id) {
-        enr_cache.write().await.put(*node_id, enr.enr.clone());
-        return Ok(enr.enr);
-    }
-
-    let history_jsonrpc_tx = header_oracle.read().await.history_jsonrpc_tx();
-    if let Ok(history_jsonrpc_tx) = history_jsonrpc_tx {
-        if let Ok(enr) = HeaderOracle::history_get_enr(node_id, history_jsonrpc_tx).await {
-            enr_cache.write().await.put(*node_id, enr.clone());
-            return Ok(enr);
-        }
-    }
-
-    let state_jsonrpc_tx = header_oracle.read().await.state_jsonrpc_tx();
-    if let Ok(state_jsonrpc_tx) = state_jsonrpc_tx {
-        if let Ok(enr) = HeaderOracle::state_get_enr(node_id, state_jsonrpc_tx).await {
-            enr_cache.write().await.put(*node_id, enr.clone());
-            return Ok(enr);
-        }
-    }
-
-    let beacon_jsonrpc_tx = header_oracle.read().await.beacon_jsonrpc_tx();
-    if let Ok(beacon_jsonrpc_tx) = beacon_jsonrpc_tx {
-        if let Ok(enr) = HeaderOracle::beacon_get_enr(node_id, beacon_jsonrpc_tx).await {
-            enr_cache.write().await.put(*node_id, enr.clone());
-            return Ok(enr);
-        }
-    }
-
-    debug!(node_id = %node_id, "uTP packet to unknown target");
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        "ENR not found for talk req destination",
-    ))
 }

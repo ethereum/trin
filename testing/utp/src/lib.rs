@@ -25,7 +25,6 @@ use tokio::sync::{
     mpsc::{self, Receiver},
     RwLock,
 };
-use trin_validation::oracle::HeaderOracle;
 use utp_rs::{conn::ConnectionConfig, peer::Peer, socket::UtpSocket};
 
 use crate::rpc::RpcServer;
@@ -179,15 +178,9 @@ pub async fn run_test_app(
     let enr = discovery.local_enr();
     let discovery = Arc::new(discovery);
 
-    let header_oracle = HeaderOracle::default();
-    let header_oracle = Arc::new(RwLock::new(header_oracle));
     let (utp_talk_req_tx, utp_talk_req_rx) = mpsc::unbounded_channel();
-    let discv5_utp_socket = portalnet::discovery::Discv5UdpSocket::new(
-        Arc::clone(&discovery),
-        utp_talk_req_rx,
-        header_oracle,
-        50,
-    );
+    let discv5_utp_socket =
+        portalnet::discovery::Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
     let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp_socket);
     let utp_socket = Arc::new(utp_socket);
 

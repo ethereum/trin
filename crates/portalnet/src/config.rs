@@ -5,10 +5,9 @@ use ethportal_api::types::{enr::Enr, network::Network};
 
 use crate::{bootnodes::Bootnodes, constants::DEFAULT_UTP_TRANSFER_LIMIT};
 
-/// Capacity of the cache for observed `NodeAddress` values.
-/// Provides capacity for 32 full k-buckets. This capacity will be shared among all active portal
-/// subnetworks.
-pub const NODE_ADDR_CACHE_CAPACITY: usize = discv5::kbucket::MAX_NODES_PER_BUCKET * 32;
+/// Discv5 session cache capacity.
+/// Provides capacity for 1000 nodes, to match Discv5's default session_cache_capacity value.
+pub const DISCV5_SESSION_CACHE_CAPACITY: usize = 1000;
 
 #[derive(Clone)]
 pub struct PortalnetConfig {
@@ -18,10 +17,10 @@ pub struct PortalnetConfig {
     pub bootnodes: Vec<Enr>,
     pub no_stun: bool,
     pub no_upnp: bool,
-    pub node_addr_cache_capacity: usize,
+    pub discv5_session_cache_capacity: usize,
     pub disable_poke: bool,
     pub trusted_block_root: Option<B256>,
-    // the max number of concurrent utp transfers
+    /// the max number of concurrent utp transfers
     pub utp_transfer_limit: usize,
 }
 
@@ -35,7 +34,7 @@ impl Default for PortalnetConfig {
             bootnodes: Bootnodes::default().to_enrs(Network::Mainnet),
             no_stun: false,
             no_upnp: false,
-            node_addr_cache_capacity: NODE_ADDR_CACHE_CAPACITY,
+            discv5_session_cache_capacity: DISCV5_SESSION_CACHE_CAPACITY,
             disable_poke: false,
             trusted_block_root: None,
             utp_transfer_limit: DEFAULT_UTP_TRANSFER_LIMIT,

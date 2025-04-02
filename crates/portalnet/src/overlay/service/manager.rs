@@ -1037,9 +1037,9 @@ impl<
         // if we're unable to find the ENR for the source node we throw an error
         // since the enr is required for the accept queue, and it is expected to be present
         let enr = self.find_enr(source).ok_or_else(|| {
-            OverlayRequestError::AcceptError(
-                "handle_offer: unable to find ENR for NodeId".to_string(),
-            )
+            OverlayRequestError::AcceptError(format!(
+                "handle_offer: unable to find ENR for NodeId: source={source:?}"
+            ))
         })?;
         for (i, key) in content_keys.iter().enumerate() {
             // Accept content if within radius and not already present in the data store.
@@ -2281,19 +2281,14 @@ impl<
 
     /// Returns an ENR if one is known for the given NodeId.
     pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
-        // Check whether we know this node id in our X's Portal Network's routing table.
-        if let Some(node) = self.kbuckets.entry(*node_id).present_or_pending() {
-            return Some(node.enr);
-        }
-
-        // Check whether this node id is in our discv5 routing table
+        // Check whether this node id is in our enr_session_cache or discv5 routing table
         if let Some(enr) = self.discovery.find_enr(node_id) {
             return Some(enr);
         }
 
-        // Check whether this node id is in our discovery ENR cache
-        if let Some(node_addr) = self.discovery.cached_node_addr(node_id) {
-            return Some(node_addr.enr);
+        // Check whether we know this node id in our X's Portal Network's routing table.
+        if let Some(node) = self.kbuckets.entry(*node_id).present_or_pending() {
+            return Some(node.enr);
         }
 
         // Check the existing find node queries for the ENR.
@@ -2473,14 +2468,11 @@ mod tests {
     use parking_lot::lock_api::Mutex;
     use rstest::*;
     use serial_test::serial;
-    use tokio::{
-        sync::{mpsc::unbounded_channel, RwLock as TokioRwLock},
-        time::timeout,
-    };
+    use tokio::{sync::mpsc::unbounded_channel, time::timeout};
     use tokio_test::{assert_pending, assert_ready, task};
     use trin_metrics::portalnet::PORTALNET_METRICS;
     use trin_storage::{DistanceFunction, MemoryContentStore};
-    use trin_validation::{oracle::HeaderOracle, validator::MockValidator};
+    use trin_validation::validator::MockValidator;
 
     use super::*;
     use crate::{
@@ -2510,15 +2502,9 @@ mod tests {
         };
         let discovery = Arc::new(Discovery::new(portal_config, MAINNET.clone()).unwrap());
 
-        let header_oracle = HeaderOracle::default();
-        let header_oracle = Arc::new(TokioRwLock::new(header_oracle));
         let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
-        let discv5_utp = crate::discovery::Discv5UdpSocket::new(
-            Arc::clone(&discovery),
-            utp_talk_req_rx,
-            header_oracle,
-            50,
-        );
+        let discv5_utp =
+            crate::discovery::Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
         let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp);
         let metrics = OverlayMetricsReporter {
             overlay_metrics: PORTALNET_METRICS.overlay(),
