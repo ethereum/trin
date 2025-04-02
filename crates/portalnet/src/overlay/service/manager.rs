@@ -1037,9 +1037,9 @@ impl<
         // if we're unable to find the ENR for the source node we throw an error
         // since the enr is required for the accept queue, and it is expected to be present
         let enr = self.find_enr(source).ok_or_else(|| {
-            OverlayRequestError::AcceptError(
-                "handle_offer: unable to find ENR for NodeId".to_string(),
-            )
+            OverlayRequestError::AcceptError(format!(
+                "handle_offer: unable to find ENR for NodeId: source={source:?}"
+            ))
         })?;
         for (i, key) in content_keys.iter().enumerate() {
             // Accept content if within radius and not already present in the data store.
@@ -2281,6 +2281,11 @@ impl<
 
     /// Returns an ENR if one is known for the given NodeId.
     pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
+        // Check whether this node id is in our discovery ENR cache
+        if let Some(node_addr) = self.discovery.cached_node_addr(node_id) {
+            return Some(node_addr.enr);
+        }
+
         // Check whether we know this node id in our X's Portal Network's routing table.
         if let Some(node) = self.kbuckets.entry(*node_id).present_or_pending() {
             return Some(node.enr);
@@ -2289,11 +2294,6 @@ impl<
         // Check whether this node id is in our discv5 routing table
         if let Some(enr) = self.discovery.find_enr(node_id) {
             return Some(enr);
-        }
-
-        // Check whether this node id is in our discovery ENR cache
-        if let Some(node_addr) = self.discovery.cached_node_addr(node_id) {
-            return Some(node_addr.enr);
         }
 
         // Check the existing find node queries for the ENR.
