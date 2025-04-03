@@ -360,7 +360,7 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
             loop {
                 let res = node.write().await.advance().await;
                 if let Err(err) = res {
-                    warn!("consensus error: {}", err);
+                    warn!("consensus error: {err}");
                 }
 
                 let next_update = node.read().await.duration_until_next_update();
@@ -372,10 +372,7 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
 
     async fn boot_from_fallback(&self) -> anyhow::Result<()> {
         if let Some(fallback) = &self.fallback {
-            info!(
-                "attempting to load checkpoint from fallback \"{}\"",
-                fallback
-            );
+            info!("attempting to load checkpoint from fallback \"{fallback}\"");
 
             let checkpoint = CheckpointFallback::fetch_checkpoint_from_api(fallback)
                 .await
@@ -383,10 +380,7 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
                     anyhow!("Failed to fetch checkpoint from fallback \"{}\"", fallback)
                 })?;
 
-            info!(
-                "external fallbacks responded with checkpoint 0x{:?}",
-                checkpoint
-            );
+            info!("external fallbacks responded with checkpoint 0x{checkpoint}");
 
             // Try to sync again with the new checkpoint by reconstructing the consensus client
             // We fail fast here since the node is unrecoverable at this point
@@ -420,10 +414,7 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
                 anyhow!("Failed to fetch latest mainnet checkpoint from external fallbacks")
             })?;
 
-        info!(
-            "external fallbacks responded with checkpoint {:?}",
-            checkpoint
-        );
+        info!("external fallbacks responded with checkpoint {checkpoint}");
 
         // Try to sync again with the new checkpoint by reconstructing the consensus client
         // We fail fast here since the node is unrecoverable at this point
