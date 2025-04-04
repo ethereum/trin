@@ -98,7 +98,7 @@ Especially while we continue to develop the procedure, try to be available the f
 
 Think through: what kinds of things do you think should be on the checklist?
 
-Double check the [Flamingo schedule](https://notes.ethereum.org/@njgheorghita/r1angO2lT) and make sure you're available for your next rotation. If not, please switch with somebody asap.
+Double check the [Flamingo schedule](https://notes.ethereum.org/@portal/flamingo) and make sure you're available for your next rotation. If not, please switch with somebody asap.
 
 ## Being the Announcer
 
