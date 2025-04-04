@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy::primitives::U256;
+use alloy::primitives::{map::HashSet, U256};
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
 use bimap::BiHashMap;
@@ -201,7 +201,10 @@ impl NetworkSpec {
             return Ok(Some(ProtocolVersion::V0));
         };
 
-        // We assume our supported protocol versions are ordered from most old to most recent.
+        // Convert `their_supported_versions` to a HashSet for O(1) lookups.
+        let their_supported_versions = their_supported_versions.iter().collect::<HashSet<_>>();
+
+        // We assume our supported protocol versions are ordered chronologically.
         // Hence, we iterate in reverse order to find the latest common version.
         for version in self.supported_protocol_versions.iter().rev() {
             if their_supported_versions.contains(version) {
