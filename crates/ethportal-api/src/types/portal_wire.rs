@@ -163,6 +163,22 @@ pub struct NetworkSpec {
 }
 
 impl NetworkSpec {
+    pub fn new(
+        portal_subnetworks: BiHashMap<Subnetwork, String>,
+        network: Network,
+        supported_protocol_versions: ProtocolVersionList,
+    ) -> anyhow::Result<Self> {
+        // Ensure supported protocol versions are ordered chronologically with no duplicates.
+        supported_protocol_versions.verify_ordered()?;
+        supported_protocol_versions.verify_unique()?;
+
+        Ok(Self {
+            portal_subnetworks,
+            network,
+            supported_protocol_versions,
+        })
+    }
+
     pub fn network(&self) -> Network {
         self.network
     }
@@ -204,7 +220,7 @@ impl NetworkSpec {
         // Convert `their_supported_versions` to a HashSet for O(1) lookups.
         let their_supported_versions = their_supported_versions.iter().collect::<HashSet<_>>();
 
-        // We assume our supported protocol versions are ordered chronologically.
+        // The NetworkSpec's `supported_protocol_versions` are ordered chronologically.
         // Hence, we iterate in reverse order to find the latest common version.
         for version in self.supported_protocol_versions.iter().rev() {
             if their_supported_versions.contains(version) {
@@ -225,11 +241,12 @@ pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     portal_subnetworks.insert(Subnetwork::VerkleState, "0x500E".to_string());
     portal_subnetworks.insert(Subnetwork::TransactionGossip, "0x500F".to_string());
     portal_subnetworks.insert(Subnetwork::Utp, "0x757470".to_string());
-    NetworkSpec {
+    NetworkSpec::new(
         portal_subnetworks,
-        network: Network::Mainnet,
-        supported_protocol_versions: ProtocolVersionList::new(vec![ProtocolVersion::V0]),
-    }
+        Network::Mainnet,
+        ProtocolVersionList::new(vec![ProtocolVersion::V0]),
+    )
+    .expect("Failed to create mainnet network spec")
     .into()
 });
 
@@ -242,14 +259,12 @@ pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     portal_subnetworks.insert(Subnetwork::VerkleState, "0x504E".to_string());
     portal_subnetworks.insert(Subnetwork::TransactionGossip, "0x504F".to_string());
     portal_subnetworks.insert(Subnetwork::Utp, "0x757470".to_string());
-    NetworkSpec {
+    NetworkSpec::new(
         portal_subnetworks,
-        network: Network::Angelfood,
-        supported_protocol_versions: ProtocolVersionList::new(vec![
-            ProtocolVersion::V0,
-            ProtocolVersion::V1,
-        ]),
-    }
+        Network::Angelfood,
+        ProtocolVersionList::new(vec![ProtocolVersion::V0, ProtocolVersion::V1]),
+    )
+    .expect("Failed to create angelfood network spec")
     .into()
 });
 

@@ -1,7 +1,8 @@
 use std::ops::Deref;
 
-use alloy::primitives::Bytes;
+use alloy::primitives::{map::HashSet, Bytes};
 use alloy_rlp::{Decodable, Encodable};
+use anyhow::{bail, ensure};
 use ssz::{Decode, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum::U8, VariableList};
@@ -81,6 +82,27 @@ pub struct ProtocolVersionList(pub VariableList<ProtocolVersion, U8>);
 impl ProtocolVersionList {
     pub fn new(versions: Vec<ProtocolVersion>) -> Self {
         Self(VariableList::from(versions))
+    }
+
+    pub fn verify_ordered(&self) -> anyhow::Result<()> {
+        let mut last_version = 0;
+        for version in &self.0 {
+            let version = u8::from(*version);
+            if version < last_version {
+                bail!("Versions are in a non-increasing order");
+            }
+            last_version = version;
+        }
+        Ok(())
+    }
+
+    pub fn verify_unique(&self) -> anyhow::Result<()> {
+        let mut seen = HashSet::new();
+        ensure!(
+            self.0.iter().all(|version| seen.insert(version)),
+            "Version list contains duplicates"
+        );
+        Ok(())
     }
 }
 
