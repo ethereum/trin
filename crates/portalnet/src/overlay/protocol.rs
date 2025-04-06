@@ -7,8 +7,8 @@ use std::{
     sync::Arc,
 };
 
+use alloy::primitives::Bytes;
 use anyhow::anyhow;
-use bytes::Bytes;
 use discv5::{
     enr::NodeId,
     kbucket::{FailureReason, InsertResult, KBucketsTable, NodeStatus},

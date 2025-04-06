@@ -1,7 +1,8 @@
 use std::io::{Read, Write};
 
+use alloy::primitives::Bytes;
 use anyhow::anyhow;
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 
 /// Decode content values from uTP payload. All content values are encoded with a LEB128 varint
 /// prefix which indicates the length in bytes of the consecutive content item.
@@ -132,7 +133,7 @@ mod test {
         let expected_content_items: Vec<Bytes> = vec![vec![1, 1].into(), vec![2, 2, 2].into()];
 
         let content_payload = encode_content_payload(&expected_content_items).unwrap();
-        let content_items: Vec<Bytes> = decode_content_payload(content_payload.into())
+        let content_items: Vec<Bytes> = decode_content_payload(content_payload.freeze().into())
             .unwrap()
             .into_iter()
             .map(|content| Bytes::from(content.to_vec()))

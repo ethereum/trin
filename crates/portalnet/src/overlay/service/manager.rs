@@ -6,15 +6,11 @@ use std::{
     time::Duration,
 };
 
-use anyhow::anyhow;
-use bytes::Bytes;
-use crossbeam_channel::Sender;
 use delay_map::HashSetDelay;
 use discv5::{
     enr::NodeId,
     kbucket::{
-        ConnectionDirection, ConnectionState, FailureReason, InsertResult, Key, NodeStatus,
-        UpdateResult,
+        ConnectionDirection, ConnectionState, FailureReason, InsertResult, NodeStatus, UpdateResult,
     },
     rpc::RequestId,
 };
@@ -22,57 +18,39 @@ use ethportal_api::{
     generate_random_node_id,
     types::{
         distance::{Distance, Metric},
-        enr::{Enr, SszEnr},
+        enr::Enr,
         network::Subnetwork,
-        portal_wire::{
-            Accept, Content, FindContent, FindNodes, Message, Nodes, Offer, OfferTrace,
-            PopulatedOffer, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
-            MAX_PORTAL_NODES_ENRS_SIZE,
-        },
-        query_trace::{QueryFailureKind, QueryTrace},
+        portal_wire::{FindNodes, Message, Request, Response},
+        query_trace::QueryFailureKind,
     },
     utils::bytes::hex_encode_compact,
-    OverlayContentKey, RawContentKey, RawContentValue,
+    OverlayContentKey,
 };
-use futures::{channel::oneshot, future::join_all, prelude::*};
+use futures::prelude::*;
 use parking_lot::{Mutex, RwLock};
 use rand::Rng;
-use smallvec::SmallVec;
 use ssz::Encode;
-use ssz_types::BitList;
-use tokio::{
-    sync::{
-        broadcast,
-        mpsc::{self, UnboundedSender},
-    },
-    task::JoinHandle,
+use tokio::sync::{
+    broadcast,
+    mpsc::{self, UnboundedSender},
 };
-use tracing::{debug, enabled, error, info, trace, warn, Level};
+use tracing::{debug, error, info, trace, warn};
 use trin_metrics::overlay::OverlayMetricsReporter;
-use trin_storage::{ContentStore, ShouldWeStoreContent};
+use trin_storage::ContentStore;
 use trin_validation::validator::Validator;
-use utp_rs::cid::ConnectionId;
 
 use super::OverlayService;
 use crate::{
     accept_queue::AcceptQueue,
-    discovery::{Discovery, UtpPeer},
+    discovery::Discovery,
     events::{EventEnvelope, OverlayEvent},
     find::{
-        iterators::{
-            findcontent::{
-                FindContentQuery, FindContentQueryPending, FindContentQueryResponse,
-                FindContentQueryResult, ValidatedContent,
-            },
-            findnodes::FindNodeQuery,
-            query::{Query, QueryConfig},
-        },
-        query_info::{QueryInfo, QueryType, RecursiveFindContentResult},
-        query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
+        iterators::query::Query,
+        query_info::{QueryInfo, QueryType},
+        query_pool::{QueryId, QueryPool, QueryPoolState},
     },
     overlay::{
         command::OverlayCommand,
-        config::FindContentConfig,
         errors::OverlayRequestError,
         ping_extensions::PingExtensions,
         request::{
@@ -80,12 +58,10 @@ use crate::{
             RequestDirection,
         },
     },
-    put_content::propagate_put_content_cross_thread,
     types::{
         kbucket::{DiscoveredNodesUpdateResult, Entry, SharedKBucketsTable},
         node::Node,
     },
-    utils::portal_wire,
     utp::{controller::UtpController, timed_semaphore::OwnedTimedSemaphorePermit},
 };
 
@@ -455,263 +431,6 @@ impl<
         }).await
     }
 
-    /// Handles a `QueryEvent` from a poll on the find nodes query pool.
-    fn handle_find_nodes_query_event(
-        &mut self,
-        query_event: QueryEvent<FindNodeQuery<NodeId>, TContentKey>,
-    ) {
-        match query_event {
-            // Send a FINDNODES on behalf of the query.
-            QueryEvent::Waiting(query_id, node_id, request) => {
-                // Look up the node's ENR.
-                if let Some(enr) = self.find_enr(&node_id) {
-                    let request = OverlayRequest::new(
-                        request,
-                        RequestDirection::Outgoing { destination: enr },
-                        None,
-                        Some(query_id),
-                        None,
-                    );
-                    let _ = self.command_tx.send(OverlayCommand::Request(request));
-                } else {
-                    error!(
-                        protocol = %self.protocol,
-                        peer = %node_id,
-                        query.id = %query_id,
-                        "Cannot query peer with unknown ENR",
-                    );
-                    if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
-                        query.on_failure(&node_id);
-                    }
-                }
-            }
-            QueryEvent::Validating(..) => {
-                // This should be an unreachable path
-                unimplemented!("A FindNode query unexpectedly tried to validate content");
-            }
-            // Query has ended.
-            QueryEvent::Finished(query_id, mut query_info, query)
-            | QueryEvent::TimedOut(query_id, mut query_info, query) => {
-                let result = query.into_result();
-                // Obtain the ENRs for the resulting nodes.
-                let mut found_enrs = Vec::new();
-                for node_id in result.into_iter() {
-                    if let Some(position) = query_info
-                        .untrusted_enrs
-                        .iter()
-                        .position(|enr| enr.node_id() == node_id)
-                    {
-                        let enr = query_info.untrusted_enrs.swap_remove(position);
-                        found_enrs.push(enr);
-                    } else if let Some(enr) = self.find_enr(&node_id) {
-                        // look up from the routing table
-                        found_enrs.push(enr);
-                    } else {
-                        warn!(
-                            query.id = %query_id,
-                            "ENR from FindNode query not present in query results"
-                        );
-                    }
-                }
-                if let QueryType::FindNode {
-                    callback: Some(callback),
-                    ..
-                } = query_info.query_type
-                {
-                    if let Err(err) = callback.send(found_enrs.clone()) {
-                        error!(
-                            query.id = %query_id,
-                            error = ?err,
-                            "Error sending FindNode query result to callback",
-                        );
-                    }
-                }
-                trace!(
-                    protocol = %self.protocol,
-                    query.id = %query_id,
-                    "Discovered {} ENRs via FindNode query",
-                    found_enrs.len()
-                );
-            }
-        }
-    }
-
-    /// Handles a `QueryEvent` from a poll on the find content query pool.
-    fn handle_find_content_query_event(
-        &mut self,
-        query_event: QueryEvent<FindContentQuery<NodeId>, TContentKey>,
-    ) {
-        match query_event {
-            QueryEvent::Waiting(query_id, node_id, request) => {
-                if let Some(enr) = self.find_enr(&node_id) {
-                    // If we find the node's ENR, then send the request on behalf of the
-                    // query. No callback channel is necessary for the request, because the
-                    // response will be incorporated into the query.
-                    let request = OverlayRequest::new(
-                        request,
-                        RequestDirection::Outgoing { destination: enr },
-                        None,
-                        Some(query_id),
-                        None,
-                    );
-                    let _ = self.command_tx.send(OverlayCommand::Request(request));
-                } else {
-                    // If we cannot find the node's ENR, then we cannot contact the
-                    // node, so fail the query for this node.
-                    error!(
-                        protocol = %self.protocol,
-                        peer = %node_id,
-                        query.id = %query_id,
-                        "Cannot query peer with unknown ENR"
-                    );
-                    if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
-                        query.on_failure(&node_id);
-                    }
-                }
-            }
-            QueryEvent::Validating(query_id, is_tracing, content_key, query_result) => {
-                let query_trace_events_tx = if is_tracing {
-                    Some(self.content_query_trace_events_tx.clone())
-                } else {
-                    None
-                };
-                match query_result {
-                    FindContentQueryPending::NonePending => {
-                        // This should be an unreachable path
-                        error!("A FindContent query claimed to have some new data to validate, but none was available");
-                    }
-                    FindContentQueryPending::PendingContent {
-                        content,
-                        nodes_to_poke,
-                        peer,
-                        valid_content_tx,
-                    } => {
-                        let utp_processing = UtpProcessing::from(&*self);
-                        tokio::spawn(async move {
-                            Self::process_received_content(
-                                content,
-                                false,
-                                content_key,
-                                nodes_to_poke,
-                                utp_processing,
-                                peer,
-                                valid_content_tx,
-                                query_id,
-                                query_trace_events_tx,
-                            )
-                            .await;
-                        });
-                    }
-                    FindContentQueryPending::Utp {
-                        connection_id,
-                        peer,
-                        nodes_to_poke,
-                        valid_content_tx,
-                    } => {
-                        let source = match self.find_enr(&peer) {
-                            Some(enr) => enr,
-                            _ => {
-                                debug!("Received uTP payload from unknown {peer}");
-                                return;
-                            }
-                        };
-                        let utp_processing = UtpProcessing::from(&*self);
-                        tokio::spawn(async move {
-                            let cid = utp_rs::cid::ConnectionId {
-                                recv: connection_id,
-                                send: connection_id.wrapping_add(1),
-                                peer_id: source.node_id(),
-                            };
-                            let data = match utp_processing
-                                .utp_controller
-                                .connect_inbound_stream(cid, UtpPeer(source))
-                                .await
-                            {
-                                Ok(data) => RawContentValue::from(data),
-                                Err(e) => {
-                                    debug!(
-                                        %e,
-                                        "Failed to connect to inbound uTP stream for FindContent"
-                                    );
-                                    // Indicate to the query that the content is invalid
-                                    let _ = valid_content_tx.send(None);
-                                    if let Some(query_trace_events_tx) = query_trace_events_tx {
-                                        let _ =
-                                            query_trace_events_tx.send(QueryTraceEvent::Failure(
-                                                query_id,
-                                                peer,
-                                                QueryFailureKind::UtpTransferFailed,
-                                            ));
-                                    }
-                                    return;
-                                }
-                            };
-                            Self::process_received_content(
-                                data,
-                                true,
-                                content_key,
-                                nodes_to_poke,
-                                utp_processing,
-                                peer,
-                                valid_content_tx,
-                                query_id,
-                                query_trace_events_tx,
-                            )
-                            .await;
-                        });
-                    }
-                };
-            }
-            QueryEvent::Finished(_, query_info, query)
-            | QueryEvent::TimedOut(_, query_info, query) => {
-                let callback = match query_info.query_type {
-                    QueryType::FindContent { callback, .. } => callback,
-                    _ => {
-                        error!(
-                            "Received wrong QueryType when handling a FindContent Timeout. This is a: {:?}",
-                            query_info.query_type
-                        );
-                        return;
-                    }
-                };
-                match query.into_result() {
-                    FindContentQueryResult::ValidContent(valid_content, cancelled_peers) => {
-                        let ValidatedContent {
-                            content,
-                            was_utp_transfer,
-                            sending_peer,
-                        } = valid_content;
-
-                        let trace = if let Some(mut trace) = query_info.trace {
-                            trace.content_validated(sending_peer);
-                            trace.cancelled = cancelled_peers;
-                            Some(trace)
-                        } else {
-                            None
-                        };
-
-                        if callback
-                            .send(Ok((content, was_utp_transfer, trace)))
-                            .is_err()
-                        {
-                            error!(
-                                "Failed to send RecursiveFindContent result to the initiator of the query"
-                            );
-                        }
-                    }
-                    FindContentQueryResult::NoneFound => {
-                        let _ = callback.send(Err(OverlayRequestError::ContentNotFound {
-                            message: "Unable to locate content on the network before timeout"
-                                .to_string(),
-                            utp: false,
-                            trace: query_info.trace,
-                        }));
-                    }
-                }
-            }
-        }
-    }
-
     /// Handles a queued event, used to trace the progress of a content query.
     /// These events can be issued from spawned tasks, such as when processing received content.
     fn track_content_query_trace_event(&mut self, trace_event: QueryTraceEvent) {
@@ -727,76 +446,6 @@ impl<
                 if let Some((query_info, _)) = self.find_content_query_pool.get_mut(query_id) {
                     if let Some(trace) = &mut query_info.trace {
                         trace.node_failed(node_id, fail_kind);
-                    }
-                }
-            }
-        }
-    }
-
-    /// Submits outgoing requests to offer `content` to the closest known nodes whose radius
-    /// contains `content_key`.
-    fn poke_content(
-        kbuckets: &SharedKBucketsTable,
-        command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
-        content_key: TContentKey,
-        content: RawContentValue,
-        nodes_to_poke: Vec<NodeId>,
-        utp_controller: Arc<UtpController>,
-    ) {
-        let content_id = content_key.content_id();
-
-        let raw_content_key = content_key.to_bytes();
-
-        // Offer content to closest nodes with sufficient radius.
-        for node_id in nodes_to_poke.iter() {
-            // Look up node in the routing table. We need the ENR and the radius. If we can't find
-            // the node, then move on to the next.
-            let Some(node) = kbuckets.entry(*node_id).present_or_pending() else {
-                continue;
-            };
-
-            // If the content is within the node's radius, then offer the node the content.
-            let is_within_radius =
-                TMetric::distance(&node_id.raw(), &content_id) <= node.data_radius;
-            if is_within_radius {
-                let content_items: Vec<(RawContentKey, RawContentValue)> =
-                    vec![(raw_content_key.clone(), content.clone())];
-                let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
-
-                // if we have met the max outbound utp transfer limit continue the loop as we aren't
-                // allow to generate another utp stream
-                let permit = match utp_controller.get_outbound_semaphore() {
-                    Some(permit) => permit,
-                    None => continue,
-                };
-
-                let request = OverlayRequest::new(
-                    offer_request,
-                    RequestDirection::Outgoing {
-                        destination: node.enr(),
-                    },
-                    None,
-                    None,
-                    Some(permit),
-                );
-
-                match command_tx.send(OverlayCommand::Request(request)) {
-                    Ok(_) => {
-                        trace!(
-                            content.id = %hex_encode_compact(content_id),
-                            content.key = %content_key,
-                            peer.node_id = %node_id,
-                            "Content poked"
-                        );
-                    }
-                    Err(err) => {
-                        warn!(
-                            content.id = %hex_encode_compact(content_id),
-                            content.key = %content_key,
-                            peer.node_id = %node_id,
-                            %err,
-                            "Failed to poke content to peer"
-                        );
                     }
                 }
             }
@@ -872,375 +521,6 @@ impl<
                 ))
             }
         }
-    }
-
-    /// Builds a `Nodes` response for a `FindNodes` request.
-    fn handle_find_nodes(
-        &self,
-        request: FindNodes,
-        source: &NodeId,
-        request_id: RequestId,
-    ) -> Nodes {
-        trace!(
-            protocol = %self.protocol,
-            request.source = %source,
-            request.discv5.id = %request_id,
-            "Handling FindNodes message",
-        );
-
-        let mut enrs = self
-            .kbuckets
-            .nodes_by_distances(self.local_enr(), &request.distances, FIND_NODES_MAX_NODES)
-            .into_iter()
-            .filter(|enr| {
-                // Filter out the source node.
-                &enr.node_id() != source
-            })
-            .map(SszEnr)
-            .collect();
-
-        // Limit the ENRs so that their summed sizes do not surpass the max TALKREQ packet size.
-        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_NODES_ENRS_SIZE);
-
-        Nodes { total: 1, enrs }
-    }
-
-    /// Attempts to build a `Content` response for a `FindContent` request.
-    #[allow(clippy::result_large_err)]
-    fn handle_find_content(
-        &self,
-        request: FindContent,
-        source: &NodeId,
-        request_id: RequestId,
-    ) -> Result<Content, OverlayRequestError> {
-        trace!(
-            protocol = %self.protocol,
-            request.source = %source,
-            request.discv5.id = %request_id,
-            "Handling FindContent message",
-        );
-        let content_key = match TContentKey::try_from_bytes(&request.content_key) {
-            Ok(key) => key,
-            Err(_) => {
-                return Err(OverlayRequestError::InvalidRequest(
-                    "Invalid content key".to_string(),
-                ))
-            }
-        };
-        match (
-            self.store.lock().get(&content_key),
-            self.utp_controller.get_outbound_semaphore(),
-        ) {
-            (Ok(Some(content)), Some(permit)) => {
-                if content.len() <= MAX_PORTAL_CONTENT_PAYLOAD_SIZE {
-                    Ok(Content::Content(content))
-                } else {
-                    // Generate a connection ID for the uTP connection.
-                    let enr = self.find_enr(source).ok_or_else(|| {
-                        OverlayRequestError::AcceptError(
-                            "handle_find_content: unable to find ENR for NodeId".to_string(),
-                        )
-                    })?;
-                    let cid = self.utp_controller.cid(enr.node_id(), false);
-                    let cid_send = cid.send;
-
-                    // Wait for an incoming connection with the given CID. Then, write the data
-                    // over the uTP stream.
-                    let utp = Arc::clone(&self.utp_controller);
-                    tokio::spawn(async move {
-                        utp.accept_outbound_stream(cid, UtpPeer(enr), &content)
-                            .await;
-                        permit.drop();
-                    });
-
-                    // Connection id is sent as BE because uTP header values are stored also as BE
-                    Ok(Content::ConnectionId(cid_send.to_be()))
-                }
-            }
-            // If we can't obtain a permit or don't have data to send back, send the requester a
-            // list of closer ENRs.
-            (Ok(_), None) | (Ok(None), _) => {
-                let mut enrs = self
-                    .kbuckets
-                    .closest_to_content_id::<TMetric>(
-                        &content_key.content_id(),
-                        FIND_CONTENT_MAX_NODES,
-                    )
-                    .into_iter()
-                    .filter(|enr| &enr.node_id() != source)
-                    .map(SszEnr)
-                    .collect::<Vec<_>>();
-                pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_CONTENT_PAYLOAD_SIZE);
-                Ok(Content::Enrs(enrs))
-            }
-            (Err(msg), _) => Err(OverlayRequestError::Failure(format!(
-                "Unable to respond to FindContent: {msg}",
-            ))),
-        }
-    }
-
-    /// Attempts to build an `Accept` response for an `Offer` request.
-    #[allow(clippy::result_large_err)]
-    fn handle_offer(
-        &self,
-        request: Offer,
-        source: &NodeId,
-        request_id: RequestId,
-    ) -> Result<Accept, OverlayRequestError> {
-        trace!(
-            protocol = %self.protocol,
-            request.source = %source,
-            request.discv5.id = %request_id,
-            "Handling Offer message",
-        );
-
-        let mut requested_keys =
-            BitList::with_capacity(request.content_keys.len()).map_err(|_| {
-                OverlayRequestError::AcceptError(
-                    "Unable to initialize bitlist for requested keys.".to_owned(),
-                )
-            })?;
-
-        // Attempt to get semaphore permit if fails we return an empty accept.
-        // `get_inbound_semaphore()` isn't blocking and will instantly return with
-        // `None` if there isn't a permit available.
-        // The reason we get the permit before checking if we can store it is because
-        // * checking if a semaphore is available is basically free it doesn't block and will return
-        //   instantly
-        // * filling the `requested_keys` is expensive because it requires calls to disk which
-        //   should be avoided.
-        // so by trying to acquire the semaphore before the storage call we avoid unnecessary work
-        // **Note:** if we are not accepting any content `requested_keys` should be empty
-        let permit = match self.utp_controller.get_inbound_semaphore() {
-            Some(permit) => permit,
-            None => {
-                return Ok(Accept {
-                    connection_id: 0,
-                    content_keys: requested_keys,
-                });
-            }
-        };
-
-        let content_keys: Vec<TContentKey> = request
-            .content_keys
-            .iter()
-            .map(TContentKey::try_from_bytes)
-            .collect::<Result<Vec<TContentKey>, _>>()
-            .map_err(|_| {
-                OverlayRequestError::AcceptError(
-                    "Unable to build content key from OFFER request".to_owned(),
-                )
-            })?;
-
-        let mut accepted_keys: Vec<TContentKey> = Vec::default();
-
-        // if we're unable to find the ENR for the source node we throw an error
-        // since the enr is required for the accept queue, and it is expected to be present
-        let enr = self.find_enr(source).ok_or_else(|| {
-            OverlayRequestError::AcceptError(format!(
-                "handle_offer: unable to find ENR for NodeId: source={source:?}"
-            ))
-        })?;
-        for (i, key) in content_keys.iter().enumerate() {
-            // Accept content if within radius and not already present in the data store.
-            let mut accept = self
-                .store
-                .lock()
-                .is_key_within_radius_and_unavailable(key)
-                .map(|value| matches!(value, ShouldWeStoreContent::Store))
-                .map_err(|err| {
-                    OverlayRequestError::AcceptError(format!(
-                        "Unable to check content availability {err}"
-                    ))
-                })?;
-            if accept {
-                // accept all keys that are successfully added to the queue
-                if self.accept_queue.write().add_key_to_queue(key, &enr) {
-                    accepted_keys.push(key.clone());
-                } else {
-                    accept = false;
-                }
-            }
-            requested_keys.set(i, accept).map_err(|err| {
-                OverlayRequestError::AcceptError(format!(
-                    "Unable to set requested keys bits: {err:?}"
-                ))
-            })?;
-        }
-
-        // If no content keys were accepted, then return an Accept with a connection ID value of
-        // zero.
-        if requested_keys.is_zero() {
-            return Ok(Accept {
-                connection_id: 0,
-                content_keys: requested_keys,
-            });
-        }
-
-        // Generate a connection ID for the uTP connection if there is data we would like to
-        // accept.
-        let enr_str = if enabled!(Level::TRACE) {
-            enr.to_base64()
-        } else {
-            String::with_capacity(0)
-        };
-        let cid: ConnectionId<NodeId> = self.utp_controller.cid(enr.node_id(), false);
-        let cid_send = cid.send;
-
-        let content_keys_string: Vec<String> = content_keys
-            .iter()
-            .map(|content_key| content_key.to_hex())
-            .collect();
-
-        trace!(
-            protocol = %self.protocol,
-            request.source = %source,
-            cid.send = cid.send,
-            cid.recv = cid.recv,
-            enr = enr_str,
-            request.content_keys = ?content_keys_string,
-            "Content keys handled by offer",
-        );
-
-        let utp_processing = UtpProcessing::from(self);
-        tokio::spawn(async move {
-            let peer = UtpPeer(enr);
-            let peer_client = peer.client();
-            let data = match utp_processing
-                .utp_controller
-                .accept_inbound_stream(cid, peer)
-                .await
-            {
-                Ok(data) => data,
-                Err(err) => {
-                    debug!(%err, cid.send, cid.recv, peer = ?peer_client, content_keys = ?content_keys_string, "unable to complete uTP transfer");
-                    // Spawn a fallback FINDCONTENT task for each content key
-                    // in a payload that failed to be received.
-                    //
-                    // We spawn these additional fallback FINDCONTENT tasks using
-                    // the same semaphore permit that was initially acquired for
-                    // the ACCEPT utp stream.
-                    let handles: Vec<JoinHandle<_>> = content_keys
-                        .into_iter()
-                        .map(|content_key| {
-                            let utp_processing = utp_processing.clone();
-                            tokio::spawn(async move {
-                                // We don't really care about the result from these fallbacks.
-                                // If the fallback FINDCONTENT task fails, that's fine for now.
-                                // In the future, we might want to cycle through all available
-                                // fallback peers on an error.
-                                if let Err(err) = Self::fallback_find_content(
-                                    content_key.clone(),
-                                    utp_processing,
-                                )
-                                .await {
-                                    debug!(%err, ?content_key, "Fallback FINDCONTENT task failed, after uTP transfer failed");
-                                }
-                            })
-                        })
-                        .collect();
-                    let _ = join_all(handles).await;
-                    permit.drop();
-                    return;
-                }
-            };
-
-            // Spawn fallback FINDCONTENT tasks for each content key
-            // in payloads that failed to be accepted.
-            let content_values = match decode_and_validate_content_payload(&accepted_keys, data) {
-                Ok(content_values) => content_values,
-                Err(err) => {
-                    debug!(%err, ?content_keys_string, "Decoding and validating content payload failed");
-                    let handles: Vec<JoinHandle<_>> = content_keys
-                        .into_iter()
-                        .map(|content_key| {
-                            let utp_processing = utp_processing.clone();
-                            tokio::spawn(async move {
-                                if let Err(err) = Self::fallback_find_content(
-                                    content_key.clone(),
-                                    utp_processing,
-                                )
-                                .await {
-                                    debug!(%err, ?content_key, "Fallback FINDCONTENT task failed, decoding and validating content payload failed");
-                                }
-                            })
-                        })
-                        .collect();
-                    let _ = join_all(handles).await;
-                    permit.drop();
-                    return;
-                }
-            };
-
-            let handles = accepted_keys
-                .into_iter()
-                .zip(content_values)
-                .map(|(key, value)| {
-                    let utp_processing = utp_processing.clone();
-                    tokio::spawn(async move {
-                        match Self::validate_and_store_content(
-                            key.clone(),
-                            value,
-                            utp_processing.clone(),
-                        )
-                        .await
-                        {
-                            Some(validated_content) => {
-                                utp_processing.accept_queue.write().remove_key(&key);
-                                Some(validated_content)
-                            }
-                            None => {
-                                // Spawn a fallback FINDCONTENT task for each content key
-                                // that failed individual processing.
-                                if let Err(err) = Self::fallback_find_content(
-                                    key.clone(), utp_processing,
-                                )
-                                .await {
-                                    debug!(%err, ?key, "Fallback FINDCONTENT task failed, after validating and storing content failed");
-                                }
-                                None
-                            }
-                        }
-                    })
-                })
-                .collect::<Vec<_>>();
-            let validated_content: Vec<(TContentKey, RawContentValue)> = join_all(handles)
-                .await
-                .into_iter()
-                .enumerate()
-                .filter_map(|(index, value)| {
-                    value.unwrap_or_else(|err| {
-                        let err = err.into_panic();
-                        let err = if let Some(err) = err.downcast_ref::<&'static str>() {
-                            err.to_string()
-                        } else if let Some(err) = err.downcast_ref::<String>() {
-                            err.clone()
-                        } else {
-                            format!("{err:?}")
-                        };
-                        debug!(err, content_key = ?content_keys_string[index], "Process uTP payload tokio task failed:");
-                        // Do we want to fallback find content here?
-                        None
-                    })
-                })
-                .flatten()
-                .collect();
-            propagate_put_content_cross_thread::<_, TMetric>(
-                validated_content,
-                &utp_processing.kbuckets,
-                utp_processing.command_tx.clone(),
-                Some(utp_processing.utp_controller),
-            );
-            // explicitly drop semaphore permit in thread so the permit is moved into the thread
-            permit.drop();
-        });
-
-        let accept = Accept {
-            connection_id: cid_send.to_be(),
-            content_keys: requested_keys,
-        };
-
-        Ok(accept)
     }
 
     /// Sends a TALK request via Discovery v5 to some destination node.
@@ -1393,296 +673,6 @@ impl<
         }
     }
 
-    // Process ACCEPT response
-    fn process_accept(
-        &self,
-        response: Accept,
-        enr: Enr,
-        offer: Request,
-        request_permit: Option<OwnedTimedSemaphorePermit>,
-    ) -> anyhow::Result<Accept> {
-        // Check that a valid triggering request was sent
-        let mut gossip_result_tx = None;
-        match &offer {
-            Request::Offer(_) => {}
-            Request::PopulatedOffer(_) => {}
-            Request::PopulatedOfferWithResult(req) => {
-                gossip_result_tx = Some(req.result_tx.clone())
-            }
-            _ => {
-                return Err(anyhow!("Invalid request message paired with ACCEPT"));
-            }
-        };
-
-        // Do not initialize uTP stream if remote node doesn't have interest in the offered content
-        // keys
-        if response.content_keys.is_zero() {
-            if let Some(tx) = gossip_result_tx {
-                let _ = tx.send(OfferTrace::Declined);
-            }
-            return Ok(response);
-        }
-
-        // Build a connection ID based on the response.
-        let conn_id = u16::from_be(response.connection_id);
-        let cid = utp_rs::cid::ConnectionId {
-            recv: conn_id,
-            send: conn_id.wrapping_add(1),
-            peer_id: enr.node_id(),
-        };
-        let store = Arc::clone(&self.store);
-        let response_clone = response.clone();
-
-        let utp_controller = Arc::clone(&self.utp_controller);
-        tokio::spawn(async move {
-            let peer = UtpPeer(enr);
-            let content_items = match offer {
-                Request::Offer(offer) => {
-                    Self::provide_requested_content(store, &response_clone, offer.content_keys)
-                }
-                Request::PopulatedOffer(offer) => Ok(response_clone
-                    .content_keys
-                    .iter()
-                    .zip(offer.content_items)
-                    .filter(|(is_accepted, _item)| *is_accepted)
-                    .map(|(_is_accepted, (_key, val))| val)
-                    .collect()),
-                Request::PopulatedOfferWithResult(offer) => Ok(response_clone
-                    .content_keys
-                    .iter()
-                    .zip(vec![offer.content_item])
-                    .filter(|(is_accepted, _item)| *is_accepted)
-                    .map(|(_is_accepted, (_key, val))| val)
-                    .collect()),
-                // Unreachable because of early return at top of method:
-                _ => Err(anyhow!("Invalid request message paired with ACCEPT")),
-            };
-
-            let content_items: Vec<Bytes> = match content_items {
-                Ok(items) => items
-                    .into_iter()
-                    .map(|item| Bytes::from(item.to_vec()))
-                    .collect(),
-                Err(err) => {
-                    error!(
-                        %err,
-                        cid.send,
-                        cid.recv,
-                        peer = ?peer.client(),
-                        "Error decoding previously offered content items"
-                    );
-                    if let Some(tx) = gossip_result_tx {
-                        let _ = tx.send(OfferTrace::Failed);
-                    }
-                    return;
-                }
-            };
-
-            let content_payload = match portal_wire::encode_content_payload(&content_items) {
-                Ok(payload) => payload,
-                Err(err) => {
-                    warn!(%err, "Unable to build content payload");
-                    if let Some(tx) = gossip_result_tx {
-                        let _ = tx.send(OfferTrace::Failed);
-                    }
-                    return;
-                }
-            };
-            let result = utp_controller
-                .connect_outbound_stream(cid, peer, &content_payload)
-                .await;
-            if let Some(tx) = gossip_result_tx {
-                if result {
-                    let _ = tx.send(OfferTrace::Success(response_clone.content_keys));
-                } else {
-                    let _ = tx.send(OfferTrace::Failed);
-                }
-            }
-            // explicitly drop permit in the thread so the permit is included in the thread
-            if let Some(permit) = request_permit {
-                permit.drop();
-            }
-        });
-
-        Ok(response)
-    }
-
-    /// Validates & stores content value received from peer.
-    /// Checks if validated content should be stored, and stores it if true
-    /// Returns validated content/content dropped from storage to
-    /// propagate to other peers.
-    // (this step requires a dedicated task since it might require
-    // non-blocking requests to this/other overlay networks).
-    async fn validate_and_store_content(
-        key: TContentKey,
-        content_value: RawContentValue,
-        utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
-    ) -> Option<Vec<(TContentKey, RawContentValue)>> {
-        // Validate received content
-        let validation_result = utp_processing
-            .validator
-            .validate_content(&key, &content_value)
-            .await;
-        utp_processing
-            .metrics
-            .report_validation(validation_result.is_ok());
-
-        let validation_result = match validation_result {
-            Ok(validation_result) => validation_result,
-            Err(err) => {
-                // Skip storing & propagating content if it's not valid
-                warn!(
-                    error = %err,
-                    content.key = %key.to_hex(),
-                    "Error validating accepted content"
-                );
-                return None;
-            }
-        };
-
-        if !validation_result.valid_for_storing {
-            // Content received via Offer/Accept should be valid for storing.
-            // If it isn't, don't store it and don't propagate it.
-            warn!(
-                content.key = %key.to_hex(),
-                "Error validating accepted content - not valid for storing"
-            );
-            return None;
-        }
-
-        // Collect all content to propagate
-        let mut content_to_propagate = vec![(key.clone(), content_value.clone())];
-        if let Some(additional_content_to_propagate) =
-            validation_result.additional_content_to_propagate
-        {
-            content_to_propagate.push(additional_content_to_propagate);
-        }
-
-        // Check if data should be stored, and store if it is within our radius and not
-        // already stored.
-        let key_desired = utp_processing
-            .store
-            .lock()
-            .is_key_within_radius_and_unavailable(&key);
-        match key_desired {
-            Ok(ShouldWeStoreContent::Store) => {
-                match utp_processing.store.lock().put(key.clone(), &content_value) {
-                    Ok(dropped_content) => {
-                        if !dropped_content.is_empty() && utp_processing.gossip_dropped {
-                            // add dropped content to validation result, so it will be propagated
-                            debug!("Dropped {:?} pieces of content after inserting new content, propagating them back into the network.", dropped_content.len());
-                            content_to_propagate.extend(dropped_content.clone());
-                        }
-                    }
-                    Err(err) => warn!(
-                        error = %err,
-                        content.key = %key.to_hex(),
-                        "Error storing accepted content"
-                    ),
-                }
-            }
-            Ok(ShouldWeStoreContent::NotWithinRadius) => {
-                warn!(
-                    content.key = %key.to_hex(),
-                    "Accepted content outside radius"
-                );
-            }
-            Ok(ShouldWeStoreContent::AlreadyStored) => {
-                warn!(
-                    content.key = %key.to_hex(),
-                    "Accepted content already stored"
-                );
-            }
-            Err(err) => {
-                warn!(
-                    error = %err,
-                    content.key = %key.to_hex(),
-                    "Error checking data store for content key"
-                );
-            }
-        };
-        Some(content_to_propagate)
-    }
-
-    /// Attempts to send a single FINDCONTENT request to a fallback peer,
-    /// if found in the accept queue. Then validate, store & propagate the content.
-    async fn fallback_find_content(
-        content_key: TContentKey,
-        utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
-    ) -> anyhow::Result<()> {
-        let fallback_peer = match utp_processing
-            .accept_queue
-            .write()
-            .process_failed_key(&content_key)
-        {
-            Some(peer) => peer,
-            None => {
-                debug!("No fallback peer found for content key");
-                return Ok(());
-            }
-        };
-        let request = Request::FindContent(FindContent {
-            content_key: content_key.to_bytes(),
-        });
-        let direction = RequestDirection::Outgoing {
-            destination: fallback_peer.clone(),
-        };
-        let (tx, rx) = oneshot::channel();
-        utp_processing
-            .command_tx
-            .send(OverlayCommand::Request(OverlayRequest::new(
-                request,
-                direction,
-                Some(tx),
-                None,
-                None,
-            )))?;
-        let data: RawContentValue = match rx.await? {
-            Ok(Response::Content(found_content)) => {
-                match found_content {
-                    Content::Content(content) => content,
-                    Content::Enrs(_) => return Err(anyhow!("expected content, got ENRs")),
-                    // Init uTP stream if `connection_id` is received
-                    Content::ConnectionId(conn_id) => {
-                        let conn_id = u16::from_be(conn_id);
-                        let cid = utp_rs::cid::ConnectionId {
-                            recv: conn_id,
-                            send: conn_id.wrapping_add(1),
-                            peer_id: fallback_peer.node_id(),
-                        };
-                        utp_processing
-                            .utp_controller
-                            .connect_inbound_stream(cid, UtpPeer(fallback_peer.clone()))
-                            .await?
-                            .into()
-                    }
-                }
-            }
-            _ => return Err(anyhow!("invalid response")),
-        };
-        let validated_content = match Self::validate_and_store_content(
-            content_key,
-            data,
-            utp_processing.clone(),
-        )
-        .await
-        {
-            Some(validated_content) => validated_content,
-            None => {
-                debug!("Fallback FINDCONTENT request to peer {fallback_peer} did not yield valid content");
-                return Ok(());
-            }
-        };
-
-        propagate_put_content_cross_thread::<_, TMetric>(
-            validated_content,
-            &utp_processing.kbuckets,
-            utp_processing.command_tx.clone(),
-            Some(utp_processing.utp_controller),
-        );
-        Ok(())
-    }
-
     /// Update the recorded radius of a node in our routing table.
     pub(super) fn update_node(&self, node: Node) {
         let node_id = node.enr.node_id();
@@ -1695,184 +685,8 @@ impl<
         };
     }
 
-    /// Processes a Nodes response.
-    fn process_nodes(&mut self, nodes: Nodes, source: Enr, query_id: Option<QueryId>) {
-        trace!(
-            protocol = %self.protocol,
-            response.source = %source.node_id(),
-            query.id = ?query_id,
-            "Processing Nodes message",
-        );
-
-        let enrs: Vec<Enr> = nodes
-            .enrs
-            .into_iter()
-            .map(|ssz_enr| ssz_enr.into())
-            .collect();
-
-        self.process_discovered_enrs(enrs.clone());
-        if let Some(query_id) = query_id {
-            self.advance_find_node_query(source, enrs, query_id);
-        }
-    }
-
-    /// Processes a Content response.
-    fn process_content(&mut self, content: Content, source: Enr, query_id: Option<QueryId>) {
-        trace!(
-            protocol = %self.protocol,
-            response.source = %source.node_id(),
-            "Processing Content message",
-        );
-        match content {
-            Content::ConnectionId(id) => {
-                if let Some(query_id) = query_id {
-                    let id = u16::from_be(id);
-                    self.advance_find_content_query_with_connection_id(&query_id, source, id);
-                }
-            }
-            Content::Content(content) => {
-                if let Some(query_id) = query_id {
-                    self.advance_find_content_query_with_content(&query_id, source, content);
-                }
-            }
-            Content::Enrs(enrs) => {
-                let enrs: Vec<Enr> = enrs.into_iter().map(|ssz_enr| ssz_enr.into()).collect();
-                self.process_discovered_enrs(enrs.clone());
-                if let Some(query_id) = query_id {
-                    self.advance_find_content_query_with_enrs(&query_id, source, enrs);
-                }
-            }
-        }
-    }
-
-    // This method should be used in a non-blocking thread to allow for
-    // requests to this/other overlay services.
-    #[allow(clippy::too_many_arguments)]
-    async fn process_received_content(
-        content: RawContentValue,
-        utp_transfer: bool,
-        content_key: TContentKey,
-        nodes_to_poke: Vec<NodeId>,
-        utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
-        sending_peer: NodeId,
-        valid_content_callback: Sender<Option<ValidatedContent<NodeId>>>,
-        query_id: QueryId,
-        query_trace_events_tx: Option<UnboundedSender<QueryTraceEvent>>,
-    ) {
-        let mut content = content;
-        // Operate under assumption that all content in the store is valid
-        let local_value = utp_processing.store.lock().get(&content_key);
-        if let Ok(Some(val)) = local_value {
-            // todo validate & replace content value if different & punish bad peer
-            content = val;
-        } else {
-            let content_id = content_key.content_id();
-            let validation_result = utp_processing
-                .validator
-                .validate_content(&content_key, &content)
-                .await;
-            utp_processing
-                .metrics
-                .report_validation(validation_result.is_ok());
-
-            let validation_result = match validation_result {
-                Ok(validation_result) => validation_result,
-                Err(err) => {
-                    warn!(
-                        error = ?err,
-                        content.id = %hex_encode_compact(content_id),
-                        content.key = %content_key,
-                        "Error validating content"
-                    );
-                    // Indicate to the query that the content is invalid
-                    let _ = valid_content_callback.send(None);
-                    if let Some(query_trace_events_tx) = query_trace_events_tx {
-                        let _ = query_trace_events_tx.send(QueryTraceEvent::Failure(
-                            query_id,
-                            sending_peer,
-                            QueryFailureKind::InvalidContent,
-                        ));
-                    }
-                    return;
-                }
-            };
-
-            // skip storing if content is not valid for storing, the content
-            // is already stored or if there's an error reading the store
-            let should_store = validation_result.valid_for_storing
-                && utp_processing
-                    .store
-                    .lock()
-                    .is_key_within_radius_and_unavailable(&content_key)
-                    .map_or_else(
-                        |err| {
-                            error!("Unable to read store: {err}");
-                            false
-                        },
-                        |val| matches!(val, ShouldWeStoreContent::Store),
-                    );
-            if should_store {
-                match utp_processing
-                    .store
-                    .lock()
-                    .put(content_key.clone(), content.clone())
-                {
-                    Ok(dropped_content) => {
-                        let mut content_to_propagate = vec![(content_key.clone(), content.clone())];
-                        if let Some(additional_content_to_propagate) =
-                            validation_result.additional_content_to_propagate
-                        {
-                            content_to_propagate.push(additional_content_to_propagate);
-                        }
-                        if !dropped_content.is_empty() && utp_processing.gossip_dropped {
-                            debug!(
-                                "Dropped {:?} pieces of content after inserting new content, propagating them back into the network.",
-                                dropped_content.len(),
-                            );
-                            content_to_propagate.extend(dropped_content.clone());
-                        }
-                        propagate_put_content_cross_thread::<_, TMetric>(
-                            content_to_propagate,
-                            &utp_processing.kbuckets,
-                            utp_processing.command_tx.clone(),
-                            Some(utp_processing.utp_controller.clone()),
-                        );
-                    }
-                    Err(err) => error!(
-                        error = %err,
-                        content.id = %hex_encode_compact(content_id),
-                        content.key = %content_key,
-                        "Error storing content"
-                    ),
-                }
-            }
-        }
-
-        if valid_content_callback
-            .send(Some(ValidatedContent {
-                content: content.clone(),
-                was_utp_transfer: utp_transfer,
-                sending_peer,
-            }))
-            .is_err()
-        {
-            warn!("The content query has exited before the returned content could be marked as valid. Perhaps a timeout, or a parallel copy of the content was validated first.");
-        }
-
-        if !utp_processing.disable_poke {
-            Self::poke_content(
-                &utp_processing.kbuckets,
-                utp_processing.command_tx,
-                content_key,
-                content,
-                nodes_to_poke,
-                utp_processing.utp_controller,
-            );
-        }
-    }
-
     /// Processes a collection of discovered nodes.
-    fn process_discovered_enrs(&mut self, enrs: Vec<Enr>) {
+    pub(super) fn process_discovered_enrs(&mut self, enrs: Vec<Enr>) {
         let local_node_id = self.local_enr().node_id();
 
         // Ignore outself
@@ -1890,149 +704,6 @@ impl<
         }
         for node_id in removed_nodes {
             self.peers_to_ping.remove(&node_id);
-        }
-    }
-
-    /// Provide the requested content key and content value for the acceptor
-    fn provide_requested_content(
-        store: Arc<Mutex<TStore>>,
-        accept_message: &Accept,
-        content_keys_offered: Vec<RawContentKey>,
-    ) -> anyhow::Result<Vec<RawContentValue>> {
-        let content_keys_offered = content_keys_offered
-            .iter()
-            .map(TContentKey::try_from_bytes)
-            .collect::<Result<Vec<_>, _>>();
-
-        let content_keys_offered: Vec<TContentKey> = content_keys_offered
-            .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
-
-        let mut content_items: Vec<RawContentValue> = Vec::new();
-
-        for (i, key) in accept_message
-            .content_keys
-            .clone()
-            .iter()
-            .zip(content_keys_offered.iter())
-        {
-            if i {
-                match store.lock().get(key) {
-                    Ok(content) => match content {
-                        Some(content) => content_items.push(content),
-                        None => return Err(anyhow!("Unable to read offered content!")),
-                    },
-                    Err(err) => {
-                        return Err(anyhow!(
-                            "Unable to get offered content from portal store: {err}"
-                        ))
-                    }
-                }
-            }
-        }
-        Ok(content_items)
-    }
-
-    /// Advances a find node query (if one is active for the node) using the received ENRs.
-    /// Does nothing if called with a node_id that does not have a corresponding active query
-    /// request.
-    fn advance_find_node_query(&mut self, source: Enr, enrs: Vec<Enr>, query_id: QueryId) {
-        // Check whether this request was sent on behalf of a query.
-        // If so, advance the query with the returned data.
-        let local_node_id = self.local_enr().node_id();
-        if let Some((query_info, query)) = self.find_node_query_pool.get_mut(query_id) {
-            for enr_ref in enrs.iter() {
-                if !query_info
-                    .untrusted_enrs
-                    .iter()
-                    .any(|enr| enr.node_id() == enr_ref.node_id() && enr.node_id() != local_node_id)
-                {
-                    query_info.untrusted_enrs.push(enr_ref.clone());
-                }
-            }
-            query.on_success(
-                &source.node_id(),
-                enrs.iter().map(|enr| enr.into()).collect(),
-            );
-        }
-    }
-
-    /// Advances a find content query (if one exists for `query_id`) with ENRs close to content.
-    fn advance_find_content_query_with_enrs(
-        &mut self,
-        query_id: &QueryId,
-        source: Enr,
-        enrs: Vec<Enr>,
-    ) {
-        let local_node_id = self.local_enr().node_id();
-        if let Some((query_info, query)) = self.find_content_query_pool.get_mut(*query_id) {
-            // If an ENR is not present in the query's untrusted ENRs, then add the ENR.
-            // Ignore the local node's ENR.
-            let mut new_enrs: Vec<&Enr> = vec![];
-            for enr_ref in enrs.iter().filter(|enr| enr.node_id() != local_node_id) {
-                if !query_info
-                    .untrusted_enrs
-                    .iter()
-                    .any(|enr| enr.node_id() == enr_ref.node_id())
-                {
-                    query_info.untrusted_enrs.push(enr_ref.clone());
-
-                    new_enrs.push(enr_ref);
-                }
-            }
-            if let Some(trace) = &mut query_info.trace {
-                trace.node_responded_with(&source, new_enrs);
-                trace.cancelled = query.pending_peers(source.node_id()).into_iter().collect();
-            }
-            let closest_nodes: Vec<NodeId> = enrs
-                .iter()
-                .filter(|enr| enr.node_id() != local_node_id)
-                .map(|enr| enr.into())
-                .collect();
-
-            // Mark the query successful for the source of the response with the closest ENRs.
-            query.on_success(
-                &source.node_id(),
-                FindContentQueryResponse::ClosestNodes(closest_nodes),
-            );
-        }
-    }
-
-    /// Advances a find content query (if one exists for `query_id`) with a connection id.
-    fn advance_find_content_query_with_connection_id(
-        &mut self,
-        query_id: &QueryId,
-        source: Enr,
-        utp: u16,
-    ) {
-        if let Some((query_info, query)) = self.find_content_query_pool.get_mut(*query_id) {
-            if let Some(trace) = &mut query_info.trace {
-                trace.node_responded_with_content(&source);
-            }
-            // Mark the query successful for the source of the response with the connection id.
-            query.on_success(
-                &source.node_id(),
-                FindContentQueryResponse::ConnectionId(utp),
-            );
-        }
-    }
-
-    /// Advances a find content query (if one exists for `query_id`) with content.
-    fn advance_find_content_query_with_content(
-        &mut self,
-        query_id: &QueryId,
-        source: Enr,
-        content: RawContentValue,
-    ) {
-        let pool = &mut self.find_content_query_pool;
-        if let Some((query_info, query)) = pool.get_mut(*query_id) {
-            if let Some(trace) = &mut query_info.trace {
-                trace.node_responded_with_content(&source);
-            }
-            // Mark the query successful for the source of the response with the content.
-            query.on_success(
-                &source.node_id(),
-                FindContentQueryResponse::Content(content),
-            );
         }
     }
 
@@ -2137,148 +808,6 @@ impl<
         }
     }
 
-    /// Starts a FindNode query to find nodes with IDs closest to `target`.
-    fn init_find_nodes_query(
-        &mut self,
-        target: &NodeId,
-        callback: Option<oneshot::Sender<Vec<Enr>>>,
-    ) {
-        let closest_enrs = self
-            .kbuckets
-            .closest_to_node_id(*target, self.query_num_results);
-        if closest_enrs.is_empty() {
-            // If there are no nodes whatsoever in the routing table the query cannot proceed.
-            warn!("No nodes in routing table, find nodes query cannot proceed.");
-            if let Some(callback) = callback {
-                let _ = callback.send(vec![]);
-            }
-            return;
-        }
-
-        let query_config = QueryConfig {
-            parallelism: self.query_parallelism,
-            num_results: self.query_num_results,
-            peer_timeout: self.query_peer_timeout,
-            overall_timeout: self.query_timeout,
-        };
-
-        let query_info = QueryInfo {
-            query_type: QueryType::FindNode {
-                target: *target,
-                distances_to_request: self.findnodes_query_distances_per_peer,
-                callback,
-            },
-            untrusted_enrs: SmallVec::from_vec(closest_enrs),
-            trace: None,
-        };
-
-        let known_closest_peers: Vec<Key<NodeId>> = query_info
-            .untrusted_enrs
-            .iter()
-            .map(|enr| Key::from(enr.node_id()))
-            .collect();
-
-        if known_closest_peers.is_empty() {
-            warn!("Cannot initialize FindNode query (no known close peers)");
-        } else {
-            let find_nodes_query =
-                FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
-            let query_id = self
-                .find_node_query_pool
-                .add_query(query_info, find_nodes_query);
-            trace!(
-                query.id = %query_id,
-                node.id = %hex_encode_compact(target),
-                "FindNode query initialized"
-            );
-        }
-    }
-
-    /// Starts a `FindContentQuery` for a target content key.
-    fn init_find_content_query(
-        &mut self,
-        target: TContentKey,
-        callback: oneshot::Sender<RecursiveFindContentResult>,
-        config: FindContentConfig,
-    ) {
-        debug!("Starting query for content key: {}", target);
-
-        // Lookup content locally before querying the network.
-        if let Ok(Some(content)) = self.store.lock().get(&target) {
-            let local_enr = self.local_enr();
-            let mut query_trace = QueryTrace::new(&local_enr, target.content_id().into());
-            query_trace.node_responded_with_content(&local_enr);
-            query_trace.content_validated(local_enr.into());
-            let _ = callback.send(Ok((
-                RawContentValue::from(content),
-                false,
-                Some(query_trace),
-            )));
-            return;
-        }
-
-        // Represent the target content ID with a node ID.
-        let target_node_id = NodeId::new(&target.content_id());
-        let target_key = Key::from(target_node_id);
-
-        let query_config = QueryConfig {
-            parallelism: self.query_parallelism,
-            num_results: self.query_num_results,
-            peer_timeout: self.query_peer_timeout,
-            overall_timeout: config.timeout.unwrap_or(self.query_timeout),
-        };
-
-        let closest_enrs = self
-            .kbuckets
-            .closest_to_content_id::<TMetric>(&target.content_id(), query_config.num_results);
-        if closest_enrs.is_empty() {
-            // If there are no connected nodes in the routing table the query cannot proceed.
-            warn!("No connected nodes in routing table, find content query cannot proceed.");
-            let _ = callback.send(Err(OverlayRequestError::ContentNotFound {
-                message: "Unable to locate content on the network: no connected nodes in the routing table"
-                    .to_string(),
-                utp: false,
-                trace: None,
-            }));
-            return;
-        }
-
-        // Convert ENRs into k-bucket keys.
-        let closest_nodes: Vec<Key<NodeId>> = closest_enrs
-            .iter()
-            .map(|enr| Key::from(enr.node_id()))
-            .collect();
-
-        let trace: Option<QueryTrace> = {
-            if config.is_trace {
-                let mut trace = QueryTrace::new(&self.local_enr(), target_node_id.raw().into());
-                let local_enr = self.local_enr();
-                trace.node_responded_with(&local_enr, closest_enrs.iter().collect());
-                Some(trace)
-            } else {
-                None
-            }
-        };
-
-        let query_info = QueryInfo {
-            query_type: QueryType::FindContent {
-                target: target.clone(),
-                callback,
-            },
-            untrusted_enrs: SmallVec::from_vec(closest_enrs),
-            trace,
-        };
-
-        let query = FindContentQuery::with_config(query_config, target_key, closest_nodes);
-        let query_id = self.find_content_query_pool.add_query(query_info, query);
-        trace!(
-            query.id = %query_id,
-            content.id = %hex_encode_compact(target.content_id()),
-            content.key = %target,
-            "FindContent query initialized"
-        );
-    }
-
     /// Returns an ENR if one is known for the given NodeId.
     pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
         // Check whether this node id is in our enr_session_cache or discv5 routing table
@@ -2353,31 +882,24 @@ pub enum QueryTraceEvent {
     Failure(QueryId, NodeId, QueryFailureKind),
 }
 
-/// Limits a to a maximum packet size, including the discv5 header overhead.
-fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
-    while enrs.ssz_bytes_len() > max_size {
-        enrs.pop();
-    }
-}
-
 /// References to `OverlayService` components required for processing
 /// a utp stream. This is basically a utility struct to avoid passing
 /// around a large number of individual references.
-struct UtpProcessing<TValidator, TStore, TContentKey>
+pub(super) struct UtpProcessing<TValidator, TStore, TContentKey>
 where
     TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
     TStore: ContentStore<Key = TContentKey>,
 {
-    validator: Arc<TValidator>,
-    store: Arc<Mutex<TStore>>,
-    metrics: OverlayMetricsReporter,
-    kbuckets: SharedKBucketsTable,
-    command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
-    utp_controller: Arc<UtpController>,
-    accept_queue: Arc<RwLock<AcceptQueue<TContentKey>>>,
-    disable_poke: bool,
-    gossip_dropped: bool,
+    pub validator: Arc<TValidator>,
+    pub store: Arc<Mutex<TStore>>,
+    pub metrics: OverlayMetricsReporter,
+    pub kbuckets: SharedKBucketsTable,
+    pub command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
+    pub utp_controller: Arc<UtpController>,
+    pub accept_queue: Arc<RwLock<AcceptQueue<TContentKey>>>,
+    pub disable_poke: bool,
+    pub gossip_dropped: bool,
 }
 
 impl<TContentKey, TMetric, TValidator, TStore, TPingExtensions>
@@ -2427,27 +949,6 @@ where
     }
 }
 
-fn decode_and_validate_content_payload<TContentKey>(
-    accepted_keys: &[TContentKey],
-    payload: Bytes,
-) -> anyhow::Result<Vec<RawContentValue>> {
-    let content_values = portal_wire::decode_content_payload(payload)?;
-    // Accepted content keys len should match content value len
-    let keys_len = accepted_keys.len();
-    let vals_len = content_values.len();
-    if keys_len != vals_len {
-        return Err(anyhow!(
-            "Accepted content keys len ({}) does not match content values len ({})",
-            keys_len,
-            vals_len
-        ));
-    }
-    Ok(content_values
-        .into_iter()
-        .map(RawContentValue::from)
-        .collect())
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -2455,15 +956,20 @@ mod tests {
 
     use alloy::primitives::U256;
     use discv5::kbucket;
-    use ethportal_api::types::{
-        content_key::overlay::IdentityContentKey,
-        distance::XorMetric,
-        enr::generate_random_remote_enr,
-        ping_extensions::{
-            extension_types::PingExtensionType, extensions::type_0::ClientInfoRadiusCapabilities,
+    use ethportal_api::{
+        types::{
+            content_key::overlay::IdentityContentKey,
+            distance::XorMetric,
+            enr::generate_random_remote_enr,
+            ping_extensions::{
+                extension_types::PingExtensionType,
+                extensions::type_0::ClientInfoRadiusCapabilities,
+            },
+            portal_wire::{Ping, Pong, MAINNET},
         },
-        portal_wire::{Ping, Pong, MAINNET},
+        RawContentValue,
     };
+    use futures::channel::oneshot;
     use kbucket::KBucketsTable;
     use parking_lot::lock_api::Mutex;
     use rstest::*;
@@ -2479,7 +985,11 @@ mod tests {
         config::PortalnetConfig,
         constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_UTP_TRANSFER_LIMIT},
         discovery::{Discovery, NodeAddress},
-        overlay::{config::OverlayConfig, ping_extensions::MockPingExtension},
+        find::iterators::findcontent::{FindContentQueryPending, FindContentQueryResult},
+        overlay::{
+            config::{FindContentConfig, OverlayConfig},
+            ping_extensions::MockPingExtension,
+        },
     };
 
     macro_rules! poll_command_rx {
@@ -3195,6 +1705,10 @@ mod tests {
         #[case] original_nodes_size: usize,
         #[case] correct_limited_size: usize,
     ) {
+        use ethportal_api::{types::portal_wire::MAX_PORTAL_NODES_ENRS_SIZE, SszEnr};
+
+        use crate::overlay::service::utils::pop_while_ssz_bytes_len_gt;
+
         let mut enrs: Vec<SszEnr> = Vec::new();
         for _ in 0..original_nodes_size {
             // Generates an ENR of size 63 bytes.

@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
+use alloy::primitives::Bytes;
 use anyhow::anyhow;
-use bytes::Bytes;
 use discv5::enr::NodeId;
 use lazy_static::lazy_static;
 use tokio::sync::Semaphore;
