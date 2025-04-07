@@ -69,31 +69,58 @@ impl BeaconBlock {
     }
 }
 
+/// Helper function to build a body root proof for a beacon block
+fn build_beacon_block_body_root_proof(
+    slot: u64,
+    proposer_index: u64,
+    parent_root: &B256,
+    state_root: &B256,
+    body_root: &B256,
+) -> Vec<B256> {
+    let leaves = vec![
+        slot.tree_hash_root().0,
+        proposer_index.tree_hash_root().0,
+        parent_root.tree_hash_root().0,
+        state_root.tree_hash_root().0,
+        body_root.tree_hash_root().0,
+    ];
+    // We want to prove the body root, which is the 5th leaf
+    build_merkle_proof_for_index(leaves, 4)
+}
+
 impl BeaconBlockCapella {
     pub fn build_body_root_proof(&self) -> Vec<B256> {
-        let leaves = vec![
-            self.slot.tree_hash_root().0,
-            self.proposer_index.tree_hash_root().0,
-            self.parent_root.tree_hash_root().0,
-            self.state_root.tree_hash_root().0,
-            self.body.tree_hash_root().0,
-        ];
-        // We want to prove the body root, which is the 5th leaf
-        build_merkle_proof_for_index(leaves, 4)
+        build_beacon_block_body_root_proof(
+            self.slot,
+            self.proposer_index,
+            &self.parent_root,
+            &self.state_root,
+            &self.body.tree_hash_root(),
+        )
     }
 }
 
 impl BeaconBlockBellatrix {
     pub fn build_body_root_proof(&self) -> Vec<B256> {
-        let leaves = vec![
-            self.slot.tree_hash_root().0,
-            self.proposer_index.tree_hash_root().0,
-            self.parent_root.tree_hash_root().0,
-            self.state_root.tree_hash_root().0,
-            self.body.tree_hash_root().0,
-        ];
-        // We want to prove the body root, which is the 5th leaf
-        build_merkle_proof_for_index(leaves, 4)
+        build_beacon_block_body_root_proof(
+            self.slot,
+            self.proposer_index,
+            &self.parent_root,
+            &self.state_root,
+            &self.body.tree_hash_root(),
+        )
+    }
+}
+
+impl BeaconBlockDeneb {
+    pub fn build_body_root_proof(&self) -> Vec<B256> {
+        build_beacon_block_body_root_proof(
+            self.slot,
+            self.proposer_index,
+            &self.parent_root,
+            &self.state_root,
+            &self.body.tree_hash_root(),
+        )
     }
 }
 

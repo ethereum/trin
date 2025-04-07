@@ -282,15 +282,16 @@ impl EpochReader {
 
 #[cfg(test)]
 mod tests {
-    use ethportal_api::types::{
-        consensus::{
-            beacon_block::{BeaconBlockBellatrix, BeaconBlockCapella},
-            beacon_state::BeaconState,
-            fork::ForkName,
-        },
-        execution::header_with_proof::{
-            build_historical_roots_proof, build_historical_summaries_proof,
-            BlockProofHistoricalRoots, BlockProofHistoricalSummaries,
+    use ethportal_api::{
+        consensus::beacon_block::BeaconBlock,
+        types::{
+            consensus::{
+                beacon_block::BeaconBlockBellatrix, beacon_state::BeaconState, fork::ForkName,
+            },
+            execution::header_with_proof::{
+                build_block_proof_historical_roots, build_historical_summaries_proof,
+                BlockProofHistoricalRoots, BlockProofHistoricalSummaries,
+            },
         },
     };
     use serde_yaml::Value;
@@ -336,7 +337,7 @@ mod tests {
         let block_path = format!("{test_assets_dir}/block.ssz");
         let block_raw = std::fs::read(block_path).unwrap();
         let block = BeaconBlockBellatrix::from_ssz_bytes(&block_raw).unwrap();
-        let proof = build_historical_roots_proof(slot, &historical_batch, block);
+        let proof = build_block_proof_historical_roots(slot, &historical_batch, &block);
 
         assert_eq!(actual_proof, proof);
     }
@@ -388,11 +389,41 @@ mod tests {
         let state_path = format!("{test_assets_dir}/beacon_state.ssz");
         let state_raw = std::fs::read(state_path).unwrap();
         let beacon_state = BeaconState::from_ssz_bytes(&state_raw, ForkName::Capella).unwrap();
-        let beacon_state = beacon_state.as_capella().unwrap();
         let block_path = format!("{test_assets_dir}/block.ssz");
         let block_raw = std::fs::read(block_path).unwrap();
-        let block = BeaconBlockCapella::from_ssz_bytes(&block_raw).unwrap();
-        let proof = build_historical_summaries_proof(slot, beacon_state, block);
+        let block = BeaconBlock::from_ssz_bytes(&block_raw, ForkName::Capella).unwrap();
+        let proof = build_historical_summaries_proof(slot, &beacon_state, &block);
+
+        assert_eq!(actual_proof, proof);
+    }
+    #[tokio::test]
+    async fn test_pre_pectra_proof_generation() {
+        let test_vector = std::fs::read_to_string(
+            "../../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_deneb/beacon_block_proof-22162263.yaml"
+        )
+            .unwrap();
+        let test_vector: Value = serde_yaml::from_str(&test_vector).unwrap();
+        let actual_proof = BlockProofHistoricalSummaries {
+            beacon_block_proof: serde_yaml::from_value(test_vector["beacon_block_proof"].clone())
+                .unwrap(),
+            beacon_block_root: serde_yaml::from_value(test_vector["beacon_block_root"].clone())
+                .unwrap(),
+            execution_block_proof: serde_yaml::from_value(
+                test_vector["execution_block_proof"].clone(),
+            )
+            .unwrap(),
+            slot: serde_yaml::from_value(test_vector["slot"].clone()).unwrap(),
+        };
+
+        let test_assets_dir =
+            "../../portal-spec-tests/tests/mainnet/history/headers_with_proof/beacon_data/22162263";
+        let state_path = format!("{test_assets_dir}/beacon_state.ssz");
+        let state_raw = std::fs::read(state_path).unwrap();
+        let beacon_state = BeaconState::from_ssz_bytes(&state_raw, ForkName::Deneb).unwrap();
+        let block_path = format!("{test_assets_dir}/block.ssz");
+        let block_raw = std::fs::read(block_path).unwrap();
+        let block = BeaconBlock::from_ssz_bytes(&block_raw, ForkName::Deneb).unwrap();
+        let proof = build_historical_summaries_proof(11378687, &beacon_state, &block);
 
         assert_eq!(actual_proof, proof);
     }
