@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy::primitives::{map::HashSet, U256};
+use alloy::primitives::U256;
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
 use bimap::BiHashMap;
@@ -21,7 +21,9 @@ use validator::ValidationError;
 use super::{
     bytes::ByteList1100,
     ping_extensions::extension_types::PingExtensionType,
-    protocol_versions::{ProtocolVersion, ProtocolVersionList, ENR_PROTOCOL_VERSION_KEY},
+    protocol_versions::{
+        ProtocolVersion, ProtocolVersionError, ProtocolVersionList, ENR_PROTOCOL_VERSION_KEY,
+    },
 };
 use crate::{
     types::{
@@ -169,8 +171,7 @@ impl NetworkSpec {
         supported_protocol_versions: ProtocolVersionList,
     ) -> anyhow::Result<Self> {
         // Ensure supported protocol versions are ordered chronologically with no duplicates.
-        supported_protocol_versions.verify_ordered()?;
-        supported_protocol_versions.verify_unique()?;
+        supported_protocol_versions.is_strictly_sorted_and_specified();
 
         Ok(Self {
             portal_subnetworks,
@@ -209,26 +210,23 @@ impl NetworkSpec {
     pub fn latest_common_protocol_version(
         &self,
         enr: &Enr,
-    ) -> anyhow::Result<Option<ProtocolVersion>> {
-        let Some(their_supported_versions) = enr
+    ) -> Result<ProtocolVersion, ProtocolVersionError> {
+        let Some(other_supported_versions) = enr
             .get_decodable::<ProtocolVersionList>(ENR_PROTOCOL_VERSION_KEY)
-            .transpose()?
+            .transpose()
+            .map_err(|_| ProtocolVersionError::FailedToDecode)?
         else {
-            return Ok(Some(ProtocolVersion::V0));
+            return Ok(ProtocolVersion::V0);
         };
-
-        // Convert `their_supported_versions` to a HashSet for O(1) lookups.
-        let their_supported_versions = their_supported_versions.iter().collect::<HashSet<_>>();
 
         // The NetworkSpec's `supported_protocol_versions` are ordered chronologically.
         // Hence, we iterate in reverse order to find the latest common version.
-        for version in self.supported_protocol_versions.iter().rev() {
-            if their_supported_versions.contains(version) {
-                return Ok(Some(*version));
-            }
-        }
-
-        Ok(None)
+        self.supported_protocol_versions
+            .iter()
+            .rev()
+            .find(|v| other_supported_versions.contains(v))
+            .copied()
+            .ok_or(ProtocolVersionError::NoMatchingVersion)
     }
 }
 

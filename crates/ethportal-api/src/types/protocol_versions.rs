@@ -1,8 +1,7 @@
-use std::ops::Deref;
+use std::{cmp::Ordering, ops::Deref};
 
-use alloy::primitives::{map::HashSet, Bytes};
+use alloy::primitives::Bytes;
 use alloy_rlp::{Decodable, Encodable};
-use anyhow::{bail, ensure};
 use ssz::{Decode, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum::U8, VariableList};
@@ -75,34 +74,38 @@ impl Decode for ProtocolVersion {
     }
 }
 
+impl PartialOrd for ProtocolVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ProtocolVersion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        u8::from(*self).cmp(&u8::from(*other))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 #[ssz(struct_behaviour = "transparent")]
 pub struct ProtocolVersionList(pub VariableList<ProtocolVersion, U8>);
 
 impl ProtocolVersionList {
+    /// Panics if the length of the list is greater than 8.
     pub fn new(versions: Vec<ProtocolVersion>) -> Self {
-        Self(VariableList::from(versions))
+        Self(VariableList::new(versions).expect("This function only accepts up to 8 elements"))
     }
 
-    pub fn verify_ordered(&self) -> anyhow::Result<()> {
-        let mut last_version = 0;
-        for version in &self.0 {
-            let version = u8::from(*version);
-            if version < last_version {
-                bail!("Versions are in a non-increasing order");
+    pub fn is_strictly_sorted_and_specified(&self) -> bool {
+        for i in 0..self.len() {
+            if let ProtocolVersion::UnspecifiedVersion(_) = self.0[i] {
+                return false;
             }
-            last_version = version;
+            if i > 0 && self.0[i - 1] >= self.0[i] {
+                return false;
+            }
         }
-        Ok(())
-    }
-
-    pub fn verify_unique(&self) -> anyhow::Result<()> {
-        let mut seen = HashSet::new();
-        ensure!(
-            self.0.iter().all(|version| seen.insert(version)),
-            "Version list contains duplicates"
-        );
-        Ok(())
+        true
     }
 }
 
@@ -129,6 +132,12 @@ impl Decodable for ProtocolVersionList {
             .map_err(|_| alloy_rlp::Error::Custom("Failed to decode SSZ ProtocolVersionList"))?;
         Ok(supported_versions)
     }
+}
+
+#[derive(Debug)]
+pub enum ProtocolVersionError {
+    FailedToDecode,
+    NoMatchingVersion,
 }
 
 #[cfg(test)]
