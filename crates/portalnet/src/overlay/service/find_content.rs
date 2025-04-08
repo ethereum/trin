@@ -51,6 +51,7 @@ use crate::{
     },
     put_content::propagate_put_content_cross_thread,
     types::kbucket::SharedKBucketsTable,
+    utils::portal_wire::{decode_single_content_payload, encode_content_payload},
     utp::controller::UtpController,
 };
 
@@ -99,6 +100,31 @@ impl<
                             "handle_find_content: unable to find ENR for NodeId".to_string(),
                         )
                     })?;
+
+                    let content = match self
+                        .discovery
+                        .network_spec
+                        .latest_common_protocol_version(&enr)
+                    {
+                        Ok(protocol_version) if protocol_version.is_v1_enabled() => {
+                            encode_content_payload(&[content])
+                                .map_err(|err| {
+                                    OverlayRequestError::AcceptError(format!(
+                                        "Unable to encode content payload: {err}"
+                                    ))
+                                })?
+                                .freeze()
+                                .into()
+                        }
+                        Ok(_) => content,
+                        Err(err) => {
+                            // TODO: descore or ban this peer as they shouldn't be sending us
+                            // requests unless they know we have a common protocol version.
+                            return Err(OverlayRequestError::AcceptError(format!(
+                                "Unable to get latest common protocol version: {err:?}"
+                            )));
+                        }
+                    };
 
                     let cid = self.utp_controller.cid(enr.node_id(), false);
                     let cid_send = cid.send;
@@ -332,21 +358,63 @@ impl<
                             }
                         };
                         let utp_processing = UtpProcessing::from(&*self);
+                        let network_spec = self.discovery.network_spec.clone();
+                        let protocol = self.protocol;
                         tokio::spawn(async move {
                             let cid = utp_rs::cid::ConnectionId {
                                 recv: connection_id,
                                 send: connection_id.wrapping_add(1),
                                 peer_id: source.node_id(),
                             };
+
+                            let protocol_version = match network_spec
+                                .latest_common_protocol_version(&source)
+                            {
+                                Ok(protocol_version) => protocol_version,
+                                Err(err) => {
+                                    debug!(?err, "Unable to get latest common protocol version");
+                                    return;
+                                }
+                            };
+
                             let data = match utp_processing
                                 .utp_controller
                                 .connect_inbound_stream(cid, UtpPeer(source))
                                 .await
                             {
-                                Ok(data) => RawContentValue::from(data),
-                                Err(e) => {
+                                Ok(data) => {
+                                    match protocol_version.is_v1_enabled() {
+                                        true => match decode_single_content_payload(data) {
+                                            Ok(data) => data,
+                                            Err(err) => {
+                                                debug!(
+                                                    protocol = %protocol,
+                                                    peer = %peer,
+                                                    error = %err,
+                                                    "Failed to decode FindContent v1 uTP payload"
+                                                );
+                                                // Indicate to the query that the content is invalid
+                                                let _ = valid_content_tx.send(None);
+                                                if let Some(query_trace_events_tx) =
+                                                    query_trace_events_tx
+                                                {
+                                                    let _ = query_trace_events_tx.send(
+                                                        QueryTraceEvent::Failure(
+                                                            query_id,
+                                                            peer,
+                                                            QueryFailureKind::InvalidContent,
+                                                        ),
+                                                    );
+                                                }
+                                                return;
+                                            }
+                                        },
+                                        false => data,
+                                    }
+                                }
+                                Err(err) => {
                                     debug!(
-                                        %e,
+                                        %err,
                                         "Failed to connect to inbound uTP stream for FindContent"
                                     );
                                     // Indicate to the query that the content is invalid

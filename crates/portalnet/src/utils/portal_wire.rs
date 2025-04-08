@@ -1,33 +1,50 @@
-use std::io::{Read, Write};
+use std::io::Write;
 
 use alloy::primitives::Bytes;
 use anyhow::anyhow;
 use bytes::{Buf, BufMut, BytesMut};
 
+fn decode_next_content_item<R: std::io::Read + std::io::BufRead>(
+    reader: &mut R,
+) -> anyhow::Result<Option<Bytes>> {
+    if reader.fill_buf()?.is_empty() {
+        return Ok(None); // Nothing left to read
+    }
+
+    // Read LEB128 index
+    let (bytes_to_read, varint) = read_varint(reader.fill_buf()?)?;
+    let mut discard_buf = vec![0u8; bytes_to_read];
+    reader.read_exact(&mut discard_buf)?;
+
+    // Read the content item
+    let mut content_buf = vec![0u8; varint as usize];
+    reader
+        .read_exact(&mut content_buf)
+        .map_err(|err| anyhow!("Error reading content item: {err}"))?;
+
+    Ok(Some(content_buf.into()))
+}
+
 /// Decode content values from uTP payload. All content values are encoded with a LEB128 varint
 /// prefix which indicates the length in bytes of the consecutive content item.
 pub fn decode_content_payload(payload: Bytes) -> anyhow::Result<Vec<Bytes>> {
-    let mut payload = BytesMut::from(&payload[..]).reader();
+    let mut reader = BytesMut::from(&payload[..]).reader();
+    let mut content_values = Vec::new();
 
-    let mut content_values: Vec<Bytes> = Vec::new();
-
-    // Read LEB128 encoded index and content items until all payload bytes are consumed
-    while !payload.get_ref().is_empty() {
-        // Read LEB128 index
-        let (bytes_to_read, varint) = read_varint(payload.get_ref())?;
-        let mut buf = vec![0u8; bytes_to_read];
-        payload
-            .read_exact(&mut buf)
-            .map_err(|err| anyhow!("Error reading varint index: {err}"))?;
-
-        // Read the content item
-        let mut buf = vec![0u8; varint as usize];
-        payload
-            .read_exact(&mut buf)
-            .map_err(|err| anyhow!("Error reading content item: {err}"))?;
-        content_values.push(buf.into());
+    while let Some(item) = decode_next_content_item(&mut reader)? {
+        content_values.push(item);
     }
+
     Ok(content_values)
+}
+
+/// Decodes a content value from a FindContent uTP payload. Expects a single piece of content which
+/// is encoded with a LEB128 varint prefix which indicates the length in bytes of the content.
+pub fn decode_single_content_payload(payload: Bytes) -> anyhow::Result<Bytes> {
+    let mut reader = BytesMut::from(&payload[..]).reader();
+
+    decode_next_content_item(&mut reader)?
+        .ok_or_else(|| anyhow!("Payload is empty or does not contain a valid content item"))
 }
 
 /// A variable length unsigned integer (varint) is prefixed to each content item.

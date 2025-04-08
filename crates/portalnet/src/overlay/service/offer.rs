@@ -9,6 +9,7 @@ use ethportal_api::{
         distance::Metric,
         enr::Enr,
         portal_wire::{Accept, Content, FindContent, Offer, OfferTrace, Request, Response},
+        protocol_versions::ProtocolVersion,
     },
     OverlayContentKey, RawContentKey, RawContentValue,
 };
@@ -30,7 +31,7 @@ use crate::{
         request::{OverlayRequest, RequestDirection},
     },
     put_content::propagate_put_content_cross_thread,
-    utils::portal_wire,
+    utils::portal_wire::{self, decode_single_content_payload},
     utp::timed_semaphore::OwnedTimedSemaphorePermit,
 };
 
@@ -206,7 +207,7 @@ impl<
                                 // fallback peers on an error.
                                 if let Err(err) = Self::fallback_find_content(
                                     content_key.clone(),
-                                    utp_processing,
+                                    utp_processing,protocol_version
                                 )
                                 .await {
                                     debug!(%err, ?content_key, "Fallback FINDCONTENT task failed, after uTP transfer failed");
@@ -233,7 +234,7 @@ impl<
                             tokio::spawn(async move {
                                 if let Err(err) = Self::fallback_find_content(
                                     content_key.clone(),
-                                    utp_processing,
+                                    utp_processing,protocol_version
                                 )
                                 .await {
                                     debug!(%err, ?content_key, "Fallback FINDCONTENT task failed, decoding and validating content payload failed");
@@ -268,7 +269,7 @@ impl<
                                 // Spawn a fallback FINDCONTENT task for each content key
                                 // that failed individual processing.
                                 if let Err(err) = Self::fallback_find_content(
-                                    key.clone(), utp_processing,
+                                    key.clone(), utp_processing,protocol_version
                                 )
                                 .await {
                                     debug!(%err, ?key, "Fallback FINDCONTENT task failed, after validating and storing content failed");
@@ -447,6 +448,7 @@ impl<
     async fn fallback_find_content(
         content_key: TContentKey,
         utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
+        protocol_version: ProtocolVersion,
     ) -> anyhow::Result<()> {
         let fallback_peer = match utp_processing
             .accept_queue
@@ -488,10 +490,20 @@ impl<
                             send: conn_id.wrapping_add(1),
                             peer_id: fallback_peer.node_id(),
                         };
-                        utp_processing
+                        let bytes = utp_processing
                             .utp_controller
                             .connect_inbound_stream(cid, UtpPeer(fallback_peer.clone()))
-                            .await?
+                            .await?;
+
+                        match protocol_version.is_v1_enabled() {
+                            true => match decode_single_content_payload(bytes) {
+                                Ok(bytes) => bytes,
+                                Err(err) => bail!(
+                                    "Unable to decode content payload from FINDCONTENT v1 response {err:?}",
+                                ),
+                            },
+                            false => bytes,
+                        }
                     }
                 }
             }

@@ -66,6 +66,7 @@ use crate::{
         kbucket::{Entry, SharedKBucketsTable},
         node::Node,
     },
+    utils::portal_wire::decode_single_content_payload,
     utp::controller::UtpController,
 };
 
@@ -480,6 +481,19 @@ impl<
         enr: Enr,
         content_key: RawContentKey,
     ) -> Result<FindContentResult, OverlayRequestError> {
+        let protocol_version = match self
+            .discovery
+            .network_spec
+            .latest_common_protocol_version(&enr)
+        {
+            Ok(protocol_version) => protocol_version,
+            Err(err) => {
+                return Err(OverlayRequestError::InvalidRequest(format!(
+                    "Can't send find content request, couldn't find shared protocol version: {err:?}"
+                )));
+            }
+        };
+
         // Construct the request.
         let request = FindContent {
             content_key: content_key.clone(),
@@ -513,9 +527,16 @@ impl<
                     // Init uTP stream if `connection_id` is received
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
-                        let content = RawContentValue::from(
-                            self.init_find_content_stream(enr, conn_id).await?,
-                        );
+                        let bytes = self.init_find_content_stream(enr, conn_id).await?;
+                        let bytes = match protocol_version.is_v1_enabled() {
+                            true => match decode_single_content_payload(bytes) {
+                                Ok(bytes) => bytes,
+                                Err(_) => return Err(OverlayRequestError::DecodeError),
+                            },
+                            false => bytes,
+                        };
+                        let content = RawContentValue::from(bytes);
+
                         match self.validate_content(&content_key, &content).await {
                             Ok(_) => Ok((Content::Content(content), true)),
                             Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
