@@ -1,5 +1,9 @@
+pub mod find_content;
+pub mod find_nodes;
 pub mod manager;
+pub mod offer;
 pub mod ping;
+pub mod utils;
 
 use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
 
