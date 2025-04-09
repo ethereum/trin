@@ -1,34 +1,30 @@
-use std::io::Write;
+use std::io::{self, Read, Write};
 
 use alloy::primitives::Bytes;
 use anyhow::anyhow;
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{buf::Reader, Buf, BufMut, BytesMut};
 
-fn decode_next_content_item<R: std::io::Read + std::io::BufRead>(
-    reader: &mut R,
-) -> anyhow::Result<Option<Bytes>> {
-    if reader.fill_buf()?.is_empty() {
+fn decode_next_content_item(reader: &mut Reader<Bytes>) -> io::Result<Option<Bytes>> {
+    if reader.get_ref().is_empty() {
         return Ok(None); // Nothing left to read
     }
 
     // Read LEB128 index
-    let (bytes_to_read, varint) = read_varint(reader.fill_buf()?)?;
+    let (bytes_to_read, varint) = read_varint(reader.get_ref())?;
     let mut discard_buf = vec![0u8; bytes_to_read];
     reader.read_exact(&mut discard_buf)?;
 
     // Read the content item
     let mut content_buf = vec![0u8; varint as usize];
-    reader
-        .read_exact(&mut content_buf)
-        .map_err(|err| anyhow!("Error reading content item: {err}"))?;
+    reader.read_exact(&mut content_buf)?;
 
     Ok(Some(content_buf.into()))
 }
 
 /// Decode content values from uTP payload. All content values are encoded with a LEB128 varint
 /// prefix which indicates the length in bytes of the consecutive content item.
-pub fn decode_content_payload(payload: Bytes) -> anyhow::Result<Vec<Bytes>> {
-    let mut reader = BytesMut::from(&payload[..]).reader();
+pub fn decode_content_payload(payload: Bytes) -> io::Result<Vec<Bytes>> {
+    let mut reader = payload.reader();
     let mut content_values = Vec::new();
 
     while let Some(item) = decode_next_content_item(&mut reader)? {
@@ -40,11 +36,19 @@ pub fn decode_content_payload(payload: Bytes) -> anyhow::Result<Vec<Bytes>> {
 
 /// Decodes a content value from a FindContent uTP payload. Expects a single piece of content which
 /// is encoded with a LEB128 varint prefix which indicates the length in bytes of the content.
-pub fn decode_single_content_payload(payload: Bytes) -> anyhow::Result<Bytes> {
-    let mut reader = BytesMut::from(&payload[..]).reader();
+pub fn decode_single_content_payload(payload: Bytes) -> io::Result<Bytes> {
+    let mut reader = payload.reader();
 
-    decode_next_content_item(&mut reader)?
-        .ok_or_else(|| anyhow!("Payload is empty or does not contain a valid content item"))
+    let content_value = decode_next_content_item(&mut reader)?
+        .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "No content found"))?;
+
+    if !reader.get_ref().is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Content payload contains more than one content item",
+        ));
+    }
+    Ok(content_value)
 }
 
 /// A variable length unsigned integer (varint) is prefixed to each content item.
@@ -73,19 +77,25 @@ pub fn encode_content_payload(content_items: &[Bytes]) -> anyhow::Result<BytesMu
 
 /// Try to read up to five LEB128 bytes (The maximum content size allowed for this application is
 /// limited to `uint32`).
-pub fn read_varint(buf: &[u8]) -> anyhow::Result<(usize, u32)> {
+pub fn read_varint(buf: &[u8]) -> io::Result<(usize, u32)> {
     for i in 1..6 {
         match leb128::read::unsigned(&mut &buf[0..i]) {
             Ok(varint) => {
                 let varint = u32::try_from(varint).map_err(|_| {
-                    anyhow!("Exceed maximum allowed varint value of u32 bytes size")
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Exceeded maximum allowed varint value (u32 limit)",
+                    )
                 })?;
                 return Ok((i, varint));
             }
             Err(_) => continue,
         }
     }
-    Err(anyhow!("Unable to read varint index"))
+    Err(io::Error::new(
+        io::ErrorKind::UnexpectedEof,
+        "Unable to read varint index from buffer",
+    ))
 }
 
 #[cfg(test)]
@@ -126,7 +136,9 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "Exceed maximum allowed varint value of u32 bytes size")]
+    #[should_panic(
+        expected = "Custom { kind: InvalidData, error: \"Exceeded maximum allowed varint value (u32 limit)\" }"
+    )]
     fn test_read_varint_max_varint_size() {
         let mut buf = [0; 1024];
         let mut writable = &mut buf[..];
@@ -138,11 +150,23 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "Error reading content item: failed to fill whole buffer")]
+    #[should_panic(
+        expected = "Error { kind: UnexpectedEof, message: \"failed to fill whole buffer\" }"
+    )]
     fn test_decode_content_payload_corrupted() {
         let hex_payload = "0x030101010201";
         let payload = hex_decode(hex_payload).unwrap();
         decode_content_payload(payload.into()).unwrap();
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Custom { kind: InvalidData, error: \"Content payload contains more than one content item\" }"
+    )]
+    fn test_decode_single_content_payload_too_much_data() {
+        let hex_payload = "0x02010122";
+        let payload = hex_decode(hex_payload).unwrap();
+        decode_single_content_payload(payload.into()).unwrap();
     }
 
     #[test]
