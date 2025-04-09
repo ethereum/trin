@@ -14,12 +14,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
 use super::{
-    accept_code::{AcceptCode, AcceptCodeList},
+    accept_code::AcceptCodeList,
     bytes::ByteList1100,
     ping_extensions::extension_types::PingExtensionType,
     protocol_versions::{
@@ -627,51 +626,12 @@ impl Accept {
         protocol_version: ProtocolVersion,
         connection_id: u16,
         content_keys: AcceptCodeList,
-    ) -> anyhow::Result<Self> {
-        let content_keys = if protocol_version.is_v1_enabled() {
-            Bytes::from(content_keys.as_ssz_bytes())
-        } else {
-            let mut v0_content_keys = BitList::<typenum::U64>::with_capacity(content_keys.len())
-                .map_err(|err| anyhow!("Failed to initialize v0 accept codes list {err:?}"))?;
-            for (index, accept_code) in content_keys.iter().enumerate() {
-                v0_content_keys
-                    .set(index, accept_code == &AcceptCode::Accepted)
-                    .map_err(|err| {
-                        anyhow!("Failed to set accept code at index: {index} {err:?}")
-                    })?;
-            }
-            Bytes::from(v0_content_keys.as_ssz_bytes())
-        };
-
-        Ok(Self {
+    ) -> Self {
+        Self {
             connection_id,
-            content_keys,
-        })
-    }
-
-    pub fn decode_accept_code_list(
-        protocol_version: ProtocolVersion,
-        raw_content_keys: Bytes,
-    ) -> anyhow::Result<AcceptCodeList> {
-        if protocol_version.is_v1_enabled() {
-            Ok(AcceptCodeList::from_ssz_bytes(&raw_content_keys)
-                .map_err(|err| anyhow!("Failed to decode v1 accept codes list {err:?}"))?)
-        } else {
-            let v0_content_keys = BitList::<typenum::U64>::from_ssz_bytes(&raw_content_keys)
-                .map_err(|err| anyhow!("Failed to decode v0 accept codes list {err:?}"))?;
-            let mut accept_code_list = AcceptCodeList::with_capacity(v0_content_keys.len())
-                .map_err(|err| anyhow!("Failed to initialize AcceptCodeList {err:?}"))?;
-            for (index, bit) in v0_content_keys.iter().enumerate() {
-                let accept_code = if bit {
-                    AcceptCode::Accepted
-                } else {
-                    AcceptCode::Declined
-                };
-                accept_code_list.set(index, accept_code).map_err(|err| {
-                    anyhow!("Failed to set accept code at index: {index} {err:?}")
-                })?;
-            }
-            Ok(accept_code_list)
+            content_keys: content_keys
+                .encode(protocol_version)
+                .expect("Failed to encode, indices should always be valid"),
         }
     }
 }
@@ -692,18 +652,17 @@ mod test {
         primitives::{bytes, Bytes},
     };
     use ssz_types::Error::OutOfBounds;
-    use test_log::test;
 
     use super::*;
     use crate::types::accept_code::AcceptCode;
 
-    #[test]
+    #[test_log::test]
     fn subnetwork_invalid() {
         let hex = "0x504F";
         assert!(!MAINNET.portal_subnetworks.contains_right(hex));
     }
 
-    #[test]
+    #[test_log::test]
     fn subnetwork_encoding() {
         let hex = "0x500A";
         let protocol_id = MAINNET
@@ -715,7 +674,7 @@ mod test {
         assert_eq!(hex, expected_hex);
     }
 
-    #[test]
+    #[test_log::test]
     fn message_encoding_find_nodes() {
         let distances = vec![256, 255];
         let find_nodes = FindNodes { distances };
@@ -730,7 +689,7 @@ mod test {
         assert_eq!(decoded, find_nodes);
     }
 
-    #[test]
+    #[test_log::test]
     fn message_encoding_nodes_zero_enrs() {
         let nodes = Nodes {
             total: 1,
@@ -747,7 +706,7 @@ mod test {
         assert_eq!(decoded, nodes);
     }
 
-    #[test]
+    #[test_log::test]
     fn message_encoding_nodes_multiple_enrs() {
         let enr_one = SszEnr(Enr::from_str("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg").unwrap());
         let enr_two = SszEnr(Enr::from_str("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU").unwrap());
@@ -766,7 +725,7 @@ mod test {
         assert_eq!(decoded, nodes);
     }
 
-    #[test]
+    #[test_log::test]
     fn message_encoding_find_content() {
         let content_key = Bytes::from_hex("0x706f7274616c").unwrap();
         let find_content = FindContent { content_key };
@@ -781,7 +740,7 @@ mod test {
         assert_eq!(decoded, find_content);
     }
 
-    #[test]
+    #[test_log::test]
     fn message_encoding_content_connection_id() {
         let connection_id = u16::from_le_bytes([0x01, 0x02]);
         let content = Content::ConnectionId(connection_id);
@@ -796,7 +755,7 @@ mod test {
         assert_eq!(decoded, content);
     }
 
-    #[test]
+    #[test_log::test]
     fn message_encoding_content_content() {
         let content_val = Bytes::from_hex("0x7468652063616b652069732061206c6965").unwrap();
         let content = Content::Content(content_val);
@@ -811,7 +770,7 @@ mod test {
         assert_eq!(decoded, content);
     }
 
-    #[test]
+    #[test_log::test]
     fn message_encoding_content_enrs() {
         let enr_one = SszEnr(Enr::from_str("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg").unwrap());
         let enr_two = SszEnr(Enr::from_str("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU").unwrap());
@@ -827,7 +786,7 @@ mod test {
         assert_eq!(decoded, content);
     }
 
-    #[test]
+    #[test_log::test]
     fn message_encoding_offer() {
         let content_keys = vec![bytes!("010203")];
         let offer = Offer { content_keys };
@@ -842,42 +801,49 @@ mod test {
         assert_eq!(decoded, offer);
     }
 
-    #[test]
-    fn message_encoding_accept() {
+    #[rstest::rstest]
+    #[case(ProtocolVersion::V0, "0x070102060000000101")]
+    #[case(ProtocolVersion::V1, "0x070102060000000001020304050101")]
+    fn message_encoding_accept(
+        #[case] protocol_version: ProtocolVersion,
+        #[case] expected_encoded: &str,
+    ) {
         let connection_id = u16::from_le_bytes([0x01, 0x02]);
-        let mut content_keys = AcceptCodeList::with_capacity(8).unwrap();
-        content_keys.set(0, AcceptCode::Accepted).unwrap();
-        content_keys.set(2, AcceptCode::AlreadyStored).unwrap();
-        content_keys.set(3, AcceptCode::NotWithinRadius).unwrap();
-        content_keys.set(4, AcceptCode::RateLimited).unwrap();
-        content_keys
-            .set(5, AcceptCode::InboundTransferInProgress)
-            .unwrap();
-        let accept = Accept::new(ProtocolVersion::V1, connection_id, content_keys).unwrap();
+        let mut content_keys = AcceptCodeList::new(8).unwrap();
+        content_keys.set(0, AcceptCode::Accepted);
+        content_keys.set(2, AcceptCode::AlreadyStored);
+        content_keys.set(3, AcceptCode::NotWithinRadius);
+        content_keys.set(4, AcceptCode::RateLimited);
+        content_keys.set(5, AcceptCode::InboundTransferInProgress);
+        let accept = Accept::new(protocol_version, connection_id, content_keys);
         let accept = Message::Accept(accept);
 
         let encoded: Vec<u8> = accept.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x070102060000000001020304050101";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, accept);
     }
 
-    #[test]
-    fn maximum_accept_items() {
+    #[rstest::rstest]
+    #[case(ProtocolVersion::V0, "0x07010206000000010000000000008001")]
+    #[case(ProtocolVersion::V1, "0x0701020600000000010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010100")]
+    #[test_log::test]
+    fn maximum_accept_items(
+        #[case] protocol_version: ProtocolVersion,
+        #[case] expected_encoded: &str,
+    ) {
         let connection_id = u16::from_le_bytes([0x01, 0x02]);
         // Specs say that the bytelist should be able to hold up to 64 bits
-        let mut content_keys = AcceptCodeList::with_capacity(64).unwrap();
-        content_keys.set(63, AcceptCode::Accepted).unwrap();
-        content_keys.set(0, AcceptCode::Accepted).unwrap();
-        let accept = Accept::new(ProtocolVersion::V1, connection_id, content_keys).unwrap();
+        let mut content_keys = AcceptCodeList::new(64).unwrap();
+        content_keys.set(63, AcceptCode::Accepted);
+        content_keys.set(0, AcceptCode::Accepted);
+        let accept = Accept::new(protocol_version, connection_id, content_keys);
         let accept = Message::Accept(accept);
 
         let encoded: Vec<u8> = accept.clone().into();
         let encoded = hex_encode(encoded);
-        let expected_encoded = "0x0701020600000000010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010100";
         assert_eq!(encoded, expected_encoded);
 
         let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
@@ -888,21 +854,21 @@ mod test {
             content_keys,
         }) = decoded
         {
-            let content_keys = AcceptCodeList::from_ssz_bytes(&content_keys).unwrap();
+            let content_keys = AcceptCodeList::decode(protocol_version, content_keys).unwrap();
             assert_eq!(decoded_connection_id, connection_id);
             assert_eq!(content_keys.len(), 64);
-            assert_eq!(content_keys.get(0).unwrap(), AcceptCode::Accepted);
-            assert_eq!(content_keys.get(1).unwrap(), AcceptCode::Declined);
-            assert_eq!(content_keys.get(62).unwrap(), AcceptCode::Declined);
-            assert_eq!(content_keys.get(63).unwrap(), AcceptCode::Accepted);
+            assert_eq!(content_keys.first().unwrap(), &AcceptCode::Accepted);
+            assert_eq!(content_keys.get(1).unwrap(), &AcceptCode::Declined);
+            assert_eq!(content_keys.get(62).unwrap(), &AcceptCode::Declined);
+            assert_eq!(content_keys.get(63).unwrap(), &AcceptCode::Accepted);
         } else {
             panic!("Expected Accept message, but got {decoded:?}");
         }
     }
 
-    #[test]
+    #[test_log::test]
     fn too_many_accept_items() {
-        match AcceptCodeList::with_capacity(65) {
+        match AcceptCodeList::new(65) {
             Err(OutOfBounds { i: _i, len }) => {
                 // TODO: assert this after https://github.com/sigp/ethereum_ssz/pull/33 is merged
                 // assert_eq!(i, 65);
@@ -910,7 +876,7 @@ mod test {
             }
             Err(_) => panic!("Expected OutOfBounds error"),
             Ok(content_keys) => {
-                let accept = Accept::new(ProtocolVersion::V1, 0, content_keys).unwrap();
+                let accept = Accept::new(ProtocolVersion::V1, 0, content_keys);
                 panic!("Expected OutOfBounds error, but got {accept:?}");
             }
         }

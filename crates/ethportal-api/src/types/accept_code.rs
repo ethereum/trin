@@ -1,56 +1,136 @@
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
+use alloy::primitives::Bytes;
 use serde::{Deserialize, Serialize};
 use ssz::{Decode, Encode};
-use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum, VariableList};
+use ssz_types::{typenum, BitList, VariableList};
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]
+use super::protocol_versions::ProtocolVersion;
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
-#[ssz(struct_behaviour = "transparent")]
-pub struct AcceptCodeList(pub VariableList<AcceptCode, typenum::U64>);
+pub struct AcceptCodeList(VariableList<AcceptCode, typenum::U64>);
 
 impl AcceptCodeList {
-    pub fn with_capacity(num_bytes: usize) -> Result<Self, ssz_types::Error> {
-        VariableList::new(vec![AcceptCode::Declined; num_bytes]).map(Self)
+    /// Creates a new AcceptCodeList with the specified capacity, initialized to
+    /// `AcceptCode::Declined`
+    ///
+    /// Errors if the capacity is greater than `64`.
+    pub fn new(capacity: usize) -> Result<Self, ssz_types::Error> {
+        VariableList::new(vec![AcceptCode::Declined; capacity]).map(Self)
     }
 
-    pub fn set(&mut self, index: usize, value: AcceptCode) -> Result<(), ssz_types::Error> {
+    /// Sets an accept_code at position `index` within the accept code list
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index > len`.
+    pub fn set(&mut self, index: usize, value: AcceptCode) {
+        let len = self.len();
         if let Some(accept_code) = self.0.get_mut(index) {
             *accept_code = value;
-            Ok(())
         } else {
-            Err(ssz_types::Error::OutOfBounds {
-                i: index,
-                len: self.len(),
-            })
-        }
-    }
-
-    pub fn get(&self, index: usize) -> Result<AcceptCode, ssz_types::Error> {
-        if let Some(accept_code) = self.0.get(index) {
-            Ok(*accept_code)
-        } else {
-            Err(ssz_types::Error::OutOfBounds {
-                i: index,
-                len: self.len(),
-            })
+            panic!("Index out of bounds: index {index} is greater than len {len}");
         }
     }
 
     /// Returns true if all accept codes are `AcceptCode::Accepted`
     pub fn all_declined(&self) -> bool {
-        self.0
-            .iter()
-            .all(|accept_code| *accept_code != AcceptCode::Accepted)
+        !self.contains(&AcceptCode::Accepted)
+    }
+
+    pub fn encode(&self, protocol_version: ProtocolVersion) -> Result<Bytes, AcceptCodeListError> {
+        if protocol_version.is_v1_enabled() {
+            Ok(Bytes::from(self.0.as_ssz_bytes()))
+        } else {
+            let mut v0_content_keys = BitList::<typenum::U64>::with_capacity(self.0.len())?;
+            for (index, accept_code) in self.0.iter().enumerate() {
+                v0_content_keys.set(index, accept_code == &AcceptCode::Accepted)?;
+            }
+            Ok(Bytes::from(v0_content_keys.as_ssz_bytes()))
+        }
+    }
+
+    pub fn decode(
+        protocol_version: ProtocolVersion,
+        raw_content_keys: Bytes,
+    ) -> Result<AcceptCodeList, AcceptCodeListError> {
+        if protocol_version.is_v1_enabled() {
+            Ok(AcceptCodeList(
+                VariableList::<AcceptCode, typenum::U64>::from_ssz_bytes(&raw_content_keys)?,
+            ))
+        } else {
+            let v0_content_keys = BitList::<typenum::U64>::from_ssz_bytes(&raw_content_keys)?;
+            let mut accept_code_list = AcceptCodeList::new(v0_content_keys.len())?;
+            for (index, bit) in v0_content_keys.iter().enumerate() {
+                let accept_code = if bit {
+                    AcceptCode::Accepted
+                } else {
+                    AcceptCode::Declined
+                };
+                accept_code_list.set(index, accept_code);
+            }
+            Ok(accept_code_list)
+        }
     }
 }
 
 impl Deref for AcceptCodeList {
-    type Target = VariableList<AcceptCode, typenum::U64>;
+    type Target = [AcceptCode];
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl DerefMut for AcceptCodeList {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+pub mod accept_code_hex {
+    use serde::{Deserializer, Serializer};
+
+    use super::*;
+
+    pub fn serialize<S>(accept_code_list: &AcceptCodeList, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let bytes = accept_code_list
+            .encode(ProtocolVersion::V1)
+            .map_err(serde::ser::Error::custom)?;
+        bytes.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<AcceptCodeList, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let bytes = Bytes::deserialize(deserializer)?;
+        AcceptCodeList::decode(ProtocolVersion::V1, bytes).map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AcceptCodeListError {
+    #[error("Failed to decode accept code list (SSZ): {0}")]
+    DecodeError(String),
+
+    #[error("SSZ types error: {0}")]
+    SSZTypesError(String),
+}
+
+impl From<ssz::DecodeError> for AcceptCodeListError {
+    fn from(err: ssz::DecodeError) -> Self {
+        AcceptCodeListError::DecodeError(format!("{err:?}"))
+    }
+}
+
+impl From<ssz_types::Error> for AcceptCodeListError {
+    fn from(err: ssz_types::Error) -> Self {
+        AcceptCodeListError::SSZTypesError(format!("{err:?}"))
     }
 }
 

@@ -4,13 +4,17 @@ use alloy::primitives::Bytes;
 use e2store::era1::Era1;
 use ethportal_api::{
     jsonrpsee::{async_client::Client, http_client::HttpClient},
-    types::{enr::Enr, execution::accumulator::EpochAccumulator, portal_wire::OfferTrace},
-    utils::bytes::hex_encode,
+    types::{
+        accept_code::{AcceptCode, AcceptCodeList},
+        enr::Enr,
+        execution::accumulator::EpochAccumulator,
+        portal_wire::OfferTrace,
+    },
     ContentValue, Discv5ApiClient, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
 use portal_bridge::api::execution::construct_proof;
 use portalnet::constants::DEFAULT_UTP_TRANSFER_LIMIT;
-use ssz::{Decode, Encode};
+use ssz::Decode;
 use tracing::info;
 
 use crate::{
@@ -36,7 +40,9 @@ pub async fn test_offer(peertest: &Peertest, target: &Client) {
         .unwrap();
 
     // Check that ACCEPT response sent by bootnode accepted the offered content
-    assert_eq!(hex_encode(result.content_keys.as_ssz_bytes()), "0x00");
+    let mut accept_code_list = AcceptCodeList::new(1).unwrap();
+    accept_code_list.set(0, AcceptCode::Accepted);
+    assert_eq!(result.content_keys, accept_code_list);
 
     // Check if the stored content value in bootnode's DB matches the offered
     assert_eq!(
@@ -71,7 +77,9 @@ pub async fn test_offer_with_trace(peertest: &Peertest, target: &Client) {
 
     // check that the result of the offer is true for a valid transfer
     if let OfferTrace::Success(accepted_keys) = result {
-        assert_eq!(hex_encode(accepted_keys.as_ssz_bytes()), "0x00");
+        let mut accept_code_list = AcceptCodeList::new(1).unwrap();
+        accept_code_list.set(0, AcceptCode::Accepted);
+        assert_eq!(accepted_keys, accept_code_list);
     } else {
         panic!("Offer failed");
     }

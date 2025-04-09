@@ -2,12 +2,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use ethportal_api::{
     types::{
+        accept_code::AcceptCodeList,
         distance::Metric,
         enr::Enr,
         portal::MAX_CONTENT_KEYS_PER_OFFER,
         portal_wire::{
-            Accept, NetworkSpec, OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request,
-            Response,
+            NetworkSpec, OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response,
         },
     },
     utils::bytes::{hex_encode, hex_encode_compact},
@@ -208,7 +208,7 @@ pub async fn trace_propagate_put_content_cross_thread<
             Ok(res) => {
                 if let Ok(Response::Accept(accept)) = res {
                     let Ok(content_keys) =
-                        Accept::decode_accept_code_list(protocol_version, accept.content_keys)
+                        AcceptCodeList::decode(protocol_version, accept.content_keys)
                     else {
                         error!("Failed to decode Accept message");
                         continue;

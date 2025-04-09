@@ -58,12 +58,11 @@ impl<
             "Handling Offer message",
         );
 
-        let mut requested_keys = AcceptCodeList::with_capacity(request.content_keys.len())
-            .map_err(|_| {
-                OverlayRequestError::AcceptError(
-                    "Unable to initialize bitlist for requested keys.".to_owned(),
-                )
-            })?;
+        let mut requested_keys = AcceptCodeList::new(request.content_keys.len()).map_err(|_| {
+            OverlayRequestError::AcceptError(
+                "Unable to initialize bitlist for requested keys.".to_owned(),
+            )
+        })?;
 
         // if we're unable to find the ENR for the source node we throw an error
         // since the enr is required for the accept queue, and it is expected to be present
@@ -100,14 +99,9 @@ impl<
             Some(permit) => permit,
             None => {
                 requested_keys
-                    .0
                     .iter_mut()
                     .for_each(|accept_code| *accept_code = AcceptCode::RateLimited);
-                return Accept::new(protocol_version, 0, requested_keys).map_err(|err| {
-                    OverlayRequestError::AcceptError(format!(
-                        "Failed to encode AcceptCodeList: {err:?}"
-                    ))
-                });
+                return Ok(Accept::new(protocol_version, 0, requested_keys));
             }
         };
 
@@ -149,21 +143,13 @@ impl<
                 ShouldWeStoreContent::AlreadyStored => AcceptCode::AlreadyStored,
             };
 
-            requested_keys.set(i, accept_code).map_err(|err| {
-                OverlayRequestError::AcceptError(format!(
-                    "Unable to set requested keys bits: {err:?}"
-                ))
-            })?;
+            requested_keys.set(i, accept_code);
         }
 
         // If no content keys were accepted, then return an Accept with a connection ID value of
         // zero.
         if requested_keys.all_declined() {
-            return Accept::new(protocol_version, 0, requested_keys).map_err(|err| {
-                OverlayRequestError::AcceptError(format!(
-                    "Failed to encode AcceptCodeList: {err:?}"
-                ))
-            });
+            return Ok(Accept::new(protocol_version, 0, requested_keys));
         }
 
         // Generate a connection ID for the uTP connection if there is data we would like to
@@ -324,9 +310,11 @@ impl<
             permit.drop();
         });
 
-        Accept::new(protocol_version, cid_send.to_be(), requested_keys).map_err(|err| {
-            OverlayRequestError::AcceptError(format!("Failed to encode AcceptCodeList: {err:?}"))
-        })
+        Ok(Accept::new(
+            protocol_version,
+            cid_send.to_be(),
+            requested_keys,
+        ))
     }
 
     // Process ACCEPT response
@@ -361,7 +349,7 @@ impl<
             }
         };
 
-        let content_keys = Accept::decode_accept_code_list(protocol_version, response.content_keys)
+        let content_keys = AcceptCodeList::decode(protocol_version, response.content_keys)
             .map_err(|err| {
                 OverlayRequestError::AcceptError(format!(
                     "Unable to decode ACCEPT response payload: {err:?}"

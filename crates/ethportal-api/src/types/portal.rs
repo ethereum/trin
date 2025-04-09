@@ -7,7 +7,7 @@ use super::{
     query_trace::QueryTrace,
 };
 use crate::{
-    types::{accept_code_hex, enr::Enr},
+    types::{accept_code::accept_code_hex, enr::Enr},
     OverlayContentKey,
 };
 

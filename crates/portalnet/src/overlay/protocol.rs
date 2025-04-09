@@ -30,7 +30,7 @@ use ethportal_api::{
         },
         portal::PutContentInfo,
         portal_wire::{
-            Accept, Content, FindContent, FindNodes, Message, Nodes, OfferTrace, Ping, Pong,
+            Content, FindContent, FindNodes, Message, Nodes, OfferTrace, Ping, Pong,
             PopulatedOffer, PopulatedOfferWithResult, Request, Response,
         },
     },
@@ -594,7 +594,7 @@ impl<
         // Send the request and wait on the response.
         match self.send_overlay_request(request, direction).await {
             Ok(Response::Accept(accept)) => {
-                match Accept::decode_accept_code_list(protocol_version, accept.content_keys) {
+                match AcceptCodeList::decode(protocol_version, accept.content_keys) {
                     Ok(accept_code_list) => Ok(accept_code_list),
                     Err(err) => Err(OverlayRequestError::Failure(format!(
                         "Failed to decode AcceptCodeList: {err:?}"
