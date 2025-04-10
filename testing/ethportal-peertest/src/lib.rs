@@ -60,7 +60,7 @@ async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
 
 fn generate_trin_config(
     id: u16,
-    network: &Network,
+    network: Network,
     subnetworks: &[Subnetwork],
     bootnode_enr: Option<&Enr>,
 ) -> TrinConfig {
@@ -116,7 +116,7 @@ fn generate_trin_config(
 
 pub async fn launch_peertest_nodes(
     count: u16,
-    network: &Network,
+    network: Network,
     subnetworks: &[Subnetwork],
 ) -> Peertest {
     // Bootnode uses a peertest id of 1

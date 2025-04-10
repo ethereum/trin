@@ -2,10 +2,13 @@ use std::{collections::HashMap, sync::Arc};
 
 use ethportal_api::{
     types::{
+        accept_code::AcceptCodeList,
         distance::Metric,
         enr::Enr,
         portal::MAX_CONTENT_KEYS_PER_OFFER,
-        portal_wire::{OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response},
+        portal_wire::{
+            NetworkSpec, OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response,
+        },
     },
     utils::bytes::{hex_encode, hex_encode_compact},
     OverlayContentKey, RawContentValue,
@@ -152,6 +155,7 @@ pub async fn trace_propagate_put_content_cross_thread<
     data: RawContentValue,
     kbuckets: &SharedKBucketsTable,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
+    network_sepc: Arc<NetworkSpec>,
 ) -> PutContentResult {
     let mut put_content_result = PutContentResult::default();
 
@@ -165,6 +169,18 @@ pub async fn trace_propagate_put_content_cross_thread<
 
     // Select ENRs to put content to, create and send OFFER overlay request to the interested nodes
     for enr in select_put_content_recipients::<TMetric>(&content_id, interested_enrs) {
+        let protocol_version = match network_sepc.latest_common_protocol_version(&enr) {
+            Ok(protocol_version) => protocol_version,
+            Err(err) => {
+                trace!(
+                    ?err,
+                    "trace_propagate_put_content_cross_thread: Failed to get protocol version for ENR: {:?}",
+                    enr.node_id()
+                );
+                continue;
+            }
+        };
+
         let (result_tx, mut result_rx) = tokio::sync::mpsc::unbounded_channel();
         let offer_request = Request::PopulatedOfferWithResult(PopulatedOfferWithResult {
             content_item: (content_key.clone().to_bytes(), data.clone()),
@@ -191,7 +207,13 @@ pub async fn trace_propagate_put_content_cross_thread<
         match rx.await {
             Ok(res) => {
                 if let Ok(Response::Accept(accept)) = res {
-                    if !accept.content_keys.is_zero() {
+                    let Ok(content_keys) =
+                        AcceptCodeList::decode(protocol_version, accept.content_keys)
+                    else {
+                        error!("Failed to decode Accept message");
+                        continue;
+                    };
+                    if !content_keys.all_declined() {
                         // update put content result with peer marked as accepting the content
                         put_content_result.accepted.push(enr.clone());
                     }

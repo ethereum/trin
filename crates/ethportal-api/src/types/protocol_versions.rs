@@ -21,6 +21,12 @@ pub enum ProtocolVersion {
     UnspecifiedVersion(u8),
 }
 
+impl ProtocolVersion {
+    pub fn is_v1_enabled(&self) -> bool {
+        self >= &ProtocolVersion::V1
+    }
+}
+
 impl From<ProtocolVersion> for u8 {
     fn from(version: ProtocolVersion) -> u8 {
         match version {

@@ -268,10 +268,7 @@ async fn store(
 }
 
 /// Constructs a JSON call for the AddEnr method.
-async fn add_enr(
-    network: Arc<BeaconNetwork>,
-    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
-) -> Result<Value, String> {
+async fn add_enr(network: Arc<BeaconNetwork>, enr: Enr) -> Result<Value, String> {
     match network.overlay.add_enr(enr) {
         Ok(_) => Ok(json!(true)),
         Err(err) => Err(format!("AddEnr failed: {err:?}")),
@@ -303,7 +300,7 @@ async fn lookup_enr(network: Arc<BeaconNetwork>, node_id: NodeId) -> Result<Valu
 /// Constructs a JSON call for the FindContent method.
 async fn find_content(
     network: Arc<BeaconNetwork>,
-    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+    enr: Enr,
     content_key: BeaconContentKey,
 ) -> Result<Value, String> {
     match network.overlay.send_find_content(enr, content_key.to_bytes()).await {
@@ -326,7 +323,7 @@ async fn find_content(
 /// Constructs a JSON call for the FindNodes method.
 async fn find_nodes(
     network: Arc<BeaconNetwork>,
-    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+    enr: Enr,
     distances: Vec<u16>,
 ) -> Result<Value, String> {
     match network.overlay.send_find_nodes(enr, distances).await {
@@ -363,7 +360,7 @@ async fn put_content(
 /// Constructs a JSON call for the Offer method.
 async fn offer(
     network: Arc<BeaconNetwork>,
-    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+    enr: Enr,
     content_items: Vec<(BeaconContentKey, BeaconContentValue)>,
 ) -> Result<Value, String> {
     let content_items = content_items
@@ -371,8 +368,8 @@ async fn offer(
         .map(|(key, value)| (key.to_bytes(), value.encode()))
         .collect();
     match network.overlay.send_offer(enr, content_items).await {
-        Ok(accept) => Ok(json!(AcceptInfo {
-            content_keys: accept.content_keys,
+        Ok(accept_code_list) => Ok(json!(AcceptInfo {
+            content_keys: accept_code_list,
         })),
         Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
     }
@@ -381,7 +378,7 @@ async fn offer(
 /// Constructs a JSON call for the Offer method with trace.
 async fn trace_offer(
     network: Arc<BeaconNetwork>,
-    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+    enr: Enr,
     content_key: BeaconContentKey,
     content_value: BeaconContentValue,
 ) -> Result<Value, String> {

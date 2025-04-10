@@ -16,6 +16,7 @@ use discv5::{
 };
 use ethportal_api::{
     types::{
+        accept_code::AcceptCodeList,
         discv5::RoutingTableInfo,
         distance::{Distance, Metric},
         enr::Enr,
@@ -29,7 +30,7 @@ use ethportal_api::{
         },
         portal::PutContentInfo,
         portal_wire::{
-            Accept, Content, FindContent, FindNodes, Message, Nodes, OfferTrace, Ping, Pong,
+            Content, FindContent, FindNodes, Message, Nodes, OfferTrace, Ping, Pong,
             PopulatedOffer, PopulatedOfferWithResult, Request, Response,
         },
     },
@@ -273,6 +274,7 @@ impl<
             data,
             &self.kbuckets,
             self.command_tx.clone(),
+            self.discovery.network_spec.clone(),
         )
         .await
     }
@@ -568,7 +570,20 @@ impl<
         &self,
         enr: Enr,
         content_items: Vec<(RawContentKey, RawContentValue)>,
-    ) -> Result<Accept, OverlayRequestError> {
+    ) -> Result<AcceptCodeList, OverlayRequestError> {
+        let protocol_version = match self
+            .discovery
+            .network_spec
+            .latest_common_protocol_version(&enr)
+        {
+            Ok(protocol_version) => protocol_version,
+            Err(err) => {
+                return Err(OverlayRequestError::InvalidRequest(format!(
+                    "An Enr with a supported common protocol version is required to make an offer request: {err:?}"
+                )))
+            }
+        };
+
         // Construct the request.
         let request = Request::PopulatedOffer(PopulatedOffer { content_items });
 
@@ -578,7 +593,14 @@ impl<
 
         // Send the request and wait on the response.
         match self.send_overlay_request(request, direction).await {
-            Ok(Response::Accept(accept)) => Ok(accept),
+            Ok(Response::Accept(accept)) => {
+                match AcceptCodeList::decode(protocol_version, accept.content_keys) {
+                    Ok(accept_code_list) => Ok(accept_code_list),
+                    Err(err) => Err(OverlayRequestError::Failure(format!(
+                        "Failed to decode AcceptCodeList: {err:?}"
+                    ))),
+                }
+            }
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
         }
