@@ -857,10 +857,10 @@ mod test {
             let content_keys = AcceptCodeList::decode(protocol_version, content_keys).unwrap();
             assert_eq!(decoded_connection_id, connection_id);
             assert_eq!(content_keys.len(), 64);
-            assert_eq!(content_keys.first().unwrap(), &AcceptCode::Accepted);
-            assert_eq!(content_keys.get(1).unwrap(), &AcceptCode::Declined);
-            assert_eq!(content_keys.get(62).unwrap(), &AcceptCode::Declined);
-            assert_eq!(content_keys.get(63).unwrap(), &AcceptCode::Accepted);
+            assert_eq!(content_keys[0], AcceptCode::Accepted);
+            assert_eq!(content_keys[1], AcceptCode::Declined);
+            assert_eq!(content_keys[62], AcceptCode::Declined);
+            assert_eq!(content_keys[63], AcceptCode::Accepted);
         } else {
             panic!("Expected Accept message, but got {decoded:?}");
         }
