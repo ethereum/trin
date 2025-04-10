@@ -621,7 +621,7 @@ impl WsHttpServerKind {
 mod tests {
     use std::{io, sync::Arc};
 
-    use ethportal_api::types::portal_wire::MAINNET;
+    use ethportal_api::types::network_spec::MAINNET;
     use portalnet::discovery::Discovery;
 
     use super::*;

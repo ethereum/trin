@@ -5,7 +5,7 @@ use std::{
 
 use discv5::TalkRequest;
 use ethportal_api::{
-    types::{network::Subnetwork, portal_wire::NetworkSpec},
+    types::{network::Subnetwork, network_spec::NetworkSpec},
     utils::bytes::{hex_encode, hex_encode_upper},
 };
 use futures::stream::{select_all, StreamExt};

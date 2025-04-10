@@ -9,6 +9,7 @@ pub mod enr;
 pub mod execution;
 pub mod jsonrpc;
 pub mod network;
+pub mod network_spec;
 pub mod node_id;
 pub mod ping_extensions;
 pub mod portal;

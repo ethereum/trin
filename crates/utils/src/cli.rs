@@ -5,7 +5,7 @@ use alloy::primitives::{B256, U256};
 use ethportal_api::types::{
     distance::Distance,
     network::Subnetwork,
-    portal_wire::{NetworkSpec, ANGELFOOD, MAINNET},
+    network_spec::{NetworkSpec, ANGELFOOD, MAINNET},
 };
 
 #[derive(Debug, PartialEq, Clone)]

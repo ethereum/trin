@@ -17,7 +17,7 @@ use discv5::{
 };
 use ethportal_api::{
     types::{
-        discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, portal_wire::NetworkSpec,
+        discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, network_spec::NetworkSpec,
         protocol_versions::ENR_PROTOCOL_VERSION_KEY,
     },
     utils::bytes::hex_decode,

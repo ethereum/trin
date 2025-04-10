@@ -3,7 +3,7 @@ use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 use alloy::primitives::B256;
 use clap::Parser;
 use ethportal_api::{
-    types::{network::Subnetwork, portal_wire::NetworkSpec},
+    types::{network::Subnetwork, network_spec::NetworkSpec},
     Enr,
 };
 use portalnet::{

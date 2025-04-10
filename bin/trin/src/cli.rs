@@ -11,7 +11,7 @@ use ethportal_api::{
     types::{
         distance::Distance,
         network::Subnetwork,
-        portal_wire::{NetworkSpec, MAINNET},
+        network_spec::{NetworkSpec, MAINNET},
     },
     version::{APP_NAME, FULL_VERSION},
 };
