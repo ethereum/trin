@@ -961,11 +961,12 @@ mod tests {
             content_key::overlay::IdentityContentKey,
             distance::XorMetric,
             enr::generate_random_remote_enr,
+            network_spec::MAINNET,
             ping_extensions::{
                 extension_types::PingExtensionType,
                 extensions::type_0::ClientInfoRadiusCapabilities,
             },
-            portal_wire::{Ping, Pong, MAINNET},
+            portal_wire::{Ping, Pong},
         },
         RawContentValue,
     };

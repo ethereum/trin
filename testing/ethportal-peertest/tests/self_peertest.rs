@@ -86,7 +86,7 @@ async fn peertest_stateless() {
 mod protocol_v0 {
     use super::*;
 
-    const V0_NETWORK: Network = Network::Mainnet;
+    const V0_NETWORK: Network = Network::Angelfood;
 
     // offer tests
 
@@ -263,7 +263,7 @@ mod protocol_v0 {
 mod protocol_v1 {
     use super::*;
 
-    const V1_NETWORK: Network = Network::Angelfood;
+    const V1_NETWORK: Network = Network::Mainnet;
 
     // offer tests
 

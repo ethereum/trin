@@ -5,10 +5,9 @@ use ethportal_api::{
         accept_code::AcceptCodeList,
         distance::Metric,
         enr::Enr,
+        network_spec::NetworkSpec,
         portal::MAX_CONTENT_KEYS_PER_OFFER,
-        portal_wire::{
-            NetworkSpec, OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response,
-        },
+        portal_wire::{OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response},
     },
     utils::bytes::{hex_encode, hex_encode_compact},
     OverlayContentKey, RawContentValue,

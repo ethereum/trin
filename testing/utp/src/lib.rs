@@ -9,7 +9,7 @@ use std::{io::ErrorKind, net::SocketAddr, str::FromStr, sync::Arc, time::Duratio
 
 use discv5::TalkRequest;
 use ethportal_api::{
-    types::{enr::Enr, network::Subnetwork, portal_wire::MAINNET},
+    types::{enr::Enr, network::Subnetwork, network_spec::MAINNET},
     utils::bytes::{hex_encode, hex_encode_upper},
 };
 use jsonrpsee::{
