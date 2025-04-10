@@ -102,8 +102,8 @@ mod test {
         let varint_result = read_varint(&mut reader).unwrap();
         let bytes_read = original_len - reader.get_ref().len();
 
-        assert_eq!(varint_result, varint);
         assert_eq!(bytes_read, bytes_written);
+        assert_eq!(varint_result, varint);
     }
 
     #[test]

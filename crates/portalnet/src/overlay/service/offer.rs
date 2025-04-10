@@ -207,7 +207,8 @@ impl<
                                 // fallback peers on an error.
                                 if let Err(err) = Self::fallback_find_content(
                                     content_key.clone(),
-                                    utp_processing,protocol_version
+                                    utp_processing,
+                                    protocol_version
                                 )
                                 .await {
                                     debug!(%err, ?content_key, "Fallback FINDCONTENT task failed, after uTP transfer failed");
@@ -234,7 +235,8 @@ impl<
                             tokio::spawn(async move {
                                 if let Err(err) = Self::fallback_find_content(
                                     content_key.clone(),
-                                    utp_processing,protocol_version
+                                    utp_processing,
+                                    protocol_version
                                 )
                                 .await {
                                     debug!(%err, ?content_key, "Fallback FINDCONTENT task failed, decoding and validating content payload failed");
@@ -269,7 +271,9 @@ impl<
                                 // Spawn a fallback FINDCONTENT task for each content key
                                 // that failed individual processing.
                                 if let Err(err) = Self::fallback_find_content(
-                                    key.clone(), utp_processing,protocol_version
+                                    key.clone(),
+                                    utp_processing,
+                                    protocol_version
                                 )
                                 .await {
                                     debug!(%err, ?key, "Fallback FINDCONTENT task failed, after validating and storing content failed");
