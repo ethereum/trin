@@ -1,24 +1,21 @@
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, Read, Write};
 
 use alloy::primitives::Bytes;
 use anyhow::anyhow;
 use bytes::{buf::Reader, Buf, BufMut, BytesMut};
 
 fn decode_next_content_item(reader: &mut Reader<Bytes>) -> io::Result<Option<Bytes>> {
-    if reader.get_ref().is_empty() {
+    if reader.fill_buf()?.is_empty() {
         return Ok(None); // Nothing left to read
     }
 
     // Read LEB128 index
-    let (bytes_to_read, varint) = read_varint(reader.get_ref())?;
-    let mut discard_buf = vec![0u8; bytes_to_read];
-    reader.read_exact(&mut discard_buf)?;
+    let varint = read_varint(reader)?;
 
     // Read the content item
-    let mut content_buf = vec![0u8; varint as usize];
-    reader.read_exact(&mut content_buf)?;
-
-    Ok(Some(content_buf.into()))
+    let mut buf = BytesMut::zeroed(varint as usize);
+    reader.read_exact(&mut buf)?;
+    Ok(Some(buf.freeze().into()))
 }
 
 /// Decode content values from uTP payload. All content values are encoded with a LEB128 varint
@@ -42,7 +39,7 @@ pub fn decode_single_content_payload(payload: Bytes) -> io::Result<Bytes> {
     let content_value = decode_next_content_item(&mut reader)?
         .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "No content found"))?;
 
-    if !reader.get_ref().is_empty() {
+    if !reader.fill_buf()?.is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "Content payload contains more than one content item",
@@ -77,25 +74,10 @@ pub fn encode_content_payload(content_items: &[Bytes]) -> anyhow::Result<BytesMu
 
 /// Try to read up to five LEB128 bytes (The maximum content size allowed for this application is
 /// limited to `uint32`).
-pub fn read_varint(buf: &[u8]) -> io::Result<(usize, u32)> {
-    for i in 1..6 {
-        match leb128::read::unsigned(&mut &buf[0..i]) {
-            Ok(varint) => {
-                let varint = u32::try_from(varint).map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "Exceeded maximum allowed varint value (u32 limit)",
-                    )
-                })?;
-                return Ok((i, varint));
-            }
-            Err(_) => continue,
-        }
-    }
-    Err(io::Error::new(
-        io::ErrorKind::UnexpectedEof,
-        "Unable to read varint index from buffer",
-    ))
+pub fn read_varint(reader: &mut Reader<Bytes>) -> io::Result<u32> {
+    let varint = leb128::read::unsigned(reader)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))?;
+    u32::try_from(varint).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))
 }
 
 #[cfg(test)]
@@ -112,19 +94,22 @@ mod test {
     #[case(u16::MAX as u32)]
     #[case(u32::MAX)]
     fn test_read_varint(#[case] varint: u32) {
-        let mut buf = [0; 1024];
-        let mut writable = &mut buf[..];
+        let mut buf = Vec::new();
+        let bytes_written = leb128::write::unsigned(&mut buf, varint as u64).unwrap();
 
-        let bytes_written = leb128::write::unsigned(&mut writable, varint.into()).unwrap();
+        let mut reader = Bytes::from(buf).reader();
+        let original_len = reader.get_ref().len();
+        let varint_result = read_varint(&mut reader).unwrap();
+        let bytes_read = original_len - reader.get_ref().len();
 
-        let (bytes_read, varint_result) = read_varint(&buf[..]).unwrap();
-
-        assert_eq!(bytes_read, bytes_written);
         assert_eq!(varint_result, varint);
+        assert_eq!(bytes_read, bytes_written);
     }
 
     #[test]
-    #[should_panic(expected = "Unable to read varint index")]
+    #[should_panic(
+        expected = "Custom { kind: InvalidData, error: \"out of range integral type conversion attempted\" }"
+    )]
     fn test_read_varint_max_read_bytes() {
         let mut buf = [0; 1024];
         let mut writable = &mut buf[..];
@@ -132,12 +117,13 @@ mod test {
 
         leb128::write::unsigned(&mut writable, varint).unwrap();
 
-        read_varint(&buf[..]).unwrap();
+        let mut reader = Bytes::from(buf).reader();
+        read_varint(&mut reader).unwrap();
     }
 
     #[test]
     #[should_panic(
-        expected = "Custom { kind: InvalidData, error: \"Exceeded maximum allowed varint value (u32 limit)\" }"
+        expected = "Custom { kind: InvalidData, error: \"out of range integral type conversion attempted\" }"
     )]
     fn test_read_varint_max_varint_size() {
         let mut buf = [0; 1024];
@@ -146,7 +132,8 @@ mod test {
 
         leb128::write::unsigned(&mut writable, varint as u64).unwrap();
 
-        read_varint(&buf[..]).unwrap();
+        let mut reader = Bytes::from(buf).reader();
+        read_varint(&mut reader).unwrap();
     }
 
     #[test]
