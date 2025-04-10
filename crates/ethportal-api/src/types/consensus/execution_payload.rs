@@ -92,6 +92,31 @@ impl ExecutionPayload {
     }
 }
 
+impl ExecutionPayloadDeneb {
+    pub fn build_block_hash_proof(&self) -> Vec<B256> {
+        let leaves = vec![
+            self.parent_hash.tree_hash_root().0,
+            self.fee_recipient.tree_hash_root().0,
+            self.state_root.tree_hash_root().0,
+            self.receipts_root.tree_hash_root().0,
+            self.logs_bloom.tree_hash_root().0,
+            self.prev_randao.tree_hash_root().0,
+            self.block_number.tree_hash_root().0,
+            self.gas_limit.tree_hash_root().0,
+            self.gas_used.tree_hash_root().0,
+            self.timestamp.tree_hash_root().0,
+            self.extra_data.tree_hash_root().0,
+            self.base_fee_per_gas.tree_hash_root().0,
+            self.block_hash.tree_hash_root().0,
+            self.transactions.tree_hash_root().0,
+            self.withdrawals.tree_hash_root().0,
+            self.blob_gas_used.tree_hash_root().0,
+            self.excess_blob_gas.tree_hash_root().0,
+        ];
+        build_merkle_proof_for_index(leaves, 12)
+    }
+}
+
 impl ExecutionPayloadCapella {
     pub fn build_block_hash_proof(&self) -> Vec<B256> {
         let leaves = vec![
