@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, bail, ensure};
 use e2store::{
     era::Era,
+    era1::Era1,
     utils::{get_era1_files, get_era_files},
 };
 use reqwest::{
@@ -25,7 +26,7 @@ pub struct EraProvider {
 
 pub enum EraSource {
     // raw era1 file
-    PreMerge(Arc<Vec<u8>>),
+    PreMerge(Arc<Era1>),
     // processed era file
     PostMerge(Arc<Era>),
 }
@@ -50,7 +51,7 @@ impl EraProvider {
                     "Era1 file not found for epoch index: {epoch_index}",
                 ))?;
                 let raw_era1 = fetch_bytes(http_client.clone(), era1_path).await?;
-                EraSource::PreMerge(Arc::new(raw_era1))
+                EraSource::PreMerge(Arc::new(Era1::deserialize(&raw_era1)?))
             }
             false => {
                 let era = fetch_era_file_for_block(http_client.clone(), starting_block).await?;
@@ -77,7 +78,7 @@ impl EraProvider {
         })
     }
 
-    pub fn get_era1_for_block(&self, block_number: u64) -> anyhow::Result<Arc<Vec<u8>>> {
+    pub fn get_era1_for_block(&self, block_number: u64) -> anyhow::Result<Arc<Era1>> {
         ensure!(
             block_number < MERGE_BLOCK_NUMBER,
             "Invalid logic, tried to lookup era1 file for post-merge block"
