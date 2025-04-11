@@ -42,7 +42,7 @@ pub async fn test_offer(peertest: &Peertest, target: &Client) {
     // Check that ACCEPT response sent by bootnode accepted the offered content
     let mut accept_code_list = AcceptCodeList::new(1).unwrap();
     accept_code_list.set(0, AcceptCode::Accepted);
-    assert_eq!(result.content_keys, accept_code_list);
+    assert_eq!(result.0, accept_code_list);
 
     // Check if the stored content value in bootnode's DB matches the offered
     assert_eq!(

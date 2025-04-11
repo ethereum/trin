@@ -68,11 +68,7 @@ pub const MAX_CONTENT_KEYS_PER_OFFER: usize = 64;
 
 /// Response for Offer endpoint
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AcceptInfo {
-    #[serde(with = "accept_code_hex")]
-    pub content_keys: AcceptCodeList,
-}
+pub struct AcceptInfo(#[serde(with = "accept_code_hex")] pub AcceptCodeList);
 
 /// Response for PutContent endpoint
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

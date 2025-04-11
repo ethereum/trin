@@ -314,9 +314,7 @@ async fn offer(
         .map(|(key, value)| (key.to_bytes(), value.encode()))
         .collect();
     match network.overlay.send_offer(enr, content_items).await {
-        Ok(accept_code_list) => Ok(json!(AcceptInfo {
-            content_keys: accept_code_list,
-        })),
+        Ok(accept_code_list) => Ok(json!(AcceptInfo(accept_code_list))),
         Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
     }
 }
