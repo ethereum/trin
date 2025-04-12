@@ -71,11 +71,6 @@ impl E2HS {
         }))
     }
 
-    pub fn get_tuple_by_index(raw_e2hs: &[u8], index: usize) -> anyhow::Result<BlockTuple> {
-        let file = E2StoreMemory::deserialize(raw_e2hs)?;
-        BlockTuple::try_from(&file.entries[index * 3 + 1..index * 3 + 4])
-    }
-
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
         let file = E2StoreMemory::deserialize(buf)?;
         ensure!(
@@ -291,7 +286,8 @@ mod tests {
     #[case(8191)]
     fn test_e2hs_block_index(#[case] block_number: usize) {
         let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-a6860fef.e2hs").unwrap();
-        let block_tuple = E2HS::get_tuple_by_index(&raw_e2hs, block_number).unwrap();
+        let e2hs = E2HS::deserialize(&raw_e2hs).expect("failed to deserialize e2hs");
+        let block_tuple = &e2hs.block_tuples[block_number];
         assert_eq!(
             block_tuple
                 .header_with_proof

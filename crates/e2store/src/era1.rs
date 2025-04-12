@@ -63,11 +63,6 @@ impl Era1 {
         })
     }
 
-    pub fn get_tuple_by_index(raw_era1: &[u8], index: usize) -> anyhow::Result<BlockTuple> {
-        let file = E2StoreMemory::deserialize(raw_era1)?;
-        BlockTuple::try_from(&file.entries[index * 4 + 1..index * 4 + 5])
-    }
-
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
         let file = E2StoreMemory::deserialize(buf)?;
         ensure!(
