@@ -24,7 +24,7 @@ pub struct EraProvider {
 }
 
 pub enum EraSource {
-    // raw era1 file
+    // processed era1 file
     PreMerge(Arc<Era1>),
     // processed era file
     PostMerge(Arc<Era>),
