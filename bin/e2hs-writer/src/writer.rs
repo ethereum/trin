@@ -26,7 +26,8 @@ impl EpochWriter {
         let mut block_tuples: Vec<BlockTuple> = vec![];
         let mut block_stream = Box::pin(reader.iter_blocks());
 
-        while let Some(Ok(block_data)) = block_stream.next().await {
+        while let Some(block_data) = block_stream.next().await {
+            let block_data = block_data?;
             info!(
                 "Writing block {}",
                 block_data.header_with_proof.header.number

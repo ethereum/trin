@@ -22,6 +22,8 @@ use trin_validation::constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER};
 pub struct EraProvider {
     first_source: EraSource,
     second_source: Option<EraSource>,
+    /// used for merge-boundary as 1 era1 file and 2 era files are needed
+    third_source: Option<EraSource>,
 }
 
 pub enum EraSource {
@@ -67,14 +69,29 @@ impl EraProvider {
             }
             false => {
                 // todo: if first source is era1, we know the era for next range
+                info!("Fetching second e2store file for epoch: {epoch}");
                 let era = fetch_era_file_for_block(http_client.clone(), ending_block).await?;
-                info!("Second e2store file fetched for epoch: {epoch}");
                 Some(EraSource::PostMerge(era))
             }
         };
+
+        let third_source = match !(starting_block..ending_block).contains(&MERGE_BLOCK_NUMBER) {
+            true => {
+                info!("No third e2store file required for epoch: {epoch}");
+                None
+            }
+            false => {
+                // todo: if first source is era1, we know the era for next range
+                info!("Fetching third e2store file for epoch: {epoch}");
+                let era = fetch_era_file_for_block(http_client.clone(), MERGE_BLOCK_NUMBER).await?;
+                Some(EraSource::PostMerge(era))
+            }
+        };
+
         Ok(Self {
             first_source,
             second_source,
+            third_source,
         })
     }
 
@@ -106,7 +123,12 @@ impl EraProvider {
                 return Ok(era.clone());
             }
         }
-        bail!("Era file not found for block number: {block_number}");
+        if let Some(EraSource::PostMerge(era)) = &self.third_source {
+            if era.contains(block_number) {
+                return Ok(era.clone());
+            }
+        }
+        bail!("Couldn't find error file not found for block number: {block_number}");
     }
 }
 
