@@ -17,13 +17,10 @@ use trin_validation::constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER};
 // This struct provides various era files based on the epoch and makes
 // them accessible via a specific block number from that epoch.
 // - pre-merge: all epochs will correspond 1:1 with era1 files
-// - merge-boundary: will have an era1 & era file
+// - merge-boundary: will have an era1 & 2 era files
 // - post-merge: all epochs will likely have 2 era files
 pub struct EraProvider {
-    first_source: EraSource,
-    second_source: Option<EraSource>,
-    /// used for merge-boundary as 1 era1 file and 2 era files are needed
-    third_source: Option<EraSource>,
+    sources: Vec<EraSource>,
 }
 
 pub enum EraSource {
@@ -31,6 +28,22 @@ pub enum EraSource {
     PreMerge(Arc<Era1>),
     // processed era file
     PostMerge(Arc<Era>),
+}
+
+impl EraSource {
+    pub fn last_block(&self) -> u64 {
+        match self {
+            EraSource::PreMerge(era1) => {
+                era1.block_tuples[era1.block_tuples.len() - 1]
+                    .header
+                    .header
+                    .number
+            }
+            EraSource::PostMerge(era) => era.blocks[era.blocks.len() - 1]
+                .block
+                .execution_block_number(),
+        }
+    }
 }
 
 impl EraProvider {
@@ -45,54 +58,27 @@ impl EraProvider {
             )]))
             .build()?;
 
-        let first_source = match starting_block < MERGE_BLOCK_NUMBER {
-            true => {
+        let mut next_block = starting_block;
+        let mut sources = vec![];
+
+        while next_block < ending_block {
+            let source = if next_block < MERGE_BLOCK_NUMBER {
                 let era1_paths = get_era1_files(&http_client).await?;
-                let epoch_index = starting_block / EPOCH_SIZE;
+                let epoch_index = next_block / EPOCH_SIZE;
                 let era1_path = era1_paths.get(&epoch_index).ok_or(anyhow!(
                     "Era1 file not found for epoch index: {epoch_index}",
                 ))?;
                 let raw_era1 = fetch_bytes(http_client.clone(), era1_path).await?;
                 EraSource::PreMerge(Arc::new(Era1::deserialize(&raw_era1)?))
-            }
-            false => {
-                let era = fetch_era_file_for_block(http_client.clone(), starting_block).await?;
+            } else {
+                let era = fetch_era_file_for_block(http_client.clone(), next_block).await?;
                 EraSource::PostMerge(era)
-            }
-        };
-        info!("First e2store file fetched for epoch: {epoch}");
+            };
+            next_block = source.last_block() + 1;
+            sources.push(source);
+        }
 
-        let second_source = match ending_block < MERGE_BLOCK_NUMBER {
-            true => {
-                info!("No second e2store file required for epoch: {epoch}");
-                None
-            }
-            false => {
-                // todo: if first source is era1, we know the era for next range
-                info!("Fetching second e2store file for epoch: {epoch}");
-                let era = fetch_era_file_for_block(http_client.clone(), ending_block).await?;
-                Some(EraSource::PostMerge(era))
-            }
-        };
-
-        let third_source = match !(starting_block..ending_block).contains(&MERGE_BLOCK_NUMBER) {
-            true => {
-                info!("No third e2store file required for epoch: {epoch}");
-                None
-            }
-            false => {
-                // todo: if first source is era1, we know the era for next range
-                info!("Fetching third e2store file for epoch: {epoch}");
-                let era = fetch_era_file_for_block(http_client.clone(), MERGE_BLOCK_NUMBER).await?;
-                Some(EraSource::PostMerge(era))
-            }
-        };
-
-        Ok(Self {
-            first_source,
-            second_source,
-            third_source,
-        })
+        Ok(Self { sources })
     }
 
     pub fn get_era1_for_block(&self, block_number: u64) -> anyhow::Result<Arc<Era1>> {
@@ -100,7 +86,7 @@ impl EraProvider {
             block_number < MERGE_BLOCK_NUMBER,
             "Invalid logic, tried to lookup era1 file for post-merge block"
         );
-        Ok(match &self.first_source {
+        Ok(match &self.sources[0] {
             EraSource::PreMerge(era1) => era1.clone(),
             EraSource::PostMerge(_) => {
                 bail!("Era1 file not found for block number: {block_number}",)
@@ -113,19 +99,11 @@ impl EraProvider {
             block_number >= MERGE_BLOCK_NUMBER,
             "Invalid logic, tried to lookup era file for pre-merge block"
         );
-        if let EraSource::PostMerge(era) = &self.first_source {
-            if era.contains(block_number) {
-                return Ok(era.clone());
-            }
-        }
-        if let Some(EraSource::PostMerge(era)) = &self.second_source {
-            if era.contains(block_number) {
-                return Ok(era.clone());
-            }
-        }
-        if let Some(EraSource::PostMerge(era)) = &self.third_source {
-            if era.contains(block_number) {
-                return Ok(era.clone());
+        for sources in self.sources.iter() {
+            if let EraSource::PostMerge(era) = sources {
+                if era.contains(block_number) {
+                    return Ok(era.clone());
+                }
             }
         }
         bail!("Couldn't find error file not found for block number: {block_number}");
