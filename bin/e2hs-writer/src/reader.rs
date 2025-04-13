@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{cmp::max, collections::HashMap, path::PathBuf, sync::Arc};
 
 use alloy::{
     consensus::BlockBody as AlloyBlockBody,
@@ -23,6 +23,7 @@ use ethportal_api::types::{
 use futures::Stream;
 use portal_bridge::{api::execution::ExecutionApi, bridge::utils::lookup_epoch_acc};
 use ssz_types::{typenum, FixedVector, VariableList};
+use tokio::try_join;
 use tree_hash::TreeHash;
 use trin_execution::era::beacon::decode_transactions;
 use trin_validation::{
@@ -50,8 +51,8 @@ pub struct EpochReader {
     starting_block: u64,
     ending_block: u64,
     epoch_accumulator: Option<Arc<EpochAccumulator>>,
-    execution_api: ExecutionApi,
     era_provider: EraProvider,
+    receipts: HashMap<u64, Receipts>,
 }
 
 impl EpochReader {
@@ -83,12 +84,29 @@ impl EpochReader {
             }
             false => None,
         };
+
+        let ending_block = starting_block + EPOCH_SIZE;
+        let receipts_handle = tokio::spawn(async move {
+            if ending_block >= MERGE_BLOCK_NUMBER {
+                execution_api
+                    .get_receipts(max(MERGE_BLOCK_NUMBER, starting_block)..ending_block)
+                    .await
+            } else {
+                Ok(HashMap::new())
+            }
+        });
+        let era_provider_handle = tokio::spawn(async move { EraProvider::new(epoch_index).await });
+        let (receipts_result, era_provider_result) =
+            try_join!(receipts_handle, era_provider_handle)?;
+        let receipts = receipts_result?;
+        let era_provider = era_provider_result?;
+
         Ok(Self {
             starting_block,
-            ending_block: starting_block + EPOCH_SIZE,
+            ending_block,
             epoch_accumulator,
-            execution_api,
-            era_provider: EraProvider::new(epoch_index).await?,
+            receipts,
+            era_provider,
         })
     }
 
@@ -165,14 +183,7 @@ impl EpochReader {
             ommers: vec![],
             withdrawals: None,
         });
-        let receipts = self
-            .execution_api
-            .get_receipts(
-                block_number,
-                payload.transactions.len(),
-                payload.receipts_root,
-            )
-            .await?;
+        let receipts = self.get_receipts(block_number, header_with_proof.header.receipts_root)?;
         Ok(AllBlockData {
             block_number,
             header_with_proof,
@@ -233,14 +244,7 @@ impl EpochReader {
             ommers: vec![],
             withdrawals: Some(Withdrawals::new(withdrawals)),
         });
-        let receipts = self
-            .execution_api
-            .get_receipts(
-                block_number,
-                payload.transactions.len(),
-                payload.receipts_root,
-            )
-            .await?;
+        let receipts = self.get_receipts(block_number, header_with_proof.header.receipts_root)?;
         Ok(AllBlockData {
             block_number,
             header_with_proof,
@@ -263,6 +267,16 @@ impl EpochReader {
                 }
             }
         }
+    }
+
+    pub fn get_receipts(&self, block_number: u64, receipts_root: B256) -> anyhow::Result<Receipts> {
+        let receipts = self
+            .receipts
+            .get(&block_number)
+            .cloned()
+            .ok_or_else(|| anyhow!("Receipts not found for block number {block_number}"))?;
+        ensure!(receipts.root() == receipts_root, "Receipts root mismatch");
+        Ok(receipts)
     }
 }
 
