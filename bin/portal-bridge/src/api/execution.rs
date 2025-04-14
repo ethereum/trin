@@ -250,8 +250,7 @@ impl ExecutionApi {
         let response: Vec<Value> = serde_json::from_str(&response).map_err(|e| anyhow!(e))?;
 
         let mut receipts = HashMap::new();
-        for (i, res) in response.into_iter().enumerate() {
-            let block_number = block_numbers[i];
+        for (res, block_number) in response.into_iter().zip(block_numbers.into_iter()) {
             let receipt: Receipts = serde_json::from_value(res).map_err(|err| {
                 anyhow!("Unable to parse receipts for block {block_number} from provider response: {err:?}")
             })?;

@@ -88,10 +88,7 @@ impl EpochWriter {
             short_hash.trim_start_matches("0x")
         );
         std::fs::write(e2hs_path.clone(), raw_e2hs)?;
-        info!(
-            "Wrote epoch {} to {e2hs_path}, Finished writing blocks in ",
-            self.epoch
-        );
+        info!("Wrote epoch {} to {e2hs_path}", self.epoch);
         Ok(())
     }
 }
