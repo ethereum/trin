@@ -34,8 +34,8 @@ use crate::{
 };
 
 /// Limit the number of requests in a single batch to avoid exceeding the
-/// provider's batch size limit configuration of 40.
-const BATCH_LIMIT: usize = 40;
+/// provider's batch size limit configuration of 30.
+const BATCH_LIMIT: usize = 30;
 
 /// Implements endpoints from the Execution API to access data from the execution layer.
 /// Performs validation of the data returned from the provider.
