@@ -676,15 +676,6 @@ async fn setup_peertest_bridge(
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
-async fn peertest_history_bridge() {
-    let (peertest, target, handle) = setup_peertest_bridge(&[Subnetwork::History]).await;
-    peertest::scenarios::bridge::test_history_bridge(&peertest, &target).await;
-    peertest.exit_all_nodes();
-    handle.stop().unwrap();
-}
-
-#[tokio::test(flavor = "multi_thread")]
-#[serial]
 async fn peertest_beacon_bridge() {
     let (peertest, target, handle) = setup_peertest_bridge(&[Subnetwork::Beacon]).await;
     peertest::scenarios::bridge::test_beacon_bridge(&peertest, &target).await;

@@ -4,8 +4,7 @@ Process to feed the portal network by gossiping data retrieved from a trusted pr
 
 ex.
 ```sh
-git clone https://github.com/ethereum/portal-accumulators.git
-cargo run -p portal-bridge -- --executable-path ./target/debug/trin --epoch-accumulator-path ./portal-accumulators
+cargo run -p portal-bridge -- --executable-path ./target/debug/trin
 ```
 
 ## Providers
@@ -25,27 +24,7 @@ cargo run -p portal-bridge -- --executable-path ./target/debug/trin --epoch-accu
 
 ### Bridge modes
 
-#### History Subnetwork
-
-- `"--mode latest"`: follow the head of the chain and gossip latest blocks
-- `"--mode test:/path/to/test_data.json"`: gossip content keys & values found in test file.
-- `"--mode backfill:b100"`: start backfill at block #100
-- `"--mode backfill:e100"`: start backfill at epoch #100
-- `"--mode backfill:r10-12"`: backfill a block range from #10 to #12 (inclusive)
-- `"--mode single:b100"`: gossip a single block #100
-- `"--mode single:e100"`: gossip a single epoch #100
-- `"--mode fourfours`: will randomly select era1 files from `era1.ethportal.net` and gossip them
-- `"--mode fourfours:random_epoch"`: will randomly select a single era1 file from `era1.ethportal.net` and then gossip it
-- `"--mode fourfours:random_epoch:100"`: will randomly select a single era1 file from `era1.ethportal.net` that represents an epoch number greater than the floor provided and then gossip it
-- `"--mode fourfours:e600`: will select era1 file 600 from `era1.ethportal.net` and gossip it
-- `"--mode fourfours:r100-200`: will gossip a block range from an era1 file, range must be from the same epoch
-- `"--mode fourfours:hunter:10:50`: sample size = 10, threshold = 50
-    - will randomly select era1 files from `era1.ethportal.net` and gossip them after performing rfc lookups given the sample size. if the threshold is **not** met, the era1 file will be gossiped.
-    - before gossiping a individual piece of content, the bridge will perform a lookup to see if the content is already in the portal network. If it is, the content will not be gossiped.
-- `"--mode fourfours:single_hunter:10:50`: sample size = 10, threshold = 50
-    - same as the above hunter mode, but it will only gossip a single era1 file before exiting
-
-#### E2HS Bridge
+#### History Network E2HS Bridge
 
 - `"--mode e2hs --e2hs-range 100-200"`: gossip a block range from #100 to #200 (inclusive) using `E2HS` files as the data source
 - `"--mode e2hs --e2hs-range 1000-10000 --e2hs-randomize"`: randomize the order in which epochs from block range are gossiped
@@ -57,7 +36,6 @@ cargo run -p portal-bridge -- --executable-path ./target/debug/trin --epoch-accu
 
 #### State Subnetwork
 
-- `"--mode single:b100"`: backfill, always beginning from block #0 until the specified block (#100)
 - `"--mode single:r50-100"`: backfill, gossips state diffs for blocks in #50-#100 range (inclusive)
 - `"--mode snapshot:1000000"`: gossips a state snapshot at the respective block, in this example the state snapshot at block 1,000,000 will be gossiped. This mode is only used for the State Network.
 
@@ -68,7 +46,7 @@ You can specify the `--portal-subnetworks` flag for which network to run the bri
 - `"--portal-subnetworks history"`: Default value. Run the bridge for the history network.
 - `"--portal-subnetworks beacon"`: Run the bridge for the beacon network.
 - `"--portal-subnetworks history,beacon"`: Run the bridge for the history & beacon network.
-`  "--portal-subnetworks state"`: Run the bridge for the state network.
+- `"--portal-subnetworks state"`: Run the bridge for the state network.
     - Currently, the `"state"` network can only be run by itself!
 
 ### Test File example

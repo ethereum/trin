@@ -4,11 +4,8 @@ use ethportal_api::{
     types::network::Subnetwork,
 };
 use portal_bridge::{
-    api::{consensus::ConsensusApi, execution::ExecutionApi},
-    bridge::{
-        beacon::BeaconBridge, e2hs::E2HSBridge, era1::Era1Bridge, history::HistoryBridge,
-        state::StateBridge,
-    },
+    api::consensus::ConsensusApi,
+    bridge::{beacon::BeaconBridge, e2hs::E2HSBridge, state::StateBridge},
     census::Census,
     cli::BridgeConfig,
     handle::build_trin,
@@ -17,7 +14,6 @@ use portal_bridge::{
 use tokio::time::{sleep, Duration};
 use tracing::Instrument;
 use trin_utils::log::init_tracing_logger;
-use trin_validation::oracle::HeaderOracle;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -101,12 +97,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .portal_subnetworks
             .contains(&Subnetwork::History)
         {
-            let execution_api = ExecutionApi::new(
-                bridge_config.el_provider,
-                bridge_config.el_provider_fallback,
-                bridge_config.request_timeout,
-            )
-            .await?;
             match bridge_config.mode {
                 BridgeMode::E2HS => {
                     let Some(e2hs_range) = bridge_config.e2hs_range else {
@@ -126,46 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     });
                     bridge_tasks.push(bridge_handle);
                 }
-                BridgeMode::FourFours(_) => {
-                    let header_oracle = HeaderOracle::default();
-                    let era1_bridge = Era1Bridge::new(
-                        bridge_config.mode,
-                        portal_client,
-                        header_oracle,
-                        bridge_config.epoch_acc_path,
-                        bridge_config.gossip_limit,
-                        execution_api,
-                    )
-                    .await?;
-                    let bridge_handle = tokio::spawn(async move {
-                        era1_bridge
-                            .launch()
-                            .instrument(tracing::trace_span!("history(era1)"))
-                            .await;
-                    });
-                    bridge_tasks.push(bridge_handle);
-                }
-                _ => {
-                    let bridge_handle = tokio::spawn(async move {
-                        let header_oracle = HeaderOracle::default();
-
-                        let bridge = HistoryBridge::new(
-                            bridge_config.mode,
-                            execution_api,
-                            portal_client,
-                            header_oracle,
-                            bridge_config.epoch_acc_path,
-                            bridge_config.gossip_limit,
-                        );
-
-                        bridge
-                            .launch()
-                            .instrument(tracing::trace_span!("history"))
-                            .await;
-                    });
-
-                    bridge_tasks.push(bridge_handle);
-                }
+                _ => panic!("Unsupported bridge mode for History network"),
             }
         }
     }

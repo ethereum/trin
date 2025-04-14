@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use portal_bridge::{cli::DEFAULT_EPOCH_ACC_PATH, DEFAULT_BASE_EL_ENDPOINT};
+use portal_bridge::DEFAULT_BASE_EL_ENDPOINT;
 use url::Url;
+
+pub const DEFAULT_EPOCH_ACC_PATH: &str = "./portal-accumulators";
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "E2HS Writer", about = "Generate E2HS files")]

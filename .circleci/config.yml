@@ -98,9 +98,6 @@ jobs:
       - checkout
       - setup_remote_docker
       - run:
-          name: Clone portal-accumulators
-          command: git clone https://github.com/ethereum/portal-accumulators
-      - run:
           name: Build Docker bridge image
           no_output_timeout: 30m
           command: docker build -f ./docker/Dockerfile.bridge -t $IMAGE_NAME:latest-bridge .

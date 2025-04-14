@@ -14,14 +14,12 @@ version.workspace = true
 [dependencies]
 alloy.workspace = true
 anyhow.workspace = true
-async-trait.workspace = true
 chrono.workspace = true
 clap.workspace = true
 delay_map.workspace = true
 discv5.workspace = true
 e2store.workspace = true
 eth_trie.workspace = true
-ethereum_ssz.workspace = true
 ethportal-api.workspace = true
 futures.workspace = true
 humanize-duration.workspace = true
