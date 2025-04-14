@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use alloy::{
     consensus::{BlockBody as AlloyBlockBody, Header},
@@ -18,10 +18,9 @@ use ethportal_api::{
     utils::bytes::{hex_decode, hex_encode},
     HistoryContentKey, HistoryContentValue, Receipts,
 };
-use futures::future::join_all;
 use serde_json::{json, Value};
 use tokio::time::sleep;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 use trin_validation::{
     accumulator::PreMergeAccumulator, constants::MERGE_BLOCK_NUMBER,
     header_validator::HeaderValidator,
@@ -30,13 +29,13 @@ use url::Url;
 
 use crate::{
     cli::{url_to_client, ClientWithBaseUrl},
-    constants::{FALLBACK_RETRY_AFTER, GET_RECEIPTS_RETRY_AFTER},
+    constants::FALLBACK_RETRY_AFTER,
     types::full_header::FullHeader,
 };
 
 /// Limit the number of requests in a single batch to avoid exceeding the
-/// provider's batch size limit configuration of 100.
-const BATCH_LIMIT: usize = 100;
+/// provider's batch size limit configuration of 30.
+const BATCH_LIMIT: usize = 30;
 
 /// Implements endpoints from the Execution API to access data from the execution layer.
 /// Performs validation of the data returned from the provider.
@@ -212,52 +211,53 @@ impl ExecutionApi {
     }
 
     /// Return validated Receipts for the given block.
-    pub async fn get_receipts(
+    pub async fn get_receipts_and_validate(
         &self,
         block_number: u64,
-        tx_count: usize,
         receipts_root: B256,
     ) -> anyhow::Result<Receipts> {
-        // Build receipts
-        let receipts = match tx_count {
-            0 => Receipts(vec![]),
-            _ => self.get_trusted_receipts(block_number).await?,
-        };
+        // Get receipt from HashMap
+        let mut receipts = self.get_receipts(block_number..=block_number).await?;
+        let receipts = receipts
+            .remove(&block_number)
+            .ok_or_else(|| anyhow!("Missing receipts for block {block_number}"))?;
 
         // Validate Receipts
         let actual_receipts_root = receipts.root();
         if actual_receipts_root != receipts_root {
-            bail!(
-                "Receipts root doesn't match header receipts root: {actual_receipts_root:?} - {receipts_root:?}",
-            );
+            bail!("Receipts root doesn't match header receipts root: {actual_receipts_root:?} - {receipts_root:?}");
         }
+
         Ok(receipts)
     }
 
-    /// Return unvalidated receipts for the given transaction hashes.
-    async fn get_trusted_receipts(&self, height: u64) -> anyhow::Result<Receipts> {
-        let block_param = format!("0x{height:01X}");
-        // At this custom retry mechanism, the json-rpc is unreliable, we only call this function if
-        // we know the receipts should exist, but they might not be ready yet for any reason and the
-        // full-node will retry null, so we will just retry 3 times as we know they have it.
-        for _ in 0..3 {
-            let params = Params::Array(vec![json!(block_param)]);
-            let request = JsonRequest::new("eth_getBlockReceipts".to_string(), params, 1);
-            let response = self.try_request(request).await?;
-            let result = response.get("result").ok_or_else(|| {
-                anyhow!("Unable to fetch block receipts result for height: {height:?} {response:?}")
-            })?;
+    pub async fn get_receipts<I>(&self, block_range: I) -> anyhow::Result<HashMap<u64, Receipts>>
+    where
+        I: IntoIterator<Item = u64>,
+    {
+        let mut batch_request = vec![];
+        let mut block_numbers = vec![];
 
-            // Check if the result is null, if so, sleep and retry.
-            if result.is_null() {
-                sleep(GET_RECEIPTS_RETRY_AFTER).await;
-                continue;
-            }
-            return serde_json::from_value(response).map_err(|err| {
-                anyhow!("Unable to parse receipts from provider response: {err:?}")
-            });
+        for (id, block_number) in block_range.into_iter().enumerate() {
+            let block_param = format!("0x{block_number:01X}");
+            let params = Params::Array(vec![json!(block_param)]);
+            let request = JsonRequest::new("eth_getBlockReceipts".to_string(), params, id as u32);
+            batch_request.push(request);
+            block_numbers.push(block_number);
         }
-        bail!("Unable to fetch receipts for block: {height:?}");
+
+        let response = self.batch_requests(batch_request).await?;
+        let response: Vec<Value> = serde_json::from_str(&response).map_err(|e| anyhow!(e))?;
+
+        let mut receipts = HashMap::new();
+        for (res, block_number) in response.into_iter().zip(block_numbers.into_iter()) {
+            let receipt: Receipts = serde_json::from_value(res).map_err(|err| {
+                anyhow!("Unable to parse receipts for block {block_number} from provider response: {err:?}")
+            })?;
+            receipts.insert(block_number, receipt);
+        }
+
+        Ok(receipts)
     }
 
     pub async fn get_block_hash(&self, height: u64) -> anyhow::Result<B256> {
@@ -291,20 +291,18 @@ impl ExecutionApi {
     }
 
     async fn batch_requests(&self, obj: Vec<JsonRequest>) -> anyhow::Result<String> {
-        let batched_request_futures = obj
-            .chunks(BATCH_LIMIT)
-            .map(|chunk| self.try_batch_request(chunk.to_vec()))
-            .collect::<Vec<_>>();
-        match join_all(batched_request_futures)
-            .await
-            .into_iter()
-            .try_fold(Vec::new(), |mut acc, next| {
-                acc.extend_from_slice(&next?);
-                Ok::<Vec<Value>, Box<dyn std::error::Error>>(acc)
-            }) {
-            Ok(val) => Ok(serde_json::to_string(&val)?),
-            Err(err) => Err(anyhow!("Unable to flatten batch request: {err:?}")),
+        let mut all_responses = Vec::new();
+
+        for chunk in obj.chunks(BATCH_LIMIT) {
+            info!("Sending batch request with {} requests", chunk.len());
+            let responses = self
+                .try_batch_request(chunk.to_vec())
+                .await
+                .map_err(|err| anyhow!("Batch request failed: {err:?}"))?;
+            all_responses.extend(responses);
         }
+
+        Ok(serde_json::to_string(&all_responses)?)
     }
 
     async fn try_batch_request(&self, requests: Vec<JsonRequest>) -> anyhow::Result<Vec<Value>> {

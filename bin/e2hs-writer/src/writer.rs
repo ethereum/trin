@@ -48,6 +48,7 @@ impl EpochWriter {
             };
             block_tuples.push(block_tuple);
         }
+
         assert_eq!(block_tuples.len(), BLOCK_TUPLE_COUNT);
         let version = VersionEntry {
             version: Entry::new(VERSION, vec![]),

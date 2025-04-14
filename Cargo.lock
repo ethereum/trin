@@ -2204,6 +2204,7 @@ dependencies = [
  "ethereum_ssz",
  "ethportal-api",
  "futures",
+ "humanize-duration",
  "portal-bridge",
  "reqwest",
  "rstest",

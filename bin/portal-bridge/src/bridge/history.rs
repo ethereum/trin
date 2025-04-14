@@ -361,11 +361,7 @@ impl HistoryBridge {
     ) -> anyhow::Result<()> {
         let timer = metrics.start_process_timer("construct_and_gossip_receipt");
         let receipts = execution_api
-            .get_receipts(
-                full_header.header.number,
-                full_header.txs.len(),
-                full_header.header.receipts_root,
-            )
+            .get_receipts_and_validate(full_header.header.number, full_header.header.receipts_root)
             .await?;
         let content_key = HistoryContentKey::new_block_receipts(full_header.header.hash_slow());
         let content_value = HistoryContentValue::Receipts(receipts);

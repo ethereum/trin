@@ -6,6 +6,7 @@ use alloy::{
     eips::eip4895::Withdrawal,
     primitives::{Bloom, B64, U256},
 };
+use anyhow::ensure;
 use ethportal_api::types::consensus::execution_payload::{
     ExecutionPayloadBellatrix, ExecutionPayloadCapella,
 };
@@ -16,7 +17,7 @@ pub fn pre_capella_execution_payload_to_header(
     transactions: &[TxEnvelope],
 ) -> anyhow::Result<Header> {
     let transactions_root = calculate_transaction_root(transactions);
-    Ok(Header {
+    let header = Header {
         parent_hash: payload.parent_hash,
         ommers_hash: EMPTY_UNCLE_ROOT_HASH,
         beneficiary: payload.fee_recipient,
@@ -38,7 +39,13 @@ pub fn pre_capella_execution_payload_to_header(
         excess_blob_gas: None,
         parent_beacon_block_root: None,
         requests_hash: None,
-    })
+    };
+
+    ensure!(
+        payload.block_hash == header.hash_slow(),
+        "Block hash mismatch"
+    );
+    Ok(header)
 }
 
 pub fn pre_deneb_execution_payload_to_header(
@@ -48,7 +55,7 @@ pub fn pre_deneb_execution_payload_to_header(
 ) -> anyhow::Result<Header> {
     let transactions_root = calculate_transaction_root(transactions);
     let withdrawals_root = calculate_withdrawals_root(withdrawals);
-    Ok(Header {
+    let header = Header {
         parent_hash: payload.parent_hash,
         ommers_hash: EMPTY_UNCLE_ROOT_HASH,
         beneficiary: payload.fee_recipient,
@@ -70,5 +77,11 @@ pub fn pre_deneb_execution_payload_to_header(
         excess_blob_gas: None,
         parent_beacon_block_root: None,
         requests_hash: None,
-    })
+    };
+
+    ensure!(
+        payload.block_hash == header.hash_slow(),
+        "Block hash mismatch"
+    );
+    Ok(header)
 }
