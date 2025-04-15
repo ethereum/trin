@@ -4,7 +4,7 @@ use alloy::{
     consensus::{Block, BlockBody as AlloyBlockBody, Header, TxEnvelope},
     rpc::types::Block as RpcBlock,
 };
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, ensure};
 use ethportal_api::{
     types::{
         execution::{
@@ -19,7 +19,10 @@ use ethportal_api::{
 use serde_json::{json, Value};
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
-use trin_validation::{accumulator::PreMergeAccumulator, header_validator::HeaderValidator};
+use trin_validation::{
+    accumulator::PreMergeAccumulator, constants::MERGE_BLOCK_NUMBER,
+    header_validator::HeaderValidator,
+};
 use url::Url;
 
 use crate::{
@@ -77,6 +80,10 @@ impl ExecutionApi {
             .get("result")
             .ok_or_else(|| anyhow!("Unable to fetch block: {height:?}"))?;
         let block = serde_json::from_str::<RpcBlock>(&result.to_string())?;
+        ensure!(
+            block.header.number >= MERGE_BLOCK_NUMBER,
+            "We only support post-merge blocks"
+        );
         Ok(AlloyBlockBody {
             transactions: block
                 .transactions
