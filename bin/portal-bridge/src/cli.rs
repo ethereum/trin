@@ -32,7 +32,6 @@ use crate::{
 
 const DEFAULT_SUBNETWORK: &str = "history";
 const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
-pub const DEFAULT_EPOCH_ACC_PATH: &str = "./portal-accumulators";
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Trin Bridge", about = "Feed the network")]
@@ -46,13 +45,6 @@ pub struct BridgeConfig {
         help = "['latest', 'backfill', <u64> to provide the starting epoch]"
     )]
     pub mode: BridgeMode,
-
-    #[arg(
-        long = "epoch-accumulator-path",
-        help = "Path to epoch accumulator repo for bridge mode",
-        default_value = DEFAULT_EPOCH_ACC_PATH
-    )]
-    pub epoch_acc_path: PathBuf,
 
     #[arg(
         long = "e2hs-range",
@@ -396,18 +388,14 @@ fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>, St
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::types::mode::ModeType;
 
     #[test]
     fn test_default_bridge_config() {
         const EXECUTABLE_PATH: &str = "path/to/executable";
-        const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
         let bridge_config = BridgeConfig::parse_from([
             "bridge",
             "--executable-path",
             EXECUTABLE_PATH,
-            "--epoch-accumulator-path",
-            EPOCH_ACC_PATH,
             "--portal-subnetworks",
             "history,beacon",
         ]);
@@ -416,7 +404,6 @@ mod test {
             PathBuf::from(EXECUTABLE_PATH)
         );
         assert_eq!(bridge_config.mode, BridgeMode::Latest);
-        assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
         assert_eq!(
             bridge_config.el_provider.to_string(),
             DEFAULT_BASE_EL_ENDPOINT
@@ -442,26 +429,19 @@ mod test {
     #[test]
     fn test_bridge_config_with_epoch() {
         const EXECUTABLE_PATH: &str = "path/to/executable";
-        const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
-        const EPOCH: &str = "backfill:e100";
+        const MODE: &str = "snapshot:60";
         let bridge_config = BridgeConfig::parse_from([
             "bridge",
             "--executable-path",
             EXECUTABLE_PATH,
-            "--epoch-accumulator-path",
-            EPOCH_ACC_PATH,
             "--mode",
-            EPOCH,
+            MODE,
         ]);
         assert_eq!(
             bridge_config.executable_path,
             PathBuf::from(EXECUTABLE_PATH)
         );
-        assert_eq!(
-            bridge_config.mode,
-            BridgeMode::Backfill(ModeType::Epoch(100))
-        );
-        assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
+        assert_eq!(bridge_config.mode, BridgeMode::Snapshot(60));
         assert_eq!(
             bridge_config.portal_subnetworks,
             vec![Subnetwork::History].into()

@@ -1,21 +1,19 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use alloy::{
-    consensus::{BlockBody as AlloyBlockBody, Header},
-    eips::eip4895::Withdrawals,
-    primitives::B256,
+    consensus::{Block, BlockBody as AlloyBlockBody, Header, TxEnvelope},
+    rpc::types::Block as RpcBlock,
 };
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, ensure};
 use ethportal_api::{
     types::{
         execution::{
             accumulator::EpochAccumulator,
-            block_body::{BlockBody, MERGE_TIMESTAMP, SHANGHAI_TIMESTAMP},
+            block_body::BlockBody,
             header_with_proof::{BlockHeaderProof, HeaderWithProof},
         },
         jsonrpc::{params::Params, request::JsonRequest},
     },
-    utils::bytes::{hex_decode, hex_encode},
     HistoryContentKey, HistoryContentValue, Receipts,
 };
 use serde_json::{json, Value};
@@ -30,7 +28,6 @@ use url::Url;
 use crate::{
     cli::{url_to_client, ClientWithBaseUrl},
     constants::FALLBACK_RETRY_AFTER,
-    types::full_header::FullHeader,
 };
 
 /// Limit the number of requests in a single batch to avoid exceeding the
@@ -72,18 +69,8 @@ impl ExecutionApi {
         })
     }
 
-    /// Return a validated FullHeader & content by hash and number key / value pair for the given
-    /// header.
-    pub async fn get_header(
-        &self,
-        height: u64,
-        epoch_acc: Option<Arc<EpochAccumulator>>,
-    ) -> anyhow::Result<(
-        FullHeader,
-        HistoryContentKey, // BlockHeaderByHash
-        HistoryContentKey, // BlockHeaderByNumber
-        HistoryContentValue,
-    )> {
+    /// Return a full block
+    pub async fn get_block(&self, height: u64) -> anyhow::Result<Block<TxEnvelope>> {
         // Geth requires block numbers to be formatted using the following padding.
         let block_param = format!("0x{height:01X}");
         let params = Params::Array(vec![json!(block_param), json!(true)]);
@@ -91,144 +78,34 @@ impl ExecutionApi {
         let response = self.try_request(request).await?;
         let result = response
             .get("result")
-            .ok_or_else(|| anyhow!("Unable to fetch header for block: {height:?}"))?;
-        let mut full_header: FullHeader = FullHeader::try_from(result.clone())?;
-
-        // Add epoch accumulator to header if it's a pre-merge block.
-        if full_header.header.number < MERGE_BLOCK_NUMBER {
-            if epoch_acc.is_none() {
-                bail!("Epoch accumulator is required for pre-merge blocks");
-            }
-            full_header.epoch_acc = epoch_acc;
+            .ok_or_else(|| anyhow!("Unable to fetch block: {height:?}"))?;
+        let block = serde_json::from_str::<RpcBlock>(&result.to_string())?;
+        ensure!(
+            block.header.number >= MERGE_BLOCK_NUMBER,
+            "We only support post-merge blocks"
+        );
+        Ok(AlloyBlockBody {
+            transactions: block
+                .transactions
+                .into_transactions()
+                .map(|transaction| transaction.into_inner())
+                .collect(),
+            ommers: vec![],
+            withdrawals: block.withdrawals,
         }
-
-        // Validate header.
-        if let Err(msg) = full_header.validate() {
-            bail!("Header validation failed: {msg}");
-        };
-        // Construct header by hash content key / value pair.
-        let header_by_hash_content_key =
-            HistoryContentKey::new_block_header_by_hash(full_header.header.hash_slow());
-        // Construct header by number content key / value pair.
-        let header_by_number_content_key =
-            HistoryContentKey::new_block_header_by_number(full_header.header.number);
-        let content_value = match &full_header.epoch_acc {
-            Some(epoch_acc) => {
-                // Construct HeaderWithProof
-                let header_with_proof =
-                    construct_proof(full_header.header.clone(), epoch_acc).await?;
-                // Double check that the proof is valid
-                self.header_validator
-                    .validate_header_with_proof(&header_with_proof)?;
-                HistoryContentValue::BlockHeaderWithProof(header_with_proof)
-            }
-            None => {
-                bail!("Generate header with historical_roots or historical_summaries proof");
-            }
-        };
-        Ok((
-            full_header,
-            header_by_hash_content_key,
-            header_by_number_content_key,
-            content_value,
-        ))
+        .into_block(block.header.into_consensus()))
     }
 
-    /// Return a validated BlockBody content key / value for the given FullHeader.
+    /// Return a validated BlockBody content key / value for the given Block.
     pub async fn get_block_body(
         &self,
-        full_header: &FullHeader,
+        block: &Block<TxEnvelope>,
     ) -> anyhow::Result<(HistoryContentKey, HistoryContentValue)> {
-        let block_body = self.get_trusted_block_body(full_header).await?;
-        block_body.validate_against_header(&full_header.header)?;
-        let content_key = HistoryContentKey::new_block_body(full_header.header.hash_slow());
+        let block_body = BlockBody(block.body.clone());
+        block_body.validate_against_header(&block.header)?;
+        let content_key = HistoryContentKey::new_block_body(block.header.hash_slow());
         let content_value = HistoryContentValue::BlockBody(block_body);
         Ok((content_key, content_value))
-    }
-
-    /// Return an unvalidated block body for the given FullHeader.
-    async fn get_trusted_block_body(&self, full_header: &FullHeader) -> anyhow::Result<BlockBody> {
-        let transactions = full_header.txs.clone();
-        if full_header.header.timestamp > SHANGHAI_TIMESTAMP {
-            if !full_header.uncles.is_empty() {
-                bail!("Invalid block: Shanghai block contains uncles");
-            }
-            let withdrawals = match full_header.withdrawals.clone() {
-                Some(val) => Some(Withdrawals(val)),
-                None => bail!("Invalid block: Shanghai block missing withdrawals"),
-            };
-            Ok(BlockBody(AlloyBlockBody {
-                transactions,
-                ommers: vec![],
-                withdrawals,
-            }))
-        } else if full_header.header.timestamp > MERGE_TIMESTAMP {
-            if !full_header.uncles.is_empty() {
-                bail!("Invalid block: Merge block contains uncles");
-            }
-            Ok(BlockBody(AlloyBlockBody {
-                transactions,
-                ommers: vec![],
-                withdrawals: None,
-            }))
-        } else {
-            let ommers = match full_header.uncles.len() {
-                0 => vec![],
-                _ => self.get_trusted_uncles(&full_header.uncles).await?,
-            };
-            Ok(BlockBody(AlloyBlockBody {
-                transactions,
-                ommers,
-                withdrawals: None,
-            }))
-        }
-    }
-
-    /// Return unvalidated uncles for the given uncle hashes.
-    async fn get_trusted_uncles(&self, hashes: &[B256]) -> anyhow::Result<Vec<Header>> {
-        let batch_request = hashes
-            .iter()
-            .enumerate()
-            .map(|(id, uncle)| {
-                let uncle_hash = hex_encode(uncle);
-                let params = Params::Array(vec![json!(uncle_hash), json!(false)]);
-                let method = "eth_getBlockByHash".to_string();
-                JsonRequest::new(method, params, id as u32)
-            })
-            .collect();
-        let response = self.batch_requests(batch_request).await?;
-        let response: Vec<Value> = serde_json::from_str(&response).map_err(|e| anyhow!(e))?;
-        // single responses are in an array, since we batch them...
-        let mut headers = vec![];
-        for res in response {
-            if res["result"].as_object().is_none() {
-                bail!("unable to find uncle header");
-            }
-            let header: Header = serde_json::from_value(res.clone())?;
-            headers.push(header)
-        }
-        Ok(headers)
-    }
-
-    /// Return validated Receipts for the given block.
-    pub async fn get_receipts_and_validate(
-        &self,
-        block_number: u64,
-        receipts_root: B256,
-    ) -> anyhow::Result<Receipts> {
-        // Get receipt from HashMap
-        let mut receipts = self.get_receipts(block_number..=block_number).await?;
-        let receipts = receipts
-            .remove(&block_number)
-            .ok_or_else(|| anyhow!("Missing receipts for block {block_number}"))?;
-
-        // Validate Receipts
-        let actual_receipts_root = receipts.root();
-        if actual_receipts_root != receipts_root {
-            bail!("Receipts root doesn't match header receipts root: {actual_receipts_root:?} - {receipts_root:?}");
-        }
-
-        Ok(receipts)
     }
 
     pub async fn get_receipts<I>(&self, block_range: I) -> anyhow::Result<HashMap<u64, Receipts>>
@@ -258,24 +135,6 @@ impl ExecutionApi {
         }
 
         Ok(receipts)
-    }
-
-    pub async fn get_block_hash(&self, height: u64) -> anyhow::Result<B256> {
-        let block_param = format!("0x{height:01X}");
-        let params = Params::Array(vec![json!(block_param), json!(false)]);
-        let request = JsonRequest::new("eth_getBlockByNumber".to_string(), params, 1);
-        let response = self.try_request(request).await?;
-        let result = response
-            .get("result")
-            .ok_or_else(|| anyhow!("Unable to fetch block hash result for block: {height:?}"))?;
-        let hash = result
-            .get("hash")
-            .ok_or_else(|| anyhow!("Unable to fetch block hash for block: {height:?}"))?;
-        let hash = hex_decode(
-            hash.as_str()
-                .ok_or_else(|| anyhow!("Unable to decode block hash"))?,
-        )?;
-        Ok(B256::from_slice(&hash))
     }
 
     pub async fn get_latest_block_number(&self) -> anyhow::Result<u64> {

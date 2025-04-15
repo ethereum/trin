@@ -26,7 +26,7 @@ use trin_metrics::bridge::BridgeMetricsReporter;
 use trin_validation::header_validator::HeaderValidator;
 
 use crate::{
-    bridge::history::{HEADER_SATURATION_DELAY, SERVE_BLOCK_TIMEOUT},
+    bridge::constants::{HEADER_SATURATION_DELAY, SERVE_BLOCK_TIMEOUT},
     put_content::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
     types::range::block_range_to_epochs,

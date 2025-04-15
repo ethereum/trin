@@ -4717,7 +4717,6 @@ version = "0.2.1"
 dependencies = [
  "alloy",
  "anyhow",
- "async-trait",
  "chrono",
  "clap",
  "delay_map 0.4.1",
@@ -4725,7 +4724,6 @@ dependencies = [
  "e2store",
  "env_logger 0.9.3",
  "eth_trie",
- "ethereum_ssz",
  "ethportal-api",
  "futures",
  "humanize-duration",

@@ -21,7 +21,7 @@ use ethportal_api::types::{
     },
 };
 use futures::Stream;
-use portal_bridge::{api::execution::ExecutionApi, bridge::utils::lookup_epoch_acc};
+use portal_bridge::api::execution::ExecutionApi;
 use ssz_types::{typenum, FixedVector, VariableList};
 use tokio::try_join;
 use tree_hash::TreeHash;
@@ -35,7 +35,10 @@ use url::Url;
 
 use crate::{
     provider::EraProvider,
-    utils::{pre_capella_execution_payload_to_header, pre_deneb_execution_payload_to_header},
+    utils::{
+        lookup_epoch_acc, pre_capella_execution_payload_to_header,
+        pre_deneb_execution_payload_to_header,
+    },
 };
 
 pub struct AllBlockData {

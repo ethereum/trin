@@ -52,8 +52,8 @@ use trin_execution::{
 use trin_metrics::bridge::BridgeMetricsReporter;
 use trin_utils::dir::{create_temp_dir, setup_data_dir};
 
+use super::constants::SERVE_BLOCK_TIMEOUT;
 use crate::{
-    bridge::history::SERVE_BLOCK_TIMEOUT,
     census::Census,
     cli::BridgeId,
     types::mode::{BridgeMode, ModeType},
@@ -103,7 +103,6 @@ impl StateBridge {
         info!("Launching state bridge: {:?}", self.mode);
         let (start_block, end_block) = match self.mode.clone() {
             // TODO: This should only gossip state trie at this block
-            BridgeMode::Single(ModeType::Block(block)) => (0, block),
             BridgeMode::Single(ModeType::BlockRange(start_block, end_block)) => (start_block, end_block),
             BridgeMode::Snapshot(snapshot_block) => {
                 self.launch_snapshot(snapshot_block)

@@ -10,6 +10,3 @@
 
 # include for vergen constants
 !/.git
-
-# include portal-accumulators, which is used in the portal-bridge Dockerfile
-!/portal-accumulators

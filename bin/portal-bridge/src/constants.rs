@@ -1,10 +1,5 @@
 use tokio::time::Duration;
 
-// This number was chosen after some experimentation with different batch sizes.
-// It was found that a batch size of 128 was the best compromise between speed and
-// successful response rate. This number may change in the future.
-pub const BATCH_SIZE: u64 = 128;
-
 /// History * content key & value
 pub const HEADER_WITH_PROOF_CONTENT_KEY: &str =
     "0x006251d65b8a8668efabe2f89c96a5b6332d83b3bbe585089ea6b2ab9b6754f5e9";
@@ -30,6 +25,3 @@ pub const DEFAULT_OFFER_LIMIT: usize = 64;
 
 // Number of seconds to wait before retrying a provider request
 pub const FALLBACK_RETRY_AFTER: Duration = Duration::from_secs(5);
-
-// Number of seconds to wait before retrying a provider request for get_receipts
-pub const GET_RECEIPTS_RETRY_AFTER: Duration = Duration::from_secs(1);
