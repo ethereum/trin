@@ -57,7 +57,7 @@ impl EraBinarySearch {
 
                 let decoded_era = Era::deserialize(&era_to_check)?;
                 if decoded_era.contains(block_number) {
-                    return process_era_file(era_to_check.to_vec(), mid);
+                    return process_era_file(&era_to_check, mid);
                 }
                 return Err(anyhow::anyhow!("Block not found in any era file"));
             }
@@ -83,7 +83,7 @@ impl EraBinarySearch {
 
                 let decoded_era = Era::deserialize(&era_to_check)?;
                 if decoded_era.contains(block_number) {
-                    return process_era_file(era_to_check.to_vec(), mid);
+                    return process_era_file(&era_to_check, mid);
                 }
             }
 

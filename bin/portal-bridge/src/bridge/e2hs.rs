@@ -1,12 +1,16 @@
 use std::{
+    collections::HashMap,
     str::FromStr,
     sync::{Arc, Mutex},
 };
 
 use alloy::primitives::B256;
-use anyhow::{anyhow, ensure};
+use anyhow::ensure;
 use clap::Parser;
-use e2store::e2hs::{BlockTuple, E2HS};
+use e2store::{
+    e2hs::{BlockTuple, E2HS},
+    utils::get_e2hs_files,
+};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
     types::execution::{
@@ -16,6 +20,10 @@ use ethportal_api::{
 };
 use futures::future::join_all;
 use rand::seq::SliceRandom;
+use reqwest::{
+    header::{HeaderMap, HeaderValue, CONTENT_TYPE},
+    Client,
+};
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
     task::JoinHandle,
@@ -32,22 +40,6 @@ use crate::{
     types::range::block_range_to_epochs,
 };
 
-/// Looks for the e2hs file for the given epoch index in a local directory.
-/// TODO: this will need to be updated to fetch files from a hosted
-/// server once we have a proper source for the files.
-fn get_e2hs_file(epoch_index: u64) -> anyhow::Result<String> {
-    let e2hs_dir = "./test-e2hs";
-    let all_files: Vec<String> = std::fs::read_dir(e2hs_dir)?
-        .filter_map(Result::ok)
-        .filter_map(|entry| entry.path().to_str().map(str::to_string))
-        .collect();
-    let e2hs_path = all_files
-        .into_iter()
-        .find(|path| path.contains(&format!("mainnet-{epoch_index:05}")))
-        .ok_or_else(|| anyhow!("Failed to find e2hs file for epoch {epoch_index}"))?;
-    Ok(e2hs_path)
-}
-
 #[derive(Debug)]
 pub struct E2HSBridge {
     portal_client: HttpClient,
@@ -56,10 +48,12 @@ pub struct E2HSBridge {
     header_validator: HeaderValidator,
     block_range: BlockRange,
     random_fill: bool,
+    e2hs_files: HashMap<u64, String>,
+    http_client: Client,
 }
 
 impl E2HSBridge {
-    pub fn new(
+    pub async fn new(
         portal_client: HttpClient,
         gossip_limit: usize,
         block_range: BlockRange,
@@ -69,6 +63,13 @@ impl E2HSBridge {
         let mode = format!("{}-{}:{}", block_range.start, block_range.end, random_fill);
         let metrics = BridgeMetricsReporter::new("e2hs".to_string(), &mode);
         let header_validator = HeaderValidator::new();
+        let http_client = Client::builder()
+            .default_headers(HeaderMap::from_iter([(
+                CONTENT_TYPE,
+                HeaderValue::from_static("application/xml"),
+            )]))
+            .build()?;
+        let e2hs_files = get_e2hs_files(&http_client).await?;
         Ok(Self {
             portal_client,
             metrics,
@@ -76,6 +77,8 @@ impl E2HSBridge {
             header_validator,
             block_range,
             random_fill,
+            e2hs_files,
+            http_client,
         })
     }
 
@@ -97,12 +100,22 @@ impl E2HSBridge {
             Some(_) => info!("Gossiping block range: {block_range:?} from epoch {epoch_index}"),
             None => info!("Gossiping entire epoch {epoch_index}"),
         }
-        let Ok(e2hs_path) = get_e2hs_file(epoch_index) else {
+        let Some(e2hs_path) = self.e2hs_files.get(&epoch_index) else {
             panic!("Failed to find e2hs file for epoch {epoch_index}");
         };
-        let raw_e2hs = std::fs::read(e2hs_path).expect("Failed to read e2hs file");
+        let raw_e2hs = self
+            .http_client
+            .get(e2hs_path.clone())
+            .send()
+            .await
+            .expect("to be able to send request")
+            .bytes()
+            .await
+            .unwrap_or_else(|err| {
+                panic!("unable to read e2hs file at path: {e2hs_path:?} : {err}")
+            });
         let mut serve_block_tuple_handles = vec![];
-        let block_stream = E2HS::iter_tuples(raw_e2hs).expect("to be able to iter tuples");
+        let block_stream = E2HS::iter_tuples(&raw_e2hs).expect("to be able to iter tuples");
         for block_tuple in block_stream {
             let block_number = block_tuple
                 .header_with_proof

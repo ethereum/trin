@@ -4,7 +4,7 @@ Process to feed the portal network by gossiping data retrieved from a trusted pr
 
 ex.
 ```sh
-cargo run -p portal-bridge -- --executable-path ./target/debug/trin
+cargo run -p portal-bridge --release -- --executable-path ./target/debug/trin
 ```
 
 ## Providers

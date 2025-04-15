@@ -342,7 +342,7 @@ pub async fn test_offer_concurrent_utp_transfer_limit(peertest: &Peertest, targe
     // this is a special-case era1 file for testing that contains the first 500 blocks
     // from this epoch.
     let era1 = fs::read("./test_assets/era1/test-mainnet-01896-xxxxxx.era1").unwrap();
-    let era1 = Era1::iter_tuples(era1);
+    let era1 = Era1::iter_tuples(&era1).unwrap();
 
     // collect keys to offer based on limit
     let tuples = era1.take(limit).collect::<Vec<_>>();

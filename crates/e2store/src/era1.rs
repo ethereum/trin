@@ -7,7 +7,7 @@ use alloy::{
     primitives::{B256, U256},
     rlp::Decodable,
 };
-use anyhow::ensure;
+use anyhow::{anyhow, ensure};
 use ethportal_api::types::execution::{block_body::BlockBody, receipts::Receipts};
 
 use crate::{
@@ -51,16 +51,19 @@ impl Era1 {
     /// Function to iterate over block tuples in an era1 file
     /// this is useful for processing large era1 files without storing the entire
     /// deserialized era1 object in memory.
-    pub fn iter_tuples(raw_era1: Vec<u8>) -> impl Iterator<Item = BlockTuple> {
-        let file = E2StoreMemory::deserialize(&raw_era1).expect("invalid era1 file");
-        let block_index =
-            Era1BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))
-                .expect("invalid block index entry")
-                .block_index;
-        (0..block_index.count).map(move |i| {
+    pub fn iter_tuples(raw_era1: &[u8]) -> anyhow::Result<impl Iterator<Item = BlockTuple>> {
+        let file = E2StoreMemory::deserialize(raw_era1)?;
+        let block_index = Era1BlockIndexEntry::try_from(
+            file.entries
+                .last()
+                .ok_or(anyhow!("missing block index entry"))?,
+        )
+        .expect("invalid block index entry")
+        .block_index;
+        Ok((0..block_index.count).map(move |i| {
             BlockTuple::try_from(&file.entries[i as usize * 4 + 1..i as usize * 4 + 5])
                 .expect("invalid block tuple")
-        })
+        }))
     }
 
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
@@ -413,7 +416,7 @@ mod tests {
         let expected = fs::read(path).unwrap();
         assert_eq!(expected, actual);
         let era1_raw_bytes = fs::read(path).unwrap();
-        let _block_tuples: Vec<BlockTuple> = Era1::iter_tuples(era1_raw_bytes).collect();
+        let _block_tuples: Vec<BlockTuple> = Era1::iter_tuples(&era1_raw_bytes).unwrap().collect();
     }
 
     #[rstest::rstest]
