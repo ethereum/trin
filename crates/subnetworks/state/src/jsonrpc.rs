@@ -67,22 +67,7 @@ impl StateRequestHandler {
                 trace_offer(network, enr, content_key, content_value).await
             }
             StateEndpoint::PutContent(content_key, content_value) => {
-                put_content(
-                    network,
-                    content_key,
-                    content_value,
-                    /* is_trace= */ false,
-                )
-                .await
-            }
-            StateEndpoint::TracePutContent(content_key, content_value) => {
-                put_content(
-                    network,
-                    content_key,
-                    content_value,
-                    /* is_trace= */ true,
-                )
-                .await
+                put_content(network, content_key, content_value).await
             }
             StateEndpoint::PaginateLocalContentKeys(offset, limit) => {
                 paginate(network, offset, limit)
@@ -337,21 +322,11 @@ async fn put_content(
     network: Arc<StateNetwork>,
     content_key: StateContentKey,
     content_value: StateContentValue,
-    is_trace: bool,
 ) -> Result<Value, String> {
-    if is_trace {
-        Ok(json!(
-            network
-                .overlay
-                .propagate_put_content_trace(content_key, content_value.encode())
-                .await
-        ))
-    } else {
-        Ok(json!(network.overlay.propagate_put_content(
-            content_key,
-            content_value.encode(),
-        )))
-    }
+    Ok(json!(network.overlay.propagate_put_content(
+        content_key,
+        content_value.encode(),
+    )))
 }
 
 fn paginate(network: Arc<StateNetwork>, offset: u64, limit: u64) -> Result<Value, String> {

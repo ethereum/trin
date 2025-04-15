@@ -80,18 +80,6 @@ pub struct PutContentInfo {
     pub stored_locally: bool,
 }
 
-/// Response for TracePutContent endpoint
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TracePutContentInfo {
-    /// List of all ENRs that were offered the content
-    pub offered: Vec<String>,
-    /// List of all ENRs that accepted the offer
-    pub accepted: Vec<String>,
-    /// List of all ENRs to whom the content was successfully transferred
-    pub transferred: Vec<String>,
-}
-
 /// Response for the FindContent endpoint
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]

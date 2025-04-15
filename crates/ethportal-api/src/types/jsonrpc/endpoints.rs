@@ -53,8 +53,6 @@ pub enum StateEndpoint {
     TraceOffer(Enr, StateContentKey, StateContentValue),
     /// params: [enr, content_key, content_value]
     PutContent(StateContentKey, StateContentValue),
-    /// params: [content_key, content_value]
-    TracePutContent(StateContentKey, StateContentValue),
     /// params: [offset, limit]
     PaginateLocalContentKeys(u64, u64),
 }
@@ -80,8 +78,6 @@ pub enum HistoryEndpoint {
     LookupEnr(NodeId),
     /// params: [content_key, content_value]
     PutContent(HistoryContentKey, HistoryContentValue),
-    /// params: [content_key, content_value]
-    TracePutContent(HistoryContentKey, HistoryContentValue),
     /// params: [enr, Vec<(content_key, content_value)>]
     Offer(Enr, Vec<(HistoryContentKey, HistoryContentValue)>),
     /// params: [enr, content_key, content_value]
@@ -136,8 +132,6 @@ pub enum BeaconEndpoint {
     LookupEnr(NodeId),
     /// params: [content_key, content_value]
     PutContent(BeaconContentKey, BeaconContentValue),
-    /// params: [content_key, content_value]
-    TracePutContent(BeaconContentKey, BeaconContentValue),
     /// params: [enr, Vec<(content_key, content_value>)]
     Offer(Enr, Vec<(BeaconContentKey, BeaconContentValue)>),
     /// params: [enr, content_key, content_value]

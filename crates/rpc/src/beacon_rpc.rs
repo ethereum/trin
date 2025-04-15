@@ -16,7 +16,7 @@ use ethportal_api::{
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
-            TracePutContentInfo, MAX_CONTENT_KEYS_PER_OFFER,
+            MAX_CONTENT_KEYS_PER_OFFER,
         },
         portal_wire::OfferTrace,
     },
@@ -191,19 +191,6 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         let content_value = BeaconContentValue::decode(&content_key, &content_value)
             .map_err(RpcServeError::from)?;
         let endpoint = BeaconEndpoint::PutContent(content_key, content_value);
-        Ok(proxy_to_subnet(&self.network, endpoint).await?)
-    }
-
-    /// Send the provided content to interested peers. Clients may choose to send to some or all
-    /// peers. Return tracing info.
-    async fn trace_put_content(
-        &self,
-        content_key: BeaconContentKey,
-        content_value: RawContentValue,
-    ) -> RpcResult<TracePutContentInfo> {
-        let content_value = BeaconContentValue::decode(&content_key, &content_value)
-            .map_err(RpcServeError::from)?;
-        let endpoint = BeaconEndpoint::TracePutContent(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

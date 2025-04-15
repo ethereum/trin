@@ -62,10 +62,7 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
         BeaconEndpoint::FindNodes(enr, distances) => find_nodes(network, enr, distances).await,
         BeaconEndpoint::GetEnr(node_id) => get_enr(network, node_id).await,
         BeaconEndpoint::PutContent(content_key, content_value) => {
-            put_content(network, content_key, content_value, false).await
-        }
-        BeaconEndpoint::TracePutContent(content_key, content_value) => {
-            put_content(network, content_key, content_value, true).await
+            put_content(network, content_key, content_value).await
         }
         BeaconEndpoint::LightClientStore => light_client_store(&network).await,
         BeaconEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
@@ -341,20 +338,11 @@ async fn put_content(
     network: Arc<BeaconNetwork>,
     content_key: BeaconContentKey,
     content_value: BeaconContentValue,
-    is_trace: bool,
 ) -> Result<Value, String> {
     let data = content_value.encode();
-    match is_trace {
-        true => Ok(json!(
-            network
-                .overlay
-                .propagate_put_content_trace(content_key, data)
-                .await
-        )),
-        false => Ok(json!(network
-            .overlay
-            .propagate_put_content(content_key, data))),
-    }
+    Ok(json!(network
+        .overlay
+        .propagate_put_content(content_key, data)))
 }
 
 /// Constructs a JSON call for the Offer method.
