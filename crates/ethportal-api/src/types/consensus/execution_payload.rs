@@ -24,7 +24,7 @@ pub type Bloom = FixedVector<u8, typenum::U256>;
 pub type ExtraData = ByteList32;
 
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Bellatrix, Capella, Deneb, Electra),
     variant_attributes(
         derive(
             Default,
@@ -70,12 +70,12 @@ pub struct ExecutionPayload {
     #[serde(serialize_with = "se_txs_to_hex")]
     #[serde(deserialize_with = "de_hex_to_txs")]
     pub transactions: Transactions,
-    #[superstruct(only(Capella, Deneb))]
+    #[superstruct(only(Capella, Deneb, Electra))]
     pub withdrawals: VariableList<Withdrawal, U16>,
-    #[superstruct(only(Deneb))]
+    #[superstruct(only(Deneb, Electra))]
     #[serde(deserialize_with = "as_u64")]
     pub blob_gas_used: u64,
-    #[superstruct(only(Deneb))]
+    #[superstruct(only(Deneb, Electra))]
     #[serde(deserialize_with = "as_u64")]
     pub excess_blob_gas: u64,
 }
@@ -88,6 +88,7 @@ impl ExecutionPayload {
             }
             ForkName::Capella => ExecutionPayloadCapella::from_ssz_bytes(bytes).map(Self::Capella),
             ForkName::Deneb => ExecutionPayloadDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
+            ForkName::Electra => ExecutionPayloadElectra::from_ssz_bytes(bytes).map(Self::Electra),
         }
     }
 }
@@ -185,7 +186,7 @@ impl From<&Withdrawal> for AlloyWithdrawal {
 }
 
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Bellatrix, Capella, Deneb, Electra),
     variant_attributes(derive(
         Default,
         Debug,
@@ -235,14 +236,14 @@ pub struct ExecutionPayloadHeader {
     pub block_hash: B256,
     #[superstruct(getter(copy))]
     pub transactions_root: B256,
-    #[superstruct(only(Capella, Deneb))]
+    #[superstruct(only(Capella, Deneb, Electra))]
     #[superstruct(getter(copy))]
     pub withdrawals_root: B256,
-    #[superstruct(only(Deneb))]
+    #[superstruct(only(Deneb, Electra))]
     #[superstruct(getter(copy))]
     #[serde(deserialize_with = "as_u64")]
     pub blob_gas_used: u64,
-    #[superstruct(only(Deneb))]
+    #[superstruct(only(Deneb, Electra))]
     #[superstruct(getter(copy))]
     #[serde(deserialize_with = "as_u64")]
     pub excess_blob_gas: u64,
@@ -258,6 +259,9 @@ impl ExecutionPayloadHeader {
                 ExecutionPayloadHeaderCapella::from_ssz_bytes(bytes).map(Self::Capella)
             }
             ForkName::Deneb => ExecutionPayloadHeaderDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
+            ForkName::Electra => {
+                ExecutionPayloadHeaderElectra::from_ssz_bytes(bytes).map(Self::Electra)
+            }
         }
     }
 }

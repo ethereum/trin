@@ -7,7 +7,7 @@ use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
 use crate::{
-    consensus::execution_payload::ExecutionPayloadHeaderDeneb,
+    consensus::execution_payload::{ExecutionPayloadHeaderDeneb, ExecutionPayloadHeaderElectra},
     types::consensus::{
         execution_payload::ExecutionPayloadHeaderCapella, fork::ForkName, header::BeaconBlockHeader,
     },
@@ -16,7 +16,7 @@ use crate::{
 pub type ExecutionBranchLen = U4;
 
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Bellatrix, Capella, Deneb, Electra),
     variant_attributes(
         derive(
             Debug,
@@ -41,7 +41,9 @@ pub struct LightClientHeader {
     pub execution: ExecutionPayloadHeaderCapella,
     #[superstruct(only(Deneb), partial_getter(rename = "execution_deneb"))]
     pub execution: ExecutionPayloadHeaderDeneb,
-    #[superstruct(only(Capella, Deneb))]
+    #[superstruct(only(Electra), partial_getter(rename = "execution_electra"))]
+    pub execution: ExecutionPayloadHeaderElectra,
+    #[superstruct(only(Capella, Deneb, Electra))]
     pub execution_branch: FixedVector<B256, ExecutionBranchLen>,
 }
 
@@ -59,6 +61,7 @@ impl LightClientHeader {
             }
             ForkName::Capella => LightClientHeaderCapella::from_ssz_bytes(bytes).map(Self::Capella),
             ForkName::Deneb => LightClientHeaderDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
+            ForkName::Electra => LightClientHeaderElectra::from_ssz_bytes(bytes).map(Self::Electra),
         }
     }
 }

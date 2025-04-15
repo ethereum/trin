@@ -6,7 +6,7 @@ use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
 use crate::{
-    light_client::header::LightClientHeaderDeneb,
+    light_client::header::{LightClientHeaderDeneb, LightClientHeaderElectra},
     types::consensus::{
         body::SyncAggregate,
         fork::ForkName,
@@ -17,7 +17,7 @@ use crate::{
 /// A LightClientOptimisticUpdate is the update we receive on each slot,
 /// it is based off the current unfinalized epoch and it is verified only against BLS signature.
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Bellatrix, Capella, Deneb, Electra),
     variant_attributes(
         derive(
             Debug,
@@ -42,6 +42,8 @@ pub struct LightClientOptimisticUpdate {
     pub attested_header: LightClientHeaderCapella,
     #[superstruct(only(Deneb), partial_getter(rename = "attested_header_deneb"))]
     pub attested_header: LightClientHeaderDeneb,
+    #[superstruct(only(Electra), partial_getter(rename = "attested_header_electra"))]
+    pub attested_header: LightClientHeaderElectra,
     /// current sync aggregate
     pub sync_aggregate: SyncAggregate,
     /// Slot of the sync aggregated signature
@@ -60,6 +62,9 @@ impl LightClientOptimisticUpdate {
             }
             ForkName::Deneb => {
                 LightClientOptimisticUpdateDeneb::from_ssz_bytes(bytes).map(Self::Deneb)
+            }
+            ForkName::Electra => {
+                LightClientOptimisticUpdateElectra::from_ssz_bytes(bytes).map(Self::Electra)
             }
         }
     }

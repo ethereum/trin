@@ -9,7 +9,10 @@ use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
 use crate::consensus::{
-    body::{BeaconBlockBodyBellatrix, BeaconBlockBodyCapella, BeaconBlockBodyDeneb},
+    body::{
+        BeaconBlockBodyBellatrix, BeaconBlockBodyCapella, BeaconBlockBodyDeneb,
+        BeaconBlockBodyElectra,
+    },
     fork::ForkName,
     proof::build_merkle_proof_for_index,
     signature::BlsSignature,
@@ -17,7 +20,7 @@ use crate::consensus::{
 
 /// A block of the `BeaconChain`.
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Bellatrix, Capella, Deneb, Electra),
     variant_attributes(
         derive(
             Debug,
@@ -57,6 +60,8 @@ pub struct BeaconBlock {
     pub body: BeaconBlockBodyCapella,
     #[superstruct(only(Deneb), partial_getter(rename = "body_deneb"))]
     pub body: BeaconBlockBodyDeneb,
+    #[superstruct(only(Electra), partial_getter(rename = "body_electra"))]
+    pub body: BeaconBlockBodyElectra,
 }
 
 impl BeaconBlock {
@@ -65,6 +70,7 @@ impl BeaconBlock {
             ForkName::Bellatrix => BeaconBlockBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix),
             ForkName::Capella => BeaconBlockCapella::from_ssz_bytes(bytes).map(Self::Capella),
             ForkName::Deneb => BeaconBlockDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
+            ForkName::Electra => BeaconBlockElectra::from_ssz_bytes(bytes).map(Self::Electra),
         }
     }
 }
@@ -126,7 +132,7 @@ impl BeaconBlockDeneb {
 
 /// A `BeaconBlock` and a signature from its proposer.
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Bellatrix, Capella, Deneb, Electra),
     variant_attributes(derive(
         Debug,
         Clone,
@@ -149,6 +155,8 @@ pub struct SignedBeaconBlock {
     pub message: BeaconBlockCapella,
     #[superstruct(only(Deneb), partial_getter(rename = "message_deneb"))]
     pub message: BeaconBlockDeneb,
+    #[superstruct(only(Electra), partial_getter(rename = "message_electra"))]
+    pub message: BeaconBlockElectra,
     pub signature: BlsSignature,
 }
 
@@ -191,6 +199,9 @@ impl SignedBeaconBlock {
             BeaconBlock::Deneb(message) => {
                 SignedBeaconBlock::Deneb(SignedBeaconBlockDeneb { message, signature })
             }
+            BeaconBlock::Electra(message) => {
+                SignedBeaconBlock::Electra(SignedBeaconBlockElectra { message, signature })
+            }
         }
     }
 
@@ -200,6 +211,7 @@ impl SignedBeaconBlock {
             SignedBeaconBlock::Bellatrix(block) => block.message.slot,
             SignedBeaconBlock::Capella(block) => block.message.slot,
             SignedBeaconBlock::Deneb(block) => block.message.slot,
+            SignedBeaconBlock::Electra(block) => block.message.slot,
         }
     }
 
@@ -211,6 +223,7 @@ impl SignedBeaconBlock {
             }
             SignedBeaconBlock::Capella(block) => block.message.body.execution_payload.block_number,
             SignedBeaconBlock::Deneb(block) => block.message.body.execution_payload.block_number,
+            SignedBeaconBlock::Electra(block) => block.message.body.execution_payload.block_number,
         }
     }
 }

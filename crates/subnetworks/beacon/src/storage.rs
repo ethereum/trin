@@ -431,6 +431,20 @@ impl BeaconStorage {
                             bootstrap_header.beacon.tree_hash_root(),
                         )
                     }
+                    ForkName::Electra => {
+                        let bootstrap_header = bootstrap.bootstrap.header_electra().map_err(|err| {
+                            ContentStoreError::InvalidData {
+                                message: format!(
+                                    "Error getting header from electra ForkVersionedLightClientBootstrap value: {err:?}"
+                                ),
+                            }
+                        })?;
+
+                        (
+                            bootstrap_header.beacon.slot,
+                            bootstrap_header.beacon.tree_hash_root(),
+                        )
+                    }
                 };
 
                 if let Err(err) = self.db_insert_lc_bootstrap(&block_root, value, slot) {

@@ -4,23 +4,26 @@ use ef_tests::test_consensus_type;
 use ethportal_api::{
     consensus::{
         beacon_block::{
-            BeaconBlockBellatrix, BeaconBlockCapella, BeaconBlockDeneb, SignedBeaconBlockBellatrix,
-            SignedBeaconBlockCapella, SignedBeaconBlockDeneb,
+            BeaconBlockBellatrix, BeaconBlockCapella, BeaconBlockDeneb, BeaconBlockElectra,
+            SignedBeaconBlockBellatrix, SignedBeaconBlockCapella, SignedBeaconBlockDeneb,
+            SignedBeaconBlockElectra,
         },
         beacon_state::{
-            BeaconStateBellatrix, BeaconStateCapella, BeaconStateDeneb, Fork, HistoricalBatch,
-            Validator,
+            BeaconStateBellatrix, BeaconStateCapella, BeaconStateDeneb, BeaconStateElectra, Fork,
+            HistoricalBatch, Validator,
         },
         body::{
             Attestation, AttestationData, AttesterSlashing, BLSToExecutionChange,
-            BeaconBlockBodyBellatrix, BeaconBlockBodyCapella, BeaconBlockBodyDeneb, Checkpoint,
-            Deposit, DepositData, Eth1Data, IndexedAttestation, ProposerSlashing,
-            SignedBLSToExecutionChange, SignedVoluntaryExit, SyncAggregate, VoluntaryExit,
+            BeaconBlockBodyBellatrix, BeaconBlockBodyCapella, BeaconBlockBodyDeneb,
+            BeaconBlockBodyElectra, Checkpoint, Deposit, DepositData, Eth1Data, IndexedAttestation,
+            ProposerSlashing, SignedBLSToExecutionChange, SignedVoluntaryExit, SyncAggregate,
+            VoluntaryExit,
         },
         execution_payload::{
             ExecutionPayloadBellatrix, ExecutionPayloadCapella, ExecutionPayloadDeneb,
-            ExecutionPayloadHeaderBellatrix, ExecutionPayloadHeaderCapella,
-            ExecutionPayloadHeaderDeneb, Withdrawal,
+            ExecutionPayloadElectra, ExecutionPayloadHeaderBellatrix,
+            ExecutionPayloadHeaderCapella, ExecutionPayloadHeaderDeneb,
+            ExecutionPayloadHeaderElectra, Withdrawal,
         },
         fork::ForkName,
         header::BeaconBlockHeader,
@@ -30,17 +33,24 @@ use ethportal_api::{
     light_client::{
         bootstrap::{
             LightClientBootstrapBellatrix, LightClientBootstrapCapella, LightClientBootstrapDeneb,
+            LightClientBootstrapElectra,
         },
         finality_update::{
             LightClientFinalityUpdateBellatrix, LightClientFinalityUpdateCapella,
-            LightClientFinalityUpdateDeneb,
+            LightClientFinalityUpdateDeneb, LightClientFinalityUpdateElectra,
         },
-        header::{LightClientHeaderBellatrix, LightClientHeaderCapella, LightClientHeaderDeneb},
+        header::{
+            LightClientHeaderBellatrix, LightClientHeaderCapella, LightClientHeaderDeneb,
+            LightClientHeaderElectra,
+        },
         optimistic_update::{
             LightClientOptimisticUpdateBellatrix, LightClientOptimisticUpdateCapella,
-            LightClientOptimisticUpdateDeneb,
+            LightClientOptimisticUpdateDeneb, LightClientOptimisticUpdateElectra,
         },
-        update::{LightClientUpdateBellatrix, LightClientUpdateCapella, LightClientUpdateDeneb},
+        update::{
+            LightClientUpdateBellatrix, LightClientUpdateCapella, LightClientUpdateDeneb,
+            LightClientUpdateElectra,
+        },
     },
 };
 
@@ -107,3 +117,16 @@ test_consensus_type!(LightClientHeaderDeneb, ForkName::Deneb);
 test_consensus_type!(LightClientOptimisticUpdateDeneb, ForkName::Deneb);
 test_consensus_type!(LightClientUpdateDeneb, ForkName::Deneb);
 test_consensus_type!(SignedBeaconBlockDeneb, ForkName::Deneb);
+
+// Electra types
+test_consensus_type!(BeaconBlockElectra, ForkName::Electra);
+test_consensus_type!(BeaconBlockBodyElectra, ForkName::Electra);
+test_consensus_type!(BeaconStateElectra, ForkName::Electra);
+test_consensus_type!(ExecutionPayloadElectra, ForkName::Electra);
+test_consensus_type!(ExecutionPayloadHeaderElectra, ForkName::Electra);
+test_consensus_type!(LightClientBootstrapElectra, ForkName::Electra);
+test_consensus_type!(LightClientFinalityUpdateElectra, ForkName::Electra);
+test_consensus_type!(LightClientHeaderElectra, ForkName::Electra);
+test_consensus_type!(LightClientOptimisticUpdateElectra, ForkName::Electra);
+test_consensus_type!(LightClientUpdateElectra, ForkName::Electra);
+test_consensus_type!(SignedBeaconBlockElectra, ForkName::Electra);
