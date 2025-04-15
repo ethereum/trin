@@ -13,8 +13,7 @@ use ethportal_api::{
     types::{
         network::Subnetwork, portal_wire::OfferTrace, state_trie::account_state::AccountState,
     },
-    ContentValue, Enr, OverlayContentKey, StateContentKey, StateContentValue,
-    StateNetworkApiClient,
+    ContentValue, OverlayContentKey, StateContentKey, StateContentValue, StateNetworkApiClient,
 };
 use humanize_duration::{prelude::DurationExt, Truncate};
 use reqwest::{
@@ -27,7 +26,7 @@ use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
     time::timeout,
 };
-use tracing::{debug, enabled, error, info, warn, Level};
+use tracing::{error, info, warn};
 use trin_evm::spec_id::get_spec_block_number;
 use trin_execution::{
     cli::{ImportStateConfig, APP_NAME},
@@ -52,7 +51,10 @@ use trin_execution::{
 use trin_metrics::bridge::BridgeMetricsReporter;
 use trin_utils::dir::{create_temp_dir, setup_data_dir};
 
-use super::constants::SERVE_BLOCK_TIMEOUT;
+use super::{
+    constants::SERVE_BLOCK_TIMEOUT,
+    offer_report::{GlobalOfferReport, OfferReport},
+};
 use crate::{
     census::Census,
     cli::BridgeId,
@@ -63,14 +65,14 @@ pub struct StateBridge {
     mode: BridgeMode,
     portal_client: HttpClient,
     metrics: BridgeMetricsReporter,
-    // Semaphore used to limit the amount of active offer transfers
-    // to make sure we don't overwhelm the trin client
+    /// Semaphore used to limit the amount of active offer transfers
+    /// to make sure we don't overwhelm the trin client
     offer_semaphore: Arc<Semaphore>,
-    // Used to request all interested enrs in the network.
+    /// Used to request all interested enrs in the network.
     census: Census,
-    // Global offer report for tallying total performance of state bridge
+    /// Global offer report for tallying total performance of state bridge
     global_offer_report: Arc<Mutex<GlobalOfferReport>>,
-    // Bridge id used to determine which content keys to gossip
+    /// Bridge id used to determine which content keys to gossip
     bridge_id: BridgeId,
     data_dir: Option<PathBuf>,
 }
@@ -86,14 +88,14 @@ impl StateBridge {
     ) -> anyhow::Result<Self> {
         let metrics = BridgeMetricsReporter::new("state".to_string(), &format!("{mode:?}"));
         let offer_semaphore = Arc::new(Semaphore::new(offer_limit));
-        let global_offer_report = GlobalOfferReport::default();
+        let global_offer_report = Arc::new(Mutex::new(GlobalOfferReport::default()));
         Ok(Self {
             mode,
             portal_client,
             metrics,
             offer_semaphore,
             census,
-            global_offer_report: Arc::new(Mutex::new(global_offer_report)),
+            global_offer_report,
             bridge_id,
             data_dir,
         })
@@ -603,98 +605,5 @@ impl StateBridge {
             .acquire_owned()
             .await
             .expect("to be able to acquire semaphore")
-    }
-}
-
-/// Global report for outcomes of offering state content keys from long-running state bridge
-#[derive(Default)]
-struct GlobalOfferReport {
-    success: usize,
-    failed: usize,
-    declined: usize,
-}
-
-impl GlobalOfferReport {
-    fn update(&mut self, trace: &OfferTrace) {
-        match trace {
-            OfferTrace::Success(_) => self.success += 1,
-            OfferTrace::Failed => self.failed += 1,
-            OfferTrace::Declined => self.declined += 1,
-        }
-    }
-
-    fn report(&self) {
-        let total = self.success + self.failed + self.declined;
-        if total == 0 {
-            return;
-        }
-        info!(
-            "State offer report: Total Offers: {}. Successful: {}% ({}). Declined: {}% ({}). Failed: {}% ({}).",
-            total,
-            100 * self.success / total,
-            self.success,
-            100 * self.declined / total,
-            self.declined,
-            100 * self.failed / total,
-            self.failed,
-        );
-    }
-}
-
-/// Individual report for outcomes of offering a state content key
-struct OfferReport {
-    content_key: StateContentKey,
-    /// total number of enrs interested in the content key
-    total: usize,
-    success: Vec<Enr>,
-    failed: Vec<Enr>,
-    declined: Vec<Enr>,
-}
-
-impl OfferReport {
-    fn new(content_key: StateContentKey, total: usize) -> Self {
-        Self {
-            content_key,
-            total,
-            success: Vec::new(),
-            failed: Vec::new(),
-            declined: Vec::new(),
-        }
-    }
-
-    fn update(&mut self, enr: &Enr, trace: &OfferTrace) {
-        match trace {
-            // since the state bridge only offers one content key at a time,
-            // we can assume that a successful offer means the lone content key
-            // was successfully offered
-            OfferTrace::Success(_) => self.success.push(enr.clone()),
-            OfferTrace::Failed => self.failed.push(enr.clone()),
-            OfferTrace::Declined => self.declined.push(enr.clone()),
-        }
-        if self.total == self.success.len() + self.failed.len() + self.declined.len() {
-            self.report();
-        }
-    }
-
-    fn report(&self) {
-        if enabled!(Level::DEBUG) {
-            debug!(
-                "Successfully offered to {}/{} peers. Content key: {}. Declined: {:?}. Failed: {:?}",
-                self.success.len(),
-                self.total,
-                self.content_key.to_hex(),
-                self.declined,
-                self.failed,
-            );
-        } else {
-            info!(
-                "Successfully offered to {}/{} peers. Content key: {}. Declined: {}. Failed: {}.",
-                self.success.len(),
-                self.total,
-                self.content_key.to_hex(),
-                self.declined.len(),
-                self.failed.len(),
-            );
-        }
     }
 }

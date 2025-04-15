@@ -39,94 +39,88 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build(web3_http_address.clone())
         .map_err(|e| e.to_string())?;
 
-    let mut bridge_tasks = Vec::new();
-    let mut census_handle = None;
+    let census_handle = match bridge_config.portal_subnetwork {
+        Subnetwork::Beacon => {
+            // Create and initialize the census to acquire critical view of network before gossiping
+            let mut census = Census::new(portal_client.clone(), &bridge_config);
+            let census_handle = census.init([Subnetwork::Beacon]).await?;
 
-    // Launch State Network portal bridge
-    if bridge_config
-        .portal_subnetworks
-        .contains(&Subnetwork::State)
-    {
-        // Create and initialize the census to acquire critical view of network before gossiping
-        let mut census = Census::new(portal_client.clone(), &bridge_config);
-        census_handle = Some(census.init([Subnetwork::State]).await?);
-
-        let state_bridge = StateBridge::new(
-            bridge_config.mode.clone(),
-            portal_client.clone(),
-            bridge_config.offer_limit,
-            census,
-            bridge_config.bridge_id,
-            bridge_config.data_dir,
-        )
-        .await?;
-
-        state_bridge
-            .launch()
-            .instrument(tracing::trace_span!("state"))
-            .await;
-    } else {
-        // Launch Beacon Network portal bridge
-        if bridge_config
-            .portal_subnetworks
-            .contains(&Subnetwork::Beacon)
-        {
             let bridge_mode = bridge_config.mode.clone();
             let consensus_api = ConsensusApi::new(
-                bridge_config.cl_provider,
-                bridge_config.cl_provider_fallback,
+                bridge_config.cl_provider.clone(),
+                bridge_config.cl_provider_fallback.clone(),
                 bridge_config.request_timeout,
             )
             .await?;
             let portal_client_clone = portal_client.clone();
-            let bridge_handle = tokio::spawn(async move {
-                let beacon_bridge =
-                    BeaconBridge::new(consensus_api, bridge_mode, portal_client_clone);
+            let beacon_bridge =
+                BeaconBridge::new(consensus_api, bridge_mode, portal_client_clone, census);
 
-                beacon_bridge
-                    .launch()
-                    .instrument(tracing::trace_span!("beacon"))
-                    .await;
-            });
-
-            bridge_tasks.push(bridge_handle);
+            beacon_bridge
+                .launch()
+                .instrument(tracing::trace_span!("beacon"))
+                .await;
+            census_handle
         }
-
-        // Launch History Network portal bridge
-        if bridge_config
-            .portal_subnetworks
-            .contains(&Subnetwork::History)
-        {
+        Subnetwork::History => {
             match bridge_config.mode {
                 BridgeMode::E2HS => {
-                    let Some(e2hs_range) = bridge_config.e2hs_range else {
+                    let Some(e2hs_range) = bridge_config.e2hs_range.clone() else {
                         panic!("e2hs_range must be set for E2HS mode");
                     };
+                    // Create and initialize the census to acquire critical view of network before
+                    // gossiping
+                    let mut census = Census::new(portal_client.clone(), &bridge_config);
+                    let census_handle = census.init([Subnetwork::History]).await?;
+
                     let e2hs_bridge = E2HSBridge::new(
                         portal_client,
-                        bridge_config.gossip_limit,
+                        bridge_config.offer_limit,
                         e2hs_range,
                         bridge_config.e2hs_randomize,
+                        census,
                     )
                     .await?;
-                    let bridge_handle = tokio::spawn(async move {
-                        e2hs_bridge
-                            .launch()
-                            .instrument(tracing::trace_span!("history(e2hs)"))
-                            .await;
-                    });
-                    bridge_tasks.push(bridge_handle);
+                    e2hs_bridge
+                        .launch()
+                        .instrument(tracing::trace_span!("history(e2hs)"))
+                        .await;
+                    census_handle
                 }
                 _ => panic!("Unsupported bridge mode for History network"),
             }
         }
-    }
+        Subnetwork::State => {
+            // Create and initialize the census to acquire critical view of network before gossiping
+            let mut census = Census::new(portal_client.clone(), &bridge_config);
+            let census_handle = census.init([Subnetwork::State]).await?;
 
-    futures::future::join_all(bridge_tasks).await;
+            let state_bridge = StateBridge::new(
+                bridge_config.mode.clone(),
+                portal_client.clone(),
+                bridge_config.offer_limit,
+                census,
+                bridge_config.bridge_id,
+                bridge_config.data_dir,
+            )
+            .await?;
+
+            state_bridge
+                .launch()
+                .instrument(tracing::trace_span!("state"))
+                .await;
+            census_handle
+        }
+        _ => {
+            panic!(
+                "Unsupported portal subnetwork: {:?}",
+                bridge_config.portal_subnetwork
+            );
+        }
+    };
+
     drop(handle);
-    if let Some(census_handle) = census_handle {
-        census_handle.abort();
-        drop(census_handle);
-    }
+    census_handle.abort();
+    drop(census_handle);
     Ok(())
 }

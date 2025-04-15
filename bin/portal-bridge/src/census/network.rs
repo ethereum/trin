@@ -72,7 +72,7 @@ impl Default for NetworkInitializationConfig {
 ///
 /// The [Network::init] should be used to initialize our view of the network, and [NetworkManager]
 /// should be used in a background task to keep it up-to-date.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(super) struct Network {
     peers: Peers<AdditiveWeight>,
     client: HttpClient,

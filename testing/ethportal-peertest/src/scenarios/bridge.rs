@@ -1,9 +1,9 @@
 use ethportal_api::{
-    jsonrpsee::http_client::HttpClient, BeaconContentKey, BeaconContentValue, ContentValue,
-    RawContentValue,
+    jsonrpsee::http_client::HttpClient, types::network::Subnetwork, BeaconContentKey,
+    BeaconContentValue, ContentValue, RawContentValue,
 };
 use portal_bridge::{
-    api::consensus::ConsensusApi, bridge::beacon::BeaconBridge,
+    api::consensus::ConsensusApi, bridge::beacon::BeaconBridge, census::Census, cli::BridgeConfig,
     constants::DEFAULT_TOTAL_REQUEST_TIMEOUT, types::mode::BridgeMode,
 };
 use serde::Deserialize;
@@ -26,7 +26,9 @@ pub async fn test_beacon_bridge(peertest: &Peertest, portal_client: &HttpClient)
     )
     .await
     .unwrap();
-    let bridge = BeaconBridge::new(consensus_api, mode, portal_client.clone());
+    let mut census = Census::new(portal_client.clone(), &BridgeConfig::default());
+    let census_handle = census.init([Subnetwork::Beacon]).await.unwrap();
+    let bridge = BeaconBridge::new(consensus_api, mode, portal_client.clone(), census);
     bridge.launch().await;
 
     let value = std::fs::read_to_string("./../../test_assets/portalnet/beacon_bridge_data.yaml")
@@ -43,4 +45,6 @@ pub async fn test_beacon_bridge(peertest: &Peertest, portal_client: &HttpClient)
         content_value, received_content_value,
         "The received beacon content {received_content_value:?}, must match the expected {content_value:?}",
     );
+    census_handle.abort();
+    drop(census_handle);
 }

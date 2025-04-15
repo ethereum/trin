@@ -24,7 +24,7 @@ use url::Url;
 use crate::{
     bridge::e2hs::BlockRange,
     census::ENR_OFFER_LIMIT,
-    constants::{DEFAULT_GOSSIP_LIMIT, DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
+    constants::{DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
     types::mode::BridgeMode,
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
     FALLBACK_BASE_EL_ENDPOINT,
@@ -65,7 +65,7 @@ pub struct BridgeConfig {
         default_value = DEFAULT_SUBNETWORK,
         value_parser = subnetwork_parser,
     )]
-    pub portal_subnetworks: Arc<Vec<Subnetwork>>,
+    pub portal_subnetwork: Subnetwork,
 
     #[arg(
             long = "network",
@@ -151,13 +151,6 @@ pub struct BridgeConfig {
     pub base_rpc_port: u16,
 
     #[arg(
-        default_value_t = DEFAULT_GOSSIP_LIMIT,
-        long = "gossip-limit",
-        help = "The maximum number of active blocks being gossiped."
-    )]
-    pub gossip_limit: usize,
-
-    #[arg(
         default_value_t = DEFAULT_OFFER_LIMIT,
         long = "offer-limit",
         help = "The maximum number of concurrent offer rpc requests. (STATE BRIDGE ONLY)"
@@ -197,6 +190,41 @@ pub struct BridgeConfig {
         help = "The directory for storing trin-execution data, useful for storing state in non standard locations."
     )]
     pub data_dir: Option<PathBuf>,
+}
+
+impl Default for BridgeConfig {
+    fn default() -> Self {
+        Self {
+            executable_path: PathBuf::from(DEFAULT_EXECUTABLE_PATH),
+            mode: BridgeMode::Latest,
+            e2hs_range: None,
+            e2hs_randomize: false,
+            portal_subnetwork: subnetwork_parser(DEFAULT_SUBNETWORK)
+                .expect("Failed to parse default subnetwork"),
+            network: network_parser(DEFAULT_NETWORK).expect("Failed to parse default network"),
+            metrics_url: None,
+            client_metrics_url: None,
+            bootnodes: "default".to_owned(),
+            external_ip: None,
+            private_key: B256::random(),
+            el_provider: Url::parse(DEFAULT_BASE_EL_ENDPOINT)
+                .expect("Failed to parse default el provider"),
+            el_provider_fallback: Url::parse(FALLBACK_BASE_EL_ENDPOINT)
+                .expect("Failed to parse default el provider fallback"),
+            cl_provider: Url::parse(DEFAULT_BASE_CL_ENDPOINT)
+                .expect("Failed to parse default cl provider"),
+            cl_provider_fallback: Url::parse(FALLBACK_BASE_CL_ENDPOINT)
+                .expect("Failed to parse default cl provider fallback"),
+            base_discovery_port: DEFAULT_DISCOVERY_PORT,
+            base_rpc_port: DEFAULT_WEB3_HTTP_PORT,
+            offer_limit: DEFAULT_OFFER_LIMIT,
+            enr_offer_limit: ENR_OFFER_LIMIT,
+            filter_clients: Vec::new(),
+            request_timeout: DEFAULT_TOTAL_REQUEST_TIMEOUT,
+            bridge_id: BridgeId { id: 1, total: 1 },
+            data_dir: None,
+        }
+    }
 }
 
 /// Used to identify the bridge amongst a set of bridges,
@@ -374,15 +402,13 @@ impl ClientWithBaseUrl {
 }
 
 // parser for subnetworks, makes sure that the state network is not ran alongside other subnetworks
-fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>, String> {
-    let active_subnetworks: Vec<Subnetwork> = subnetwork_string
-        .split(',')
-        .map(Subnetwork::from_str)
-        .collect::<Result<Vec<Subnetwork>, String>>()?;
-    if active_subnetworks.contains(&Subnetwork::State) && active_subnetworks.len() > 1 {
-        return Err("The State network doesn't support being ran with other subnetwork bridges at the same time".to_string());
+fn subnetwork_parser(subnetwork_string: &str) -> Result<Subnetwork, String> {
+    match subnetwork_string {
+        "history" => Ok(Subnetwork::History),
+        "beacon" => Ok(Subnetwork::Beacon),
+        "state" => Ok(Subnetwork::State),
+        _ => Err(format!("Unknown subnetwork: {subnetwork_string}")),
     }
-    Ok(Arc::new(active_subnetworks))
 }
 
 #[cfg(test)]
@@ -397,7 +423,7 @@ mod test {
             "--executable-path",
             EXECUTABLE_PATH,
             "--portal-subnetworks",
-            "history,beacon",
+            "history",
         ]);
         assert_eq!(
             bridge_config.executable_path,
@@ -420,10 +446,7 @@ mod test {
             bridge_config.cl_provider_fallback.to_string(),
             FALLBACK_BASE_CL_ENDPOINT
         );
-        assert_eq!(
-            bridge_config.portal_subnetworks,
-            vec![Subnetwork::History, Subnetwork::Beacon].into()
-        );
+        assert_eq!(bridge_config.portal_subnetwork, Subnetwork::History);
     }
 
     #[test]
@@ -442,10 +465,7 @@ mod test {
             PathBuf::from(EXECUTABLE_PATH)
         );
         assert_eq!(bridge_config.mode, BridgeMode::Snapshot(60));
-        assert_eq!(
-            bridge_config.portal_subnetworks,
-            vec![Subnetwork::History].into()
-        );
+        assert_eq!(bridge_config.portal_subnetwork, Subnetwork::History);
     }
 
     #[test]

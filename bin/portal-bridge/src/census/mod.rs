@@ -39,7 +39,7 @@ pub const ENR_OFFER_LIMIT: usize = 2;
 /// The census is responsible for maintaining a list of known peers in the network,
 /// checking their liveness, updating their data radius, iterating through their
 /// rfn to find new peers, and providing interested enrs for a given content id.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Census {
     history: Network,
     state: Network,

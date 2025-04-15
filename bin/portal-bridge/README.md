@@ -42,12 +42,11 @@ cargo run -p portal-bridge --release -- --executable-path ./target/debug/trin
 
 ### Subnetwork configuration
 
-You can specify the `--portal-subnetworks` flag for which network to run the bridge for
-- `"--portal-subnetworks history"`: Default value. Run the bridge for the history network.
-- `"--portal-subnetworks beacon"`: Run the bridge for the beacon network.
-- `"--portal-subnetworks history,beacon"`: Run the bridge for the history & beacon network.
-- `"--portal-subnetworks state"`: Run the bridge for the state network.
-    - Currently, the `"state"` network can only be run by itself!
+You can specify the `--portal-subnetwork` flag for which network to run the bridge for
+- `"--portal-subnetwork history"`: Default value. Run the bridge for the history network.
+- `"--portal-subnetwork beacon"`: Run the bridge for the beacon network.
+- `"--portal-subnetwork state"`: Run the bridge for the state network.
+Any pre-required subnetworks will automatically be enabled
 
 ### Test File example
 

@@ -7,8 +7,6 @@ pub mod census;
 pub mod cli;
 pub mod constants;
 pub mod handle;
-pub mod put_content;
-pub mod stats;
 pub mod types;
 pub mod utils;
 
