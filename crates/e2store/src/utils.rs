@@ -54,36 +54,13 @@ async fn download_e2store_links(
 
 pub async fn get_era_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
     let era_files = download_e2store_links(http_client, ERA_DIR_URL).await?;
-    ensure!(!era_files.is_empty(), "No era files found at {ERA_DIR_URL}");
-    let missing_epochs: Vec<String> = (0..era_files.len())
-        .filter(|&epoch_num| !era_files.contains_key(&(epoch_num as u64)))
-        .map(|epoch_num| epoch_num.to_string())
-        .collect();
-
-    ensure!(
-        missing_epochs.is_empty(),
-        "Epoch indices are not starting from zero or not consecutive: missing epochs [{}]",
-        missing_epochs.join(", ")
-    );
+    assert_nonempty_and_consecutive_epochs(&era_files)?;
     Ok(era_files)
 }
 
 pub async fn get_e2hs_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
     let e2hs_files = download_e2store_links(http_client, E2HS_DIR_URL).await?;
-    ensure!(
-        !e2hs_files.is_empty(),
-        "No e2hs files found at {ERA_DIR_URL}"
-    );
-    let missing_epochs: Vec<String> = (0..e2hs_files.len())
-        .filter(|&epoch_num| !e2hs_files.contains_key(&(epoch_num as u64)))
-        .map(|epoch_num| epoch_num.to_string())
-        .collect();
-
-    ensure!(
-        missing_epochs.is_empty(),
-        "Epoch indices are not starting from zero or not consecutive: missing epochs [{}]",
-        missing_epochs.join(", ")
-    );
+    assert_nonempty_and_consecutive_epochs(&e2hs_files)?;
     Ok(e2hs_files)
 }
 
@@ -97,8 +74,19 @@ pub async fn get_era1_files(http_client: &Client) -> anyhow::Result<HashMap<u64,
             era1_files.len()
         )
     );
-    let missing_epochs: Vec<String> = (0..ERA1_FILE_COUNT)
-        .filter(|&epoch_num| !era1_files.contains_key(&(epoch_num as u64)))
+    assert_nonempty_and_consecutive_epochs(&era1_files)?;
+    Ok(era1_files)
+}
+
+pub async fn get_e2ss_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
+    let e2ss_files = download_e2store_links(http_client, E2SS_DIR_URL).await?;
+    Ok(e2ss_files)
+}
+
+fn assert_nonempty_and_consecutive_epochs(files: &HashMap<u64, String>) -> anyhow::Result<()> {
+    ensure!(!files.is_empty(), "No e2store files found at {ERA_DIR_URL}");
+    let missing_epochs: Vec<String> = (0..files.len())
+        .filter(|&epoch_num| !files.contains_key(&(epoch_num as u64)))
         .map(|epoch_num| epoch_num.to_string())
         .collect();
 
@@ -107,12 +95,7 @@ pub async fn get_era1_files(http_client: &Client) -> anyhow::Result<HashMap<u64,
         "Epoch indices are not starting from zero or not consecutive: missing epochs [{}]",
         missing_epochs.join(", ")
     );
-    Ok(era1_files)
-}
-
-pub async fn get_e2ss_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
-    let e2ss_files = download_e2store_links(http_client, E2SS_DIR_URL).await?;
-    Ok(e2ss_files)
+    Ok(())
 }
 
 /// Fetches era1 files hosted on era1.ethportal.net and shuffles them
