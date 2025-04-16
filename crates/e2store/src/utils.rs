@@ -72,7 +72,7 @@ pub async fn get_e2hs_files(http_client: &Client) -> anyhow::Result<HashMap<u64,
     let e2hs_files = download_e2store_links(http_client, E2HS_DIR_URL).await?;
     ensure!(
         !e2hs_files.is_empty(),
-        "No era files found at {ERA_DIR_URL}"
+        "No e2hs files found at {ERA_DIR_URL}"
     );
     let missing_epochs: Vec<String> = (0..e2hs_files.len())
         .filter(|&epoch_num| !e2hs_files.contains_key(&(epoch_num as u64)))
@@ -97,9 +97,15 @@ pub async fn get_era1_files(http_client: &Client) -> anyhow::Result<HashMap<u64,
             era1_files.len()
         )
     );
+    let missing_epochs: Vec<String> = (0..ERA1_FILE_COUNT)
+        .filter(|&epoch_num| !era1_files.contains_key(&(epoch_num as u64)))
+        .map(|epoch_num| epoch_num.to_string())
+        .collect();
+
     ensure!(
-        (0..ERA1_FILE_COUNT).all(|epoch| era1_files.contains_key(&(epoch as u64))),
-        "Epoch indices are not starting from zero or not consecutive",
+        missing_epochs.is_empty(),
+        "Epoch indices are not starting from zero or not consecutive: missing epochs [{}]",
+        missing_epochs.join(", ")
     );
     Ok(era1_files)
 }
