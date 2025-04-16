@@ -17,9 +17,9 @@ use crate::era::{
     types::{EraType, ProcessedBlock, TransactionsWithSender},
 };
 
-pub fn process_era1_file(raw_era1: Vec<u8>, epoch_index: u64) -> anyhow::Result<ProcessedEra> {
+pub fn process_era1_file(raw_era1: &[u8], epoch_index: u64) -> anyhow::Result<ProcessedEra> {
     let mut blocks = Vec::with_capacity(BLOCK_TUPLE_COUNT);
-    for BlockTuple { header, body, .. } in Era1::iter_tuples(raw_era1) {
+    for BlockTuple { header, body, .. } in Era1::iter_tuples(raw_era1)? {
         let transactions_with_recovered_senders = body
             .body
             .transactions
@@ -50,7 +50,7 @@ pub fn process_era1_file(raw_era1: Vec<u8>, epoch_index: u64) -> anyhow::Result<
     })
 }
 
-pub fn process_era_file(raw_era: Vec<u8>, epoch_index: u64) -> anyhow::Result<ProcessedEra> {
+pub fn process_era_file(raw_era: &[u8], epoch_index: u64) -> anyhow::Result<ProcessedEra> {
     let blocks = Era::iter_blocks(raw_era)?
         .map(|compressed_block| {
             Ok(compressed_block

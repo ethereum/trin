@@ -59,8 +59,8 @@ impl E2HS {
     /// Function to iterate over block tuples in an e2hs file
     /// this is useful for processing large e2hs files without storing the entire
     /// deserialized e2hs object in memory.
-    pub fn iter_tuples(raw_e2hs: Vec<u8>) -> anyhow::Result<impl Iterator<Item = BlockTuple>> {
-        let file = E2StoreMemory::deserialize(&raw_e2hs)?;
+    pub fn iter_tuples(raw_e2hs: &[u8]) -> anyhow::Result<impl Iterator<Item = BlockTuple>> {
+        let file = E2StoreMemory::deserialize(raw_e2hs)?;
         let last_entry = file.entries.last().ok_or(anyhow!(
             "invalid e2hs file found during iter: missing block index entry"
         ))?;

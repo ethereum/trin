@@ -128,8 +128,8 @@ impl EraManager {
             };
             let raw_era = download_raw_era(next_era_path, http_client.clone()).await?;
             match next_era_type {
-                EraType::Era1 => process_era1_file(raw_era.to_vec(), next_epoch_index),
-                EraType::Era => process_era_file(raw_era.to_vec(), next_epoch_index),
+                EraType::Era1 => process_era1_file(&raw_era, next_epoch_index),
+                EraType::Era => process_era_file(&raw_era, next_epoch_index),
             }
         });
         self.next_era = Some(join_handle);
@@ -149,7 +149,7 @@ impl EraManager {
             };
             let raw_era1 = download_raw_era(era1_path, http_client.clone()).await?;
 
-            return process_era1_file(raw_era1.to_vec(), epoch_index);
+            return process_era1_file(&raw_era1, epoch_index);
         }
 
         EraBinarySearch::find_era_file(http_client.clone(), block_number).await

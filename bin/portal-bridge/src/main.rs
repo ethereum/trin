@@ -107,7 +107,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         bridge_config.gossip_limit,
                         e2hs_range,
                         bridge_config.e2hs_randomize,
-                    )?;
+                    )
+                    .await?;
                     let bridge_handle = tokio::spawn(async move {
                         e2hs_bridge
                             .launch()

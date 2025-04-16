@@ -93,10 +93,10 @@ impl Era {
 
     /// Iterate over beacon blocks.
     pub fn iter_blocks(
-        raw_era: Vec<u8>,
+        raw_era: &[u8],
     ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<CompressedSignedBeaconBlock>>> {
         let file_length = raw_era.len();
-        let file = E2StoreMemory::deserialize(&raw_era)?;
+        let file = E2StoreMemory::deserialize(raw_era)?;
         let entries_length = file.entries.len();
         let block_index = SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])?;
         let slot_indexes = Era::get_block_slot_indexes(file_length, &block_index);
