@@ -24,17 +24,20 @@
 //! https://github.com/eth-clients/e2store-format-specs/blob/main/formats/e2hs.md
 
 use std::{
-    fs,
+    fs::{self, File},
     io::{Read, Write},
+    path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, ensure};
+use alloy::{hex::ToHexExt, primitives::B256};
+use anyhow::{anyhow, bail, ensure};
 use ethportal_api::types::execution::header_with_proof::HeaderWithProof;
 use ssz::{Decode, Encode};
 
 use crate::{
     e2store::{
         memory::E2StoreMemory,
+        stream::E2StoreStreamWriter,
         types::{Entry, VersionEntry},
     },
     entry_types,
@@ -44,13 +47,109 @@ use crate::{
 pub const BLOCK_TUPLE_COUNT: usize = 8192;
 const E2HS_ENTRY_COUNT: usize = BLOCK_TUPLE_COUNT * 3 + 2;
 
-pub struct E2HS {
+/// The `E2HS` streaming writer.
+pub struct E2HSWriter {
+    pub version: VersionEntry,
+    writer: E2StoreStreamWriter<File>,
+    temp_path: PathBuf,
+    epoch_index: u64,
+    block_index_offset: u64,
+    block_index_indices: Vec<u64>,
+    last_block_hash: Option<B256>,
+}
+
+impl E2HSWriter {
+    pub fn create(temp_path: &Path, epoch_index: u64) -> anyhow::Result<Self> {
+        fs::create_dir_all(temp_path)?;
+        ensure!(
+            temp_path.is_dir(),
+            "e2hs path is not a directory: {:?}",
+            temp_path
+        );
+        let temp_path: PathBuf = temp_path.join(format!("temp-mainnet-{:05}.e2hs", epoch_index));
+        ensure!(
+            !temp_path.exists(),
+            "e2hs file already exists: {:?}",
+            temp_path
+        );
+        let mut writer = E2StoreStreamWriter::create(&temp_path)?;
+
+        let version = VersionEntry::default();
+        writer.append_entry(&Entry::from(&version))?;
+
+        Ok(Self {
+            block_index_offset: version.version.length() as u64,
+            version,
+            writer,
+            temp_path,
+            epoch_index,
+            block_index_indices: vec![],
+            last_block_hash: None,
+        })
+    }
+
+    pub fn temp_path(&self) -> &Path {
+        self.temp_path.as_path()
+    }
+
+    pub fn append_block_tuple(&mut self, block_tuple: &BlockTuple) -> anyhow::Result<()> {
+        self.block_index_indices.push(self.block_index_offset);
+        let entries = <[Entry; 3]>::try_from(block_tuple)?;
+        for entry in entries {
+            self.writer.append_entry(&entry)?;
+            self.block_index_offset += entry.length() as u64;
+        }
+
+        if self.block_index_indices.len() == BLOCK_TUPLE_COUNT {
+            self.last_block_hash = Some(
+                block_tuple
+                    .header_with_proof
+                    .header_with_proof
+                    .header
+                    .hash_slow(),
+            );
+        }
+
+        Ok(())
+    }
+
+    pub fn finish(mut self) -> anyhow::Result<PathBuf> {
+        ensure!(self.block_index_indices.len() == BLOCK_TUPLE_COUNT);
+        let block_index = BlockIndex {
+            starting_number: self.epoch_index * BLOCK_TUPLE_COUNT as u64,
+            indices: self.block_index_indices,
+            count: BLOCK_TUPLE_COUNT as u64,
+        };
+        self.writer
+            .append_entry(&Entry::from(&E2HSBlockIndexEntry::new(block_index)))?;
+        self.writer.flush()?;
+
+        let Some(last_block_hash) = self.last_block_hash else {
+            bail!("No last block hash found");
+        };
+        let short_hash = &last_block_hash.encode_hex()[..8];
+
+        let mut new_path = self.temp_path.clone();
+        new_path.pop();
+
+        let finished_e2hs_path = new_path.join(format!(
+            "mainnet-{:05}-{}.e2hs",
+            self.epoch_index, short_hash
+        ));
+
+        fs::rename(&self.temp_path, &finished_e2hs_path)?;
+
+        Ok(finished_e2hs_path)
+    }
+}
+
+pub struct E2HSMemory {
     pub version: VersionEntry,
     pub block_tuples: Vec<BlockTuple>,
     pub block_index: E2HSBlockIndexEntry,
 }
 
-impl E2HS {
+impl E2HSMemory {
     pub fn read_from_file(path: String) -> anyhow::Result<Self> {
         let buf = fs::read(path)?;
         Self::deserialize(&buf)
@@ -223,6 +322,12 @@ pub struct E2HSBlockIndexEntry {
     pub block_index: BlockIndex,
 }
 
+impl E2HSBlockIndexEntry {
+    pub fn new(block_index: BlockIndex) -> Self {
+        Self { block_index }
+    }
+}
+
 impl TryFrom<&Entry> for E2HSBlockIndexEntry {
     type Error = anyhow::Error;
 
@@ -274,7 +379,7 @@ mod tests {
     #[test]
     fn test_e2hs_round_trip() {
         let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-a6860fef.e2hs").unwrap();
-        let e2hs = E2HS::deserialize(&raw_e2hs).expect("failed to deserialize e2hs");
+        let e2hs = E2HSMemory::deserialize(&raw_e2hs).expect("failed to deserialize e2hs");
         let raw_e2hs2 = e2hs.write().expect("failed to serialize e2hs");
         assert_eq!(raw_e2hs, raw_e2hs2);
     }
@@ -286,7 +391,7 @@ mod tests {
     #[case(8191)]
     fn test_e2hs_block_index(#[case] block_number: usize) {
         let raw_e2hs = fs::read("../../test_assets/era1/mainnet-00000-a6860fef.e2hs").unwrap();
-        let e2hs = E2HS::deserialize(&raw_e2hs).expect("failed to deserialize e2hs");
+        let e2hs = E2HSMemory::deserialize(&raw_e2hs).expect("failed to deserialize e2hs");
         let block_tuple = &e2hs.block_tuples[block_number];
         assert_eq!(
             block_tuple

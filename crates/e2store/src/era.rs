@@ -91,32 +91,6 @@ impl Era {
         Ok(era_state.state)
     }
 
-    /// Iterate over beacon blocks.
-    pub fn iter_blocks(
-        raw_era: &[u8],
-    ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<CompressedSignedBeaconBlock>>> {
-        let file_length = raw_era.len();
-        let file = E2StoreMemory::deserialize(raw_era)?;
-        let entries_length = file.entries.len();
-        let block_index = SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])?;
-        let slot_indexes = Era::get_block_slot_indexes(file_length, &block_index);
-
-        ensure!(
-            slot_indexes.len() == entries_length - 4,
-            "invalid slot index block: incorrect count"
-        );
-
-        Ok(slot_indexes
-            .into_iter()
-            .enumerate()
-            .map(move |(index, slot)| {
-                let fork = get_beacon_fork(slot);
-                let beacon_block =
-                    CompressedSignedBeaconBlock::try_from(&file.entries[index + 1], fork)?;
-                Ok(beacon_block)
-            }))
-    }
-
     fn get_block_slot_indexes(
         file_length: usize,
         slot_index_block_entry: &SlotIndexBlockEntry,
@@ -141,8 +115,7 @@ impl Era {
             .collect::<Vec<u64>>()
     }
 
-    #[allow(dead_code)]
-    fn write(&self) -> anyhow::Result<Vec<u8>> {
+    pub fn write(&self) -> anyhow::Result<Vec<u8>> {
         let mut entries: Vec<Entry> = vec![];
         let version_entry = Entry::from(&self.version);
         entries.push(version_entry);
@@ -173,6 +146,10 @@ impl Era {
             .block
             .execution_block_number();
         (first_block_number..=last_block_number).contains(&block_number)
+    }
+
+    pub fn epoch_index(&self) -> u64 {
+        self.slot_index_state.slot_index.starting_slot / SLOTS_PER_HISTORICAL_ROOT as u64
     }
 }
 

@@ -10,7 +10,7 @@ pub const DEFAULT_EPOCH_ACC_PATH: &str = "./portal-accumulators";
 #[command(name = "E2HS Writer", about = "Generate E2HS files")]
 pub struct WriterConfig {
     #[arg(long, help = "Target directory where E2HS files will be written")]
-    pub target_dir: String,
+    pub target_dir: PathBuf,
 
     #[arg(long, help = "Epoch used to generate E2HS file")]
     pub epoch: u64,

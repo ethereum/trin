@@ -1,17 +1,14 @@
+use std::collections::HashMap;
+
 use e2store::{
     e2store::types::{Entry, Header as E2StoreHeader},
     era::{get_beacon_fork, CompressedSignedBeaconBlock, Era, SLOTS_PER_HISTORICAL_ROOT},
-    utils::get_era_files,
 };
 use reqwest::Client;
 use revm_primitives::SpecId;
 use trin_evm::spec_id::get_spec_block_number;
 
-use super::{
-    constants::FIRST_ERA_EPOCH_WITH_EXECUTION_PAYLOAD,
-    types::ProcessedEra,
-    utils::{download_raw_era, process_era_file},
-};
+use super::{constants::FIRST_ERA_EPOCH_WITH_EXECUTION_PAYLOAD, utils::download_raw_era};
 
 pub struct EraBinarySearch {}
 
@@ -23,20 +20,19 @@ impl EraBinarySearch {
     /// search for the era file which contains the block we want. To make it so we don't have to
     /// download multiple era files because they are very big we will download the first beacon
     /// block estimate which blocks it contains and narrow our search till we find it.
-    pub async fn find_era_file(
+    pub async fn fetch_era_file(
         http_client: Client,
+        era_links: &HashMap<u64, String>,
         block_number: u64,
-    ) -> anyhow::Result<ProcessedEra> {
+    ) -> anyhow::Result<Era> {
         if block_number < get_spec_block_number(SpecId::MERGE) {
             return Err(anyhow::anyhow!(
                 "Block number is too low to be in any era file"
             ));
         }
 
-        let era_links = get_era_files(&http_client).await?;
         let mut start_epoch_index = FIRST_ERA_EPOCH_WITH_EXECUTION_PAYLOAD;
-        let mut end_epoch_index =
-            *era_links.keys().max().expect("Getting max shouldn't fail") as u64;
+        let mut end_epoch_index = *era_links.keys().max().expect("Getting max shouldn't fail");
         let last_epoch_index = end_epoch_index;
 
         while start_epoch_index <= end_epoch_index {
@@ -51,13 +47,13 @@ impl EraBinarySearch {
 
             // this is an edge case where the block number is in the last era file, we can't check
             // mid plus 1 so we just manually check the last era file
-            if mid + 1 > last_epoch_index as u64 {
+            if mid + 1 > last_epoch_index {
                 let era_to_check =
                     download_raw_era(era_links[&(mid)].clone(), http_client.clone()).await?;
 
                 let decoded_era = Era::deserialize(&era_to_check)?;
                 if decoded_era.contains(block_number) {
-                    return process_era_file(&era_to_check, mid);
+                    return Ok(decoded_era);
                 }
                 return Err(anyhow::anyhow!("Block not found in any era file"));
             }
@@ -83,7 +79,7 @@ impl EraBinarySearch {
 
                 let decoded_era = Era::deserialize(&era_to_check)?;
                 if decoded_era.contains(block_number) {
-                    return process_era_file(&era_to_check, mid);
+                    return Ok(decoded_era);
                 }
             }
 

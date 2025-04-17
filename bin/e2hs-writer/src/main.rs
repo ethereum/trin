@@ -38,5 +38,6 @@ async fn main() -> anyhow::Result<()> {
         "Time taken to finished writing blocks  {}",
         start.elapsed().human(Truncate::Second)
     );
+
     Ok(())
 }

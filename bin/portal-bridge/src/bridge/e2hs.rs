@@ -9,7 +9,7 @@ use alloy::primitives::B256;
 use anyhow::ensure;
 use clap::Parser;
 use e2store::{
-    e2hs::{BlockTuple, E2HS},
+    e2hs::{BlockTuple, E2HSMemory},
     utils::get_e2hs_files,
 };
 use ethportal_api::{
@@ -126,7 +126,7 @@ impl E2HSBridge {
             .unwrap_or_else(|err| {
                 panic!("unable to read e2hs file at path: {e2hs_path:?} : {err}")
             });
-        let block_stream = E2HS::iter_tuples(&raw_e2hs).expect("to be able to iter tuples");
+        let block_stream = E2HSMemory::iter_tuples(&raw_e2hs).expect("to be able to iter tuples");
         for block_tuple in block_stream {
             let block_number = block_tuple
                 .header_with_proof
