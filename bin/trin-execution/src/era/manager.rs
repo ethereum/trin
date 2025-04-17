@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{bail, ensure};
 use e2store::{
+    era::Era,
     era1::Era1,
     utils::{get_era1_files, get_era_files, ERA1_FILE_COUNT},
 };
@@ -128,8 +129,8 @@ impl EraManager {
             };
             let raw_era = download_raw_era(next_era_path, http_client.clone()).await?;
             match next_era_type {
-                EraType::Era1 => process_era1_file(&raw_era, next_epoch_index),
-                EraType::Era => process_era_file(&raw_era, next_epoch_index),
+                EraType::Era1 => process_era1_file(&raw_era),
+                EraType::Era => process_era_file(Era::deserialize(&raw_era)?),
             }
         });
         self.next_era = Some(join_handle);
@@ -149,9 +150,12 @@ impl EraManager {
             };
             let raw_era1 = download_raw_era(era1_path, http_client.clone()).await?;
 
-            return process_era1_file(&raw_era1, epoch_index);
+            return process_era1_file(&raw_era1);
         }
 
-        EraBinarySearch::find_era_file(http_client.clone(), block_number).await
+        let era_links = get_era_files(&http_client).await?;
+        let era =
+            EraBinarySearch::fetch_era_file(http_client.clone(), &era_links, block_number).await?;
+        process_era_file(era)
     }
 }

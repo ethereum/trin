@@ -8,17 +8,14 @@ use alloy::{
 use anyhow::{anyhow, bail, ensure};
 use async_stream::stream;
 use e2store::era1::Era1;
-use ethportal_api::types::{
-    consensus::beacon_state::HistoricalBatch,
-    execution::{
-        accumulator::EpochAccumulator,
-        block_body::BlockBody,
-        header_with_proof::{
-            BlockHeaderProof, BlockProofHistoricalHashesAccumulator, BlockProofHistoricalRoots,
-            BlockProofHistoricalSummaries, HeaderWithProof,
-        },
-        receipts::Receipts,
+use ethportal_api::types::execution::{
+    accumulator::EpochAccumulator,
+    block_body::BlockBody,
+    header_with_proof::{
+        BlockHeaderProof, BlockProofHistoricalHashesAccumulator, BlockProofHistoricalRoots,
+        BlockProofHistoricalSummaries, HeaderWithProof,
     },
+    receipts::Receipts,
 };
 use futures::Stream;
 use portal_bridge::api::execution::ExecutionApi;
@@ -137,15 +134,11 @@ impl EpochReader {
         })
     }
 
-    async fn get_pre_capella_block_data(&self, block_number: u64) -> anyhow::Result<AllBlockData> {
-        let era = self.era_provider.get_era_for_block(block_number)?;
-        let block = era
-            .blocks
-            .iter()
-            .find(|block| block.block.execution_block_number() == block_number)
-            .ok_or_else(|| {
-                anyhow!("Era file for block #{block_number} not found during pre-capella lookup")
-            })?;
+    async fn get_pre_capella_block_data(
+        &mut self,
+        block_number: u64,
+    ) -> anyhow::Result<AllBlockData> {
+        let (block, era) = self.era_provider.get_block(block_number)?;
         let block = block
             .block
             .message_merge()
@@ -153,14 +146,13 @@ impl EpochReader {
         let payload = block.body.execution_payload.clone();
         let transactions = decode_transactions(&payload.transactions)?;
         let header = pre_capella_execution_payload_to_header(payload.clone(), &transactions)?;
-        let historical_batch = HistoricalBatch {
-            state_roots: era.era_state.state.state_roots().clone(),
-            block_roots: era.era_state.state.block_roots().clone(),
-        };
+
         let slot = block.slot;
 
         // create beacon block proof
-        let historical_batch_proof = historical_batch.build_block_root_proof(slot % EPOCH_SIZE);
+        let historical_batch_proof = era
+            .historical_batch
+            .build_block_root_proof(slot % EPOCH_SIZE);
         let beacon_block_proof: FixedVector<B256, typenum::U14> = historical_batch_proof.into();
 
         // create execution block proof
@@ -195,15 +187,12 @@ impl EpochReader {
         })
     }
 
-    async fn get_pre_deneb_block_data(&self, block_number: u64) -> anyhow::Result<AllBlockData> {
-        let era = self.era_provider.get_era_for_block(block_number)?;
-        let block = era
-            .blocks
-            .iter()
-            .find(|block| block.block.execution_block_number() == block_number)
-            .ok_or_else(|| {
-                anyhow!("Era file for block #{block_number} not found during pre-deneb lookup")
-            })?;
+    async fn get_pre_deneb_block_data(
+        &mut self,
+        block_number: u64,
+    ) -> anyhow::Result<AllBlockData> {
+        let (block, era) = self.era_provider.get_block(block_number)?;
+
         let block = block
             .block
             .message_capella()
@@ -215,14 +204,12 @@ impl EpochReader {
         let header =
             pre_deneb_execution_payload_to_header(payload.clone(), &transactions, &withdrawals)?;
 
-        let historical_batch = HistoricalBatch {
-            state_roots: era.era_state.state.state_roots().clone(),
-            block_roots: era.era_state.state.block_roots().clone(),
-        };
         let slot = block.slot;
 
         // create beacon block proof
-        let historical_batch_proof = historical_batch.build_block_root_proof(slot % EPOCH_SIZE);
+        let historical_batch_proof = era
+            .historical_batch
+            .build_block_root_proof(slot % EPOCH_SIZE);
         let beacon_block_proof: FixedVector<B256, typenum::U13> = historical_batch_proof.into();
 
         // create execution block proof
@@ -256,7 +243,7 @@ impl EpochReader {
         })
     }
 
-    pub fn iter_blocks(self) -> impl Stream<Item = anyhow::Result<AllBlockData>> {
+    pub fn iter_blocks(mut self) -> impl Stream<Item = anyhow::Result<AllBlockData>> {
         stream! {
             for current_block in self.starting_block..self.ending_block {
                 if current_block < MERGE_BLOCK_NUMBER {
@@ -272,11 +259,19 @@ impl EpochReader {
         }
     }
 
-    pub fn get_receipts(&self, block_number: u64, receipts_root: B256) -> anyhow::Result<Receipts> {
+    /// Returns the receipts for a given block number and receipts root.
+    /// After a receipt is retrieved, it is removed from the internal map.
+    ///
+    /// Errors if receipts are not found for the given block number or if the receipts root does not
+    /// match.
+    pub fn get_receipts(
+        &mut self,
+        block_number: u64,
+        receipts_root: B256,
+    ) -> anyhow::Result<Receipts> {
         let receipts = self
             .receipts
-            .get(&block_number)
-            .cloned()
+            .remove(&block_number)
             .ok_or_else(|| anyhow!("Receipts not found for block number {block_number}"))?;
         ensure!(receipts.root() == receipts_root, "Receipts root mismatch");
         Ok(receipts)
@@ -299,8 +294,6 @@ mod tests {
     use serde_yaml::Value;
     use ssz::Decode;
 
-    use super::*;
-
     #[rstest::rstest]
     // epoch #575
     #[case(15539558, 4702208, "block_proofs_bellatrix/beacon_block_proof-15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01.yaml")]
@@ -314,6 +307,8 @@ mod tests {
         #[case] slot: u64,
         #[case] file_path: &str,
     ) {
+        use ethportal_api::consensus::beacon_state::HistoricalBatch;
+
         let test_vector = std::fs::read_to_string(format!(
             "../../portal-spec-tests/tests/mainnet/history/headers_with_proof/{file_path}"
         ))

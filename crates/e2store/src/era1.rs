@@ -92,8 +92,7 @@ impl Era1 {
         })
     }
 
-    #[allow(dead_code)]
-    fn write(&self) -> anyhow::Result<Vec<u8>> {
+    pub fn write(&self) -> anyhow::Result<Vec<u8>> {
         let mut entries: Vec<Entry> = vec![];
         let version_entry = Entry::from(&self.version);
         entries.push(version_entry);

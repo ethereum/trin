@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use alloy::primitives::bytes::Bytes;
-use anyhow::anyhow;
 use e2store::{
     era::Era,
     era1::{BlockTuple, Era1, BLOCK_TUPLE_COUNT},
@@ -17,7 +16,7 @@ use crate::era::{
     types::{EraType, ProcessedBlock, TransactionsWithSender},
 };
 
-pub fn process_era1_file(raw_era1: &[u8], epoch_index: u64) -> anyhow::Result<ProcessedEra> {
+pub fn process_era1_file(raw_era1: &[u8]) -> anyhow::Result<ProcessedEra> {
     let mut blocks = Vec::with_capacity(BLOCK_TUPLE_COUNT);
     for BlockTuple { header, body, .. } in Era1::iter_tuples(raw_era1)? {
         let transactions_with_recovered_senders = body
@@ -40,6 +39,7 @@ pub fn process_era1_file(raw_era1: &[u8], epoch_index: u64) -> anyhow::Result<Pr
         });
     }
 
+    let epoch_index = Era1::epoch_number_from_block_number(blocks[0].header.number);
     info!("Done processing era1 file {epoch_index}");
 
     Ok(ProcessedEra {
@@ -50,21 +50,16 @@ pub fn process_era1_file(raw_era1: &[u8], epoch_index: u64) -> anyhow::Result<Pr
     })
 }
 
-pub fn process_era_file(raw_era: &[u8], epoch_index: u64) -> anyhow::Result<ProcessedEra> {
-    let blocks = Era::iter_blocks(raw_era)?
-        .map(|compressed_block| {
-            Ok(compressed_block
-                .map_err(|err| anyhow!("Failed to decompress beacon block: {err:?}"))?
-                .block)
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
-    let blocks = blocks
+pub fn process_era_file(era: Era) -> anyhow::Result<ProcessedEra> {
+    let epoch_index = era.epoch_index();
+    let blocks = era
+        .blocks
         .into_iter()
         // Before the merge occurred the beacon chain was already executing bellatrix blocks,
         // because the merge didn't occur yet the execution_payloads were empty. Hence we skip those
         // blocks.
-        .filter(|block| block.execution_block_number() != 0)
-        .map(|block| block.process_beacon_block())
+        .filter(|block| block.block.execution_block_number() != 0)
+        .map(|block| block.block.process_beacon_block())
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     info!("Done processing era file {epoch_index}");

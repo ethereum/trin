@@ -31,8 +31,8 @@ use crate::{
 };
 
 /// Limit the number of requests in a single batch to avoid exceeding the
-/// provider's batch size limit configuration of 30.
-const BATCH_LIMIT: usize = 30;
+/// provider's batch size limit configuration of 10.
+const BATCH_LIMIT: usize = 10;
 
 /// Implements endpoints from the Execution API to access data from the execution layer.
 /// Performs validation of the data returned from the provider.
@@ -123,15 +123,30 @@ impl ExecutionApi {
             block_numbers.push(block_number);
         }
 
-        let response = self.batch_requests(batch_request).await?;
-        let response: Vec<Value> = serde_json::from_str(&response).map_err(|e| anyhow!(e))?;
-
+        let batch_request_len = batch_request.len();
+        let mut batch_requests_sent = 0;
         let mut receipts = HashMap::new();
-        for (res, block_number) in response.into_iter().zip(block_numbers.into_iter()) {
-            let receipt: Receipts = serde_json::from_value(res).map_err(|err| {
-                anyhow!("Unable to parse receipts for block {block_number} from provider response: {err:?}")
-            })?;
-            receipts.insert(block_number, receipt);
+        for (chunk, block_numbers) in batch_request
+            .chunks(BATCH_LIMIT)
+            .zip(block_numbers.chunks(BATCH_LIMIT))
+        {
+            info!(
+                "Sending batch requests {}/{} ({:.2}%)",
+                batch_requests_sent,
+                batch_request_len,
+                (batch_requests_sent as f64 / batch_request_len as f64) * 100.0
+            );
+            let responses = self
+                .try_batch_request(chunk.to_vec())
+                .await
+                .map_err(|err| anyhow!("Batch request failed: {err:?}"))?;
+            for (res, block_number) in responses.into_iter().zip(block_numbers.iter()) {
+                let receipt: Receipts = serde_json::from_value(res).map_err(|err| {
+                    anyhow!("Unable to parse receipts for block {block_number} from provider response: {err:?}")
+                })?;
+                receipts.insert(*block_number, receipt);
+            }
+            batch_requests_sent += chunk.len();
         }
 
         Ok(receipts)
@@ -147,21 +162,6 @@ impl ExecutionApi {
             .ok_or_else(|| anyhow!("Unable to fetch latest block"))?;
         let header: Header = serde_json::from_value(result.clone())?;
         Ok(header.number)
-    }
-
-    async fn batch_requests(&self, obj: Vec<JsonRequest>) -> anyhow::Result<String> {
-        let mut all_responses = Vec::new();
-
-        for chunk in obj.chunks(BATCH_LIMIT) {
-            info!("Sending batch request with {} requests", chunk.len());
-            let responses = self
-                .try_batch_request(chunk.to_vec())
-                .await
-                .map_err(|err| anyhow!("Batch request failed: {err:?}"))?;
-            all_responses.extend(responses);
-        }
-
-        Ok(serde_json::to_string(&all_responses)?)
     }
 
     async fn try_batch_request(&self, requests: Vec<JsonRequest>) -> anyhow::Result<Vec<Value>> {
