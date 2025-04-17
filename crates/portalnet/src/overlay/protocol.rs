@@ -58,10 +58,7 @@ use crate::{
         errors::OverlayRequestError,
         request::{OverlayRequest, RequestDirection},
     },
-    put_content::{
-        propagate_put_content_cross_thread, trace_propagate_put_content_cross_thread,
-        PutContentResult,
-    },
+    put_content::propagate_put_content_cross_thread,
     types::{
         kbucket::{Entry, SharedKBucketsTable},
         node::Node,
@@ -261,23 +258,6 @@ impl<
             ) as u32,
             stored_locally: should_we_store,
         }
-    }
-
-    /// Propagate put content accepted content via OFFER/ACCEPT, returns trace detailing outcome of
-    /// put content
-    pub async fn propagate_put_content_trace(
-        &self,
-        content_key: TContentKey,
-        data: RawContentValue,
-    ) -> PutContentResult {
-        trace_propagate_put_content_cross_thread::<_, TMetric>(
-            content_key,
-            data,
-            &self.kbuckets,
-            self.command_tx.clone(),
-            self.discovery.network_spec.clone(),
-        )
-        .await
     }
 
     /// Returns a vector of all the ENRs of nodes currently contained in the routing table.

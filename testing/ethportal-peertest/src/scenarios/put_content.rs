@@ -15,21 +15,20 @@ use crate::{
     },
     Peertest,
 };
-pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client, network: Network) {
-    info!("Testing Gossip with tracing");
+
+pub async fn test_put_content(peertest: &Peertest, target: &Client, network: Network) {
+    info!("Testing Put Content");
 
     let _ = HistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone(), None, None)
         .await
         .unwrap();
     let (content_key, content_value) = fixture_header_by_hash();
     let result = target
-        .trace_put_content(content_key.clone(), content_value.encode())
+        .put_content(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
-    assert_eq!(result.offered.len(), 1);
-    assert_eq!(result.accepted.len(), 1);
-    assert_eq!(result.transferred.len(), 1);
+    assert_eq!(result.peer_count, 1);
 
     // Check if the stored content value in bootnode's DB matches the offered
     let received_content_value =
@@ -55,13 +54,11 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client, networ
 
     // send new trace gossip request
     let result = target
-        .trace_put_content(content_key.clone(), content_value.encode())
+        .put_content(content_key.clone(), content_value.encode())
         .await
         .unwrap();
 
-    assert_eq!(result.offered.len(), 2);
-    assert_eq!(result.accepted.len(), 1);
-    assert_eq!(result.transferred.len(), 1);
+    assert_eq!(result.peer_count, 2);
 
     // Check if the stored content value in fresh node's DB matches the offered
     let received_content_value = wait_for_history_content(&fresh_target, content_key.clone()).await;
@@ -72,13 +69,11 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client, networ
 
     // test trace gossip without any expected accepts
     let result = target
-        .trace_put_content(content_key, content_value.encode())
+        .put_content(content_key, content_value.encode())
         .await
         .unwrap();
 
-    assert_eq!(result.offered.len(), 2);
-    assert_eq!(result.accepted.len(), 0);
-    assert_eq!(result.transferred.len(), 0);
+    assert_eq!(result.peer_count, 2);
 }
 
 pub async fn test_gossip_dropped_with_offer(

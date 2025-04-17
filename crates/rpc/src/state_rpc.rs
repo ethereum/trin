@@ -7,7 +7,7 @@ use ethportal_api::{
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
-            TracePutContentInfo, MAX_CONTENT_KEYS_PER_OFFER,
+            MAX_CONTENT_KEYS_PER_OFFER,
         },
         portal_wire::OfferTrace,
     },
@@ -142,19 +142,6 @@ impl StateNetworkApiServer for StateNetworkApi {
         let content_value =
             StateContentValue::decode(&content_key, &content_value).map_err(RpcServeError::from)?;
         let endpoint = StateEndpoint::PutContent(content_key, content_value);
-        Ok(proxy_to_subnet(&self.network, endpoint).await?)
-    }
-
-    /// Send the provided content to interested peers. Clients may choose to send to some or all
-    /// peers. Return tracing info.
-    async fn trace_put_content(
-        &self,
-        content_key: StateContentKey,
-        content_value: RawContentValue,
-    ) -> RpcResult<TracePutContentInfo> {
-        let content_value =
-            StateContentValue::decode(&content_key, &content_value).map_err(RpcServeError::from)?;
-        let endpoint = StateEndpoint::TracePutContent(content_key, content_value);
         Ok(proxy_to_subnet(&self.network, endpoint).await?)
     }
 

@@ -2,19 +2,15 @@ use std::{collections::HashMap, sync::Arc};
 
 use ethportal_api::{
     types::{
-        accept_code::AcceptCodeList,
         distance::Metric,
         enr::Enr,
-        network_spec::NetworkSpec,
         portal::MAX_CONTENT_KEYS_PER_OFFER,
-        portal_wire::{OfferTrace, PopulatedOffer, PopulatedOfferWithResult, Request, Response},
+        portal_wire::{PopulatedOffer, Request},
     },
     utils::bytes::{hex_encode, hex_encode_compact},
     OverlayContentKey, RawContentValue,
 };
-use futures::channel::oneshot;
 use rand::Rng;
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::{debug, error, trace, warn};
 
@@ -26,17 +22,6 @@ use crate::{
     types::kbucket::SharedKBucketsTable,
     utp::controller::UtpController,
 };
-
-/// Datatype to store the result of a put content request.
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
-pub struct PutContentResult {
-    /// List of all ENRs that were offered the content
-    pub offered: Vec<Enr>,
-    /// List of all ENRs that accepted the offer
-    pub accepted: Vec<Enr>,
-    /// List of all ENRs to whom the content was successfully transferred
-    pub transferred: Vec<Enr>,
-}
 
 /// Propagate put content in a way that can be used across threads, without &self.
 /// Doesn't trace put content results
@@ -140,96 +125,6 @@ pub fn propagate_put_content_cross_thread<TContentKey: OverlayContentKey, TMetri
     }
 
     num_propagated_peers
-}
-
-/// Propagate put content in a way that can be used across threads, without &self.
-/// This function is designed to be used via the JSON-RPC API. Since it is blocking, it should not
-/// be used internally in the offer/accept flow.
-/// Returns a trace detailing the outcome of the put content.
-pub async fn trace_propagate_put_content_cross_thread<
-    TContentKey: OverlayContentKey,
-    TMetric: Metric,
->(
-    content_key: TContentKey,
-    data: RawContentValue,
-    kbuckets: &SharedKBucketsTable,
-    command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
-    network_sepc: Arc<NetworkSpec>,
-) -> PutContentResult {
-    let mut put_content_result = PutContentResult::default();
-
-    let content_id = content_key.content_id();
-
-    let interested_enrs = kbuckets.interested_enrs::<TMetric>(&content_id);
-    if interested_enrs.is_empty() {
-        debug!(content.id = %hex_encode(content_id), "No peers eligible for trace put content");
-        return put_content_result;
-    };
-
-    // Select ENRs to put content to, create and send OFFER overlay request to the interested nodes
-    for enr in select_put_content_recipients::<TMetric>(&content_id, interested_enrs) {
-        let protocol_version = match network_sepc.latest_common_protocol_version(&enr) {
-            Ok(protocol_version) => protocol_version,
-            Err(err) => {
-                trace!(
-                    ?err,
-                    "trace_propagate_put_content_cross_thread: Failed to get protocol version for ENR: {:?}",
-                    enr.node_id()
-                );
-                continue;
-            }
-        };
-
-        let (result_tx, mut result_rx) = tokio::sync::mpsc::unbounded_channel();
-        let offer_request = Request::PopulatedOfferWithResult(PopulatedOfferWithResult {
-            content_item: (content_key.clone().to_bytes(), data.clone()),
-            result_tx,
-        });
-
-        let (tx, rx) = oneshot::channel();
-        let responder = Some(tx);
-        let overlay_request = OverlayRequest::new(
-            offer_request,
-            RequestDirection::Outgoing {
-                destination: enr.clone(),
-            },
-            responder,
-            None,
-            None,
-        );
-        if let Err(err) = command_tx.send(OverlayCommand::Request(overlay_request)) {
-            error!(error = %err, "Error sending OFFER message to service");
-            continue;
-        }
-        // update put content result with peer marked as being offered the content
-        put_content_result.offered.push(enr.clone());
-        match rx.await {
-            Ok(res) => {
-                if let Ok(Response::Accept(accept)) = res {
-                    let Ok(content_keys) =
-                        AcceptCodeList::decode(protocol_version, accept.content_keys)
-                    else {
-                        error!("Failed to decode Accept message");
-                        continue;
-                    };
-                    if !content_keys.all_declined() {
-                        // update put content result with peer marked as accepting the content
-                        put_content_result.accepted.push(enr.clone());
-                    }
-                } else {
-                    // continue to next peer if no content was accepted
-                    continue;
-                }
-            }
-            // continue to next peer if err while waiting for response
-            Err(_) => continue,
-        }
-        if let Some(OfferTrace::Success(_)) = result_rx.recv().await {
-            // update put content result with peer marked as successfully transferring the content
-            put_content_result.transferred.push(enr);
-        }
-    }
-    put_content_result
 }
 
 const NUM_CLOSEST_NODES: usize = 4;

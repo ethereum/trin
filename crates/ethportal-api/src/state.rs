@@ -10,7 +10,6 @@ use crate::{
         portal::{
             AcceptInfo, DataRadius, FindContentInfo, FindNodesInfo, GetContentInfo,
             PaginateLocalContentInfo, PongInfo, PutContentInfo, TraceContentInfo,
-            TracePutContentInfo,
         },
         portal_wire::OfferTrace,
     },
@@ -96,15 +95,6 @@ pub trait StateNetworkApi {
         content_key: StateContentKey,
         content_value: RawContentValue,
     ) -> RpcResult<PutContentInfo>;
-
-    /// Send the provided content value to interested peers. Clients may choose to send to some or
-    /// all peers. Return tracing info detailing the gossip propagation.
-    #[method(name = "stateTracePutContent")]
-    async fn trace_put_content(
-        &self,
-        content_key: StateContentKey,
-        content_value: RawContentValue,
-    ) -> RpcResult<TracePutContentInfo>;
 
     /// Send an OFFER request with given ContentItems, to the designated peer and wait for a
     /// response. Does not store the content locally.

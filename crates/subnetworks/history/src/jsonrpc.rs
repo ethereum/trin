@@ -63,9 +63,6 @@ async fn complete_request(network: Arc<HistoryNetwork>, request: HistoryJsonRpcR
         HistoryEndpoint::PutContent(content_key, content_value) => {
             put_content(network, content_key, content_value).await
         }
-        HistoryEndpoint::TracePutContent(content_key, content_value) => {
-            trace_put_content(network, content_key, content_value).await
-        }
         HistoryEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
         HistoryEndpoint::Offer(enr, content_items) => offer(network, enr, content_items).await,
         HistoryEndpoint::TraceOffer(enr, content_key, content_value) => {
@@ -286,21 +283,6 @@ async fn put_content(
     Ok(json!(network
         .overlay
         .propagate_put_content(content_key, data)))
-}
-
-/// Constructs a JSON call for the PutContent method, with tracing enabled.
-async fn trace_put_content(
-    network: Arc<HistoryNetwork>,
-    content_key: HistoryContentKey,
-    content_value: ethportal_api::HistoryContentValue,
-) -> Result<Value, String> {
-    let data = content_value.encode();
-    Ok(json!(
-        network
-            .overlay
-            .propagate_put_content_trace(content_key, data)
-            .await
-    ))
 }
 
 /// Constructs a JSON call for the Offer method.
