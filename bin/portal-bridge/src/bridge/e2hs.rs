@@ -15,11 +15,7 @@ use e2store::{
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
     types::{
-        execution::{
-            block_body::BlockBody, header_with_proof::HeaderWithProof, receipts::Receipts,
-        },
-        network::Subnetwork,
-        portal_wire::OfferTrace,
+        execution::header_with_proof::HeaderWithProof, network::Subnetwork, portal_wire::OfferTrace,
     },
     ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
     OverlayContentKey,
@@ -30,8 +26,8 @@ use reqwest::{
     Client,
 };
 use tokio::{
-    sync::{OwnedSemaphorePermit, Semaphore},
-    time::{sleep, timeout, Duration},
+    sync::{oneshot, OwnedSemaphorePermit, Semaphore},
+    time::timeout,
 };
 use tracing::{debug, error, info, warn};
 use trin_metrics::bridge::BridgeMetricsReporter;
@@ -39,9 +35,7 @@ use trin_validation::header_validator::HeaderValidator;
 
 use super::offer_report::{GlobalOfferReport, OfferReport};
 use crate::{
-    bridge::constants::{HEADER_SATURATION_DELAY, SERVE_BLOCK_TIMEOUT},
-    census::Census,
-    types::range::block_range_to_epochs,
+    bridge::constants::SERVE_BLOCK_TIMEOUT, census::Census, types::range::block_range_to_epochs,
 };
 
 #[derive(Debug)]
@@ -107,6 +101,10 @@ impl E2HSBridge {
             let block_range = epochs.get(&index).expect("to be able to get block range");
             self.gossip_epoch(index, *block_range).await;
         }
+        self.global_offer_report
+            .lock()
+            .expect("to acquire lock")
+            .report();
     }
 
     async fn gossip_epoch(&self, epoch_index: u64, block_range: Option<(u64, u64)>) {
@@ -157,48 +155,91 @@ impl E2HSBridge {
             .header
             .hash_slow();
 
+        let (is_finished_tx, is_finished_rx) = oneshot::channel();
         self.gossip_header_by_hash(
             block_tuple.header_with_proof.header_with_proof.clone(),
             block_hash,
+            is_finished_tx,
         )
         .await;
-
-        // Sleep for 10 seconds to allow headers to saturate network,
-        // since they must be available for body / receipt validation.
-        sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-
         self.gossip_header_by_number(
             block_tuple.header_with_proof.header_with_proof,
             block_number,
         )
         .await;
-        self.gossip_body(block_tuple.body.body, block_hash).await;
-        self.gossip_receipts(block_tuple.receipts.receipts, block_hash)
+
+        let census = self.census.clone();
+        let portal_client = self.portal_client.clone();
+        let metrics = self.metrics.clone();
+        let global_offer_report = self.global_offer_report.clone();
+        let offer_semaphore = self.offer_semaphore.clone();
+        tokio::spawn(async move {
+            if let Err(err) = is_finished_rx.await {
+                error!("Failed to receive header_by_hash finished response: {err:?}");
+                return;
+            }
+
+            spawn_offer_tasks(
+                HistoryContentKey::new_block_body(block_hash),
+                HistoryContentValue::BlockBody(block_tuple.body.body),
+                census.clone(),
+                portal_client.clone(),
+                metrics.clone(),
+                global_offer_report.clone(),
+                offer_semaphore.clone(),
+                None,
+            )
             .await;
+
+            spawn_offer_tasks(
+                HistoryContentKey::new_block_receipts(block_hash),
+                HistoryContentValue::Receipts(block_tuple.receipts.receipts),
+                census.clone(),
+                portal_client.clone(),
+                metrics.clone(),
+                global_offer_report.clone(),
+                offer_semaphore.clone(),
+                None,
+            )
+            .await;
+        });
     }
 
-    async fn gossip_header_by_hash(&self, header_with_proof: HeaderWithProof, block_hash: B256) {
+    async fn gossip_header_by_hash(
+        &self,
+        header_with_proof: HeaderWithProof,
+        block_hash: B256,
+        is_finished_tx: oneshot::Sender<()>,
+    ) {
         let content_key = HistoryContentKey::new_block_header_by_hash(block_hash);
         let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
-        self.spawn_offer_tasks(content_key, content_value).await;
+        spawn_offer_tasks(
+            content_key,
+            content_value,
+            self.census.clone(),
+            self.portal_client.clone(),
+            self.metrics.clone(),
+            self.global_offer_report.clone(),
+            self.offer_semaphore.clone(),
+            Some(is_finished_tx),
+        )
+        .await;
     }
 
     async fn gossip_header_by_number(&self, header_with_proof: HeaderWithProof, block_number: u64) {
         let content_key = HistoryContentKey::new_block_header_by_number(block_number);
         let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
-        self.spawn_offer_tasks(content_key, content_value).await;
-    }
-
-    async fn gossip_body(&self, body: BlockBody, block_hash: B256) {
-        let content_key = HistoryContentKey::new_block_body(block_hash);
-        let content_value = HistoryContentValue::BlockBody(body);
-        self.spawn_offer_tasks(content_key, content_value).await;
-    }
-
-    async fn gossip_receipts(&self, receipts: Receipts, block_hash: B256) {
-        let content_key = HistoryContentKey::new_block_receipts(block_hash);
-        let content_value = HistoryContentValue::Receipts(receipts);
-        self.spawn_offer_tasks(content_key, content_value).await;
+        spawn_offer_tasks(
+            content_key,
+            content_value,
+            self.census.clone(),
+            self.portal_client.clone(),
+            self.metrics.clone(),
+            self.global_offer_report.clone(),
+            self.offer_semaphore.clone(),
+            None,
+        )
+        .await;
     }
 
     fn validate_block_tuple(&self, block_tuple: &BlockTuple) -> anyhow::Result<()> {
@@ -214,114 +255,118 @@ impl E2HSBridge {
         );
         Ok(())
     }
+}
 
-    // spawn individual offer tasks of the content key for each interested enr found in Census
-    async fn spawn_offer_tasks(
-        &self,
-        content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
-    ) {
-        let Ok(enrs) = self
-            .census
-            .select_peers(Subnetwork::History, &content_key.content_id())
-        else {
-            error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
-            return;
-        };
-        let offer_report = Arc::new(Mutex::new(OfferReport::new(
-            content_key.clone(),
-            enrs.len(),
-        )));
-        let encoded_content_value = content_value.encode();
-        for enr in enrs.clone() {
-            let permit = self.acquire_offer_permit().await;
-            let census = self.census.clone();
-            let portal_client = self.portal_client.clone();
-            let content_key = content_key.clone();
-            let encoded_content_value = encoded_content_value.clone();
-            let offer_report = offer_report.clone();
-            let metrics = self.metrics.clone();
-            let global_offer_report = self.global_offer_report.clone();
-            tokio::spawn(async move {
-                let timer = metrics.start_process_timer("spawn_offer_history");
+// spawn individual offer tasks of the content key for each interested enr found in Census
+#[allow(clippy::too_many_arguments)]
+async fn spawn_offer_tasks(
+    content_key: HistoryContentKey,
+    content_value: HistoryContentValue,
+    census: Census,
+    portal_client: HttpClient,
+    metrics: BridgeMetricsReporter,
+    global_offer_report: Arc<Mutex<GlobalOfferReport>>,
+    offer_semaphore: Arc<Semaphore>,
+    is_finished_tx: Option<oneshot::Sender<()>>,
+) {
+    let Ok(enrs) = census.select_peers(Subnetwork::History, &content_key.content_id()) else {
+        error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
+        return;
+    };
+    let offer_report = Arc::new(Mutex::new(OfferReport::new(
+        content_key.clone(),
+        enrs.len(),
+        is_finished_tx,
+    )));
+    let encoded_content_value = content_value.encode();
+    for enr in enrs.clone() {
+        let content_key = content_key.clone();
+        let encoded_content_value = encoded_content_value.clone();
+        let permit = acquire_offer_permit(offer_semaphore.clone()).await;
+        let census = census.clone();
+        let portal_client = portal_client.clone();
+        let offer_report = offer_report.clone();
+        let metrics = metrics.clone();
+        let global_offer_report = global_offer_report.clone();
+        tokio::spawn(async move {
+            let timer = metrics.start_process_timer("spawn_offer_history");
 
-                let start_time = Instant::now();
-                let content_value_size = encoded_content_value.len();
+            let start_time = Instant::now();
+            let content_value_size = encoded_content_value.len();
 
-                let result = timeout(
-                    SERVE_BLOCK_TIMEOUT,
-                    HistoryNetworkApiClient::trace_offer(
-                        &portal_client,
-                        enr.clone(),
-                        content_key.clone(),
-                        encoded_content_value,
-                    ),
-                )
-                .await;
+            let result = timeout(
+                SERVE_BLOCK_TIMEOUT,
+                HistoryNetworkApiClient::trace_offer(
+                    &portal_client,
+                    enr.clone(),
+                    content_key.clone(),
+                    encoded_content_value,
+                ),
+            )
+            .await;
 
-                let offer_trace = match &result {
-                    Ok(Ok(result)) => {
-                        if matches!(result, &OfferTrace::Failed) {
-                            warn!("Internal error offering to: {enr}");
-                        }
-                        result
+            let offer_trace = match &result {
+                Ok(Ok(result)) => {
+                    if matches!(result, &OfferTrace::Failed) {
+                        warn!("Internal error offering to: {enr}");
                     }
-                    Ok(Err(err)) => {
-                        warn!("Error offering to: {enr}, error: {err:?}");
-                        &OfferTrace::Failed
-                    }
-                    Err(_) => {
-                        error!("trace_offer timed out on history {content_key}: indicating a bug is present");
-                        &OfferTrace::Failed
-                    }
-                };
+                    result
+                }
+                Ok(Err(err)) => {
+                    warn!("Error offering to: {enr}, error: {err:?}");
+                    &OfferTrace::Failed
+                }
+                Err(_) => {
+                    error!("trace_offer timed out on history {content_key}: indicating a bug is present");
+                    &OfferTrace::Failed
+                }
+            };
 
-                census.record_offer_result(
-                    Subnetwork::History,
-                    enr.node_id(),
-                    content_value_size,
-                    start_time.elapsed(),
-                    offer_trace,
-                );
+            census.record_offer_result(
+                Subnetwork::History,
+                enr.node_id(),
+                content_value_size,
+                start_time.elapsed(),
+                offer_trace,
+            );
 
-                // Update report and metrics
-                global_offer_report
-                    .lock()
-                    .expect("to acquire lock")
-                    .update(offer_trace);
-                offer_report
-                    .lock()
-                    .expect("to acquire lock")
-                    .update(&enr, offer_trace);
+            // Update report and metrics
+            global_offer_report
+                .lock()
+                .expect("to acquire lock")
+                .update(offer_trace);
+            offer_report
+                .lock()
+                .expect("to acquire lock")
+                .update(&enr, offer_trace);
 
-                metrics.report_offer(
-                    match content_key {
-                        HistoryContentKey::BlockHeaderByHash(_) => "header_by_hash",
-                        HistoryContentKey::BlockHeaderByNumber(_) => "header_by_number",
-                        HistoryContentKey::BlockBody(_) => "block_body",
-                        HistoryContentKey::BlockReceipts(_) => "receipts",
-                    },
-                    match offer_trace {
-                        OfferTrace::Success(_) => "success",
-                        OfferTrace::Declined => "declined",
-                        OfferTrace::Failed => "failed",
-                    },
-                );
+            metrics.report_offer(
+                match content_key {
+                    HistoryContentKey::BlockHeaderByHash(_) => "header_by_hash",
+                    HistoryContentKey::BlockHeaderByNumber(_) => "header_by_number",
+                    HistoryContentKey::BlockBody(_) => "block_body",
+                    HistoryContentKey::BlockReceipts(_) => "receipts",
+                },
+                match offer_trace {
+                    OfferTrace::Success(_) => "success",
+                    OfferTrace::Declined => "declined",
+                    OfferTrace::Failed => "failed",
+                },
+            );
 
-                // Release permit
-                drop(permit);
-                metrics.stop_process_timer(timer);
-            });
-        }
+            // Release permit
+            drop(permit);
+            metrics.stop_process_timer(timer);
+        });
     }
+}
 
-    async fn acquire_offer_permit(&self) -> OwnedSemaphorePermit {
-        self.offer_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore")
-    }
+async fn acquire_offer_permit(offer_semaphore: Arc<Semaphore>) -> OwnedSemaphorePermit {
+    offer_semaphore
+        .clone()
+        .acquire_owned()
+        .await
+        .expect("to be able to acquire semaphore")
 }
 
 /// BlockRange used specifically for the E2HS bridge

@@ -1,5 +1,6 @@
 use discv5::Enr;
 use ethportal_api::{types::portal_wire::OfferTrace, OverlayContentKey};
+use tokio::sync::oneshot;
 use tracing::{debug, enabled, info, Level};
 
 /// Global report for outcomes of offering state content keys from long-running state bridge
@@ -45,19 +46,25 @@ pub struct OfferReport<ContentKey> {
     success: Vec<Enr>,
     failed: Vec<Enr>,
     declined: Vec<Enr>,
+    is_finished_tx: Option<oneshot::Sender<()>>,
 }
 
 impl<ContentKey> OfferReport<ContentKey>
 where
     ContentKey: OverlayContentKey + std::fmt::Debug,
 {
-    pub fn new(content_key: ContentKey, total: usize) -> Self {
+    pub fn new(
+        content_key: ContentKey,
+        total: usize,
+        is_finished_tx: Option<oneshot::Sender<()>>,
+    ) -> Self {
         Self {
             content_key,
             total,
             success: Vec::new(),
             failed: Vec::new(),
             declined: Vec::new(),
+            is_finished_tx,
         }
     }
 
@@ -75,7 +82,7 @@ where
         }
     }
 
-    pub fn report(&self) {
+    fn report(&mut self) {
         if enabled!(Level::DEBUG) {
             debug!(
                 "Successfully offered to {}/{} peers. Content key: {}. Declined: {:?}. Failed: {:?}",
@@ -94,6 +101,11 @@ where
                 self.declined.len(),
                 self.failed.len(),
             );
+        }
+        if let Some(is_finished_tx) = self.is_finished_tx.take() {
+            if let Err(err) = is_finished_tx.send(()) {
+                debug!("Failed to send single for bodies and receipts to start being gossiped: {err:?}");
+            }
         }
     }
 }

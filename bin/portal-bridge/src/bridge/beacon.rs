@@ -44,10 +44,7 @@ use tokio::{
 use tracing::{error, info, warn, Instrument};
 use trin_metrics::bridge::BridgeMetricsReporter;
 
-use super::{
-    constants::SERVE_BLOCK_TIMEOUT,
-    offer_report::{GlobalOfferReport, OfferReport},
-};
+use super::{constants::SERVE_BLOCK_TIMEOUT, offer_report::OfferReport};
 use crate::{
     api::consensus::ConsensusApi,
     census::Census,
@@ -101,8 +98,6 @@ pub struct BeaconBridge {
     metrics: BridgeMetricsReporter,
     /// Used to request all interested enrs in the network.
     census: Census,
-    /// Global offer report for tallying total performance of beacon bridge
-    global_offer_report: Arc<StdMutex<GlobalOfferReport>>,
 }
 
 impl BeaconBridge {
@@ -113,13 +108,11 @@ impl BeaconBridge {
         census: Census,
     ) -> Self {
         let metrics = BridgeMetricsReporter::new("beacon".to_string(), &format!("{mode:?}"));
-        let global_offer_report = Arc::new(StdMutex::new(GlobalOfferReport::default()));
         Self {
             consensus_api,
             mode,
             portal_client,
             metrics,
-            global_offer_report,
             census,
         }
     }
@@ -150,9 +143,7 @@ impl BeaconBridge {
                 asset.content_value().expect("Error getting content value"),
                 self.metrics.clone(),
                 self.census.clone(),
-                self.global_offer_report.clone(),
-            )
-            .await;
+            );
         }
     }
 
@@ -185,32 +176,24 @@ impl BeaconBridge {
                 finalized_bootstrap.clone(),
                 finalized_slot.clone(),
                 finalized_state_root.clone(),
-                self.census.clone(),
-                self.global_offer_report.clone(),
-            )
-            .await;
+            );
         }
     }
 
     /// Serve latest beacon network data to the network
-    ///
-    /// Returns the new current period and finalized block root
-    async fn serve_latest(
+    fn serve_latest(
         &self,
         current_period: Arc<Mutex<u64>>,
         finalized_bootstrap: Arc<Mutex<FinalizedBootstrap>>,
         finalized_slot: Arc<Mutex<u64>>,
         _finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
-        census: Census,
-        global_offer_report: Arc<StdMutex<GlobalOfferReport>>,
     ) {
         // Serve LightClientBootstrap data
         let consensus_api_clone = self.consensus_api.clone();
 
         let metrics_clone = self.metrics.clone();
         let portal_client_clone = self.portal_client.clone();
-        let census_clone = census.clone();
-        let global_offer_report_clone = global_offer_report.clone();
+        let census_clone = self.census.clone();
 
         tokio::spawn(async move {
             if let Err(err) = Self::serve_light_client_bootstrap(
@@ -219,7 +202,6 @@ impl BeaconBridge {
                 finalized_bootstrap.clone(),
                 metrics_clone,
                 census_clone,
-                global_offer_report_clone,
             )
             .in_current_span()
             .await
@@ -233,8 +215,7 @@ impl BeaconBridge {
         let consensus_api_clone = self.consensus_api.clone();
         let metrics_clone = self.metrics.clone();
         let portal_client_clone = self.portal_client.clone();
-        let census_clone = census.clone();
-        let global_offer_report_clone = global_offer_report.clone();
+        let census_clone = self.census.clone();
         tokio::spawn(async move {
             if let Err(err) = Self::serve_light_client_update(
                 consensus_api_clone,
@@ -242,7 +223,6 @@ impl BeaconBridge {
                 current_period,
                 metrics_clone,
                 census_clone,
-                global_offer_report_clone,
             )
             .in_current_span()
             .await
@@ -255,8 +235,7 @@ impl BeaconBridge {
         let consensus_api_clone = self.consensus_api.clone();
         let metrics_clone = self.metrics.clone();
         let portal_client_clone = self.portal_client.clone();
-        let census_clone = census.clone();
-        let global_offer_report_clone = global_offer_report.clone();
+        let census_clone = self.census.clone();
         tokio::spawn(async move {
             if let Err(err) = Self::serve_light_client_finality_update(
                 consensus_api_clone,
@@ -264,7 +243,6 @@ impl BeaconBridge {
                 finalized_slot,
                 metrics_clone,
                 census_clone,
-                global_offer_report_clone,
             )
             .in_current_span()
             .await
@@ -277,15 +255,13 @@ impl BeaconBridge {
         let consensus_api_clone = self.consensus_api.clone();
         let metrics_clone = self.metrics.clone();
         let portal_client_clone = self.portal_client.clone();
-        let census = census.clone();
-        let global_offer_report_clone = global_offer_report.clone();
+        let census = self.census.clone();
         tokio::spawn(async move {
             if let Err(err) = Self::serve_light_client_optimistic_update(
                 consensus_api_clone,
                 portal_client_clone,
                 metrics_clone,
                 census,
-                global_offer_report_clone,
             )
             .in_current_span()
             .await
@@ -293,11 +269,6 @@ impl BeaconBridge {
                 warn!("Failed to serve LightClientOptimisticUpdate: {err}");
             }
         });
-
-        self.global_offer_report
-            .lock()
-            .expect("Failed to get global offer report lock")
-            .report();
     }
 
     /// Serve `LightClientBootstrap` data
@@ -307,7 +278,6 @@ impl BeaconBridge {
         finalized_bootstrap: Arc<Mutex<FinalizedBootstrap>>,
         metrics: BridgeMetricsReporter,
         census: Census,
-        global_offer_report: Arc<StdMutex<GlobalOfferReport>>,
     ) -> anyhow::Result<()> {
         if finalized_bootstrap.lock().await.in_progress {
             // If the `LightClientBootstrap` generation is in progress, do not serve a new
@@ -352,15 +322,7 @@ impl BeaconBridge {
         });
 
         // Return the latest finalized block root if we successfully gossiped the latest bootstrap.
-        Self::spawn_offer_tasks(
-            portal_client,
-            content_key,
-            content_value,
-            metrics,
-            census,
-            global_offer_report,
-        )
-        .await;
+        Self::spawn_offer_tasks(portal_client, content_key, content_value, metrics, census);
         finalized_bootstrap.lock().await.finalized_block_root = latest_finalized_block_root;
         finalized_bootstrap.lock().await.in_progress = false;
 
@@ -373,7 +335,6 @@ impl BeaconBridge {
         current_period: Arc<Mutex<u64>>,
         metrics: BridgeMetricsReporter,
         census: Census,
-        global_offer_report: Arc<StdMutex<GlobalOfferReport>>,
     ) -> anyhow::Result<()> {
         let now = SystemTime::now();
         let expected_current_period =
@@ -430,15 +391,7 @@ impl BeaconBridge {
         );
 
         // Update the current known period if we successfully gossiped the latest data.
-        Self::spawn_offer_tasks(
-            portal_client,
-            content_key,
-            content_value,
-            metrics,
-            census,
-            global_offer_report,
-        )
-        .await;
+        Self::spawn_offer_tasks(portal_client, content_key, content_value, metrics, census);
         *current_period.lock().await = expected_current_period;
 
         Ok(())
@@ -449,7 +402,6 @@ impl BeaconBridge {
         portal_client: HttpClient,
         metrics: BridgeMetricsReporter,
         census: Census,
-        global_offer_report: Arc<StdMutex<GlobalOfferReport>>,
     ) -> anyhow::Result<()> {
         let data = consensus_api.get_lc_optimistic_update().await?;
         let update: Value = serde_json::from_str(&data)?;
@@ -464,15 +416,7 @@ impl BeaconBridge {
             LightClientOptimisticUpdateKey::new(update.signature_slot),
         );
         let content_value = BeaconContentValue::LightClientOptimisticUpdate(update.into());
-        Self::spawn_offer_tasks(
-            portal_client,
-            content_key,
-            content_value,
-            metrics,
-            census,
-            global_offer_report,
-        )
-        .await;
+        Self::spawn_offer_tasks(portal_client, content_key, content_value, metrics, census);
         Ok(())
     }
 
@@ -482,7 +426,6 @@ impl BeaconBridge {
         finalized_slot: Arc<Mutex<u64>>,
         metrics: BridgeMetricsReporter,
         census: Census,
-        global_offer_report: Arc<StdMutex<GlobalOfferReport>>,
     ) -> anyhow::Result<()> {
         let data = consensus_api.get_lc_finality_update().await?;
         let update: Value = serde_json::from_str(&data)?;
@@ -514,15 +457,7 @@ impl BeaconBridge {
         );
         let content_value = BeaconContentValue::LightClientFinalityUpdate(update.into());
 
-        Self::spawn_offer_tasks(
-            portal_client,
-            content_key,
-            content_value,
-            metrics,
-            census,
-            global_offer_report,
-        )
-        .await;
+        Self::spawn_offer_tasks(portal_client, content_key, content_value, metrics, census);
         *finalized_slot.lock().await = new_finalized_slot;
 
         Ok(())
@@ -535,7 +470,6 @@ impl BeaconBridge {
         metrics: BridgeMetricsReporter,
         finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
         census: Census,
-        global_offer_report: Arc<StdMutex<GlobalOfferReport>>,
     ) -> anyhow::Result<()> {
         if finalized_state_root.lock().await.in_progress {
             // If the beacon state download is in progress, do not serve a new historical summary.
@@ -591,15 +525,7 @@ impl BeaconBridge {
         let content_value =
             BeaconContentValue::HistoricalSummariesWithProof(historical_summaries_with_proof);
 
-        Self::spawn_offer_tasks(
-            portal_client,
-            content_key,
-            content_value,
-            metrics,
-            census,
-            global_offer_report,
-        )
-        .await;
+        Self::spawn_offer_tasks(portal_client, content_key, content_value, metrics, census);
         finalized_state_root.lock().await.state_root = latest_finalized_state_root;
         finalized_state_root.lock().await.in_progress = false;
 
@@ -607,13 +533,12 @@ impl BeaconBridge {
     }
 
     // spawn individual offer tasks of the content key for each interested enr found in Census
-    async fn spawn_offer_tasks(
+    fn spawn_offer_tasks(
         portal_client: HttpClient,
         content_key: BeaconContentKey,
         content_value: BeaconContentValue,
         metrics: BridgeMetricsReporter,
         census: Census,
-        global_offer_report: Arc<StdMutex<GlobalOfferReport>>,
     ) {
         let Ok(enrs) = census.select_peers(Subnetwork::Beacon, &content_key.content_id()) else {
             error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
@@ -622,6 +547,7 @@ impl BeaconBridge {
         let offer_report = Arc::new(StdMutex::new(OfferReport::new(
             content_key.clone(),
             enrs.len(),
+            None,
         )));
         let encoded_content_value = content_value.encode();
         for enr in enrs.clone() {
@@ -631,7 +557,6 @@ impl BeaconBridge {
             let encoded_content_value = encoded_content_value.clone();
             let offer_report = offer_report.clone();
             let metrics = metrics.clone();
-            let global_offer_report = global_offer_report.clone();
             tokio::spawn(async move {
                 let timer = metrics.start_process_timer("spawn_offer_beacon");
 
@@ -675,10 +600,6 @@ impl BeaconBridge {
                 );
 
                 // Update report and metrics
-                global_offer_report
-                    .lock()
-                    .expect("to acquire lock")
-                    .update(offer_trace);
                 offer_report
                     .lock()
                     .expect("to acquire lock")
