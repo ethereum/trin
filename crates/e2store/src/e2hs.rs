@@ -95,14 +95,9 @@ impl E2HSWriter {
     pub fn append_block_tuple(&mut self, block_tuple: &BlockTuple) -> anyhow::Result<()> {
         self.block_index_indices.push(self.block_index_offset);
         let entries = <[Entry; 3]>::try_from(block_tuple)?;
-        let length = entries
-            .iter()
-            .map(|entry| entry.length() as u64)
-            .sum::<u64>();
-        self.block_index_offset += length;
-
         for entry in entries {
             self.writer.append_entry(&entry)?;
+            self.block_index_offset += entry.length() as u64;
         }
 
         if self.block_index_indices.len() == BLOCK_TUPLE_COUNT {

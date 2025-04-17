@@ -45,12 +45,24 @@ pub struct MinimalEra {
 }
 
 impl MinimalEra {
-    pub fn contains_block(&self, block_number: u64) -> bool {
+    pub fn get_block(
+        &self,
+        block_number: u64,
+    ) -> Option<(CompressedSignedBeaconBlock, &MinimalEra)> {
         let first_block_number = self.blocks[0].block.execution_block_number();
         let last_block_number = self.blocks[self.blocks.len() - 1]
             .block
             .execution_block_number();
-        (first_block_number..=last_block_number).contains(&block_number)
+        if (first_block_number..=last_block_number).contains(&block_number) {
+            if let Some(block) = self
+                .blocks
+                .iter()
+                .find(|block| block.block.execution_block_number() == block_number)
+            {
+                return Some((block.clone(), self));
+            }
+        }
+        None
     }
 }
 
@@ -149,7 +161,12 @@ impl EraProvider {
         );
         Ok(match &self.sources[0] {
             EraSource::PreMerge(era1) => {
-                era1.block_tuples[(block_number % EPOCH_SIZE) as usize].clone()
+                let block_tuple = era1.block_tuples[(block_number % EPOCH_SIZE) as usize].clone();
+                ensure!(
+                    block_tuple.header.header.number == block_number,
+                    "Block number mismatch",
+                );
+                block_tuple
             }
             EraSource::PostMerge(_) => {
                 bail!("Era1 file not found for block number: {block_number}",)
@@ -167,14 +184,8 @@ impl EraProvider {
         );
         for sources in self.sources.iter() {
             if let EraSource::PostMerge(era) = sources {
-                if era.contains_block(block_number) {
-                    if let Some(block) = era
-                        .blocks
-                        .iter()
-                        .find(|block| block.block.execution_block_number() == block_number)
-                    {
-                        return Ok((block.clone(), era));
-                    }
+                if let Some(block) = era.get_block(block_number) {
+                    return Ok(block);
                 }
             }
         }
