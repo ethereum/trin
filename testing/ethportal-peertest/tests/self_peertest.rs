@@ -92,6 +92,15 @@ mod protocol_v0 {
 
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
+    async fn peertest_put_content() {
+        let (peertest, target, handle) = setup_peertest(V0_NETWORK, &[Subnetwork::History]).await;
+        peertest::scenarios::put_content::test_put_content(&peertest, &target, V0_NETWORK).await;
+        peertest.exit_all_nodes();
+        handle.stop().unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
     async fn peertest_history_gossip_dropped_with_offer() {
         let (peertest, target, handle) = setup_peertest(V0_NETWORK, &[Subnetwork::History]).await;
         peertest::scenarios::put_content::test_gossip_dropped_with_offer(
@@ -256,6 +265,15 @@ mod protocol_v1 {
     const V1_NETWORK: Network = Network::Mainnet;
 
     // offer tests
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn peertest_put_content() {
+        let (peertest, target, handle) = setup_peertest(V1_NETWORK, &[Subnetwork::History]).await;
+        peertest::scenarios::put_content::test_put_content(&peertest, &target, V1_NETWORK).await;
+        peertest.exit_all_nodes();
+        handle.stop().unwrap();
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
