@@ -114,6 +114,12 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 }
                 Ok(ValidationResult::new(true))
             }
+            HistoryContentKey::EphemeralHeaderOffer(_) => Err(anyhow!(
+                "Validation is not implemented for EphemeralHeaderOffer yet"
+            )),
+            HistoryContentKey::EphemeralHeadersFindContent(_) => Err(anyhow!(
+                "Validation is not implemented for EphemeralHeadersFindContent yet"
+            )),
         }
     }
 }

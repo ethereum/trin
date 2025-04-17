@@ -18,6 +18,8 @@ pub const HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX: u8 = 0x00;
 pub const HISTORY_BLOCK_BODY_KEY_PREFIX: u8 = 0x01;
 pub const HISTORY_BLOCK_RECEIPTS_KEY_PREFIX: u8 = 0x02;
 pub const HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX: u8 = 0x03;
+pub const HISTORY_EPHEMERAL_HEADERS_FIND_CONTENT_KEY_PREFIX: u8 = 0x04;
+pub const HISTORY_EPHEMERAL_HEADER_OFFER_KEY_PREFIX: u8 = 0x05;
 
 /// A content key in the history overlay network.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -30,6 +32,17 @@ pub enum HistoryContentKey {
     BlockBody(BlockBodyKey),
     /// The transaction receipts for a block.
     BlockReceipts(BlockReceiptsKey),
+    /// Ephemeral headers used for FindContent request.
+    ///
+    /// This is used to find the headers of a block and its ancestors.
+    /// This content type can only be used by FindContent requests.
+    EphemeralHeadersFindContent(EphemeralHeadersFindContentKey),
+    /// Ephemeral header used for Offer request.
+    ///
+    /// This is used to offer an ephemeral block header to a peer. This content type can only be
+    /// used by Offer requests. The type contains a single header, but more headers should be
+    /// included in the single Offer request.
+    EphemeralHeaderOffer(EphemeralHeaderOfferKey),
 }
 
 impl HistoryContentKey {
@@ -71,6 +84,22 @@ impl HistoryContentKey {
 
     pub fn new_block_receipts(block_hash: impl Into<[u8; 32]>) -> Self {
         Self::BlockReceipts(BlockReceiptsKey {
+            block_hash: block_hash.into(),
+        })
+    }
+
+    pub fn new_ephemeral_headers_find_content(
+        block_hash: impl Into<[u8; 32]>,
+        ancestor_count: u8,
+    ) -> Self {
+        Self::EphemeralHeadersFindContent(EphemeralHeadersFindContentKey {
+            block_hash: block_hash.into(),
+            ancestor_count,
+        })
+    }
+
+    pub fn new_ephemeral_header_offer(block_hash: impl Into<[u8; 32]>) -> Self {
+        Self::EphemeralHeaderOffer(EphemeralHeaderOfferKey {
             block_hash: block_hash.into(),
         })
     }
@@ -129,6 +158,21 @@ pub struct BlockReceiptsKey {
     pub block_hash: [u8; 32],
 }
 
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+pub struct EphemeralHeadersFindContentKey {
+    /// Hash of the block.
+    pub block_hash: [u8; 32],
+    /// The number of ancestors included in the response.
+    pub ancestor_count: u8,
+}
+
+/// A key for a block header by hash.
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Default)]
+pub struct EphemeralHeaderOfferKey {
+    /// Hash of the block.
+    pub block_hash: [u8; 32],
+}
+
 impl fmt::Display for HistoryContentKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
@@ -150,6 +194,19 @@ impl fmt::Display for HistoryContentKey {
                 format!(
                     "BlockHeaderByNumber {{ block_number: {} }}",
                     header.block_number
+                )
+            }
+            Self::EphemeralHeadersFindContent(ephemeral_headers) => {
+                format!(
+                    "EphemeralHeadersFindContent {{ block_hash: {}, ancestor_count: {} }}",
+                    hex_encode_compact(ephemeral_headers.block_hash),
+                    ephemeral_headers.ancestor_count
+                )
+            }
+            Self::EphemeralHeaderOffer(ephemeral_header) => {
+                format!(
+                    "EphemeralHeaderOffer {{ block_hash: {} }}",
+                    hex_encode_compact(ephemeral_header.block_hash),
                 )
             }
         };
@@ -183,6 +240,16 @@ impl OverlayContentKey for HistoryContentKey {
                 bytes.put_u8(HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX);
                 bytes.put_slice(&key.as_ssz_bytes());
             }
+            HistoryContentKey::EphemeralHeadersFindContent(key) => {
+                bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
+                bytes.put_u8(HISTORY_EPHEMERAL_HEADERS_FIND_CONTENT_KEY_PREFIX);
+                bytes.put_slice(&key.as_ssz_bytes());
+            }
+            HistoryContentKey::EphemeralHeaderOffer(key) => {
+                bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
+                bytes.put_u8(HISTORY_EPHEMERAL_HEADER_OFFER_KEY_PREFIX);
+                bytes.put_slice(&key.as_ssz_bytes());
+            }
         }
 
         RawContentKey::from(bytes.freeze())
@@ -211,6 +278,16 @@ impl OverlayContentKey for HistoryContentKey {
                     .map(Self::BlockHeaderByNumber)
                     .map_err(|e| ContentKeyError::from_decode_error(e, bytes))
             }
+            HISTORY_EPHEMERAL_HEADERS_FIND_CONTENT_KEY_PREFIX => {
+                EphemeralHeadersFindContentKey::from_ssz_bytes(key)
+                    .map(Self::EphemeralHeadersFindContent)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, bytes))
+            }
+            HISTORY_EPHEMERAL_HEADER_OFFER_KEY_PREFIX => {
+                EphemeralHeaderOfferKey::from_ssz_bytes(key)
+                    .map(Self::EphemeralHeaderOffer)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, bytes))
+            }
             _ => Err(ContentKeyError::from_decode_error(
                 DecodeError::UnionSelectorInvalid(selector),
                 bytes,
@@ -222,6 +299,8 @@ impl OverlayContentKey for HistoryContentKey {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
+    use alloy::{hex::FromHex, primitives::B256};
+
     use super::*;
     use crate::{types::content_key::overlay::OverlayContentKey, utils::bytes::hex_decode};
 
@@ -411,6 +490,82 @@ mod test {
         assert_eq!(
             serde_json::to_string(&content_key).unwrap(),
             content_key_json
+        );
+    }
+
+    #[test]
+    fn serde_ephemeral_headers_find_content() {
+        let content_key_json =
+            "\"0x04d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f27618301\"";
+        let block_hash =
+            B256::from_hex("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
+                .unwrap();
+        let ancestor_count = 1;
+        let expected_content_key =
+            HistoryContentKey::new_ephemeral_headers_find_content(block_hash, ancestor_count);
+
+        let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
+
+        assert_eq!(content_key, expected_content_key);
+        assert_eq!(
+            serde_json::to_string(&content_key).unwrap(),
+            content_key_json
+        );
+    }
+
+    #[test]
+    fn ephemeral_headers_find_content_content_id_derivations() {
+        let block_hash =
+            B256::from_hex("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
+                .unwrap();
+        let ancestor_count = 1;
+        let content_key =
+            HistoryContentKey::new_ephemeral_headers_find_content(block_hash, ancestor_count);
+        assert_eq!(
+            **content_key.to_bytes(),
+            hex_decode("0x04d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f27618301")
+                .unwrap()
+        );
+        assert_eq!(
+            content_key.content_id(),
+            B256::from_hex("0xbf9f37c72f6635bbe8dbb4d9377a56d8d579a434399f4c5ba4aad5a213ca04d8")
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn serde_ephemeral_header_offer() {
+        let content_key_json =
+            "\"0x05d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183\"";
+        let block_hash =
+            B256::from_hex("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
+                .unwrap();
+        let expected_content_key = HistoryContentKey::new_ephemeral_header_offer(block_hash);
+
+        let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
+
+        assert_eq!(content_key, expected_content_key);
+        assert_eq!(
+            serde_json::to_string(&content_key).unwrap(),
+            content_key_json
+        );
+    }
+
+    #[test]
+    fn ephemeral_header_offer_content_id_derivations() {
+        let block_hash =
+            B256::from_hex("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
+                .unwrap();
+        let content_key = HistoryContentKey::new_ephemeral_header_offer(block_hash);
+        assert_eq!(
+            **content_key.to_bytes(),
+            hex_decode("0x05d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
+                .unwrap()
+        );
+        assert_eq!(
+            content_key.content_id(),
+            B256::from_hex("0x76744a5338183a04ea39bbb94906e539b9a839b4aa508f8493b2afbba2491567")
+                .unwrap()
         );
     }
 }
