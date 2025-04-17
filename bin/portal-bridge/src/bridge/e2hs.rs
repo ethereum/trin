@@ -346,10 +346,10 @@ async fn spawn_offer_tasks(
                     HistoryContentKey::BlockHeaderByNumber(_) => "header_by_number",
                     HistoryContentKey::BlockBody(_) => "block_body",
                     HistoryContentKey::BlockReceipts(_) => "receipts",
-                    HistoryContentKey::EphemeralHeadersByFindContent(_) => {
-                        "ephemeral_header_by_find_content"
+                    HistoryContentKey::EphemeralHeadersFindContent(_) => {
+                        "ephemeral_headers_find_content"
                     }
-                    HistoryContentKey::EphemeralHeaderByOffer(_) => "ephemeral_header_by_offer",
+                    HistoryContentKey::EphemeralHeaderOffer(_) => "ephemeral_header_offer",
                 },
                 match offer_trace {
                     OfferTrace::Success(_) => "success",

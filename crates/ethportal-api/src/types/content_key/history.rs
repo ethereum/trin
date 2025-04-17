@@ -18,8 +18,8 @@ pub const HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX: u8 = 0x00;
 pub const HISTORY_BLOCK_BODY_KEY_PREFIX: u8 = 0x01;
 pub const HISTORY_BLOCK_RECEIPTS_KEY_PREFIX: u8 = 0x02;
 pub const HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX: u8 = 0x03;
-pub const HISTORY_EPHEMERAL_HEADERS_BY_FIND_CONTENT_KEY_PREFIX: u8 = 0x04;
-pub const HISTORY_EPHEMERAL_HEADER_BY_OFFER_KEY_PREFIX: u8 = 0x05;
+pub const HISTORY_EPHEMERAL_HEADERS_FIND_CONTENT_KEY_PREFIX: u8 = 0x04;
+pub const HISTORY_EPHEMERAL_HEADER_OFFER_KEY_PREFIX: u8 = 0x05;
 
 /// A content key in the history overlay network.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -32,8 +32,16 @@ pub enum HistoryContentKey {
     BlockBody(BlockBodyKey),
     /// The transaction receipts for a block.
     BlockReceipts(BlockReceiptsKey),
-    EphemeralHeadersByFindContent(EphemeralHeadersByFindContentKey),
-    EphemeralHeaderByOffer(EphemeralHeaderByOfferKey),
+    /// Ephemeral headers by find content.
+    ///
+    /// This is used to find the headers of a block and its ancestors.
+    /// This response can only be used by FindContent requests.
+    EphemeralHeadersFindContent(EphemeralHeadersFindContentKey),
+    /// Ephemeral header offer.
+    ///
+    /// This is used to offer a block header to a peer. This response can only be used by Offer
+    /// requests. This type contains a single header.
+    EphemeralHeaderOffer(EphemeralHeaderOfferKey),
 }
 
 impl HistoryContentKey {
@@ -79,18 +87,18 @@ impl HistoryContentKey {
         })
     }
 
-    pub fn new_ephemeral_headers_by_find_content(
+    pub fn new_ephemeral_headers_find_content(
         block_hash: impl Into<[u8; 32]>,
         ancestor_count: u8,
     ) -> Self {
-        Self::EphemeralHeadersByFindContent(EphemeralHeadersByFindContentKey {
+        Self::EphemeralHeadersFindContent(EphemeralHeadersFindContentKey {
             block_hash: block_hash.into(),
             ancestor_count,
         })
     }
 
-    pub fn new_ephemeral_header_by_offer(block_hash: impl Into<[u8; 32]>) -> Self {
-        Self::EphemeralHeaderByOffer(EphemeralHeaderByOfferKey {
+    pub fn new_ephemeral_header_offer(block_hash: impl Into<[u8; 32]>) -> Self {
+        Self::EphemeralHeaderOffer(EphemeralHeaderOfferKey {
             block_hash: block_hash.into(),
         })
     }
@@ -150,7 +158,7 @@ pub struct BlockReceiptsKey {
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
-pub struct EphemeralHeadersByFindContentKey {
+pub struct EphemeralHeadersFindContentKey {
     /// Hash of the block.
     pub block_hash: [u8; 32],
     /// The number of ancestors included in the response.
@@ -159,7 +167,7 @@ pub struct EphemeralHeadersByFindContentKey {
 
 /// A key for a block header by hash.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Default)]
-pub struct EphemeralHeaderByOfferKey {
+pub struct EphemeralHeaderOfferKey {
     /// Hash of the block.
     pub block_hash: [u8; 32],
 }
@@ -187,16 +195,16 @@ impl fmt::Display for HistoryContentKey {
                     header.block_number
                 )
             }
-            Self::EphemeralHeadersByFindContent(ephemeral_headers) => {
+            Self::EphemeralHeadersFindContent(ephemeral_headers) => {
                 format!(
-                    "EphemeralHeadersByFindContent {{ block_hash: {}, ancestor_count: {} }}",
+                    "EphemeralHeadersFindContent {{ block_hash: {}, ancestor_count: {} }}",
                     hex_encode_compact(ephemeral_headers.block_hash),
                     ephemeral_headers.ancestor_count
                 )
             }
-            Self::EphemeralHeaderByOffer(ephemeral_header) => {
+            Self::EphemeralHeaderOffer(ephemeral_header) => {
                 format!(
-                    "EphemeralHeadersByOffer {{ block_hash: {} }}",
+                    "EphemeralHeadersOffer {{ block_hash: {} }}",
                     hex_encode_compact(ephemeral_header.block_hash),
                 )
             }
@@ -231,14 +239,14 @@ impl OverlayContentKey for HistoryContentKey {
                 bytes.put_u8(HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX);
                 bytes.put_slice(&key.as_ssz_bytes());
             }
-            HistoryContentKey::EphemeralHeadersByFindContent(key) => {
+            HistoryContentKey::EphemeralHeadersFindContent(key) => {
                 bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
-                bytes.put_u8(HISTORY_EPHEMERAL_HEADERS_BY_FIND_CONTENT_KEY_PREFIX);
+                bytes.put_u8(HISTORY_EPHEMERAL_HEADERS_FIND_CONTENT_KEY_PREFIX);
                 bytes.put_slice(&key.as_ssz_bytes());
             }
-            HistoryContentKey::EphemeralHeaderByOffer(key) => {
+            HistoryContentKey::EphemeralHeaderOffer(key) => {
                 bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
-                bytes.put_u8(HISTORY_EPHEMERAL_HEADER_BY_OFFER_KEY_PREFIX);
+                bytes.put_u8(HISTORY_EPHEMERAL_HEADER_OFFER_KEY_PREFIX);
                 bytes.put_slice(&key.as_ssz_bytes());
             }
         }
@@ -269,14 +277,14 @@ impl OverlayContentKey for HistoryContentKey {
                     .map(Self::BlockHeaderByNumber)
                     .map_err(|e| ContentKeyError::from_decode_error(e, bytes))
             }
-            HISTORY_EPHEMERAL_HEADERS_BY_FIND_CONTENT_KEY_PREFIX => {
-                EphemeralHeadersByFindContentKey::from_ssz_bytes(key)
-                    .map(Self::EphemeralHeadersByFindContent)
+            HISTORY_EPHEMERAL_HEADERS_FIND_CONTENT_KEY_PREFIX => {
+                EphemeralHeadersFindContentKey::from_ssz_bytes(key)
+                    .map(Self::EphemeralHeadersFindContent)
                     .map_err(|e| ContentKeyError::from_decode_error(e, bytes))
             }
-            HISTORY_EPHEMERAL_HEADER_BY_OFFER_KEY_PREFIX => {
-                EphemeralHeaderByOfferKey::from_ssz_bytes(key)
-                    .map(Self::EphemeralHeaderByOffer)
+            HISTORY_EPHEMERAL_HEADER_OFFER_KEY_PREFIX => {
+                EphemeralHeaderOfferKey::from_ssz_bytes(key)
+                    .map(Self::EphemeralHeaderOffer)
                     .map_err(|e| ContentKeyError::from_decode_error(e, bytes))
             }
             _ => Err(ContentKeyError::from_decode_error(
@@ -485,7 +493,7 @@ mod test {
     }
 
     #[test]
-    fn serde_ephemeral_headers_by_find_content() {
+    fn serde_ephemeral_headers_find_content() {
         let content_key_json =
             "\"0x04d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f27618301\"";
         let block_hash =
@@ -493,7 +501,7 @@ mod test {
                 .unwrap();
         let ancestor_count = 1;
         let expected_content_key =
-            HistoryContentKey::new_ephemeral_headers_by_find_content(block_hash, ancestor_count);
+            HistoryContentKey::new_ephemeral_headers_find_content(block_hash, ancestor_count);
 
         let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 
@@ -505,13 +513,13 @@ mod test {
     }
 
     #[test]
-    fn ephemeral_headers_by_find_content_content_id_derivations() {
+    fn ephemeral_headers_find_content_content_id_derivations() {
         let block_hash =
             B256::from_hex("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
                 .unwrap();
         let ancestor_count = 1;
         let content_key =
-            HistoryContentKey::new_ephemeral_headers_by_find_content(block_hash, ancestor_count);
+            HistoryContentKey::new_ephemeral_headers_find_content(block_hash, ancestor_count);
         assert_eq!(
             **content_key.to_bytes(),
             hex_decode("0x04d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f27618301")
@@ -525,13 +533,13 @@ mod test {
     }
 
     #[test]
-    fn serde_ephemeral_header_by_offer() {
+    fn serde_ephemeral_header_offer() {
         let content_key_json =
             "\"0x05d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183\"";
         let block_hash =
             B256::from_hex("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
                 .unwrap();
-        let expected_content_key = HistoryContentKey::new_ephemeral_header_by_offer(block_hash);
+        let expected_content_key = HistoryContentKey::new_ephemeral_header_offer(block_hash);
 
         let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 
@@ -543,11 +551,11 @@ mod test {
     }
 
     #[test]
-    fn ephemeral_header_by_offer_content_id_derivations() {
+    fn ephemeral_header_offer_content_id_derivations() {
         let block_hash =
             B256::from_hex("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
                 .unwrap();
-        let content_key = HistoryContentKey::new_ephemeral_header_by_offer(block_hash);
+        let content_key = HistoryContentKey::new_ephemeral_header_offer(block_hash);
         assert_eq!(
             **content_key.to_bytes(),
             hex_decode("0x05d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
