@@ -32,15 +32,16 @@ pub enum HistoryContentKey {
     BlockBody(BlockBodyKey),
     /// The transaction receipts for a block.
     BlockReceipts(BlockReceiptsKey),
-    /// Ephemeral headers by find content.
+    /// Ephemeral headers used for FindContent request.
     ///
     /// This is used to find the headers of a block and its ancestors.
-    /// This response can only be used by FindContent requests.
+    /// This content type can only be used by FindContent requests.
     EphemeralHeadersFindContent(EphemeralHeadersFindContentKey),
-    /// Ephemeral header offer.
+    /// Ephemeral header used for Offer request.
     ///
-    /// This is used to offer a block header to a peer. This response can only be used by Offer
-    /// requests. This type contains a single header.
+    /// This is used to offer an ephemeral block header to a peer. This content type can only be
+    /// used by Offer requests. The type contains a single header, but more headers should be
+    /// included in the single Offer request.
     EphemeralHeaderOffer(EphemeralHeaderOfferKey),
 }
 
@@ -204,7 +205,7 @@ impl fmt::Display for HistoryContentKey {
             }
             Self::EphemeralHeaderOffer(ephemeral_header) => {
                 format!(
-                    "EphemeralHeadersOffer {{ block_hash: {} }}",
+                    "EphemeralHeaderOffer {{ block_hash: {} }}",
                     hex_encode_compact(ephemeral_header.block_hash),
                 )
             }
