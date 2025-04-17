@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, bail, ensure};
 use e2store::{
     era::{CompressedSignedBeaconBlock, Era},
-    era1::Era1,
+    era1::{BlockTuple, Era1},
     utils::{get_era1_files, get_era_files},
 };
 use ethportal_api::consensus::beacon_state::HistoricalBatch;
@@ -42,6 +42,16 @@ impl EraSource {
 pub struct MinimalEra {
     pub blocks: Vec<CompressedSignedBeaconBlock>,
     pub historical_batch: HistoricalBatch,
+}
+
+impl MinimalEra {
+    pub fn contains_block(&self, block_number: u64) -> bool {
+        let first_block_number = self.blocks[0].block.execution_block_number();
+        let last_block_number = self.blocks[self.blocks.len() - 1]
+            .block
+            .execution_block_number();
+        (first_block_number..=last_block_number).contains(&block_number)
+    }
 }
 
 impl From<Era> for MinimalEra {
@@ -132,20 +142,22 @@ impl EraProvider {
         Ok(Self { sources })
     }
 
-    pub fn get_era1_for_block(&self, block_number: u64) -> anyhow::Result<Arc<Era1>> {
+    pub fn get_pre_merge(&self, block_number: u64) -> anyhow::Result<BlockTuple> {
         ensure!(
             block_number < MERGE_BLOCK_NUMBER,
             "Invalid logic, tried to lookup era1 file for post-merge block"
         );
         Ok(match &self.sources[0] {
-            EraSource::PreMerge(era1) => era1.clone(),
+            EraSource::PreMerge(era1) => {
+                era1.block_tuples[(block_number % EPOCH_SIZE) as usize].clone()
+            }
             EraSource::PostMerge(_) => {
                 bail!("Era1 file not found for block number: {block_number}",)
             }
         })
     }
 
-    pub fn get_block(
+    pub fn get_post_merge(
         &self,
         block_number: u64,
     ) -> anyhow::Result<(CompressedSignedBeaconBlock, &MinimalEra)> {
@@ -155,11 +167,7 @@ impl EraProvider {
         );
         for sources in self.sources.iter() {
             if let EraSource::PostMerge(era) = sources {
-                let first_block_number = era.blocks[0].block.execution_block_number();
-                let last_block_number = era.blocks[era.blocks.len() - 1]
-                    .block
-                    .execution_block_number();
-                if (first_block_number..=last_block_number).contains(&block_number) {
+                if era.contains_block(block_number) {
                     if let Some(block) = era
                         .blocks
                         .iter()

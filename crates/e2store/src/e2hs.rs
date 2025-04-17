@@ -29,7 +29,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, ensure};
+use alloy::{hex::ToHexExt, primitives::B256};
+use anyhow::{anyhow, bail, ensure};
 use ethportal_api::types::execution::header_with_proof::HeaderWithProof;
 use ssz::{Decode, Encode};
 
@@ -46,17 +47,15 @@ use crate::{
 pub const BLOCK_TUPLE_COUNT: usize = 8192;
 const E2HS_ENTRY_COUNT: usize = BLOCK_TUPLE_COUNT * 3 + 2;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum BlockTupleOrIndexEntry {
-    BlockTuple(BlockTuple),
-    BlockIndex(E2HSBlockIndexEntry),
-}
-
 /// The `E2HS` streaming writer.
 pub struct E2HSWriter {
     pub version: VersionEntry,
     writer: E2StoreStreamWriter<File>,
     temp_path: PathBuf,
+    epoch_index: u64,
+    block_index_offset: u64,
+    block_index_indices: Vec<u64>,
+    last_block_hash: Option<B256>,
 }
 
 impl E2HSWriter {
@@ -79,9 +78,13 @@ impl E2HSWriter {
         writer.append_entry(&Entry::from(&version))?;
 
         Ok(Self {
+            block_index_offset: version.version.length() as u64,
             version,
             writer,
             temp_path,
+            epoch_index,
+            block_index_indices: vec![],
+            last_block_hash: None,
         })
     }
 
@@ -89,40 +92,54 @@ impl E2HSWriter {
         self.temp_path.as_path()
     }
 
-    pub fn append_entry(&mut self, entry: &BlockTupleOrIndexEntry) -> anyhow::Result<usize> {
-        let size = match entry {
-            BlockTupleOrIndexEntry::BlockTuple(block_tuple) => {
-                let block_tuple_entries = <[Entry; 3]>::try_from(block_tuple)?;
-                for entry in &block_tuple_entries {
-                    self.writer.append_entry(entry)?;
-                }
-                block_tuple_entries
-                    .iter()
-                    .map(|entry| entry.value.len())
-                    .sum()
-            }
-            BlockTupleOrIndexEntry::BlockIndex(block_index) => {
-                let entry = Entry::from(block_index);
-                self.writer.append_entry(&entry)?;
-                entry.value.len()
-            }
+    pub fn append_block_tuple(&mut self, block_tuple: &BlockTuple) -> anyhow::Result<()> {
+        self.block_index_indices.push(self.block_index_offset);
+        let entries = <[Entry; 3]>::try_from(block_tuple)?;
+        let length = entries
+            .iter()
+            .map(|entry| entry.length() as u64)
+            .sum::<u64>();
+        self.block_index_offset += length;
+
+        for entry in entries {
+            self.writer.append_entry(&entry)?;
+        }
+
+        if self.block_index_indices.len() == BLOCK_TUPLE_COUNT {
+            self.last_block_hash = Some(
+                block_tuple
+                    .header_with_proof
+                    .header_with_proof
+                    .header
+                    .hash_slow(),
+            );
+        }
+
+        Ok(())
+    }
+
+    pub fn finish(mut self) -> anyhow::Result<PathBuf> {
+        ensure!(self.block_index_indices.len() == BLOCK_TUPLE_COUNT);
+        let block_index = BlockIndex {
+            starting_number: self.epoch_index * BLOCK_TUPLE_COUNT as u64,
+            indices: self.block_index_indices,
+            count: BLOCK_TUPLE_COUNT as u64,
         };
-        Ok(size)
-    }
-
-    pub fn flush(&mut self) -> anyhow::Result<()> {
-        self.writer.flush()
-    }
-
-    pub fn finish(mut self, epoch_index: u64, short_hash: String) -> anyhow::Result<PathBuf> {
+        self.writer
+            .append_entry(&Entry::from(&E2HSBlockIndexEntry::new(block_index)))?;
         self.writer.flush()?;
+
+        let Some(last_block_hash) = self.last_block_hash else {
+            bail!("No last block hash found");
+        };
+        let short_hash = &last_block_hash.encode_hex()[..8];
+
         let mut new_path = self.temp_path.clone();
         new_path.pop();
 
         let finished_e2hs_path = new_path.join(format!(
             "mainnet-{:05}-{}.e2hs",
-            epoch_index,
-            short_hash.trim_start_matches("0x")
+            self.epoch_index, short_hash
         ));
 
         fs::rename(&self.temp_path, &finished_e2hs_path)?;

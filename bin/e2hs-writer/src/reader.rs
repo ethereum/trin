@@ -7,7 +7,6 @@ use alloy::{
 };
 use anyhow::{anyhow, bail, ensure};
 use async_stream::stream;
-use e2store::era1::Era1;
 use ethportal_api::types::execution::{
     accumulator::EpochAccumulator,
     block_body::BlockBody,
@@ -111,9 +110,7 @@ impl EpochReader {
     }
 
     fn get_pre_merge_block_data(&self, block_number: u64) -> anyhow::Result<AllBlockData> {
-        let era1: Arc<Era1> = self.era_provider.get_era1_for_block(block_number)?;
-        let block_index = block_number % EPOCH_SIZE;
-        let tuple = era1.block_tuples[block_index as usize].clone();
+        let tuple = self.era_provider.get_pre_merge(block_number)?;
         let header = tuple.header.header;
         let Some(epoch_acc) = &self.epoch_accumulator else {
             bail!("Epoch accumulator not found for pre-merge block: {block_number}")
@@ -138,7 +135,7 @@ impl EpochReader {
         &mut self,
         block_number: u64,
     ) -> anyhow::Result<AllBlockData> {
-        let (block, era) = self.era_provider.get_block(block_number)?;
+        let (block, era) = self.era_provider.get_post_merge(block_number)?;
         let block = block
             .block
             .message_merge()
@@ -191,8 +188,7 @@ impl EpochReader {
         &mut self,
         block_number: u64,
     ) -> anyhow::Result<AllBlockData> {
-        let (block, era) = self.era_provider.get_block(block_number)?;
-
+        let (block, era) = self.era_provider.get_post_merge(block_number)?;
         let block = block
             .block
             .message_capella()

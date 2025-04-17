@@ -1,18 +1,11 @@
 use std::path::PathBuf;
 
-use anyhow::bail;
 use e2store::{
-    e2hs::{
-        BlockTuple, BlockTupleOrIndexEntry, E2HSBlockIndexEntry, E2HSWriter, HeaderWithProofEntry,
-        BLOCK_TUPLE_COUNT,
-    },
-    e2store::types::Entry,
-    era1::{BlockIndex, BodyEntry, ReceiptsEntry},
+    e2hs::{BlockTuple, E2HSWriter, HeaderWithProofEntry},
+    era1::{BodyEntry, ReceiptsEntry},
 };
-use ethportal_api::utils::bytes::hex_encode;
 use futures::StreamExt;
 use tracing::info;
-use trin_validation::constants::EPOCH_SIZE;
 
 use crate::reader::EpochReader;
 
@@ -38,10 +31,6 @@ impl EpochWriter {
         let mut e2hs_writer = E2HSWriter::create(&self.target_dir, self.epoch_index)?;
         let mut block_stream = Box::pin(reader.iter_blocks());
 
-        let mut block_index_offset = e2hs_writer.version.version.length() as u64;
-        let mut block_index_indices = vec![];
-        let mut block_tuple_count = 0;
-        let mut last_block_hash = None;
         while let Some(block_data) = block_stream.next().await {
             let block_data = block_data?;
             info!(
@@ -63,44 +52,10 @@ impl EpochWriter {
                 receipts,
             };
 
-            block_index_indices.push(block_index_offset);
-            let entry = <[Entry; 3]>::try_from(&block_tuple)?;
-            let length = entry.iter().map(|entry| entry.length() as u64).sum::<u64>();
-            block_index_offset += length;
-            block_tuple_count += 1;
-
-            if block_tuple_count == BLOCK_TUPLE_COUNT {
-                last_block_hash = Some(
-                    block_tuple
-                        .header_with_proof
-                        .header_with_proof
-                        .header
-                        .hash_slow(),
-                );
-            }
-
-            e2hs_writer.append_entry(&BlockTupleOrIndexEntry::BlockTuple(block_tuple))?;
-
-            // Flush the writer to ensure memory usage is kept low.
-            if block_tuple_count % 100 == 0 {
-                e2hs_writer.flush()?;
-            }
+            e2hs_writer.append_block_tuple(&block_tuple)?;
         }
-        assert_eq!(block_tuple_count, BLOCK_TUPLE_COUNT);
 
-        e2hs_writer.append_entry(&BlockTupleOrIndexEntry::BlockIndex(
-            E2HSBlockIndexEntry::new(BlockIndex {
-                starting_number: self.epoch_index * EPOCH_SIZE,
-                indices: block_index_indices,
-                count: BLOCK_TUPLE_COUNT as u64,
-            }),
-        ))?;
-
-        let Some(last_block_hash) = last_block_hash else {
-            bail!("No last block hash found");
-        };
-        let short_hash = hex_encode(&last_block_hash[..4]);
-        let e2hs_path = e2hs_writer.finish(self.epoch_index, short_hash)?;
+        let e2hs_path = e2hs_writer.finish()?;
 
         info!("Wrote epoch {} to {e2hs_path:?}", self.epoch_index);
         Ok(())
