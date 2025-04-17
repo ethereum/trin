@@ -24,14 +24,14 @@ use url::Url;
 use crate::{
     bridge::e2hs::BlockRange,
     census::ENR_OFFER_LIMIT,
-    constants::{DEFAULT_GOSSIP_LIMIT, DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
+    constants::{DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
     types::mode::BridgeMode,
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
     FALLBACK_BASE_EL_ENDPOINT,
 };
 
-const DEFAULT_SUBNETWORK: &str = "history";
-const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
+pub const DEFAULT_SUBNETWORK: &str = "history";
+pub const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Trin Bridge", about = "Feed the network")]
@@ -63,9 +63,8 @@ pub struct BridgeConfig {
         long = "portal-subnetworks",
         help = "Comma-separated list of which portal subnetworks to activate",
         default_value = DEFAULT_SUBNETWORK,
-        value_parser = subnetwork_parser,
     )]
-    pub portal_subnetworks: Arc<Vec<Subnetwork>>,
+    pub portal_subnetwork: Subnetwork,
 
     #[arg(
             long = "network",
@@ -149,13 +148,6 @@ pub struct BridgeConfig {
         help = "The base jsonrpc port to listen on. If more than one node is launched, the additional ports will be incremented by 1."
     )]
     pub base_rpc_port: u16,
-
-    #[arg(
-        default_value_t = DEFAULT_GOSSIP_LIMIT,
-        long = "gossip-limit",
-        help = "The maximum number of active blocks being gossiped."
-    )]
-    pub gossip_limit: usize,
 
     #[arg(
         default_value_t = DEFAULT_OFFER_LIMIT,
@@ -373,18 +365,6 @@ impl ClientWithBaseUrl {
     }
 }
 
-// parser for subnetworks, makes sure that the state network is not ran alongside other subnetworks
-fn subnetwork_parser(subnetwork_string: &str) -> Result<Arc<Vec<Subnetwork>>, String> {
-    let active_subnetworks: Vec<Subnetwork> = subnetwork_string
-        .split(',')
-        .map(Subnetwork::from_str)
-        .collect::<Result<Vec<Subnetwork>, String>>()?;
-    if active_subnetworks.contains(&Subnetwork::State) && active_subnetworks.len() > 1 {
-        return Err("The State network doesn't support being ran with other subnetwork bridges at the same time".to_string());
-    }
-    Ok(Arc::new(active_subnetworks))
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -397,7 +377,7 @@ mod test {
             "--executable-path",
             EXECUTABLE_PATH,
             "--portal-subnetworks",
-            "history,beacon",
+            "history",
         ]);
         assert_eq!(
             bridge_config.executable_path,
@@ -420,10 +400,7 @@ mod test {
             bridge_config.cl_provider_fallback.to_string(),
             FALLBACK_BASE_CL_ENDPOINT
         );
-        assert_eq!(
-            bridge_config.portal_subnetworks,
-            vec![Subnetwork::History, Subnetwork::Beacon].into()
-        );
+        assert_eq!(bridge_config.portal_subnetwork, Subnetwork::History);
     }
 
     #[test]
@@ -442,10 +419,7 @@ mod test {
             PathBuf::from(EXECUTABLE_PATH)
         );
         assert_eq!(bridge_config.mode, BridgeMode::Snapshot(60));
-        assert_eq!(
-            bridge_config.portal_subnetworks,
-            vec![Subnetwork::History].into()
-        );
+        assert_eq!(bridge_config.portal_subnetwork, Subnetwork::History);
     }
 
     #[test]
