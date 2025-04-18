@@ -110,7 +110,7 @@ epoch,index
 15523839,0x804008940c025a4e8a00ea42a659b484ba32c14dff133e9d3b7bf3685c1e54de // penultimate epoch (full)
 15532031,0x3f81607c8cb3f0448a11cab8df0e504b605581f4891a9a35bd9c0dd37a71834f // final epoch (incomplete)
 ```
-Final PoW block: `15537394`
+Final PoW block: `15537393`
 
 The hash tree root of the Master Accumulator is:
 ```sh
