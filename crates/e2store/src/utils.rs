@@ -8,7 +8,7 @@ use url::Url;
 
 const ERA_DIR_URL: &str = "https://mainnet.era.nimbus.team/";
 const ERA1_DIR_URL: &str = "https://era1.ethportal.net/";
-const E2HS_DIR_URL: &str = "https://e2hs.ethportal.net/";
+const E2HS_DIR_URL: &str = "https://e2hs.ethportal.net/index.html";
 const E2SS_DIR_URL: &str = "https://e2ss.ethportal.net/index.html";
 pub const ERA1_FILE_COUNT: usize = 1897;
 
