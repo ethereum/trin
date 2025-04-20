@@ -22,7 +22,11 @@ use ethportal_api::{
     BlockBody, ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
     OverlayContentKey, RawContentValue, Receipts,
 };
-use futures::future::join_all;
+use futures::{
+    future::{join_all, JoinAll, Map},
+    FutureExt,
+};
+use itertools::Itertools;
 use rand::seq::SliceRandom;
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
@@ -30,7 +34,7 @@ use reqwest::{
 };
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
-    task::JoinHandle,
+    task::{JoinError, JoinHandle},
     time::{sleep, timeout},
 };
 use tracing::{debug, error, info, warn};
@@ -104,14 +108,29 @@ impl E2HSBridge {
     pub async fn launch(&self) {
         info!("Launching E2HS bridge");
         let epochs = block_range_to_epochs(self.block_range.start, self.block_range.end);
-        let mut epoch_indexes: Vec<u64> = epochs.keys().cloned().collect();
+        let mut epoch_indexes: Vec<u64> = epochs.keys().cloned().sorted().collect();
         if self.random_fill {
             epoch_indexes.shuffle(&mut rand::thread_rng());
         }
+
+        let mut latest_task = None;
         for index in epoch_indexes {
             let block_range = epochs.get(&index).expect("to be able to get block range");
-            self.gossip_epoch(index, *block_range).await;
+
+            // Start gossiping epoch
+            let task = self.gossip_epoch(index, *block_range).await;
+
+            // Save task and make sure that previous task finished gossiping before we proceed.
+            if let Some(previous_task) = latest_task.replace(task) {
+                previous_task.await;
+            }
         }
+
+        // Wait for the latest task to finish
+        if let Some(latest_task) = latest_task.take() {
+            latest_task.await;
+        }
+
         self.gossiper
             .global_offer_report
             .lock()
@@ -119,7 +138,18 @@ impl E2HSBridge {
             .report();
     }
 
-    async fn gossip_epoch(&self, epoch_index: u64, block_range: Option<(u64, u64)>) {
+    /// Gossip single epoch.
+    ///
+    /// Downloads e2hs file, then validates and gossips each block from the epoch. For each block,
+    /// we first obtain `block_permit`, then we spawn a task that gossips it. This controls how
+    /// many blocks are gossiped in parallel.
+    ///
+    /// Returns [JoinAll] of all block gossip tasks.
+    async fn gossip_epoch(
+        &self,
+        epoch_index: u64,
+        block_range: Option<(u64, u64)>,
+    ) -> JoinAll<Map<JoinHandle<()>, impl FnOnce(Result<(), JoinError>)>> {
         match block_range {
             Some(block_range) => {
                 info!("Gossiping block range: {block_range:?} from epoch {epoch_index}")
@@ -150,12 +180,18 @@ impl E2HSBridge {
 
             let gossiper = self.gossiper.clone();
             let block_permit = self.block_semaphore.clone().acquire_owned().await;
-            tasks.push(tokio::spawn(async move {
+            let task = tokio::spawn(async move {
                 gossiper.gossip_block(block_number, block_tuple).await;
                 drop(block_permit);
-            }));
+            })
+            .map(move |task_result| {
+                if let Err(err) = task_result {
+                    error!(block_number, %err, "Error gossiping block");
+                }
+            });
+            tasks.push(task);
         }
-        join_all(tasks).await;
+        join_all(tasks)
     }
 
     async fn download_e2hs(&self, epoch_index: u64) -> Bytes {
