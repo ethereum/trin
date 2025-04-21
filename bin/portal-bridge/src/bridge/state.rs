@@ -516,7 +516,6 @@ impl StateBridge {
         let offer_report = Arc::new(Mutex::new(OfferReport::new(
             content_key.clone(),
             enrs.len(),
-            None,
         )));
         let encoded_content_value = content_value.encode();
         for enr in enrs.clone() {

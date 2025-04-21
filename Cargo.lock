@@ -4717,6 +4717,7 @@ version = "0.2.1"
 dependencies = [
  "alloy",
  "anyhow",
+ "bytes",
  "chrono",
  "clap",
  "delay_map 0.4.1",
