@@ -23,7 +23,6 @@ use url::Url;
 
 use crate::{
     bridge::e2hs::BlockRange,
-    census::ENR_OFFER_LIMIT,
     constants::{DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
     types::mode::BridgeMode,
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
@@ -32,6 +31,11 @@ use crate::{
 
 pub const DEFAULT_SUBNETWORK: &str = "history";
 pub const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
+
+/// The maximum number of enrs to return in a response,
+/// limiting the number of OFFER requests spawned by the bridge
+/// for each piece of content
+pub const ENR_OFFER_LIMIT: usize = 8;
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Trin Bridge", about = "Feed the network")]
