@@ -7783,6 +7783,7 @@ dependencies = [
  "serde_yaml",
  "ssz_types",
  "tokio",
+ "tracing",
  "tree_hash",
  "tree_hash_derive",
  "trin-utils",

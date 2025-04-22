@@ -1,9 +1,10 @@
-use alloy::primitives::B256;
+use alloy::primitives::{Bytes, B256};
 use anyhow::{anyhow, bail};
 use ethportal_api::{
-    consensus::header::BeaconBlockHeader,
+    consensus::{header::BeaconBlockHeader, historical_summaries::HistoricalSummaries},
     light_client::store::LightClientStore,
     types::{
+        content_key::beacon::HistoricalSummariesWithProofKey,
         execution::header_with_proof::HeaderWithProof,
         jsonrpc::{
             endpoints::{BeaconEndpoint, HistoryEndpoint},
@@ -11,13 +12,11 @@ use ethportal_api::{
         },
         portal::GetContentInfo,
     },
-    ContentValue, HistoryContentKey, HistoryContentValue,
+    BeaconContentKey, BeaconContentValue, ContentValue, HistoryContentKey, HistoryContentValue,
 };
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::mpsc;
-
-use crate::header_validator::HeaderValidator;
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation.
@@ -29,7 +28,6 @@ pub struct HeaderOracle {
     pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
     pub beacon_jsonrpc_tx: Option<mpsc::UnboundedSender<BeaconJsonRpcRequest>>,
     pub state_jsonrpc_tx: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
-    pub header_validator: HeaderValidator,
 }
 
 impl HeaderOracle {
@@ -38,7 +36,6 @@ impl HeaderOracle {
             history_jsonrpc_tx: None,
             beacon_jsonrpc_tx: None,
             state_jsonrpc_tx: None,
-            header_validator: HeaderValidator::default(),
         }
     }
 
@@ -134,27 +131,22 @@ impl HeaderOracle {
             None => bail!("No response from Beacon network"),
         }
     }
-}
 
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod test {
-    use std::str::FromStr;
+    /// Return HistoricalSummary for the given epoch
+    pub async fn get_historical_summary(&self, epoch: u64) -> anyhow::Result<HistoricalSummaries> {
+        let content_key =
+            BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
+                epoch,
+            });
+        let endpoint = BeaconEndpoint::LocalContent(content_key.clone());
+        let content: Bytes = self.send_beacon_request(endpoint).await?;
+        let content: BeaconContentValue = BeaconContentValue::decode(&content_key, &content)?;
 
-    use tree_hash::TreeHash;
-
-    use super::*;
-    use crate::constants::DEFAULT_PRE_MERGE_ACC_HASH;
-
-    #[tokio::test]
-    async fn header_oracle_bootstraps_with_default_pre_merge_acc() {
-        let header_oracle = HeaderOracle::default();
-        assert_eq!(
-            header_oracle
-                .header_validator
-                .pre_merge_acc
-                .tree_hash_root(),
-            B256::from_str(DEFAULT_PRE_MERGE_ACC_HASH).unwrap(),
-        );
+        match content {
+            BeaconContentValue::HistoricalSummariesWithProof(content) => Ok(content.historical_summaries_with_proof.historical_summaries),
+            _ => Err(anyhow!(
+                "Invalid BeaconContentValue received from HistoricalSummaries local_content, expected HistoricalSummariesWithProof: {content:?}"
+            )),
+        }
     }
 }

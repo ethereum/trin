@@ -2,7 +2,6 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use ethportal_api::{
     types::{distance::Distance, network::Subnetwork},
-    utils::bytes::hex_encode,
     version::get_trin_version,
 };
 use portalnet::{
@@ -14,7 +13,6 @@ use portalnet::{
 use rpc::{config::RpcConfig, launch_jsonrpc_server, RpcServerHandle};
 use tokio::sync::{mpsc, RwLock};
 use tracing::info;
-use tree_hash::TreeHash;
 use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
@@ -121,12 +119,7 @@ async fn run_trin_internal(
     }
 
     // Initialize validation oracle
-    let header_oracle = HeaderOracle::default();
-    info!(
-        hash_tree_root = %hex_encode(header_oracle.header_validator.pre_merge_acc.tree_hash_root().0),
-        "Loaded pre-merge accumulator."
-    );
-    let header_oracle = Arc::new(RwLock::new(header_oracle));
+    let header_oracle = Arc::new(RwLock::new(HeaderOracle::default()));
 
     // Initialize and spawn uTP socket
     let (utp_talk_reqs_tx, utp_talk_reqs_rx) = mpsc::unbounded_channel();

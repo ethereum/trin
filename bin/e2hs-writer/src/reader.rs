@@ -76,7 +76,7 @@ impl EpochReader {
             Some(Arc::new(
                 lookup_epoch_acc(
                     epoch_index,
-                    &HeaderValidator::new().pre_merge_acc,
+                    &HeaderValidator::new_without_historical_summaries().pre_merge_acc,
                     &epoch_acc_path,
                 )
                 .await?,

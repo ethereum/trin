@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
 use alloy::{consensus::Header, primitives::B256};
 use alloy_hardforks::EthereumHardforks;
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use ethportal_api::{
-    consensus::historical_summaries::HistoricalSummaries,
+    consensus::historical_summaries::{HistoricalSummaries, HistoricalSummary},
     types::{
         execution::header_with_proof::{
             BeaconBlockProofHistoricalRoots, BeaconBlockProofHistoricalSummaries, BlockHeaderProof,
@@ -13,36 +15,107 @@ use ethportal_api::{
         network_spec::network_spec,
     },
 };
+use tokio::sync::RwLock;
+use tracing::error;
 
 use crate::{
     accumulator::PreMergeAccumulator,
     constants::{CAPELLA_FORK_EPOCH, EPOCH_SIZE, SLOTS_PER_EPOCH},
     historical_roots_acc::HistoricalRootsAccumulator,
     merkle::proof::verify_merkle_proof,
+    oracle::HeaderOracle,
 };
+
+#[derive(Debug, Clone)]
+pub enum HistoricalSummariesSource {
+    /// The historical summaries are provided by the header oracle.
+    HeaderOracle(Arc<RwLock<HeaderOracle>>),
+    /// The historical summaries are provided by passed historical summaries.
+    HistoricalSummaries(HistoricalSummaries),
+}
+
+#[derive(Debug, Clone)]
+pub struct HistoricalSummariesProvider {
+    cache: Arc<RwLock<HistoricalSummaries>>,
+    source: HistoricalSummariesSource,
+}
+
+impl HistoricalSummariesProvider {
+    pub fn new(source: HistoricalSummariesSource) -> Self {
+        Self {
+            cache: Arc::new(RwLock::new(HistoricalSummaries::default())),
+            source,
+        }
+    }
+
+    pub async fn get_historical_summary(
+        &self,
+        epoch: u64,
+        historical_summary_index: usize,
+    ) -> anyhow::Result<HistoricalSummary> {
+        // Check to see if we have the historical summaries in cache
+        if let Some(historical_summary) = self.cache.read().await.get(historical_summary_index) {
+            return Ok(historical_summary.clone());
+        }
+
+        let historical_summaries = match &self.source {
+            HistoricalSummariesSource::HeaderOracle(header_oracle) => {
+                &header_oracle
+                    .read()
+                    .await
+                    .get_historical_summary(epoch)
+                    .await?
+            }
+            HistoricalSummariesSource::HistoricalSummaries(historical_summaries) => {
+                historical_summaries
+            }
+        };
+
+        match historical_summaries.get(historical_summary_index) {
+            Some(historical_summary) => {
+                // Update the cache with the historical summary
+                *self.cache.write().await = historical_summaries.clone();
+                Ok(historical_summary.clone())
+            }
+            None => {
+                bail!("Historical summary index out of bounds: {historical_summary_index}")
+            }
+        }
+    }
+}
 
 /// HeaderValidator is responsible for validating pre-merge and post-merge headers with their
 /// respective proofs.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone)]
 pub struct HeaderValidator {
     /// Pre-merge accumulator used to validate pre-merge headers.
     pub pre_merge_acc: PreMergeAccumulator,
     /// Historical roots accumulator used to validate post-merge/pre-Capella headers.
     pub historical_roots_acc: HistoricalRootsAccumulator,
+    /// Historical summaries provider used to validate post-Capella headers.
+    pub historical_summaries_provider: HistoricalSummariesProvider,
 }
 
 impl HeaderValidator {
-    pub fn new() -> Self {
-        let pre_merge_acc = PreMergeAccumulator::default();
-        let historical_roots_acc = HistoricalRootsAccumulator::default();
-
+    pub fn new(historical_summaries_provider: HistoricalSummariesProvider) -> Self {
         Self {
-            pre_merge_acc,
-            historical_roots_acc,
+            pre_merge_acc: PreMergeAccumulator::default(),
+            historical_roots_acc: HistoricalRootsAccumulator::default(),
+            historical_summaries_provider,
         }
     }
 
-    pub fn validate_header_with_proof(
+    pub fn new_without_historical_summaries() -> Self {
+        Self {
+            pre_merge_acc: PreMergeAccumulator::default(),
+            historical_roots_acc: HistoricalRootsAccumulator::default(),
+            historical_summaries_provider: HistoricalSummariesProvider::new(
+                HistoricalSummariesSource::HistoricalSummaries(HistoricalSummaries::default()),
+            ),
+        }
+    }
+
+    pub async fn validate_header_with_proof(
         &self,
         header_with_proof: &HeaderWithProof,
     ) -> anyhow::Result<()> {
@@ -57,12 +130,14 @@ impl HeaderValidator {
                 header.hash_slow(),
                 proof,
             ),
-            BlockHeaderProof::HistoricalSummariesCapella(_) => Err(anyhow!(
-                "HistoricalSummariesCapella header validation is not implemented yet."
-            )),
-            BlockHeaderProof::HistoricalSummariesDeneb(_) => Err(anyhow!(
-                "HistoricalSummariesDeneb header validation is not implemented yet."
-            )),
+            BlockHeaderProof::HistoricalSummariesCapella(proof) => {
+                self.verify_capella_to_deneb_header(header.timestamp, header.hash_slow(), proof)
+                    .await
+            }
+            BlockHeaderProof::HistoricalSummariesDeneb(proof) => {
+                self.verify_post_deneb_header(header.timestamp, header.hash_slow(), proof)
+                    .await
+            }
         }
     }
 
@@ -133,13 +208,11 @@ impl HeaderValidator {
     }
 
     /// A method to verify the chain of proofs for post-Capella/pre-Deneb execution headers.
-    #[allow(dead_code)] // TODO: Remove this when used
-    fn verify_capella_to_deneb_header(
+    async fn verify_capella_to_deneb_header(
         &self,
         block_timestamp: u64,
         header_hash: B256,
         proof: &BlockProofHistoricalSummariesCapella,
-        historical_summaries: &HistoricalSummaries,
     ) -> anyhow::Result<()> {
         if !network_spec().is_shanghai_active_at_timestamp(block_timestamp) {
             bail!("Invalid BlockProofHistoricalSummariesCapella found for pre-Shanghai header.");
@@ -158,12 +231,14 @@ impl HeaderValidator {
         }
 
         // Verify beacon block inclusion in historical summaries
-        if !self.verify_historical_summaries_beacon_block_proof(
-            proof.slot,
-            proof.beacon_block_root,
-            &proof.beacon_block_proof,
-            historical_summaries,
-        ) {
+        if !self
+            .verify_historical_summaries_beacon_block_proof(
+                proof.slot,
+                proof.beacon_block_root,
+                &proof.beacon_block_proof,
+            )
+            .await
+        {
             bail!("Beacon block proof verification failed for Capella-Deneb header");
         }
 
@@ -171,13 +246,11 @@ impl HeaderValidator {
     }
 
     /// A method to verify the chain of proofs for post-Deneb execution headers.
-    #[allow(dead_code)] // TODO: Remove this when used
-    fn verify_post_deneb_header(
+    async fn verify_post_deneb_header(
         &self,
         block_timestamp: u64,
         header_hash: B256,
         proof: &BlockProofHistoricalSummariesDeneb,
-        historical_summaries: &HistoricalSummaries,
     ) -> anyhow::Result<()> {
         if !network_spec().is_cancun_active_at_timestamp(block_timestamp) {
             bail!("Invalid BlockProofHistoricalSummariesDeneb found for pre-Cancun header.");
@@ -193,12 +266,14 @@ impl HeaderValidator {
         }
 
         // Verify beacon block inclusion in historical summaries
-        if !self.verify_historical_summaries_beacon_block_proof(
-            proof.slot,
-            proof.beacon_block_root,
-            &proof.beacon_block_proof,
-            historical_summaries,
-        ) {
+        if !self
+            .verify_historical_summaries_beacon_block_proof(
+                proof.slot,
+                proof.beacon_block_root,
+                &proof.beacon_block_proof,
+            )
+            .await
+        {
             bail!("Beacon block proof verification failed for post-Deneb header");
         }
 
@@ -292,17 +367,23 @@ impl HeaderValidator {
 
     /// Verifies that post-Capella Beacon Block root is included in the [HistoricalSummaries].
     #[must_use]
-    fn verify_historical_summaries_beacon_block_proof(
+    async fn verify_historical_summaries_beacon_block_proof(
         &self,
         slot: u64,
         beacon_block_root: B256,
         beacon_block_proof: &BeaconBlockProofHistoricalSummaries,
-        historical_summaries: &HistoricalSummaries,
     ) -> bool {
         let block_root_index = slot % EPOCH_SIZE;
         let gen_index = EPOCH_SIZE + block_root_index;
         let historical_summary_index = (slot - CAPELLA_FORK_EPOCH * SLOTS_PER_EPOCH) / EPOCH_SIZE;
-        let historical_summary = &historical_summaries[historical_summary_index as usize];
+        let Ok(historical_summary) = self
+            .historical_summaries_provider
+            .get_historical_summary(slot / SLOTS_PER_EPOCH, historical_summary_index as usize)
+            .await
+        else {
+            error!("Failed to get historical summary for slot {slot} and index {historical_summary_index}");
+            return false;
+        };
 
         verify_merkle_proof(
             beacon_block_root,
@@ -346,7 +427,8 @@ mod test {
         use super::*;
 
         #[rstest]
-        fn verify_header(
+        #[tokio::test]
+        async fn verify_header(
             #[values(
                 1_000_001, 1_000_002, 1_000_003, 1_000_004, 1_000_005, 1_000_006, 1_000_007,
                 1_000_008, 1_000_009, 1_000_010
@@ -365,11 +447,15 @@ mod test {
 
             get_mainnet_header_validator()
                 .validate_header_with_proof(&header_with_proof)
+                .await
                 .unwrap();
         }
 
         #[rstest]
-        fn verify_header_from_partial_epoch(#[values(15_537_392, 15_537_393)] block_number: u64) {
+        #[tokio::test]
+        async fn verify_header_from_partial_epoch(
+            #[values(15_537_392, 15_537_393)] block_number: u64,
+        ) {
             let test_data: ContentItem<HistoryContentKey> = read_yaml_portal_spec_tests_file(
                 format!("tests/mainnet/history/headers_with_proof/{block_number}.yaml"),
             )
@@ -380,12 +466,13 @@ mod test {
 
             get_mainnet_header_validator()
                 .validate_header_with_proof(&header_with_proof)
+                .await
                 .unwrap();
         }
 
-        #[test]
+        #[tokio::test]
         #[should_panic = "Execution block proof verification failed for pre-Merge header"]
-        fn invalidate_invalid_proofs() {
+        async fn invalidate_invalid_proofs() {
             let test_data: ContentItem<HistoryContentKey> = read_yaml_portal_spec_tests_file(
                 "tests/mainnet/history/headers_with_proof/1000010.yaml",
             )
@@ -401,12 +488,13 @@ mod test {
 
             get_mainnet_header_validator()
                 .validate_header_with_proof(&header_with_proof)
+                .await
                 .unwrap()
         }
 
-        #[test]
+        #[tokio::test]
         #[should_panic = "Invalid proof type found for post-merge header."]
-        fn header_validator_invalidates_post_merge_header_with_accumulator_proof() {
+        async fn header_validator_invalidates_post_merge_header_with_accumulator_proof() {
             let header_validator = get_mainnet_header_validator();
             let future_height = EthereumHardfork::Paris.mainnet_activation_block().unwrap();
             let future_header = generate_random_header(&future_height);
@@ -416,6 +504,7 @@ mod test {
             };
             header_validator
                 .validate_header_with_proof(&future_header_with_proof)
+                .await
                 .unwrap();
         }
     }
@@ -496,10 +585,14 @@ mod test {
         use super::*;
 
         #[rstest]
-        fn verify_header(
+        #[tokio::test]
+        async fn verify_header(
             #[values(17_034_870, 17_042_287, 17_062_257, 19_426_586)] block_number: u64,
         ) {
-            let header_validator = get_mainnet_header_validator();
+            let mut header_validator = get_mainnet_header_validator();
+            header_validator.historical_summaries_provider = HistoricalSummariesProvider::new(
+                HistoricalSummariesSource::HistoricalSummaries(read_historical_summaries()),
+            );
 
             let BlockHashWithProof::<BlockProofHistoricalSummariesCapella> { header_hash, proof } =
                 read_yaml_portal_spec_tests_file(PathBuf::from(SPEC_TESTS_DIR).join(format!(
@@ -507,28 +600,30 @@ mod test {
             )))
                 .unwrap();
 
-            let historical_summaries = read_historical_summaries();
-
             header_validator
                 .verify_capella_to_deneb_header(
                     network_spec().slot_to_timestamp(proof.slot),
                     header_hash,
                     &proof,
-                    &historical_summaries,
                 )
+                .await
                 .unwrap();
         }
 
-        #[test]
+        #[tokio::test]
         #[should_panic = "Invalid BlockProofHistoricalSummariesCapella found for pre-Shanghai header"]
-        fn pre_capella_block() {
+        async fn pre_capella_block() {
             let dummy_proof = BlockProofHistoricalSummariesCapella {
                 beacon_block_proof: Default::default(),
                 beacon_block_root: Default::default(),
                 execution_block_proof: Default::default(),
                 slot: Default::default(),
             };
-            get_mainnet_header_validator()
+            let mut header_validator = get_mainnet_header_validator();
+            header_validator.historical_summaries_provider = HistoricalSummariesProvider::new(
+                HistoricalSummariesSource::HistoricalSummaries(read_historical_summaries()),
+            );
+            header_validator
                 .verify_capella_to_deneb_header(
                     EthereumHardfork::Shanghai
                         .mainnet_activation_timestamp()
@@ -536,29 +631,33 @@ mod test {
                         - 1,
                     B256::random(),
                     &dummy_proof,
-                    &read_historical_summaries(),
                 )
+                .await
                 .unwrap()
         }
 
-        #[test]
+        #[tokio::test]
         #[should_panic = "Invalid BlockProofHistoricalSummariesCapella found for post-Cancun header"]
-        fn post_deneb_block() {
+        async fn post_deneb_block() {
             let dummy_proof = BlockProofHistoricalSummariesCapella {
                 beacon_block_proof: Default::default(),
                 beacon_block_root: Default::default(),
                 execution_block_proof: Default::default(),
                 slot: Default::default(),
             };
-            get_mainnet_header_validator()
+            let mut header_validator = get_mainnet_header_validator();
+            header_validator.historical_summaries_provider = HistoricalSummariesProvider::new(
+                HistoricalSummariesSource::HistoricalSummaries(read_historical_summaries()),
+            );
+            header_validator
                 .verify_capella_to_deneb_header(
                     EthereumHardfork::Cancun
                         .mainnet_activation_timestamp()
                         .unwrap(),
                     B256::random(),
                     &dummy_proof,
-                    &read_historical_summaries(),
                 )
+                .await
                 .unwrap()
         }
     }
@@ -567,8 +666,12 @@ mod test {
         use super::*;
 
         #[rstest]
-        fn verify_header(#[values(19_426_587, 22_162_263)] block_number: u64) {
-            let header_validator = get_mainnet_header_validator();
+        #[tokio::test]
+        async fn verify_header(#[values(19_426_587, 22_162_263)] block_number: u64) {
+            let mut header_validator = get_mainnet_header_validator();
+            header_validator.historical_summaries_provider = HistoricalSummariesProvider::new(
+                HistoricalSummariesSource::HistoricalSummaries(read_historical_summaries()),
+            );
 
             let BlockHashWithProof::<BlockProofHistoricalSummariesDeneb> { header_hash, proof } =
                 read_yaml_portal_spec_tests_file(PathBuf::from(SPEC_TESTS_DIR).join(format!(
@@ -576,28 +679,30 @@ mod test {
                 )))
                 .unwrap();
 
-            let historical_summaries = read_historical_summaries();
-
             header_validator
                 .verify_post_deneb_header(
                     network_spec().slot_to_timestamp(proof.slot),
                     header_hash,
                     &proof,
-                    &historical_summaries,
                 )
+                .await
                 .unwrap();
         }
 
-        #[test]
+        #[tokio::test]
         #[should_panic = "Invalid BlockProofHistoricalSummariesDeneb found for pre-Cancun header"]
-        fn pre_deneb_block() {
+        async fn pre_deneb_block() {
             let dummy_proof = BlockProofHistoricalSummariesDeneb {
                 beacon_block_proof: Default::default(),
                 beacon_block_root: Default::default(),
                 execution_block_proof: Default::default(),
                 slot: Default::default(),
             };
-            get_mainnet_header_validator()
+            let mut header_validator = get_mainnet_header_validator();
+            header_validator.historical_summaries_provider = HistoricalSummariesProvider::new(
+                HistoricalSummariesSource::HistoricalSummaries(read_historical_summaries()),
+            );
+            header_validator
                 .verify_post_deneb_header(
                     EthereumHardfork::Cancun
                         .mainnet_activation_timestamp()
@@ -605,8 +710,8 @@ mod test {
                         - 1,
                     B256::random(),
                     &dummy_proof,
-                    &read_historical_summaries(),
                 )
+                .await
                 .unwrap()
         }
     }
@@ -624,7 +729,7 @@ mod test {
     }
 
     fn get_mainnet_header_validator() -> HeaderValidator {
-        let header_validator = HeaderValidator::default();
+        let header_validator = HeaderValidator::new_without_historical_summaries();
         assert_eq!(
             header_validator.pre_merge_acc.tree_hash_root(),
             B256::from_str(DEFAULT_PRE_MERGE_ACC_HASH).unwrap()

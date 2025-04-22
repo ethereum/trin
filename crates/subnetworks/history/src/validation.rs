@@ -11,18 +11,32 @@ use ethportal_api::{
 };
 use ssz::Decode;
 use tokio::sync::RwLock;
+use tracing::info;
+use tree_hash::TreeHash;
 use trin_validation::{
+    header_validator::{HeaderValidator, HistoricalSummariesProvider, HistoricalSummariesSource},
     oracle::HeaderOracle,
     validator::{ValidationResult, Validator},
 };
 
 pub struct ChainHistoryValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
+    pub header_validator: HeaderValidator,
 }
 
 impl ChainHistoryValidator {
     pub fn new(header_oracle: Arc<RwLock<HeaderOracle>>) -> Self {
-        Self { header_oracle }
+        let header_validator = HeaderValidator::new(HistoricalSummariesProvider::new(
+            HistoricalSummariesSource::HeaderOracle(header_oracle.clone()),
+        ));
+        info!(
+            hash_tree_root = %header_validator.pre_merge_acc.tree_hash_root(),
+            "Loaded pre-merge accumulator."
+        );
+        Self {
+            header_oracle,
+            header_validator,
+        }
     }
 }
 
@@ -44,11 +58,9 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     "Content validation failed: Invalid header hash. Found: {header_hash:?} - Expected: {:?}",
                     hex_encode(header_hash)
                 );
-                self.header_oracle
-                    .read()
-                    .await
-                    .header_validator
-                    .validate_header_with_proof(&header_with_proof)?;
+                self.header_validator
+                    .validate_header_with_proof(&header_with_proof)
+                    .await?;
 
                 Ok(ValidationResult::new(true))
             }
@@ -63,11 +75,9 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     "Content validation failed: Invalid header number. Found: {header_number} - Expected: {}",
                     key.block_number
                 );
-                self.header_oracle
-                    .read()
-                    .await
-                    .header_validator
-                    .validate_header_with_proof(&header_with_proof)?;
+                self.header_validator
+                    .validate_header_with_proof(&header_with_proof)
+                    .await?;
 
                 Ok(ValidationResult::new(true))
             }
