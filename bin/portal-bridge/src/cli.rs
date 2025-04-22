@@ -32,9 +32,9 @@ use crate::{
 pub const DEFAULT_SUBNETWORK: &str = "history";
 pub const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
 
-/// The maximum number of enrs to return in a response,
-/// limiting the number of OFFER requests spawned by the bridge
-/// for each piece of content
+/// The maximum number of peers to send each piece of content.
+///
+/// This is used as a parameter in census, which selects the peers.
 pub const ENR_OFFER_LIMIT: usize = 8;
 
 #[derive(Parser, Debug, Clone)]
