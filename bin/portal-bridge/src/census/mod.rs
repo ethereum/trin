@@ -31,11 +31,6 @@ pub enum CensusError {
     AlreadyInitialized,
 }
 
-/// The maximum number of enrs to return in a response,
-/// limiting the number of OFFER requests spawned by the bridge
-/// for each piece of content
-pub const ENR_OFFER_LIMIT: usize = 2;
-
 /// The census is responsible for maintaining a list of known peers in the network,
 /// checking their liveness, updating their data radius, iterating through their
 /// rfn to find new peers, and providing interested enrs for a given content id.

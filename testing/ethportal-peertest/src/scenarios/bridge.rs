@@ -8,8 +8,8 @@ use ethportal_api::{
 use portal_bridge::{
     api::consensus::ConsensusApi,
     bridge::beacon::BeaconBridge,
-    census::{Census, ENR_OFFER_LIMIT},
-    cli::{BridgeConfig, BridgeId, DEFAULT_EXECUTABLE_PATH, DEFAULT_SUBNETWORK},
+    census::Census,
+    cli::{BridgeConfig, BridgeId, DEFAULT_EXECUTABLE_PATH, DEFAULT_SUBNETWORK, ENR_OFFER_LIMIT},
     constants::{DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
     types::mode::BridgeMode,
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
