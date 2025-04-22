@@ -41,7 +41,6 @@ pub async fn initialize_history_network(
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
-    disable_history_storage: bool,
 ) -> anyhow::Result<(
     HistoryHandler,
     HistoryNetworkTask,
@@ -59,7 +58,6 @@ pub async fn initialize_history_network(
         storage_config,
         portalnet_config.clone(),
         header_oracle,
-        disable_history_storage,
     )
     .await?;
     let event_stream = history_network.overlay.event_stream().await?;

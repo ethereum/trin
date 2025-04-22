@@ -74,7 +74,9 @@ impl HeaderValidator {
                     ));
                 }
                 // TODO: Validation for post-Capella headers is not implemented
-                Ok(())
+                Err(anyhow!(
+                    "Post-Capella header validation is not implemented yet."
+                ))
             }
         }
     }
