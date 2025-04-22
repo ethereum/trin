@@ -46,7 +46,6 @@ impl HistoryNetwork {
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
-        disable_history_storage: bool,
     ) -> anyhow::Result<Self> {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnodes,
@@ -55,10 +54,7 @@ impl HistoryNetwork {
             utp_transfer_limit: portal_config.utp_transfer_limit,
             ..Default::default()
         };
-        let storage = Arc::new(Mutex::new(HistoryStorage::new(
-            storage_config,
-            disable_history_storage,
-        )?));
+        let storage = Arc::new(Mutex::new(HistoryStorage::new(storage_config)?));
         let validator = Arc::new(ChainHistoryValidator { header_oracle });
         let ping_extensions = Arc::new(HistoryPingExtensions {});
         let overlay = OverlayProtocol::new(

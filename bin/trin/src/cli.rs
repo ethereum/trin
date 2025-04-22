@@ -216,13 +216,6 @@ pub struct TrinConfig {
         value_parser = max_radius_parser,
     )]
     pub max_radius: Distance,
-
-    #[arg(
-        long = "disable-history-storage",
-        help = "Disable storing all history data locally. This is a temporary flag used for upgrading the network, and should be removed once the upgrade is complete.",
-        default_value = "false"
-    )]
-    pub disable_history_storage: bool,
 }
 
 impl Default for TrinConfig {
@@ -256,7 +249,6 @@ impl Default for TrinConfig {
             network: MAINNET.clone(),
             max_radius: max_radius_parser(DEFAULT_MAX_RADIUS)
                 .expect("Parsing static DEFAULT_MAX_RADIUS to work"),
-            disable_history_storage: false,
         }
     }
 }
