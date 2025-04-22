@@ -76,10 +76,8 @@ pub async fn test_offer_with_trace(peertest: &Peertest, target: &Client) {
         .unwrap();
 
     // check that the result of the offer is true for a valid transfer
-    if let OfferTrace::Success(accepted_keys) = result {
-        let mut accept_code_list = AcceptCodeList::new(1).unwrap();
-        accept_code_list.set(0, AcceptCode::Accepted);
-        assert_eq!(accepted_keys, accept_code_list);
+    if let OfferTrace::Success(accept_code) = result {
+        assert_eq!(accept_code, AcceptCode::Accepted);
     } else {
         panic!("Offer failed");
     }

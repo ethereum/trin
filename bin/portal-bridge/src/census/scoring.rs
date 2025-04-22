@@ -1,10 +1,10 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use ethportal_api::types::{accept_code::AcceptCode, portal_wire::OfferTrace};
 use itertools::Itertools;
 use rand::{seq::SliceRandom, thread_rng};
 
-use super::{client_type::PeerInfo, peer::Peer};
+use super::peer::{Peer, PeerInfo};
 
 /// A trait for calculating peer's weight.
 pub trait Weight: Send + Sync {
@@ -36,24 +36,36 @@ pub struct AdditiveWeight {
     pub starting_weight: u32,
     pub maximum_weight: u32,
     pub success_weight: i32,
-    pub already_stored_weight: i32,
-    pub rate_limited_weight: i32,
-    pub non_accept_code_compliance_weight: i32,
-    pub not_within_radius_weight: i32,
+    pub accept_code_weights: HashMap<AcceptCode, i32>,
     pub failure_weight: i32,
 }
 
 impl Default for AdditiveWeight {
     fn default() -> Self {
+        let accept_code_weights = HashMap::from([
+            (AcceptCode::Accepted, 5),
+            (AcceptCode::AlreadyStored, 0),
+            // Rate limited and inbound transfer in progress are treated the same. We don't
+            // want to overload the node.
+            (AcceptCode::RateLimited, -2),
+            (AcceptCode::InboundTransferInProgress, -2),
+            // The peer doesn't properly support decline codes, we should avoid using them
+            // as we can't get good data from them, they will still get the content through
+            // neighbors, but they are a lower priority for the bridge as we have limited
+            // resources.
+            (AcceptCode::Declined, -5),
+            (AcceptCode::Unspecified, -5),
+            // If we got a NotWithinRadius code, we either have a bug, they do, or the node
+            // is malicious.
+            (AcceptCode::NotWithinRadius, -10),
+        ]);
+
         Self {
             timeframe: Duration::from_secs(15 * 60), // 15 min
             starting_weight: 200,
             maximum_weight: 400,
             success_weight: 5,
-            already_stored_weight: 0,
-            rate_limited_weight: -2,
-            non_accept_code_compliance_weight: -5,
-            not_within_radius_weight: -10,
+            accept_code_weights,
             failure_weight: -10,
         }
     }
@@ -81,25 +93,12 @@ impl Weight for AdditiveWeight {
             .iter_offer_events()
             .filter(|offer_event| offer_event.timestamp.elapsed() <= self.timeframe)
             .map(|offer_event| match &offer_event.offer_trace {
-                OfferTrace::Success(accept_codes) => match accept_codes[0] {
-                    AcceptCode::Accepted => self.success_weight,
-                    AcceptCode::AlreadyStored => self.already_stored_weight,
-                    // Rate limited and inbound transfer in progress are treated the same. We don't
-                    // want to overload the node.
-                    AcceptCode::RateLimited | AcceptCode::InboundTransferInProgress => {
-                        self.rate_limited_weight
-                    }
-                    // The peer doesn't properly support decline codes, we should avoid using them
-                    // as we can't get good data from them, they will still get the content through
-                    // neighbors, but they are a lower priority for the bridge as we have limited
-                    // resources.
-                    AcceptCode::Declined | AcceptCode::Unspecified => {
-                        self.non_accept_code_compliance_weight
-                    }
-                    // If we got a NotWithinRadius code, we either have a bug, they do, or the node
-                    // is malicious.
-                    AcceptCode::NotWithinRadius => self.not_within_radius_weight,
-                },
+                OfferTrace::Success(accept_code) => *self
+                    .accept_code_weights
+                    .get(accept_code)
+                    // We don't know how to handle this accept code, so we might as well prioritize
+                    // nodes we do know how to deal with
+                    .unwrap_or(&self.failure_weight),
                 OfferTrace::Failed => self.failure_weight,
             })
             .sum::<i32>();

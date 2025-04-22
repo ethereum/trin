@@ -365,7 +365,13 @@ impl<
         // keys
         if content_keys.all_declined() {
             if let Some(tx) = gossip_result_tx {
-                let _ = tx.send(OfferTrace::Success(content_keys));
+                if content_keys.len() != 1 {
+                    error!(
+                        "OfferTrace only supports one content key at a time, got {}",
+                        content_keys.len()
+                    );
+                }
+                let _ = tx.send(OfferTrace::Success(content_keys[0]));
             }
             return Ok(());
         }
@@ -433,7 +439,13 @@ impl<
                 .await;
             if let Some(tx) = gossip_result_tx {
                 if result {
-                    let _ = tx.send(OfferTrace::Success(content_keys));
+                    if content_keys.len() != 1 {
+                        error!(
+                            "OfferTrace only supports one content key at a time, got {}",
+                            content_keys.len()
+                        );
+                    }
+                    let _ = tx.send(OfferTrace::Success(content_keys[0]));
                 } else {
                     let _ = tx.send(OfferTrace::Failed);
                 }

@@ -10,7 +10,7 @@ use ethportal_api::types::{
 };
 use tracing::error;
 
-use super::client_type::{ClientType, PeerInfo};
+use super::client_type::ClientType;
 
 #[derive(Debug, Clone)]
 pub struct LivenessCheck {
@@ -53,7 +53,7 @@ impl Peer {
     pub fn new(enr: Enr) -> Self {
         Self {
             enr,
-            client_type: ClientType::Unknown,
+            client_type: ClientType::Unknown(None),
             radius: Distance::ZERO,
             liveness_checks: VecDeque::with_capacity(Self::MAX_LIVENESS_CHECKS + 1),
             offer_events: VecDeque::with_capacity(Self::MAX_OFFER_EVENTS + 1),
@@ -65,11 +65,11 @@ impl Peer {
     }
 
     pub fn client_type(&self) -> ClientType {
-        self.client_type
+        self.client_type.clone()
     }
 
     pub fn peer_info(&self) -> PeerInfo {
-        PeerInfo::new(self.enr.clone(), self.client_type)
+        PeerInfo::new(self.enr(), self.client_type())
     }
 
     /// Returns true if content is within radius.
@@ -157,5 +157,17 @@ impl Peer {
 
     pub fn iter_offer_events(&self) -> impl Iterator<Item = &OfferEvent> {
         self.offer_events.iter()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerInfo {
+    pub enr: Enr,
+    pub client_type: ClientType,
+}
+
+impl PeerInfo {
+    pub fn new(enr: Enr, client_type: ClientType) -> Self {
+        Self { enr, client_type }
     }
 }

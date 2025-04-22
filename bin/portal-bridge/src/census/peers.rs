@@ -17,8 +17,8 @@ use tokio::time::Instant;
 use tracing::error;
 
 use super::{
-    client_type::{ClientType, PeerInfo},
-    peer::Peer,
+    client_type::ClientType,
+    peer::{Peer, PeerInfo},
     scoring::{PeerSelector, Weight},
 };
 
@@ -127,14 +127,6 @@ impl<W: Weight> Peers<W> {
     pub fn select_peers(&self, content_id: &[u8; 32]) -> Vec<PeerInfo> {
         self.selector
             .select_peers(content_id, self.read().peers.values())
-    }
-
-    pub fn get_client_type(&self, node_id: &NodeId) -> ClientType {
-        self.read()
-            .peers
-            .get(node_id)
-            .map(|peer| peer.client_type())
-            .unwrap_or(ClientType::Unknown)
     }
 
     fn read(&self) -> RwLockReadGuard<'_, PeersWithLivenessChecks> {

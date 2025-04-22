@@ -620,9 +620,9 @@ impl BeaconBridge {
                             "historical_summaries_with_proof"
                         }
                     },
-                    peer.client_type.to_string(),
+                    &format!("{:?}", peer.client_type),
                     match &offer_trace {
-                        OfferTrace::Success(accept_code) => accept_code[0].to_string(),
+                        OfferTrace::Success(accept_code) => accept_code.to_string(),
                         OfferTrace::Failed => "Failed".to_string(),
                     },
                 );

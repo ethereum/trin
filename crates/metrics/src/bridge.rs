@@ -101,10 +101,10 @@ impl BridgeMetricsReporter {
             .inc();
     }
 
-    pub fn report_offer(&self, content_type: &str, client_type: String, status: String) {
+    pub fn report_offer(&self, content_type: &str, client_type: &str, status: String) {
         self.bridge_metrics
             .offer_total
-            .with_label_values(&[&self.bridge, content_type, &client_type, &status])
+            .with_label_values(&[&self.bridge, content_type, client_type, &status])
             .inc();
     }
 

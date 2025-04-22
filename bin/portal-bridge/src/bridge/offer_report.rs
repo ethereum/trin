@@ -6,7 +6,7 @@ use ethportal_api::{
 };
 use tracing::{debug, enabled, info, Level};
 
-use crate::census::client_type::PeerInfo;
+use crate::census::peer::PeerInfo;
 
 /// Global report for outcomes of offering state content keys from long-running state bridge
 #[derive(Default, Debug)]
@@ -20,10 +20,10 @@ impl GlobalOfferReport {
     pub fn update(&mut self, trace: &OfferTrace) {
         match trace {
             OfferTrace::Success(accept_code) => {
-                if accept_code[0] == AcceptCode::Accepted {
+                if *accept_code == AcceptCode::Accepted {
                     self.accepted += 1;
                 } else {
-                    self.failed += 1;
+                    self.declined += 1;
                 }
             }
             OfferTrace::Failed => self.failed += 1,
@@ -53,7 +53,7 @@ pub struct OfferReport<ContentKey> {
     content_key: ContentKey,
     /// total number of enrs interested in the content key
     total: usize,
-    accepted: Vec<PeerInfo>,
+    accepted: usize,
     declined: Vec<PeerWithAcceptCode>,
     failed: Vec<PeerInfo>,
 }
@@ -66,7 +66,7 @@ where
         Self {
             content_key,
             total,
-            accepted: Vec::new(),
+            accepted: 0,
             declined: Vec::new(),
             failed: Vec::new(),
         }
@@ -75,16 +75,16 @@ where
     pub fn update(&mut self, peer: &PeerInfo, trace: &OfferTrace) {
         match trace {
             OfferTrace::Success(accept_code) => {
-                if accept_code[0] == AcceptCode::Accepted {
-                    self.accepted.push(peer.clone())
+                if *accept_code == AcceptCode::Accepted {
+                    self.accepted += 1;
                 } else {
                     self.declined
-                        .push(PeerWithAcceptCode::new(peer.clone(), accept_code[0]));
+                        .push(PeerWithAcceptCode::new(peer.clone(), *accept_code));
                 }
             }
             OfferTrace::Failed => self.failed.push(peer.clone()),
         }
-        if self.total == self.accepted.len() + self.failed.len() + self.declined.len() {
+        if self.total == self.accepted + self.failed.len() + self.declined.len() {
             self.report();
         }
     }
@@ -93,7 +93,7 @@ where
         if enabled!(Level::DEBUG) {
             debug!(
                 "Successfully offered to {}/{} peers. Content key: {}. Declined: {:?}. Failed: {:?}",
-                self.accepted.len(),
+                self.accepted ,
                 self.total,
                 self.content_key.to_hex(),
                 self.declined,
@@ -102,7 +102,7 @@ where
         } else {
             info!(
                 "Successfully offered to {}/{} peers. Content key: {}. Decline reasons: {}. Failed: {}.",
-                self.accepted.len(),
+                self.accepted ,
                 self.total,
                 self.content_key.to_hex(),
                 self.decline_reason_summary(),
@@ -118,7 +118,7 @@ where
             groups
                 .entry(declined.accept_code)
                 .or_default()
-                .push(declined.peer.client_type.to_string());
+                .push(format!("{:?}", declined.peer.client_type));
         }
 
         if groups.is_empty() {

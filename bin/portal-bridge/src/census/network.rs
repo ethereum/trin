@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{anyhow, bail};
 use discv5::enr::NodeId;
 use ethportal_api::{
     generate_random_node_ids,
@@ -20,7 +20,8 @@ use tokio::{
 use tracing::{debug, error, info, warn};
 
 use super::{
-    client_type::{ClientType, PeerInfo},
+    client_type::ClientType,
+    peer::PeerInfo,
     peers::Peers,
     scoring::{AdditiveWeight, PeerSelector},
 };
@@ -124,14 +125,6 @@ impl Network {
     ) {
         self.peers
             .record_offer_result(node_id, content_value_size, duration, offer_trace);
-    }
-
-    /// Returns whether `enr` represents eligible peer.
-    ///
-    /// Currently this only filters out peers based on client type (using `filter_client` field).
-    fn is_eligible(&self, enr: &Enr) -> bool {
-        let client_type = self.peers.get_client_type(&enr.node_id());
-        self.filter_clients.is_empty() || !self.filter_clients.contains(&client_type)
     }
 
     /// Initializes the peers.
@@ -288,7 +281,7 @@ impl Network {
         let client_type = if let Some(client_type) = capabilities.client_info {
             ClientType::from(client_type.client_name.as_str())
         } else {
-            ClientType::Unknown
+            ClientType::Unknown(None)
         };
 
         self.peers
@@ -297,8 +290,6 @@ impl Network {
     }
 
     async fn ping(&self, enr: &Enr) -> anyhow::Result<PongInfo> {
-        ensure!(self.is_eligible(enr), "ping: peer is filtered out");
-
         match self.subnetwork {
             Subnetwork::History => {
                 HistoryNetworkApiClient::ping(&self.client, enr.clone(), None, None)
@@ -317,8 +308,6 @@ impl Network {
     ///
     /// Should be used when ENR sequence returned by Ping request is higher than the one we know.
     async fn fetch_enr(&self, enr: &Enr) -> anyhow::Result<Enr> {
-        ensure!(self.is_eligible(enr), "fetch_enr: peer is filtered out");
-
         let enrs = self.find_nodes(enr, /* distances= */ vec![0]).await?;
         if enrs.len() != 1 {
             warn!(
@@ -365,10 +354,7 @@ impl Network {
                 self.subnetwork
             ),
         };
-        Ok(enrs
-            .into_iter()
-            .filter(|enr| self.is_eligible(enr))
-            .collect())
+        Ok(enrs)
     }
 }
 

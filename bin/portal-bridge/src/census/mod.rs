@@ -1,12 +1,12 @@
 use std::{collections::HashSet, time::Duration};
 
-use client_type::PeerInfo;
 use discv5::enr::NodeId;
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
     types::{network::Subnetwork, portal_wire::OfferTrace},
 };
 use network::{Network, NetworkAction, NetworkInitializationConfig, NetworkManager};
+use peer::PeerInfo;
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use tracing::{error, info, Instrument};
@@ -15,7 +15,7 @@ use crate::cli::BridgeConfig;
 
 pub mod client_type;
 mod network;
-mod peer;
+pub(crate) mod peer;
 mod peers;
 mod scoring;
 

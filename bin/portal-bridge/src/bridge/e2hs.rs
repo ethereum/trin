@@ -43,7 +43,7 @@ use trin_validation::header_validator::HeaderValidator;
 use super::offer_report::{GlobalOfferReport, OfferReport};
 use crate::{
     bridge::constants::{HEADER_SATURATION_DELAY, SERVE_BLOCK_TIMEOUT},
-    census::{client_type::PeerInfo, Census},
+    census::{peer::PeerInfo, Census},
     types::range::block_range_to_epochs,
 };
 
@@ -465,9 +465,9 @@ impl Gossiper {
                 }
                 HistoryContentKey::EphemeralHeaderOffer(_) => "ephemeral_header_offer",
             },
-            peer.client_type.to_string(),
+            &format!("{:?}", peer.client_type),
             match &offer_trace {
-                OfferTrace::Success(accept_code) => accept_code[0].to_string(),
+                OfferTrace::Success(accept_code) => accept_code.to_string(),
                 OfferTrace::Failed => "Failed".to_string(),
             },
         );
