@@ -365,7 +365,7 @@ impl<
         // keys
         if content_keys.all_declined() {
             if let Some(tx) = gossip_result_tx {
-                let _ = tx.send(OfferTrace::Declined);
+                let _ = tx.send(OfferTrace::Success(content_keys));
             }
             return Ok(());
         }

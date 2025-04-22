@@ -9,7 +9,6 @@ use alloy::primitives::B256;
 use anyhow::ensure;
 use bytes::Bytes;
 use clap::Parser;
-use discv5::Enr;
 use e2store::{
     e2hs::{BlockTuple, E2HSMemory},
     utils::get_e2hs_files,
@@ -44,7 +43,7 @@ use trin_validation::header_validator::HeaderValidator;
 use super::offer_report::{GlobalOfferReport, OfferReport};
 use crate::{
     bridge::constants::{HEADER_SATURATION_DELAY, SERVE_BLOCK_TIMEOUT},
-    census::Census,
+    census::{client_type::PeerInfo, Census},
     types::range::block_range_to_epochs,
 };
 
@@ -349,7 +348,7 @@ impl Gossiper {
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
     ) -> Vec<OfferTrace> {
-        let Ok(enrs) = self
+        let Ok(peers) = self
             .census
             .select_peers(Subnetwork::History, &content_key.content_id())
         else {
@@ -358,11 +357,11 @@ impl Gossiper {
         };
         let offer_report = Arc::new(Mutex::new(OfferReport::new(
             content_key.clone(),
-            enrs.len(),
+            peers.len(),
         )));
         let encoded_content_value = content_value.encode();
         let mut tasks = vec![];
-        for enr in enrs.clone() {
+        for peer in peers.clone() {
             let offer_permit = self.acquire_offer_permit().await;
             let offer_report = offer_report.clone();
             let content_key = content_key.clone();
@@ -374,7 +373,7 @@ impl Gossiper {
                     .send_offer(
                         offer_permit,
                         offer_report,
-                        enr,
+                        peer,
                         content_key,
                         raw_content_value,
                     )
@@ -398,7 +397,7 @@ impl Gossiper {
         &self,
         offer_permit: OwnedSemaphorePermit,
         offer_report: Arc<Mutex<OfferReport<HistoryContentKey>>>,
-        enr: Enr,
+        peer: PeerInfo,
         content_key: HistoryContentKey,
         raw_content_value: RawContentValue,
     ) -> OfferTrace {
@@ -411,7 +410,7 @@ impl Gossiper {
             SERVE_BLOCK_TIMEOUT,
             HistoryNetworkApiClient::trace_offer(
                 &self.portal_client,
-                enr.clone(),
+                peer.enr.clone(),
                 content_key.clone(),
                 raw_content_value,
             ),
@@ -421,12 +420,12 @@ impl Gossiper {
         let offer_trace = match result {
             Ok(Ok(result)) => {
                 if matches!(result, OfferTrace::Failed) {
-                    warn!("Internal error offering to: {enr}");
+                    warn!("Internal error offering to: {}", peer.enr);
                 }
                 result
             }
             Ok(Err(err)) => {
-                warn!("Error offering to: {enr}, error: {err:?}");
+                warn!("Error offering to: {}, error: {err:?}", peer.enr);
                 OfferTrace::Failed
             }
             Err(_) => {
@@ -439,7 +438,7 @@ impl Gossiper {
 
         self.census.record_offer_result(
             Subnetwork::History,
-            enr.node_id(),
+            peer.enr.node_id(),
             content_value_size,
             start_time.elapsed(),
             &offer_trace,
@@ -453,7 +452,7 @@ impl Gossiper {
         offer_report
             .lock()
             .expect("to acquire lock")
-            .update(&enr, &offer_trace);
+            .update(&peer, &offer_trace);
 
         self.metrics.report_offer(
             match content_key {
@@ -466,10 +465,10 @@ impl Gossiper {
                 }
                 HistoryContentKey::EphemeralHeaderOffer(_) => "ephemeral_header_offer",
             },
-            match offer_trace {
-                OfferTrace::Success(_) => "success",
-                OfferTrace::Declined => "declined",
-                OfferTrace::Failed => "failed",
+            peer.client_type.to_string(),
+            match &offer_trace {
+                OfferTrace::Success(accept_code) => accept_code[0].to_string(),
+                OfferTrace::Failed => "Failed".to_string(),
             },
         );
 

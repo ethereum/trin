@@ -20,13 +20,11 @@ use tokio::{
 use tracing::{debug, error, info, warn};
 
 use super::{
+    client_type::{ClientType, PeerInfo},
     peers::Peers,
     scoring::{AdditiveWeight, PeerSelector},
 };
-use crate::{
-    census::CensusError,
-    cli::{BridgeConfig, ClientType},
-};
+use crate::{census::CensusError, cli::BridgeConfig};
 
 /// The result of the liveness check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,7 +103,7 @@ impl Network {
     }
 
     /// Selects peers to receive content.
-    pub fn select_peers(&self, content_id: &[u8; 32]) -> Result<Vec<Enr>, CensusError> {
+    pub fn select_peers(&self, content_id: &[u8; 32]) -> Result<Vec<PeerInfo>, CensusError> {
         if self.peers.is_empty() {
             error!(
                 subnetwork = %self.subnetwork,
@@ -132,7 +130,8 @@ impl Network {
     ///
     /// Currently this only filters out peers based on client type (using `filter_client` field).
     fn is_eligible(&self, enr: &Enr) -> bool {
-        self.filter_clients.is_empty() || !self.filter_clients.contains(&ClientType::from(enr))
+        let client_type = self.peers.get_client_type(&enr.node_id());
+        self.filter_clients.is_empty() || !self.filter_clients.contains(&client_type)
     }
 
     /// Initializes the peers.
@@ -254,8 +253,11 @@ impl Network {
             return LivenessResult::Fail;
         };
 
-        let radius = match PingExtension::decode_json(pong_info.payload_type, pong_info.payload) {
-            Ok(PingExtension::Capabilities(payload)) => payload.data_radius,
+        let capabilities = match PingExtension::decode_json(
+            pong_info.payload_type,
+            pong_info.payload,
+        ) {
+            Ok(PingExtension::Capabilities(capabilities)) => capabilities,
             _ => {
                 warn!(
                     subnetwork = %self.subnetwork,
@@ -283,7 +285,14 @@ impl Network {
             enr
         };
 
-        self.peers.record_successful_liveness_check(enr, radius);
+        let client_type = if let Some(client_type) = capabilities.client_info {
+            ClientType::from(client_type.client_name.as_str())
+        } else {
+            ClientType::Unknown
+        };
+
+        self.peers
+            .record_successful_liveness_check(enr, client_type, capabilities.data_radius);
         LivenessResult::Pass
     }
 

@@ -2,14 +2,8 @@ use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy::primitives::B256;
 use clap::Parser;
-use ethportal_api::{
-    types::{network::Subnetwork, network_spec::NetworkSpec},
-    Enr,
-};
-use portalnet::{
-    constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK, DEFAULT_WEB3_HTTP_PORT},
-    discovery::ENR_PORTAL_CLIENT_KEY,
-};
+use ethportal_api::types::{network::Subnetwork, network_spec::NetworkSpec};
+use portalnet::constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK, DEFAULT_WEB3_HTTP_PORT};
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client, IntoUrl, Request, Response,
@@ -23,6 +17,7 @@ use url::Url;
 
 use crate::{
     bridge::e2hs::BlockRange,
+    census::client_type::ClientType,
     constants::{DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
     types::mode::BridgeMode,
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
@@ -239,53 +234,6 @@ impl FromStr for BridgeId {
             return Err("Bridge id and total must each be greater than 0".to_string());
         }
         Ok(Self { id, total })
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ClientType {
-    Fluffy,
-    Trin,
-    Shisui,
-    Ultralight,
-    Unknown,
-}
-
-impl FromStr for ClientType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "fluffy" => Ok(ClientType::Fluffy),
-            "trin" => Ok(ClientType::Trin),
-            "shisui" => Ok(ClientType::Shisui),
-            "ultralight" => Ok(ClientType::Ultralight),
-            "unknown" => Ok(ClientType::Unknown),
-            _ => Err(format!("Unknown client type: {s}")),
-        }
-    }
-}
-
-impl From<&Enr> for ClientType {
-    fn from(enr: &Enr) -> Self {
-        let client_id = enr
-            .get_decodable::<String>(ENR_PORTAL_CLIENT_KEY)
-            .and_then(|v| v.ok());
-        if let Some(client_id) = client_id {
-            if client_id.starts_with("t") {
-                ClientType::Trin
-            } else if client_id.starts_with("f") {
-                ClientType::Fluffy
-            } else if client_id.starts_with("s") {
-                ClientType::Shisui
-            } else if client_id.starts_with("u") {
-                ClientType::Ultralight
-            } else {
-                ClientType::Unknown
-            }
-        } else {
-            ClientType::Unknown
-        }
     }
 }
 

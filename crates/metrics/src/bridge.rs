@@ -44,7 +44,7 @@ impl BridgeMetrics {
         )?;
         let offer_total = register_int_counter_vec_with_registry!(
             opts!("bridge_offer_total", "counts all content offer requests"),
-            &["bridge", "type", "result"],
+            &["bridge", "content_type", "client_type", "result"],
             registry
         )?;
         let current_block = register_int_gauge_vec_with_registry!(
@@ -101,10 +101,10 @@ impl BridgeMetricsReporter {
             .inc();
     }
 
-    pub fn report_offer(&self, content_type: &str, status: &str) {
+    pub fn report_offer(&self, content_type: &str, client_type: String, status: String) {
         self.bridge_metrics
             .offer_total
-            .with_label_values(&[&self.bridge, content_type, status])
+            .with_label_values(&[&self.bridge, content_type, &client_type, &status])
             .inc();
     }
 

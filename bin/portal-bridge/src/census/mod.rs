@@ -1,10 +1,10 @@
 use std::{collections::HashSet, time::Duration};
 
+use client_type::PeerInfo;
 use discv5::enr::NodeId;
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
     types::{network::Subnetwork, portal_wire::OfferTrace},
-    Enr,
 };
 use network::{Network, NetworkAction, NetworkInitializationConfig, NetworkManager};
 use thiserror::Error;
@@ -13,6 +13,7 @@ use tracing::{error, info, Instrument};
 
 use crate::cli::BridgeConfig;
 
+pub mod client_type;
 mod network;
 mod peer;
 mod peers;
@@ -60,7 +61,7 @@ impl Census {
         &self,
         subnetwork: Subnetwork,
         content_id: &[u8; 32],
-    ) -> Result<Vec<Enr>, CensusError> {
+    ) -> Result<Vec<PeerInfo>, CensusError> {
         match subnetwork {
             Subnetwork::History => self.history.select_peers(content_id),
             Subnetwork::State => self.state.select_peers(content_id),

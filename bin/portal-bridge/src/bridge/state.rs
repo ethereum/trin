@@ -506,7 +506,7 @@ impl StateBridge {
         content_key: StateContentKey,
         content_value: StateContentValue,
     ) {
-        let Ok(enrs) = self
+        let Ok(peers) = self
             .census
             .select_peers(Subnetwork::State, &content_key.content_id())
         else {
@@ -515,10 +515,10 @@ impl StateBridge {
         };
         let offer_report = Arc::new(Mutex::new(OfferReport::new(
             content_key.clone(),
-            enrs.len(),
+            peers.len(),
         )));
         let encoded_content_value = content_value.encode();
-        for enr in enrs.clone() {
+        for peer in peers.clone() {
             let permit = self.acquire_offer_permit().await;
             let census = self.census.clone();
             let portal_client = self.portal_client.clone();
@@ -537,7 +537,7 @@ impl StateBridge {
                     SERVE_BLOCK_TIMEOUT,
                     StateNetworkApiClient::trace_offer(
                         &portal_client,
-                        enr.clone(),
+                        peer.enr.clone(),
                         content_key.clone(),
                         encoded_content_value,
                     ),
@@ -547,12 +547,12 @@ impl StateBridge {
                 let offer_trace = match &result {
                     Ok(Ok(result)) => {
                         if matches!(result, &OfferTrace::Failed) {
-                            warn!("Internal error offering to: {enr}");
+                            warn!("Internal error offering to: {}", peer.enr);
                         }
                         result
                     }
                     Ok(Err(err)) => {
-                        warn!("Error offering to: {enr}, error: {err:?}");
+                        warn!("Error offering to: {}, error: {err:?}", peer.enr);
                         &OfferTrace::Failed
                     }
                     Err(_) => {
@@ -563,7 +563,7 @@ impl StateBridge {
 
                 census.record_offer_result(
                     Subnetwork::State,
-                    enr.node_id(),
+                    peer.enr.node_id(),
                     content_value_size,
                     start_time.elapsed(),
                     offer_trace,
@@ -577,7 +577,7 @@ impl StateBridge {
                 offer_report
                     .lock()
                     .expect("to acquire lock")
-                    .update(&enr, offer_trace);
+                    .update(&peer, offer_trace);
 
                 metrics.report_offer(
                     match content_key {
@@ -585,10 +585,10 @@ impl StateBridge {
                         StateContentKey::ContractStorageTrieNode(_) => "contract_storage_trie_node",
                         StateContentKey::ContractBytecode(_) => "contract_bytecode",
                     },
-                    match offer_trace {
-                        OfferTrace::Success(_) => "success",
-                        OfferTrace::Declined => "declined",
-                        OfferTrace::Failed => "failed",
+                    peer.client_type.to_string(),
+                    match &offer_trace {
+                        OfferTrace::Success(accept_code) => accept_code[0].to_string(),
+                        OfferTrace::Failed => "Failed".to_string(),
                     },
                 );
 

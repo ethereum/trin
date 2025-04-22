@@ -540,16 +540,16 @@ impl BeaconBridge {
         metrics: BridgeMetricsReporter,
         census: Census,
     ) {
-        let Ok(enrs) = census.select_peers(Subnetwork::Beacon, &content_key.content_id()) else {
+        let Ok(peers) = census.select_peers(Subnetwork::Beacon, &content_key.content_id()) else {
             error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
             return;
         };
         let offer_report = Arc::new(StdMutex::new(OfferReport::new(
             content_key.clone(),
-            enrs.len(),
+            peers.len(),
         )));
         let encoded_content_value = content_value.encode();
-        for enr in enrs.clone() {
+        for peer in peers.clone() {
             let census = census.clone();
             let portal_client = portal_client.clone();
             let content_key = content_key.clone();
@@ -566,7 +566,7 @@ impl BeaconBridge {
                     SERVE_BLOCK_TIMEOUT,
                     BeaconNetworkApiClient::trace_offer(
                         &portal_client,
-                        enr.clone(),
+                        peer.enr.clone(),
                         content_key.clone(),
                         encoded_content_value,
                     ),
@@ -576,12 +576,12 @@ impl BeaconBridge {
                 let offer_trace = match &result {
                     Ok(Ok(result)) => {
                         if matches!(result, &OfferTrace::Failed) {
-                            warn!("Internal error offering to: {enr}");
+                            warn!("Internal error offering to: {}", peer.enr);
                         }
                         result
                     }
                     Ok(Err(err)) => {
-                        warn!("Error offering to: {enr}, error: {err:?}");
+                        warn!("Error offering to: {}, error: {err:?}", peer.enr);
                         &OfferTrace::Failed
                     }
                     Err(_) => {
@@ -592,7 +592,7 @@ impl BeaconBridge {
 
                 census.record_offer_result(
                     Subnetwork::Beacon,
-                    enr.node_id(),
+                    peer.enr.node_id(),
                     content_value_size,
                     start_time.elapsed(),
                     offer_trace,
@@ -602,7 +602,7 @@ impl BeaconBridge {
                 offer_report
                     .lock()
                     .expect("to acquire lock")
-                    .update(&enr, offer_trace);
+                    .update(&peer, offer_trace);
 
                 metrics.report_offer(
                     match content_key {
@@ -620,10 +620,10 @@ impl BeaconBridge {
                             "historical_summaries_with_proof"
                         }
                     },
-                    match offer_trace {
-                        OfferTrace::Success(_) => "success",
-                        OfferTrace::Declined => "declined",
-                        OfferTrace::Failed => "failed",
+                    peer.client_type.to_string(),
+                    match &offer_trace {
+                        OfferTrace::Success(accept_code) => accept_code[0].to_string(),
+                        OfferTrace::Failed => "Failed".to_string(),
                     },
                 );
                 metrics.stop_process_timer(timer);

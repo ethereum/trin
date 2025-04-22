@@ -478,10 +478,8 @@ pub struct PopulatedOfferWithResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OfferTrace {
-    /// Offer was successful, all accepted content keys in bytelist were transferred
+    /// Offer was successful sent and received a response
     Success(AcceptCodeList),
-    /// Peer is not interested in any of the offered content keys
-    Declined,
     /// This offer failed, perhaps locally or from a timeout or transfer failure
     Failed,
 }

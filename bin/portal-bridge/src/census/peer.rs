@@ -4,8 +4,13 @@ use std::{
 };
 
 use discv5::Enr;
-use ethportal_api::types::distance::{Distance, Metric, XorMetric};
+use ethportal_api::types::{
+    distance::{Distance, Metric, XorMetric},
+    portal_wire::OfferTrace,
+};
 use tracing::error;
+
+use super::client_type::{ClientType, PeerInfo};
 
 #[derive(Debug, Clone)]
 pub struct LivenessCheck {
@@ -15,7 +20,7 @@ pub struct LivenessCheck {
 
 #[derive(Debug, Clone)]
 pub struct OfferEvent {
-    pub success: bool,
+    pub offer_trace: OfferTrace,
     pub timestamp: Instant,
     #[allow(dead_code)]
     pub content_value_size: usize,
@@ -27,6 +32,7 @@ pub struct OfferEvent {
 /// Stores information about peer and its most recent interactions.
 pub struct Peer {
     enr: Enr,
+    client_type: ClientType,
     radius: Distance,
     /// Liveness checks, ordered from most recent (index `0`), to the earliest.
     ///
@@ -47,6 +53,7 @@ impl Peer {
     pub fn new(enr: Enr) -> Self {
         Self {
             enr,
+            client_type: ClientType::Unknown,
             radius: Distance::ZERO,
             liveness_checks: VecDeque::with_capacity(Self::MAX_LIVENESS_CHECKS + 1),
             offer_events: VecDeque::with_capacity(Self::MAX_OFFER_EVENTS + 1),
@@ -55,6 +62,14 @@ impl Peer {
 
     pub fn enr(&self) -> Enr {
         self.enr.clone()
+    }
+
+    pub fn client_type(&self) -> ClientType {
+        self.client_type
+    }
+
+    pub fn peer_info(&self) -> PeerInfo {
+        PeerInfo::new(self.enr.clone(), self.client_type)
     }
 
     /// Returns true if content is within radius.
@@ -73,7 +88,12 @@ impl Peer {
             .all(|liveness_check| !liveness_check.success)
     }
 
-    pub fn record_successful_liveness_check(&mut self, enr: Enr, radius: Distance) {
+    pub fn record_successful_liveness_check(
+        &mut self,
+        enr: Enr,
+        client_type: ClientType,
+        radius: Distance,
+    ) {
         assert_eq!(
             self.enr.node_id(),
             enr.node_id(),
@@ -89,6 +109,7 @@ impl Peer {
         } else {
             self.enr = enr;
         }
+        self.client_type = client_type;
         self.radius = radius;
         self.liveness_checks.push_front(LivenessCheck {
             success: true,
@@ -107,12 +128,12 @@ impl Peer {
 
     pub fn record_offer_result(
         &mut self,
-        success: bool,
+        offer_trace: OfferTrace,
         content_value_size: usize,
         duration: Duration,
     ) {
         self.offer_events.push_front(OfferEvent {
-            success,
+            offer_trace,
             timestamp: Instant::now(),
             content_value_size,
             duration,

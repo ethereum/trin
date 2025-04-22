@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use ethportal_api::Enr;
+use ethportal_api::types::{accept_code::AcceptCode, portal_wire::OfferTrace};
 use itertools::Itertools;
 use rand::{seq::SliceRandom, thread_rng};
 
-use super::peer::Peer;
+use super::{client_type::PeerInfo, peer::Peer};
 
 /// A trait for calculating peer's weight.
 pub trait Weight: Send + Sync {
@@ -36,6 +36,10 @@ pub struct AdditiveWeight {
     pub starting_weight: u32,
     pub maximum_weight: u32,
     pub success_weight: i32,
+    pub already_stored_weight: i32,
+    pub rate_limited_weight: i32,
+    pub non_accept_code_compliance_weight: i32,
+    pub not_within_radius_weight: i32,
     pub failure_weight: i32,
 }
 
@@ -46,6 +50,10 @@ impl Default for AdditiveWeight {
             starting_weight: 200,
             maximum_weight: 400,
             success_weight: 5,
+            already_stored_weight: 0,
+            rate_limited_weight: -2,
+            non_accept_code_compliance_weight: -5,
+            not_within_radius_weight: -10,
             failure_weight: -10,
         }
     }
@@ -56,24 +64,47 @@ impl Weight for AdditiveWeight {
         if !peer.is_interested_in_content(content_id) {
             return 0;
         }
-        let weight = self.starting_weight as i32
-            + Iterator::chain(
-                peer.iter_liveness_checks()
-                    .map(|liveness_check| (liveness_check.success, liveness_check.timestamp)),
-                peer.iter_offer_events()
-                    .map(|offer_event| (offer_event.success, offer_event.timestamp)),
-            )
-            .map(|(success, timestamp)| {
-                if timestamp.elapsed() > self.timeframe {
-                    return 0;
-                }
-                if success {
+
+        let liveness_weight = peer
+            .iter_liveness_checks()
+            .filter(|liveness_check| liveness_check.timestamp.elapsed() <= self.timeframe)
+            .map(|liveness_check| {
+                if liveness_check.success {
                     self.success_weight
                 } else {
                     self.failure_weight
                 }
             })
             .sum::<i32>();
+
+        let offer_weight = peer
+            .iter_offer_events()
+            .filter(|offer_event| offer_event.timestamp.elapsed() <= self.timeframe)
+            .map(|offer_event| match &offer_event.offer_trace {
+                OfferTrace::Success(accept_codes) => match accept_codes[0] {
+                    AcceptCode::Accepted => self.success_weight,
+                    AcceptCode::AlreadyStored => self.already_stored_weight,
+                    // Rate limited and inbound transfer in progress are treated the same. We don't
+                    // want to overload the node.
+                    AcceptCode::RateLimited | AcceptCode::InboundTransferInProgress => {
+                        self.rate_limited_weight
+                    }
+                    // The peer doesn't properly support decline codes, we should avoid using them
+                    // as we can't get good data from them, they will still get the content through
+                    // neighbors, but they are a lower priority for the bridge as we have limited
+                    // resources.
+                    AcceptCode::Declined | AcceptCode::Unspecified => {
+                        self.non_accept_code_compliance_weight
+                    }
+                    // If we got a NotWithinRadius code, we either have a bug, they do, or the node
+                    // is malicious.
+                    AcceptCode::NotWithinRadius => self.not_within_radius_weight,
+                },
+                OfferTrace::Failed => self.failure_weight,
+            })
+            .sum::<i32>();
+
+        let weight = self.starting_weight as i32 + liveness_weight + offer_weight;
         weight.clamp(0, self.maximum_weight as i32) as u32
     }
 }
@@ -103,13 +134,13 @@ impl<W: Weight> PeerSelector<W> {
         &self,
         content_id: &[u8; 32],
         peers: impl IntoIterator<Item = &'a Peer>,
-    ) -> Vec<Enr> {
+    ) -> Vec<PeerInfo> {
         let weighted_peers = self.weight.weight_all(content_id, peers).collect_vec();
 
         weighted_peers
             .choose_multiple_weighted(&mut thread_rng(), self.limit, |(_peer, weight)| *weight)
             .expect("choosing random sample shouldn't fail")
-            .map(|(peer, _weight)| peer.enr())
+            .map(|(peer, _weight)| peer.peer_info())
             .collect()
     }
 }
