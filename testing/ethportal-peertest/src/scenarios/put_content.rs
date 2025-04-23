@@ -370,7 +370,7 @@ fn fresh_node_config(network: Network) -> (String, TrinConfig) {
         "--network",
         &network.to_string(),
         "--portal-subnetworks",
-        "history",
+        "beacon,history",
         "--external-address",
         external_addr.as_str(),
         "--mb",

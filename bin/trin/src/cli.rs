@@ -31,7 +31,7 @@ use trin_utils::cli::{
 };
 use url::Url;
 
-const DEFAULT_SUBNETWORKS: &str = "history";
+const DEFAULT_SUBNETWORKS: &str = "beacon,history";
 /// Default max radius value percentage out of 100.
 const DEFAULT_MAX_RADIUS: &str = "5";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
@@ -299,13 +299,15 @@ impl TrinConfig {
             }
         }
 
-        if config.portal_subnetworks.contains(&Subnetwork::State)
-            && !config.portal_subnetworks.contains(&Subnetwork::History)
-        {
-            return Err(Error::raw(
-                ErrorKind::ValueValidation,
-                "State subnetwork can only be enabled together with history.",
-            ));
+        for subnetwork in config.portal_subnetworks.iter() {
+            for dependency in subnetwork.dependencies() {
+                if !config.portal_subnetworks.contains(&dependency) {
+                    return Err(Error::raw(
+                        ErrorKind::ValueValidation,
+                        format!("{subnetwork} subnetwork can only be enabled together with {dependency}."),
+                    ));
+                }
+            }
         }
 
         match config.storage_total {
@@ -686,324 +688,392 @@ mod tests {
                 config.storage_capacity_config(),
                 StorageCapacityConfig::Combined {
                     total_mb: 1000,
-                    subnetworks: vec![Subnetwork::History],
+                    subnetworks: vec![Subnetwork::Beacon, Subnetwork::History],
                 }
             );
         }
 
-        #[test_log::test]
-        fn with_subnetworks() {
-            let config =
+        mod subnetworks_flag {
+            use super::*;
+
+            #[test_log::test]
+            fn with_beacon() {
+                let config =
+                    TrinConfig::new_from([APP_NAME, "--portal-subnetworks", "beacon"]).unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Combined {
+                        total_mb: 1000,
+                        subnetworks: vec![Subnetwork::Beacon],
+                    }
+                );
+            }
+
+            #[test_log::test]
+            fn with_beacon_and_history() {
+                let config =
+                    TrinConfig::new_from([APP_NAME, "--portal-subnetworks", "beacon,history"])
+                        .unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Combined {
+                        total_mb: 1000,
+                        subnetworks: vec![Subnetwork::Beacon, Subnetwork::History],
+                    }
+                );
+            }
+
+            #[test_log::test]
+            #[should_panic(
+                expected = "History subnetwork can only be enabled together with Beacon."
+            )]
+            fn with_history_without_beacon() {
+                TrinConfig::new_from([APP_NAME, "--portal-subnetworks", "history"]).unwrap();
+            }
+
+            #[test_log::test]
+            #[should_panic(
+                expected = "State subnetwork can only be enabled together with History."
+            )]
+            fn with_state_without_history() {
+                TrinConfig::new_from([APP_NAME, "--portal-subnetworks", "state"]).unwrap();
+            }
+
+            #[test_log::test]
+            #[should_panic(
+                expected = "History subnetwork can only be enabled together with Beacon."
+            )]
+            fn with_history_and_state_without_beacon() {
                 TrinConfig::new_from([APP_NAME, "--portal-subnetworks", "history,state"]).unwrap();
-            assert_eq!(
-                config.storage_capacity_config(),
-                StorageCapacityConfig::Combined {
-                    total_mb: 1000,
-                    subnetworks: vec![Subnetwork::History, Subnetwork::State],
-                }
-            );
-        }
+            }
 
-        #[test_log::test]
-        fn with_total() {
-            let config = TrinConfig::new_from([APP_NAME, "--storage.total", "200"]).unwrap();
-            assert_eq!(
-                config.storage_capacity_config(),
-                StorageCapacityConfig::Combined {
-                    total_mb: 200,
-                    subnetworks: vec![Subnetwork::History],
-                }
-            );
-        }
-
-        #[test_log::test]
-        fn with_total_and_subnetworks() {
-            let config = TrinConfig::new_from([
-                APP_NAME,
-                "--storage.total",
-                "200",
-                "--portal-subnetworks",
-                "history,state",
-            ])
-            .unwrap();
-            assert_eq!(
-                config.storage_capacity_config(),
-                StorageCapacityConfig::Combined {
-                    total_mb: 200,
-                    subnetworks: vec![Subnetwork::History, Subnetwork::State],
-                }
-            );
-        }
-
-        #[test_log::test]
-        fn with_mb() {
-            let config = TrinConfig::new_from([APP_NAME, "--mb", "200"]).unwrap();
-            assert_eq!(
-                config.storage_capacity_config(),
-                StorageCapacityConfig::Combined {
-                    total_mb: 200,
-                    subnetworks: vec![Subnetwork::History],
-                }
-            );
-        }
-
-        #[test_log::test]
-        fn with_mb_and_subnetworks() {
-            let config = TrinConfig::new_from([
-                APP_NAME,
-                "--mb",
-                "200",
-                "--portal-subnetworks",
-                "history,state",
-            ])
-            .unwrap();
-            assert_eq!(
-                config.storage_capacity_config(),
-                StorageCapacityConfig::Combined {
-                    total_mb: 200,
-                    subnetworks: vec![Subnetwork::History, Subnetwork::State],
-                }
-            );
-        }
-
-        #[test_log::test]
-        fn with_total_and_all_subnetworks() {
-            let config = TrinConfig::new_from([
-                APP_NAME,
-                "--storage.total",
-                "200",
-                "--portal-subnetworks",
-                "beacon,history,state",
-            ])
-            .unwrap();
-            assert_eq!(
-                config.storage_capacity_config(),
-                StorageCapacityConfig::Combined {
-                    total_mb: 200,
-                    subnetworks: vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State],
-                }
-            );
-        }
-
-        #[test_log::test]
-        #[should_panic(
-            expected = "--storage.total and --storage.beacon can't be set at the same time"
-        )]
-        fn with_total_and_beacon() {
-            TrinConfig::new_from([
-                APP_NAME,
-                "--storage.total",
-                "200",
-                "--storage.beacon",
-                "100",
-            ])
-            .unwrap();
-        }
-
-        #[test_log::test]
-        #[should_panic(
-            expected = "--storage.total and --storage.history can't be set at the same time"
-        )]
-        fn with_total_and_history() {
-            TrinConfig::new_from([
-                APP_NAME,
-                "--storage.total",
-                "200",
-                "--storage.history",
-                "100",
-            ])
-            .unwrap();
-        }
-
-        #[test_log::test]
-        #[should_panic(
-            expected = "--storage.total and --storage.state can't be set at the same time"
-        )]
-        fn with_total_and_state() {
-            TrinConfig::new_from([APP_NAME, "--storage.total", "200", "--storage.state", "100"])
+            #[test_log::test]
+            fn with_all_subnetworks() {
+                let config = TrinConfig::new_from([
+                    APP_NAME,
+                    "--portal-subnetworks",
+                    "beacon,history,state",
+                ])
                 .unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Combined {
+                        total_mb: 1000,
+                        subnetworks: vec![
+                            Subnetwork::Beacon,
+                            Subnetwork::History,
+                            Subnetwork::State
+                        ],
+                    }
+                );
+            }
         }
 
-        #[test_log::test]
-        fn with_history() {
-            let config = TrinConfig::new_from([APP_NAME, "--storage.history", "200"]).unwrap();
-            assert_eq!(
-                config.storage_capacity_config(),
-                StorageCapacityConfig::Specific {
-                    beacon_mb: None,
-                    history_mb: Some(200),
-                    state_mb: None,
-                }
-            );
-        }
+        mod storage_flag {
+            use super::*;
 
-        #[test_log::test]
-        fn with_history_and_state() {
-            let config = TrinConfig::new_from([
-                APP_NAME,
-                "--storage.history",
-                "200",
-                "--storage.state",
-                "300",
-                "--portal-subnetworks",
-                "history,state",
-            ])
-            .unwrap();
-            assert_eq!(
-                config.storage_capacity_config(),
-                StorageCapacityConfig::Specific {
-                    beacon_mb: None,
-                    history_mb: Some(200),
-                    state_mb: Some(300),
-                }
-            );
-        }
+            #[test_log::test]
+            fn with_total() {
+                let config = TrinConfig::new_from([APP_NAME, "--storage.total", "200"]).unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Combined {
+                        total_mb: 200,
+                        subnetworks: vec![Subnetwork::Beacon, Subnetwork::History],
+                    }
+                );
+            }
 
-        #[test_log::test]
-        fn with_history_and_state_and_beacon() {
-            let config = TrinConfig::new_from([
-                APP_NAME,
-                "--storage.history",
-                "200",
-                "--storage.state",
-                "300",
-                "--storage.beacon",
-                "400",
-                "--portal-subnetworks",
-                "history,state,beacon",
-            ])
-            .unwrap();
-            assert_eq!(
-                config.storage_capacity_config(),
-                StorageCapacityConfig::Specific {
-                    beacon_mb: Some(400),
-                    history_mb: Some(200),
-                    state_mb: Some(300),
-                }
-            );
-        }
+            #[test_log::test]
+            fn with_total_and_subnetworks() {
+                let config = TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.total",
+                    "200",
+                    "--portal-subnetworks",
+                    "beacon,history,state",
+                ])
+                .unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Combined {
+                        total_mb: 200,
+                        subnetworks: vec![
+                            Subnetwork::Beacon,
+                            Subnetwork::History,
+                            Subnetwork::State
+                        ],
+                    }
+                );
+            }
 
-        #[test_log::test]
-        #[should_panic(expected = "--storage.state is set but State subnetwork is not enabled")]
-        fn with_history_and_state_without_subnetworks() {
-            TrinConfig::new_from([
-                APP_NAME,
-                "--storage.history",
-                "200",
-                "--storage.state",
-                "300",
-            ])
-            .unwrap();
-        }
+            #[test_log::test]
+            fn with_mb() {
+                let config = TrinConfig::new_from([APP_NAME, "--mb", "200"]).unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Combined {
+                        total_mb: 200,
+                        subnetworks: vec![Subnetwork::Beacon, Subnetwork::History],
+                    }
+                );
+            }
 
-        #[test_log::test]
-        #[should_panic(expected = "--storage.beacon is set but Beacon subnetwork is not enabled")]
-        fn with_history_and_beacon_without_subnetworks() {
-            TrinConfig::new_from([
-                APP_NAME,
-                "--storage.history",
-                "200",
-                "--storage.beacon",
-                "300",
-            ])
-            .unwrap();
-        }
+            #[test_log::test]
+            fn with_mb_and_subnetworks() {
+                let config = TrinConfig::new_from([
+                    APP_NAME,
+                    "--mb",
+                    "200",
+                    "--portal-subnetworks",
+                    "beacon,history,state",
+                ])
+                .unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Combined {
+                        total_mb: 200,
+                        subnetworks: vec![
+                            Subnetwork::Beacon,
+                            Subnetwork::History,
+                            Subnetwork::State
+                        ],
+                    }
+                );
+            }
 
-        #[test_log::test]
-        #[should_panic(expected = "--storage.history is set but History subnetwork is not enabled")]
-        fn with_history_and_beacon_without_history_subnetwork() {
-            TrinConfig::new_from([
-                APP_NAME,
-                "--storage.history",
-                "200",
-                "--storage.beacon",
-                "300",
-                "--portal-subnetworks",
-                "beacon",
-            ])
-            .unwrap();
-        }
+            #[test_log::test]
+            #[should_panic(
+                expected = "--storage.total and --storage.beacon can't be set at the same time"
+            )]
+            fn with_total_and_beacon() {
+                TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.total",
+                    "200",
+                    "--storage.beacon",
+                    "100",
+                ])
+                .unwrap();
+            }
 
-        #[test_log::test]
-        #[should_panic(expected = "History subnetwork enabled but --storage.history is not set")]
-        fn specific_without_history_with_subnetwork() {
-            TrinConfig::new_from([
-                APP_NAME,
-                "--storage.state",
-                "200",
-                "--portal-subnetworks",
-                "history,state",
-            ])
-            .unwrap();
-        }
+            #[test_log::test]
+            #[should_panic(
+                expected = "--storage.total and --storage.history can't be set at the same time"
+            )]
+            fn with_total_and_history() {
+                TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.total",
+                    "200",
+                    "--storage.history",
+                    "100",
+                ])
+                .unwrap();
+            }
 
-        #[test_log::test]
-        #[should_panic(expected = "State subnetwork enabled but --storage.state is not set")]
-        fn specific_without_state_with_subnetwork() {
-            TrinConfig::new_from([
-                APP_NAME,
-                "--storage.history",
-                "200",
-                "--portal-subnetworks",
-                "history,state",
-            ])
-            .unwrap();
-        }
+            #[test_log::test]
+            #[should_panic(
+                expected = "--storage.total and --storage.state can't be set at the same time"
+            )]
+            fn with_total_and_state() {
+                TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.total",
+                    "200",
+                    "--storage.state",
+                    "100",
+                ])
+                .unwrap();
+            }
 
-        #[test_log::test]
-        #[should_panic(expected = "Beacon subnetwork enabled but --storage.beacon is not set")]
-        fn specific_without_beacon_with_subnetwork() {
-            TrinConfig::new_from([
-                APP_NAME,
-                "--storage.history",
-                "200",
-                "--portal-subnetworks",
-                "history,beacon",
-            ])
-            .unwrap();
-        }
+            #[test_log::test]
+            fn with_beacon() {
+                let config = TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.beacon",
+                    "200",
+                    "--portal-subnetworks",
+                    "beacon",
+                ])
+                .unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Specific {
+                        beacon_mb: Some(200),
+                        history_mb: None,
+                        state_mb: None,
+                    }
+                );
+            }
 
-        #[test_log::test]
-        fn with_total_zero() {
-            let config = TrinConfig::new_from([
-                APP_NAME,
-                "--storage.total",
-                "0",
-                "--portal-subnetworks",
-                "history,state,beacon",
-            ])
-            .unwrap();
-            assert_eq!(
-                config.storage_capacity_config(),
-                StorageCapacityConfig::Combined {
-                    total_mb: 0,
-                    subnetworks: vec![Subnetwork::History, Subnetwork::State, Subnetwork::Beacon]
-                }
-            );
-        }
+            #[test_log::test]
+            fn with_beacon_and_history() {
+                let config = TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.beacon",
+                    "200",
+                    "--storage.history",
+                    "300",
+                    "--portal-subnetworks",
+                    "beacon,history",
+                ])
+                .unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Specific {
+                        beacon_mb: Some(200),
+                        history_mb: Some(300),
+                        state_mb: None,
+                    }
+                );
+            }
 
-        #[test_log::test]
-        fn with_zero_per_subnetwork() {
-            let config = TrinConfig::new_from([
-                APP_NAME,
-                "--storage.history",
-                "0",
-                "--storage.state",
-                "0",
-                "--storage.beacon",
-                "0",
-                "--portal-subnetworks",
-                "history,state,beacon",
-            ])
-            .unwrap();
-            assert_eq!(
-                config.storage_capacity_config(),
-                StorageCapacityConfig::Specific {
-                    beacon_mb: Some(0),
-                    history_mb: Some(0),
-                    state_mb: Some(0),
-                }
-            );
+            #[test_log::test]
+            fn with_beacon_and_history_and_state() {
+                let config = TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.beacon",
+                    "200",
+                    "--storage.history",
+                    "300",
+                    "--storage.state",
+                    "400",
+                    "--portal-subnetworks",
+                    "beacon,history,state",
+                ])
+                .unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Specific {
+                        beacon_mb: Some(200),
+                        history_mb: Some(300),
+                        state_mb: Some(400),
+                    }
+                );
+            }
+
+            #[test_log::test]
+            #[should_panic(expected = "--storage.state is set but State subnetwork is not enabled")]
+            fn with_state_without_subnetworks() {
+                TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.beacon",
+                    "100",
+                    "--storage.history",
+                    "200",
+                    "--storage.state",
+                    "300",
+                ])
+                .unwrap();
+            }
+
+            #[test_log::test]
+            #[should_panic(
+                expected = "--storage.history is set but History subnetwork is not enabled"
+            )]
+            fn with_history_without_history_subnetwork() {
+                TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.history",
+                    "200",
+                    "--storage.beacon",
+                    "300",
+                    "--portal-subnetworks",
+                    "beacon",
+                ])
+                .unwrap();
+            }
+
+            #[test_log::test]
+            #[should_panic(
+                expected = "History subnetwork enabled but --storage.history is not set"
+            )]
+            fn specific_without_history_with_subnetworks() {
+                TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.beacon",
+                    "200",
+                    "--portal-subnetworks",
+                    "beacon,history",
+                ])
+                .unwrap();
+            }
+
+            #[test_log::test]
+            #[should_panic(expected = "State subnetwork enabled but --storage.state is not set")]
+            fn specific_without_state_with_subnetworks() {
+                TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.beacon",
+                    "100",
+                    "--storage.history",
+                    "200",
+                    "--portal-subnetworks",
+                    "beacon,history,state",
+                ])
+                .unwrap();
+            }
+
+            #[test_log::test]
+            #[should_panic(expected = "Beacon subnetwork enabled but --storage.beacon is not set")]
+            fn specific_without_beacon_with_subnetworks() {
+                TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.history",
+                    "200",
+                    "--portal-subnetworks",
+                    "beacon,history",
+                ])
+                .unwrap();
+            }
+
+            #[test_log::test]
+            fn with_total_zero() {
+                let config = TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.total",
+                    "0",
+                    "--portal-subnetworks",
+                    "beacon,history,state",
+                ])
+                .unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Combined {
+                        total_mb: 0,
+                        subnetworks: vec![
+                            Subnetwork::Beacon,
+                            Subnetwork::History,
+                            Subnetwork::State
+                        ]
+                    }
+                );
+            }
+
+            #[test_log::test]
+            fn with_zero_per_subnetwork() {
+                let config = TrinConfig::new_from([
+                    APP_NAME,
+                    "--storage.beacon",
+                    "0",
+                    "--storage.history",
+                    "0",
+                    "--storage.state",
+                    "0",
+                    "--portal-subnetworks",
+                    "beacon,history,state",
+                ])
+                .unwrap();
+                assert_eq!(
+                    config.storage_capacity_config(),
+                    StorageCapacityConfig::Specific {
+                        beacon_mb: Some(0),
+                        history_mb: Some(0),
+                        state_mb: Some(0),
+                    }
+                );
+            }
         }
     }
 

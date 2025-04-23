@@ -15,6 +15,7 @@ use ethportal_api::{
     Discv5ApiClient,
 };
 use futures::future;
+use itertools::Itertools;
 use jsonrpsee::async_client::Client;
 use portalnet::constants::DEFAULT_DISCOVERY_PORT;
 use rpc::RpcServerHandle;
@@ -86,8 +87,9 @@ fn generate_trin_config(
     let private_key = hex_encode(private_key);
     let subnetworks = subnetworks
         .iter()
-        .map(|sn| sn.to_cli_arg())
-        .collect::<Vec<String>>()
+        .flat_map(Subnetwork::with_dependencies)
+        .unique()
+        .map(|subnetwork| subnetwork.to_cli_arg())
         .join(",");
     let network = network.to_string();
 
