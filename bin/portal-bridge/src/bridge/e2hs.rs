@@ -465,11 +465,8 @@ impl Gossiper {
                 }
                 HistoryContentKey::EphemeralHeaderOffer(_) => "ephemeral_header_offer",
             },
-            &format!("{:?}", peer.client_type),
-            match &offer_trace {
-                OfferTrace::Success(accept_code) => accept_code.to_string(),
-                OfferTrace::Failed => "Failed".to_string(),
-            },
+            &peer.client_type,
+            &offer_trace,
         );
 
         self.metrics.stop_process_timer(timer);

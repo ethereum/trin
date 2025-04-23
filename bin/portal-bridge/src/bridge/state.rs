@@ -585,11 +585,8 @@ impl StateBridge {
                         StateContentKey::ContractStorageTrieNode(_) => "contract_storage_trie_node",
                         StateContentKey::ContractBytecode(_) => "contract_bytecode",
                     },
-                    &format!("{:?}", peer.client_type),
-                    match &offer_trace {
-                        OfferTrace::Success(accept_code) => accept_code.to_string(),
-                        OfferTrace::Failed => "Failed".to_string(),
-                    },
+                    &peer.client_type,
+                    offer_trace,
                 );
 
                 // Release permit

@@ -12,6 +12,7 @@ use std::fmt::Display;
 pub enum ClientType {
     Fluffy,
     Trin,
+    TrinExecution,
     Shisui,
     Ultralight,
     Samba,
@@ -24,6 +25,7 @@ impl From<&str> for ClientType {
         match value.as_str() {
             "fluffy" => ClientType::Fluffy,
             "trin" => ClientType::Trin,
+            "trin-execution" => ClientType::TrinExecution,
             "shisui" => ClientType::Shisui,
             "ultralight" => ClientType::Ultralight,
             "samba" => ClientType::Samba,
