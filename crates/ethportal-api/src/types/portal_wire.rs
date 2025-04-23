@@ -14,8 +14,10 @@ use thiserror::Error;
 use validator::ValidationError;
 
 use super::{
-    accept_code::AcceptCodeList, bytes::ByteList1100,
-    ping_extensions::extension_types::PingExtensionType, protocol_versions::ProtocolVersion,
+    accept_code::{AcceptCode, AcceptCodeList},
+    bytes::ByteList1100,
+    ping_extensions::extension_types::PingExtensionType,
+    protocol_versions::ProtocolVersion,
 };
 use crate::{
     types::enr::SszEnr,
@@ -478,10 +480,8 @@ pub struct PopulatedOfferWithResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OfferTrace {
-    /// Offer was successful, all accepted content keys in bytelist were transferred
-    Success(AcceptCodeList),
-    /// Peer is not interested in any of the offered content keys
-    Declined,
+    /// Offer was successful sent and received a response
+    Success(AcceptCode),
     /// This offer failed, perhaps locally or from a timeout or transfer failure
     Failed,
 }

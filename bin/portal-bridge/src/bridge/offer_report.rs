@@ -1,34 +1,45 @@
-use discv5::Enr;
-use ethportal_api::{types::portal_wire::OfferTrace, OverlayContentKey};
+use std::collections::HashMap;
+
+use ethportal_api::{
+    types::{accept_code::AcceptCode, portal_wire::OfferTrace},
+    OverlayContentKey,
+};
 use tracing::{debug, enabled, info, Level};
+
+use crate::census::peer::PeerInfo;
 
 /// Global report for outcomes of offering state content keys from long-running state bridge
 #[derive(Default, Debug)]
 pub struct GlobalOfferReport {
-    success: usize,
-    failed: usize,
+    accepted: usize,
     declined: usize,
+    failed: usize,
 }
 
 impl GlobalOfferReport {
     pub fn update(&mut self, trace: &OfferTrace) {
         match trace {
-            OfferTrace::Success(_) => self.success += 1,
+            OfferTrace::Success(accept_code) => {
+                if *accept_code == AcceptCode::Accepted {
+                    self.accepted += 1;
+                } else {
+                    self.declined += 1;
+                }
+            }
             OfferTrace::Failed => self.failed += 1,
-            OfferTrace::Declined => self.declined += 1,
         }
     }
 
     pub fn report(&self) {
-        let total = self.success + self.failed + self.declined;
+        let total = self.accepted + self.failed + self.declined;
         if total == 0 {
             return;
         }
         info!(
-            "Offer report: Total Offers: {}. Successful: {}% ({}). Declined: {}% ({}). Failed: {}% ({}).",
+            "Offer report: Total Offers: {}. Accepted: {}% ({}). Declined: {}% ({}). Failed: {}% ({}).",
             total,
-            100 * self.success / total,
-            self.success,
+            100 * self.accepted / total,
+            self.accepted,
             100 * self.declined / total,
             self.declined,
             100 * self.failed / total,
@@ -42,9 +53,9 @@ pub struct OfferReport<ContentKey> {
     content_key: ContentKey,
     /// total number of enrs interested in the content key
     total: usize,
-    success: Vec<Enr>,
-    failed: Vec<Enr>,
-    declined: Vec<Enr>,
+    accepted: usize,
+    declined: Vec<PeerWithAcceptCode>,
+    failed: Vec<PeerInfo>,
 }
 
 impl<ContentKey> OfferReport<ContentKey>
@@ -55,22 +66,25 @@ where
         Self {
             content_key,
             total,
-            success: Vec::new(),
-            failed: Vec::new(),
+            accepted: 0,
             declined: Vec::new(),
+            failed: Vec::new(),
         }
     }
 
-    pub fn update(&mut self, enr: &Enr, trace: &OfferTrace) {
+    pub fn update(&mut self, peer: &PeerInfo, trace: &OfferTrace) {
         match trace {
-            // since the state bridge only offers one content key at a time,
-            // we can assume that a successful offer means the lone content key
-            // was successfully offered
-            OfferTrace::Success(_) => self.success.push(enr.clone()),
-            OfferTrace::Failed => self.failed.push(enr.clone()),
-            OfferTrace::Declined => self.declined.push(enr.clone()),
+            OfferTrace::Success(accept_code) => {
+                if *accept_code == AcceptCode::Accepted {
+                    self.accepted += 1;
+                } else {
+                    self.declined
+                        .push(PeerWithAcceptCode::new(peer.clone(), *accept_code));
+                }
+            }
+            OfferTrace::Failed => self.failed.push(peer.clone()),
         }
-        if self.total == self.success.len() + self.failed.len() + self.declined.len() {
+        if self.total == self.accepted + self.failed.len() + self.declined.len() {
             self.report();
         }
     }
@@ -79,7 +93,7 @@ where
         if enabled!(Level::DEBUG) {
             debug!(
                 "Successfully offered to {}/{} peers. Content key: {}. Declined: {:?}. Failed: {:?}",
-                self.success.len(),
+                self.accepted ,
                 self.total,
                 self.content_key.to_hex(),
                 self.declined,
@@ -87,13 +101,46 @@ where
             );
         } else {
             info!(
-                "Successfully offered to {}/{} peers. Content key: {}. Declined: {}. Failed: {}.",
-                self.success.len(),
+                "Successfully offered to {}/{} peers. Content key: {}. Decline reasons: {}. Failed: {}.",
+                self.accepted ,
                 self.total,
                 self.content_key.to_hex(),
-                self.declined.len(),
+                self.decline_reason_summary(),
                 self.failed.len(),
             );
         }
+    }
+
+    fn decline_reason_summary(&self) -> String {
+        let mut groups: HashMap<AcceptCode, Vec<String>> = HashMap::new();
+
+        for declined in &self.declined {
+            groups
+                .entry(declined.accept_code)
+                .or_default()
+                .push(format!("{:?}", declined.peer.client_type));
+        }
+
+        if groups.is_empty() {
+            return "none".to_string();
+        }
+
+        groups
+            .into_iter()
+            .map(|(accept_code, clients)| format!("{accept_code}:[{}]", clients.join(",")))
+            .collect::<Vec<_>>()
+            .join(" | ")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PeerWithAcceptCode {
+    pub peer: PeerInfo,
+    pub accept_code: AcceptCode,
+}
+
+impl PeerWithAcceptCode {
+    pub fn new(peer: PeerInfo, accept_code: AcceptCode) -> Self {
+        Self { peer, accept_code }
     }
 }

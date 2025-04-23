@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{anyhow, bail};
 use discv5::enr::NodeId;
 use ethportal_api::{
     generate_random_node_ids,
@@ -20,13 +20,11 @@ use tokio::{
 use tracing::{debug, error, info, warn};
 
 use super::{
+    peer::PeerInfo,
     peers::Peers,
     scoring::{AdditiveWeight, PeerSelector},
 };
-use crate::{
-    census::CensusError,
-    cli::{BridgeConfig, ClientType},
-};
+use crate::{census::CensusError, cli::BridgeConfig};
 
 /// The result of the liveness check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,7 +75,6 @@ pub(super) struct Network {
     peers: Peers<AdditiveWeight>,
     client: HttpClient,
     subnetwork: Subnetwork,
-    filter_clients: Vec<ClientType>,
 }
 
 impl Network {
@@ -96,7 +93,6 @@ impl Network {
             )),
             client,
             subnetwork,
-            filter_clients: bridge_config.filter_clients.to_vec(),
         }
     }
 
@@ -105,7 +101,7 @@ impl Network {
     }
 
     /// Selects peers to receive content.
-    pub fn select_peers(&self, content_id: &[u8; 32]) -> Result<Vec<Enr>, CensusError> {
+    pub fn select_peers(&self, content_id: &[u8; 32]) -> Result<Vec<PeerInfo>, CensusError> {
         if self.peers.is_empty() {
             error!(
                 subnetwork = %self.subnetwork,
@@ -128,13 +124,6 @@ impl Network {
             .record_offer_result(node_id, content_value_size, duration, offer_trace);
     }
 
-    /// Returns whether `enr` represents eligible peer.
-    ///
-    /// Currently this only filters out peers based on client type (using `filter_client` field).
-    fn is_eligible(&self, enr: &Enr) -> bool {
-        self.filter_clients.is_empty() || !self.filter_clients.contains(&ClientType::from(enr))
-    }
-
     /// Initializes the peers.
     ///
     /// Runs "node discovery" in a loop, and stops once number of newly discovered nodes is less
@@ -146,7 +135,6 @@ impl Network {
     pub async fn init(&mut self, config: &NetworkInitializationConfig) -> Result<(), CensusError> {
         info!(
             subnetwork = %self.subnetwork,
-            filter_clients = ?self.filter_clients,
             "init: started",
         );
 
@@ -254,8 +242,11 @@ impl Network {
             return LivenessResult::Fail;
         };
 
-        let radius = match PingExtension::decode_json(pong_info.payload_type, pong_info.payload) {
-            Ok(PingExtension::Capabilities(payload)) => payload.data_radius,
+        let capabilities = match PingExtension::decode_json(
+            pong_info.payload_type,
+            pong_info.payload,
+        ) {
+            Ok(PingExtension::Capabilities(capabilities)) => capabilities,
             _ => {
                 warn!(
                     subnetwork = %self.subnetwork,
@@ -283,13 +274,15 @@ impl Network {
             enr
         };
 
-        self.peers.record_successful_liveness_check(enr, radius);
+        self.peers.record_successful_liveness_check(
+            enr,
+            capabilities.get_client_type(),
+            capabilities.data_radius,
+        );
         LivenessResult::Pass
     }
 
     async fn ping(&self, enr: &Enr) -> anyhow::Result<PongInfo> {
-        ensure!(self.is_eligible(enr), "ping: peer is filtered out");
-
         match self.subnetwork {
             Subnetwork::History => {
                 HistoryNetworkApiClient::ping(&self.client, enr.clone(), None, None)
@@ -308,8 +301,6 @@ impl Network {
     ///
     /// Should be used when ENR sequence returned by Ping request is higher than the one we know.
     async fn fetch_enr(&self, enr: &Enr) -> anyhow::Result<Enr> {
-        ensure!(self.is_eligible(enr), "fetch_enr: peer is filtered out");
-
         let enrs = self.find_nodes(enr, /* distances= */ vec![0]).await?;
         if enrs.len() != 1 {
             warn!(
@@ -356,10 +347,7 @@ impl Network {
                 self.subnetwork
             ),
         };
-        Ok(enrs
-            .into_iter()
-            .filter(|enr| self.is_eligible(enr))
-            .collect())
+        Ok(enrs)
     }
 }
 

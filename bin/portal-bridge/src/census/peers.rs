@@ -9,7 +9,7 @@ use std::{
 use delay_map::HashSetDelay;
 use discv5::enr::NodeId;
 use ethportal_api::{
-    types::{distance::Distance, portal_wire::OfferTrace},
+    types::{client_type::ClientType, distance::Distance, portal_wire::OfferTrace},
     Enr,
 };
 use futures::Stream;
@@ -17,7 +17,7 @@ use tokio::time::Instant;
 use tracing::error;
 
 use super::{
-    peer::Peer,
+    peer::{Peer, PeerInfo},
     scoring::{PeerSelector, Weight},
 };
 
@@ -70,14 +70,19 @@ impl<W: Weight> Peers<W> {
         self.read().liveness_checks.deadline(node_id)
     }
 
-    pub fn record_successful_liveness_check(&self, enr: Enr, radius: Distance) {
+    pub fn record_successful_liveness_check(
+        &self,
+        enr: Enr,
+        client_type: ClientType,
+        radius: Distance,
+    ) {
         let node_id = enr.node_id();
         let mut guard = self.write();
         guard
             .peers
             .entry(node_id)
             .or_insert_with(|| Peer::new(enr.clone()))
-            .record_successful_liveness_check(enr, radius);
+            .record_successful_liveness_check(enr, client_type, radius);
         guard.liveness_checks.insert(node_id);
     }
 
@@ -109,18 +114,16 @@ impl<W: Weight> Peers<W> {
         duration: Duration,
         offer_trace: &OfferTrace,
     ) {
-        let success = match offer_trace {
-            OfferTrace::Success(_) | OfferTrace::Declined => true,
-            OfferTrace::Failed => false,
-        };
         match self.write().peers.get_mut(&node_id) {
-            Some(peer) => peer.record_offer_result(success, content_value_size, duration),
+            Some(peer) => {
+                peer.record_offer_result(offer_trace.clone(), content_value_size, duration)
+            }
             None => error!("record_offer_result: unknown peer: {node_id}"),
         }
     }
 
     /// Selects peers to receive content.
-    pub fn select_peers(&self, content_id: &[u8; 32]) -> Vec<Enr> {
+    pub fn select_peers(&self, content_id: &[u8; 32]) -> Vec<PeerInfo> {
         self.selector
             .select_peers(content_id, self.read().peers.values())
     }

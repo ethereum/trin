@@ -2,14 +2,8 @@ use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy::primitives::B256;
 use clap::Parser;
-use ethportal_api::{
-    types::{network::Subnetwork, network_spec::NetworkSpec},
-    Enr,
-};
-use portalnet::{
-    constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK, DEFAULT_WEB3_HTTP_PORT},
-    discovery::ENR_PORTAL_CLIENT_KEY,
-};
+use ethportal_api::types::{network::Subnetwork, network_spec::NetworkSpec};
+use portalnet::constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK, DEFAULT_WEB3_HTTP_PORT};
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client, IntoUrl, Request, Response,
@@ -64,8 +58,8 @@ pub struct BridgeConfig {
     pub e2hs_randomize: bool,
 
     #[arg(
-        long = "portal-subnetworks",
-        help = "Comma-separated list of which portal subnetworks to activate",
+        long = "portal-subnetwork",
+        help = "The name of the subnetwork to use. Options: [history, state, beacon]",
         default_value = DEFAULT_SUBNETWORK,
     )]
     pub portal_subnetwork: Subnetwork,
@@ -168,13 +162,6 @@ pub struct BridgeConfig {
     pub enr_offer_limit: usize,
 
     #[arg(
-        long = "filter-clients",
-        help = "Filter clients out from offer request (STATE BRIDGE ONLY).",
-        value_delimiter = ','
-    )]
-    pub filter_clients: Vec<ClientType>,
-
-    #[arg(
         default_value_t = DEFAULT_TOTAL_REQUEST_TIMEOUT,
         long = "request-timeout",
         help = "The timeout in seconds is applied from when the request starts connecting until the response body has finished. Also considered a total deadline.",
@@ -239,53 +226,6 @@ impl FromStr for BridgeId {
             return Err("Bridge id and total must each be greater than 0".to_string());
         }
         Ok(Self { id, total })
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ClientType {
-    Fluffy,
-    Trin,
-    Shisui,
-    Ultralight,
-    Unknown,
-}
-
-impl FromStr for ClientType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "fluffy" => Ok(ClientType::Fluffy),
-            "trin" => Ok(ClientType::Trin),
-            "shisui" => Ok(ClientType::Shisui),
-            "ultralight" => Ok(ClientType::Ultralight),
-            "unknown" => Ok(ClientType::Unknown),
-            _ => Err(format!("Unknown client type: {s}")),
-        }
-    }
-}
-
-impl From<&Enr> for ClientType {
-    fn from(enr: &Enr) -> Self {
-        let client_id = enr
-            .get_decodable::<String>(ENR_PORTAL_CLIENT_KEY)
-            .and_then(|v| v.ok());
-        if let Some(client_id) = client_id {
-            if client_id.starts_with("t") {
-                ClientType::Trin
-            } else if client_id.starts_with("f") {
-                ClientType::Fluffy
-            } else if client_id.starts_with("s") {
-                ClientType::Shisui
-            } else if client_id.starts_with("u") {
-                ClientType::Ultralight
-            } else {
-                ClientType::Unknown
-            }
-        } else {
-            ClientType::Unknown
-        }
     }
 }
 
@@ -380,7 +320,7 @@ mod test {
             "bridge",
             "--executable-path",
             EXECUTABLE_PATH,
-            "--portal-subnetworks",
+            "--portal-subnetwork",
             "history",
         ]);
         assert_eq!(
@@ -429,6 +369,6 @@ mod test {
     #[test]
     #[should_panic(expected = "Unknown subnetwork: das")]
     fn test_invalid_network_arg() {
-        BridgeConfig::try_parse_from(["bridge", "--portal-subnetworks", "das"].iter()).unwrap();
+        BridgeConfig::try_parse_from(["bridge", "--portal-subnetwork", "das"].iter()).unwrap();
     }
 }

@@ -1,4 +1,7 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    fmt::Display,
+    ops::{Deref, DerefMut},
+};
 
 use alloy::primitives::Bytes;
 use serde::{Deserialize, Serialize};
@@ -134,7 +137,7 @@ impl From<ssz_types::Error> for AcceptCodeListError {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AcceptCode {
     /// The content was accepted
     Accepted,
@@ -151,6 +154,20 @@ pub enum AcceptCode {
     InboundTransferInProgress,
     /// Unspecified accept code, this should not be used
     Unspecified,
+}
+
+impl Display for AcceptCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AcceptCode::Accepted => write!(f, "Accepted"),
+            AcceptCode::Declined => write!(f, "Declined"),
+            AcceptCode::AlreadyStored => write!(f, "AlreadyStored"),
+            AcceptCode::NotWithinRadius => write!(f, "NotWithinRadius"),
+            AcceptCode::RateLimited => write!(f, "RateLimited"),
+            AcceptCode::InboundTransferInProgress => write!(f, "InboundTransferInProgress"),
+            AcceptCode::Unspecified => write!(f, "Unspecified"),
+        }
+    }
 }
 
 impl From<AcceptCode> for u8 {

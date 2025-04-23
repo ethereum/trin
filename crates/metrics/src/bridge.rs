@@ -1,3 +1,4 @@
+use ethportal_api::types::{client_type::ClientType, portal_wire::OfferTrace};
 use prometheus_exporter::{
     self,
     prometheus::{
@@ -44,7 +45,7 @@ impl BridgeMetrics {
         )?;
         let offer_total = register_int_counter_vec_with_registry!(
             opts!("bridge_offer_total", "counts all content offer requests"),
-            &["bridge", "type", "result"],
+            &["bridge", "content_type", "client_type", "result"],
             registry
         )?;
         let current_block = register_int_gauge_vec_with_registry!(
@@ -101,10 +102,25 @@ impl BridgeMetricsReporter {
             .inc();
     }
 
-    pub fn report_offer(&self, content_type: &str, status: &str) {
+    pub fn report_offer(
+        &self,
+        content_type: &str,
+        client_type: &ClientType,
+        offer_trace: &OfferTrace,
+    ) {
+        let offer_trace_string = match &offer_trace {
+            OfferTrace::Success(accept_code) => accept_code.to_string(),
+            OfferTrace::Failed => "Failed".to_string(),
+        };
+
         self.bridge_metrics
             .offer_total
-            .with_label_values(&[&self.bridge, content_type, status])
+            .with_label_values(&[
+                &self.bridge,
+                content_type,
+                &client_type.to_string(),
+                &offer_trace_string,
+            ])
             .inc();
     }
 
