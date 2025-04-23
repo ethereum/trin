@@ -5,18 +5,13 @@ use std::{
     time::{Instant, SystemTime},
 };
 
+use alloy::primitives::B256;
 use anyhow::{bail, ensure};
 use ethportal_api::{
-    consensus::{
-        beacon_state::BeaconStateDeneb,
-        historical_summaries::{HistoricalSummariesStateProof, HistoricalSummariesWithProof},
+    consensus::historical_summaries::{
+        HistoricalSummariesStateProof, HistoricalSummariesWithProof,
     },
-    light_client::{
-        bootstrap::LightClientBootstrapDeneb,
-        finality_update::LightClientFinalityUpdateDeneb,
-        optimistic_update::LightClientOptimisticUpdateDeneb,
-        update::{LightClientUpdate, LightClientUpdateDeneb},
-    },
+    light_client::update::LightClientUpdate,
     types::{
         consensus::fork::ForkName,
         content_key::beacon::{
@@ -30,12 +25,10 @@ use ethportal_api::{
         network::Subnetwork,
         portal_wire::OfferTrace,
     },
-    utils::bytes::hex_decode,
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, ContentValue,
     LightClientBootstrapKey, LightClientUpdatesByRangeKey, OverlayContentKey,
 };
 use jsonrpsee::http_client::HttpClient;
-use serde_json::Value;
 use ssz_types::VariableList;
 use tokio::{
     sync::Mutex,
@@ -66,7 +59,7 @@ const HISTORICAL_SUMMARIES_PROOF_LENGTH: usize = 5;
 #[derive(Clone, Debug, Default)]
 pub struct FinalizedBeaconState {
     /// THe root of the finalized state
-    pub state_root: String,
+    pub state_root: B256,
     /// True if the beacon state download is in progress
     pub in_progress: bool,
 }
@@ -81,7 +74,7 @@ impl FinalizedBeaconState {
 /// generation is in progress.
 #[derive(Clone, Debug, Default)]
 pub struct FinalizedBootstrap {
-    pub finalized_block_root: String,
+    pub finalized_block_root: B256,
     pub in_progress: bool,
 }
 
@@ -186,7 +179,7 @@ impl BeaconBridge {
         current_period: Arc<Mutex<u64>>,
         finalized_bootstrap: Arc<Mutex<FinalizedBootstrap>>,
         finalized_slot: Arc<Mutex<u64>>,
-        _finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
+        finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
     ) {
         // Serve LightClientBootstrap data
         let consensus_api_clone = self.consensus_api.clone();
@@ -255,18 +248,39 @@ impl BeaconBridge {
         let consensus_api_clone = self.consensus_api.clone();
         let metrics_clone = self.metrics.clone();
         let portal_client_clone = self.portal_client.clone();
-        let census = self.census.clone();
+        let census_clone = self.census.clone();
         tokio::spawn(async move {
             if let Err(err) = Self::serve_light_client_optimistic_update(
                 consensus_api_clone,
                 portal_client_clone,
                 metrics_clone,
-                census,
+                census_clone,
             )
             .in_current_span()
             .await
             {
                 warn!("Failed to serve LightClientOptimisticUpdate: {err}");
+            }
+        });
+
+        // Serve `HistoricalSummariesWithProof` data
+        let consensus_api_clone = self.consensus_api.clone();
+        let metrics_clone = self.metrics.clone();
+        let portal_client_clone = self.portal_client.clone();
+        let census_clone = self.census.clone();
+        let finalized_state_root_clone = finalized_state_root.clone();
+        tokio::spawn(async move {
+            if let Err(err) = Self::serve_historical_summaries_with_proof(
+                consensus_api_clone,
+                portal_client_clone,
+                metrics_clone,
+                census_clone,
+                finalized_state_root_clone,
+            )
+            .in_current_span()
+            .await
+            {
+                warn!("Failed to serve HistoricalSummariesWithProof: {err}");
             }
         });
     }
@@ -285,12 +299,10 @@ impl BeaconBridge {
             info!("LightClientBootstrap generation is in progress, skipping generation.");
             return Ok(());
         }
-        let response = consensus_api
+        let latest_finalized_block_root = consensus_api
             .get_beacon_block_root("finalized".to_owned())
-            .await?;
-        let response: Value = serde_json::from_str(&response)?;
-        let latest_finalized_block_root: String =
-            serde_json::from_value(response["data"]["root"].clone())?;
+            .await?
+            .root;
 
         // If the latest finalized block root is the same, do not serve a new bootstrap
         if latest_finalized_block_root.eq(&*finalized_bootstrap.lock().await.finalized_block_root) {
@@ -303,11 +315,9 @@ impl BeaconBridge {
         // is propagated first.
         let duration = Duration::from_secs(24);
         sleep(duration).await;
-        let result = consensus_api
-            .get_lc_bootstrap(&latest_finalized_block_root)
+        let bootstrap = consensus_api
+            .get_light_client_bootstrap(latest_finalized_block_root)
             .await?;
-        let result: Value = serde_json::from_str(&result)?;
-        let bootstrap: LightClientBootstrapDeneb = serde_json::from_value(result["data"].clone())?;
 
         info!(
             header_slot=%bootstrap.header.beacon.slot,
@@ -316,9 +326,7 @@ impl BeaconBridge {
 
         let content_value = BeaconContentValue::LightClientBootstrap(bootstrap.into());
         let content_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
-            block_hash: <[u8; 32]>::try_from(hex_decode(&latest_finalized_block_root)?).map_err(
-                |err| anyhow::anyhow!("Failed to convert finalized block root to bytes: {err:?}"),
-            )?,
+            block_hash: latest_finalized_block_root.0,
         });
 
         // Return the latest finalized block root if we successfully gossiped the latest bootstrap.
@@ -354,11 +362,9 @@ impl BeaconBridge {
             }
         }
 
-        let data = consensus_api
-            .get_lc_updates(expected_current_period, 1)
-            .await?;
-        let update: Value = serde_json::from_str(&data)?;
-        let update: LightClientUpdateDeneb = serde_json::from_value(update[0]["data"].clone())?;
+        let update = &consensus_api
+            .get_light_client_updates(expected_current_period, 1)
+            .await?[0];
         let finalized_header_period = update.finalized_header.beacon.slot / SLOTS_PER_PERIOD;
 
         // We don't serve a `LightClientUpdate` if its finalized header slot is not within the
@@ -403,11 +409,7 @@ impl BeaconBridge {
         metrics: BridgeMetricsReporter,
         census: Census,
     ) -> anyhow::Result<()> {
-        let data = consensus_api.get_lc_optimistic_update().await?;
-        let update: Value = serde_json::from_str(&data)?;
-
-        let update: LightClientOptimisticUpdateDeneb =
-            serde_json::from_value(update["data"].clone())?;
+        let update = consensus_api.get_light_client_optimistic_update().await?;
         info!(
             signature_slot = %update.signature_slot,
             "Generated LightClientOptimisticUpdate",
@@ -427,10 +429,7 @@ impl BeaconBridge {
         metrics: BridgeMetricsReporter,
         census: Census,
     ) -> anyhow::Result<()> {
-        let data = consensus_api.get_lc_finality_update().await?;
-        let update: Value = serde_json::from_str(&data)?;
-        let update: LightClientFinalityUpdateDeneb =
-            serde_json::from_value(update["data"].clone())?;
+        let update = consensus_api.get_light_client_finality_update().await?;
         info!(
             finalized_slot = %update.finalized_header.beacon.slot,
             "Generated LightClientFinalityUpdate",
@@ -463,13 +462,12 @@ impl BeaconBridge {
         Ok(())
     }
 
-    #[allow(dead_code)] // TODO: Remove this once the method is used
     async fn serve_historical_summaries_with_proof(
         consensus_api: ConsensusApi,
         portal_client: HttpClient,
         metrics: BridgeMetricsReporter,
-        finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
         census: Census,
+        finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
     ) -> anyhow::Result<()> {
         if finalized_state_root.lock().await.in_progress {
             // If the beacon state download is in progress, do not serve a new historical summary.
@@ -477,10 +475,8 @@ impl BeaconBridge {
             return Ok(());
         }
 
-        let finalized_state_root_data = consensus_api.get_beacon_state_finalized_root().await?;
-        let finalized_state_root_data: Value = serde_json::from_str(&finalized_state_root_data)?;
-        let latest_finalized_state_root: String =
-            serde_json::from_value(finalized_state_root_data["data"]["root"].clone())?;
+        let latest_finalized_state_root =
+            consensus_api.get_beacon_state_finalized_root().await?.root;
 
         if latest_finalized_state_root.eq(&finalized_state_root.lock().await.state_root) {
             // We already gossiped the latest historical summaries from the current finalized root,
@@ -496,8 +492,6 @@ impl BeaconBridge {
         info!("Downloading beacon state for HistoricalSummariesWithProof generation...");
         finalized_state_root.lock().await.in_progress = true;
         let beacon_state = consensus_api.get_beacon_state().await?;
-        let beacon_state: Value = serde_json::from_str(&beacon_state)?;
-        let beacon_state: BeaconStateDeneb = serde_json::from_value(beacon_state["data"].clone())?;
         let state_epoch = beacon_state.slot / SLOTS_PER_EPOCH;
         let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
         // Ensure the historical summaries proof is of the correct length

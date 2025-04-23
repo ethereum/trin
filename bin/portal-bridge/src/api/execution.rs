@@ -25,10 +25,8 @@ use trin_validation::{
 };
 use url::Url;
 
-use crate::{
-    cli::{url_to_client, ClientWithBaseUrl},
-    constants::FALLBACK_RETRY_AFTER,
-};
+use super::utils::{ClientWithBaseUrl, ContentType};
+use crate::{api::utils::url_to_client, constants::FALLBACK_RETRY_AFTER};
 
 /// Limit the number of requests in a single batch to avoid exceeding the
 /// provider's batch size limit configuration of 10.
@@ -54,9 +52,10 @@ impl ExecutionApi {
         debug!(
             "Starting ExecutionApi with primary provider: {primary} and fallback provider: {fallback}",
         );
-        let client = url_to_client(primary.clone(), request_timeout).map_err(|err| {
-            anyhow!("Unable to create primary client for execution data provider: {err:?}")
-        })?;
+        let client =
+            url_to_client(primary.clone(), request_timeout, ContentType::Json).map_err(|err| {
+                anyhow!("Unable to create primary client for execution data provider: {err:?}")
+            })?;
         if let Err(err) = check_provider(&client).await {
             error!("Primary el provider is offline: {err:?}");
         }
@@ -170,7 +169,12 @@ impl ExecutionApi {
                 "Attempting to send requests outnumbering provider request limit of {BATCH_LIMIT}."
             )
         }
-        let client = url_to_client(self.primary.clone(), self.request_timeout).map_err(|err| {
+        let client = url_to_client(
+            self.primary.clone(),
+            self.request_timeout,
+            ContentType::Json,
+        )
+        .map_err(|err| {
             anyhow!("Unable to create primary client for execution data provider: {err:?}")
         })?;
         match Self::send_batch_request(&client, &requests).await {
@@ -178,12 +182,14 @@ impl ExecutionApi {
             Err(msg) => {
                 warn!("Failed to send batch request to primary provider: {msg}");
                 sleep(FALLBACK_RETRY_AFTER).await;
-                let client =
-                    url_to_client(self.fallback.clone(), self.request_timeout).map_err(|err| {
-                        anyhow!(
-                            "Unable to create fallback client for execution data provider: {err:?}"
-                        )
-                    })?;
+                let client = url_to_client(
+                    self.fallback.clone(),
+                    self.request_timeout,
+                    ContentType::Json,
+                )
+                .map_err(|err| {
+                    anyhow!("Unable to create fallback client for execution data provider: {err:?}")
+                })?;
                 Self::send_batch_request(&client, &requests)
                     .await
                     .map_err(|err| {
@@ -210,7 +216,12 @@ impl ExecutionApi {
     }
 
     async fn try_request(&self, request: JsonRequest) -> anyhow::Result<Value> {
-        let client = url_to_client(self.primary.clone(), self.request_timeout).map_err(|err| {
+        let client = url_to_client(
+            self.primary.clone(),
+            self.request_timeout,
+            ContentType::Json,
+        )
+        .map_err(|err| {
             anyhow!("Unable to create primary client for execution data provider: {err:?}")
         })?;
         match Self::send_request(&client, &request).await {
@@ -218,12 +229,14 @@ impl ExecutionApi {
             Err(msg) => {
                 warn!("Failed to send request to primary provider, retrying with fallback provider: {msg}");
                 sleep(FALLBACK_RETRY_AFTER).await;
-                let client =
-                    url_to_client(self.fallback.clone(), self.request_timeout).map_err(|err| {
-                        anyhow!(
-                            "Unable to create fallback client for execution data provider: {err:?}"
-                        )
-                    })?;
+                let client = url_to_client(
+                    self.fallback.clone(),
+                    self.request_timeout,
+                    ContentType::Json,
+                )
+                .map_err(|err| {
+                    anyhow!("Unable to create fallback client for execution data provider: {err:?}")
+                })?;
                 Self::send_request(&client, &request)
                     .await
                     .map_err(|err| anyhow!("Failed to send request to fallback provider: {err:?}"))

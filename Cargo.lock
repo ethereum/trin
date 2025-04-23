@@ -4725,6 +4725,8 @@ dependencies = [
  "e2store",
  "env_logger 0.9.3",
  "eth_trie",
+ "ethereum_ssz",
+ "ethereum_ssz_derive",
  "ethportal-api",
  "futures",
  "humanize-duration",
