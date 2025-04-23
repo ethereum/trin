@@ -6,8 +6,8 @@ use ethportal_api::{
     generate_random_node_ids,
     jsonrpsee::http_client::HttpClient,
     types::{
-        network::Subnetwork, ping_extensions::decode::PingExtension, portal::PongInfo,
-        portal_wire::OfferTrace,
+        client_type::ClientType, network::Subnetwork, ping_extensions::decode::PingExtension,
+        portal::PongInfo, portal_wire::OfferTrace,
     },
     BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, StateNetworkApiClient,
 };
@@ -20,7 +20,6 @@ use tokio::{
 use tracing::{debug, error, info, warn};
 
 use super::{
-    client_type::ClientType,
     peer::PeerInfo,
     peers::Peers,
     scoring::{AdditiveWeight, PeerSelector},
@@ -76,7 +75,6 @@ pub(super) struct Network {
     peers: Peers<AdditiveWeight>,
     client: HttpClient,
     subnetwork: Subnetwork,
-    filter_clients: Vec<ClientType>,
 }
 
 impl Network {
@@ -95,7 +93,6 @@ impl Network {
             )),
             client,
             subnetwork,
-            filter_clients: bridge_config.filter_clients.to_vec(),
         }
     }
 
@@ -138,7 +135,6 @@ impl Network {
     pub async fn init(&mut self, config: &NetworkInitializationConfig) -> Result<(), CensusError> {
         info!(
             subnetwork = %self.subnetwork,
-            filter_clients = ?self.filter_clients,
             "init: started",
         );
 

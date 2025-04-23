@@ -1,5 +1,6 @@
 pub mod accept_code;
 pub mod bytes;
+pub mod client_type;
 pub mod consensus;
 pub mod content_key;
 pub mod content_value;

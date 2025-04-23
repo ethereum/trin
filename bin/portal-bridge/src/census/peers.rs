@@ -9,7 +9,7 @@ use std::{
 use delay_map::HashSetDelay;
 use discv5::enr::NodeId;
 use ethportal_api::{
-    types::{distance::Distance, portal_wire::OfferTrace},
+    types::{client_type::ClientType, distance::Distance, portal_wire::OfferTrace},
     Enr,
 };
 use futures::Stream;
@@ -17,7 +17,6 @@ use tokio::time::Instant;
 use tracing::error;
 
 use super::{
-    client_type::ClientType,
     peer::{Peer, PeerInfo},
     scoring::{PeerSelector, Weight},
 };

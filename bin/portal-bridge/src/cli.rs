@@ -17,7 +17,6 @@ use url::Url;
 
 use crate::{
     bridge::e2hs::BlockRange,
-    census::client_type::ClientType,
     constants::{DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
     types::mode::BridgeMode,
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
@@ -59,8 +58,8 @@ pub struct BridgeConfig {
     pub e2hs_randomize: bool,
 
     #[arg(
-        long = "portal-subnetworks",
-        help = "Comma-separated list of which portal subnetworks to activate",
+        long = "portal-subnetwork",
+        help = "The name of the subnetwork to use. Options: [history, state, beacon]",
         default_value = DEFAULT_SUBNETWORK,
     )]
     pub portal_subnetwork: Subnetwork,
@@ -161,13 +160,6 @@ pub struct BridgeConfig {
         help = "The maximum number of enrs to gossip per content key (STATE BRIDGE ONLY)."
     )]
     pub enr_offer_limit: usize,
-
-    #[arg(
-        long = "filter-clients",
-        help = "Filter clients out from offer request (STATE BRIDGE ONLY).",
-        value_delimiter = ','
-    )]
-    pub filter_clients: Vec<ClientType>,
 
     #[arg(
         default_value_t = DEFAULT_TOTAL_REQUEST_TIMEOUT,
@@ -328,7 +320,7 @@ mod test {
             "bridge",
             "--executable-path",
             EXECUTABLE_PATH,
-            "--portal-subnetworks",
+            "--portal-subnetwork",
             "history",
         ]);
         assert_eq!(
@@ -377,6 +369,6 @@ mod test {
     #[test]
     #[should_panic(expected = "Unknown subnetwork: das")]
     fn test_invalid_network_arg() {
-        BridgeConfig::try_parse_from(["bridge", "--portal-subnetworks", "das"].iter()).unwrap();
+        BridgeConfig::try_parse_from(["bridge", "--portal-subnetwork", "das"].iter()).unwrap();
     }
 }

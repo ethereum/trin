@@ -5,12 +5,11 @@ use std::{
 
 use discv5::Enr;
 use ethportal_api::types::{
+    client_type::ClientType,
     distance::{Distance, Metric, XorMetric},
     portal_wire::OfferTrace,
 };
 use tracing::error;
-
-use super::client_type::ClientType;
 
 #[derive(Debug, Clone)]
 pub struct LivenessCheck {

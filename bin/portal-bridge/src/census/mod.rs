@@ -13,7 +13,6 @@ use tracing::{error, info, Instrument};
 
 use crate::cli::BridgeConfig;
 
-pub mod client_type;
 mod network;
 pub(crate) mod peer;
 mod peers;

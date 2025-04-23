@@ -63,7 +63,6 @@ pub async fn test_beacon_bridge(peertest: &Peertest, portal_client: &HttpClient)
         base_rpc_port: DEFAULT_WEB3_HTTP_PORT,
         offer_limit: DEFAULT_OFFER_LIMIT,
         enr_offer_limit: ENR_OFFER_LIMIT,
-        filter_clients: Vec::new(),
         request_timeout: DEFAULT_TOTAL_REQUEST_TIMEOUT,
         bridge_id: BridgeId { id: 1, total: 1 },
         data_dir: None,
