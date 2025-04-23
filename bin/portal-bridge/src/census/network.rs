@@ -6,8 +6,8 @@ use ethportal_api::{
     generate_random_node_ids,
     jsonrpsee::http_client::HttpClient,
     types::{
-        client_type::ClientType, network::Subnetwork, ping_extensions::decode::PingExtension,
-        portal::PongInfo, portal_wire::OfferTrace,
+        network::Subnetwork, ping_extensions::decode::PingExtension, portal::PongInfo,
+        portal_wire::OfferTrace,
     },
     BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, StateNetworkApiClient,
 };
@@ -274,14 +274,11 @@ impl Network {
             enr
         };
 
-        let client_type = if let Some(client_type) = capabilities.client_info {
-            ClientType::from(client_type.client_name.as_str())
-        } else {
-            ClientType::Unknown(None)
-        };
-
-        self.peers
-            .record_successful_liveness_check(enr, client_type, capabilities.data_radius);
+        self.peers.record_successful_liveness_check(
+            enr,
+            capabilities.get_client_type(),
+            capabilities.data_radius,
+        );
         LivenessResult::Pass
     }
 

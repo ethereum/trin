@@ -12,8 +12,8 @@ use ssz_types::{
 
 use crate::{
     types::{
-        distance::Distance, ping_extensions::extension_types::PingExtensionType,
-        portal_wire::CustomPayload,
+        client_type::ClientType, distance::Distance,
+        ping_extensions::extension_types::PingExtensionType, portal_wire::CustomPayload,
     },
     version::{
         APP_NAME, BUILD_ARCHITECTURE, BUILD_OPERATING_SYSTEM, PROGRAMMING_LANGUAGE_VERSION,
@@ -47,6 +47,22 @@ impl ClientInfoRadiusCapabilities {
             client_info,
             data_radius: radius,
             capabilities: VariableList::from(capabilities),
+        }
+    }
+
+    /// ClientType is not robust and should not be used for any critical logic.
+    /// It can't be used to reliably identify the client type from ClientInfoRadiusCapabilities,
+    /// since clients can include amendments to their client name, an example of this is Trin
+    /// Execution uses the client name "trin-execution", and hence if ClientType is used to
+    /// parse this it will return unknown.
+    ///
+    /// For projects built on Portal like Glados, it is recommended  the respective projects
+    /// maintain their own client type parsing logic.
+    pub fn get_client_type(&self) -> ClientType {
+        if let Some(client_info) = &self.client_info {
+            ClientType::from(client_info.client_name.as_str())
+        } else {
+            ClientType::Unknown(None)
         }
     }
 }
