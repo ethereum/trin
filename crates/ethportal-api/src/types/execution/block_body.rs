@@ -16,10 +16,6 @@ use anyhow::{anyhow, bail};
 use serde::Deserialize;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 
-pub const SHANGHAI_TIMESTAMP: u64 = 1681338455;
-// block 15537393 timestamp
-pub const MERGE_TIMESTAMP: u64 = 1663224162;
-
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, RlpEncodableWrapper, RlpDecodableWrapper)]
 pub struct BlockBody(pub AlloyBlockBody<TxEnvelope>);
 

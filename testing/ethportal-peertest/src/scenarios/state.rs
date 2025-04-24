@@ -1,13 +1,14 @@
 use ethportal_api::{
     jsonrpsee::async_client::Client,
     types::execution::header_with_proof::{
-        BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummaries, HeaderWithProof,
+        BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummariesCapella,
+        BlockProofHistoricalSummariesDeneb, HeaderWithProof,
     },
     ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
     StateNetworkApiClient,
 };
 use tracing::info;
-use trin_validation::constants::{MERGE_BLOCK_NUMBER, SHANGHAI_BLOCK_NUMBER};
+use trin_validation::constants::{CANCUN_BLOCK_NUMBER, MERGE_BLOCK_NUMBER, SHANGHAI_BLOCK_NUMBER};
 
 use crate::{
     utils::{
@@ -62,8 +63,16 @@ async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &Peerte
                 slot: 0,
             })
         }
-        SHANGHAI_BLOCK_NUMBER.. => {
-            BlockHeaderProof::HistoricalSummaries(BlockProofHistoricalSummaries {
+        SHANGHAI_BLOCK_NUMBER..CANCUN_BLOCK_NUMBER => {
+            BlockHeaderProof::HistoricalSummariesCapella(BlockProofHistoricalSummariesCapella {
+                beacon_block_proof: Default::default(),
+                beacon_block_root: Default::default(),
+                execution_block_proof: Default::default(),
+                slot: 0,
+            })
+        }
+        CANCUN_BLOCK_NUMBER.. => {
+            BlockHeaderProof::HistoricalSummariesDeneb(BlockProofHistoricalSummariesDeneb {
                 beacon_block_proof: Default::default(),
                 beacon_block_root: Default::default(),
                 execution_block_proof: Default::default(),

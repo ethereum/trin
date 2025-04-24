@@ -69,6 +69,20 @@ impl BeaconBlock {
     }
 }
 
+impl BeaconBlockDeneb {
+    pub fn build_body_root_proof(&self) -> Vec<B256> {
+        let leaves = vec![
+            self.slot.tree_hash_root().0,
+            self.proposer_index.tree_hash_root().0,
+            self.parent_root.tree_hash_root().0,
+            self.state_root.tree_hash_root().0,
+            self.body.tree_hash_root().0,
+        ];
+        // We want to prove the body root, which is the 5th leaf
+        build_merkle_proof_for_index(leaves, 4)
+    }
+}
+
 impl BeaconBlockCapella {
     pub fn build_body_root_proof(&self) -> Vec<B256> {
         let leaves = vec![

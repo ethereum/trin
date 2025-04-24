@@ -3,14 +3,16 @@ use anyhow::anyhow;
 use ethportal_api::{
     consensus::historical_summaries::HistoricalSummaries,
     types::execution::header_with_proof::{
-        BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummaries, HeaderWithProof,
+        BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummariesCapella,
+        HeaderWithProof,
     },
 };
 
 use crate::{
     accumulator::PreMergeAccumulator,
     constants::{
-        CAPELLA_FORK_EPOCH, EPOCH_SIZE, MERGE_BLOCK_NUMBER, SHANGHAI_BLOCK_NUMBER, SLOTS_PER_EPOCH,
+        CANCUN_BLOCK_NUMBER, CAPELLA_FORK_EPOCH, EPOCH_SIZE, MERGE_BLOCK_NUMBER,
+        SHANGHAI_BLOCK_NUMBER, SLOTS_PER_EPOCH,
     },
     historical_roots_acc::HistoricalRootsAccumulator,
     merkle::proof::verify_merkle_proof,
@@ -67,15 +69,31 @@ impl HeaderValidator {
                 hwp.header.hash_slow(),
                 proof,
             ),
-            BlockHeaderProof::HistoricalSummaries(_) => {
+            BlockHeaderProof::HistoricalSummariesCapella(_) => {
                 if hwp.header.number < SHANGHAI_BLOCK_NUMBER {
                     return Err(anyhow!(
                         "Invalid BlockProofHistoricalSummaries found for pre-Shanghai header."
                     ));
                 }
-                // TODO: Validation for post-Capella headers is not implemented
+                if hwp.header.number >= CANCUN_BLOCK_NUMBER {
+                    return Err(anyhow!(
+                        "Invalid BlockProofHistoricalSummaries found for post-Cancun header."
+                    ));
+                }
+                // TODO: Validation for post-Shanghai/pre-Cancun headers is not implemented
                 Err(anyhow!(
-                    "Post-Capella header validation is not implemented yet."
+                    "Post-Shanghai/pre-Cancun header validation is not implemented yet."
+                ))
+            }
+            BlockHeaderProof::HistoricalSummariesDeneb(_) => {
+                if hwp.header.number < CANCUN_BLOCK_NUMBER {
+                    return Err(anyhow!(
+                        "Invalid BlockProofHistoricalSummaries found for pre-Cancun header."
+                    ));
+                }
+                // TODO: Validation for post-Cancun headers is not implemented
+                Err(anyhow!(
+                    "Post-Cancun header validation is not implemented yet."
                 ))
             }
         }
@@ -133,7 +151,7 @@ impl HeaderValidator {
         &self,
         block_number: u64,
         header_hash: B256,
-        proof: &BlockProofHistoricalSummaries,
+        proof: &BlockProofHistoricalSummariesCapella,
         historical_summaries: HistoricalSummaries,
     ) -> anyhow::Result<()> {
         if block_number < SHANGHAI_BLOCK_NUMBER {
@@ -423,7 +441,7 @@ mod test {
             .as_str()
             .unwrap();
         let header_hash = B256::from_str(header_hash).unwrap();
-        let historical_summaries_block_proof: BlockProofHistoricalSummaries =
+        let historical_summaries_block_proof: BlockProofHistoricalSummariesCapella =
             serde_yaml::from_value(value).unwrap();
 
         // Load historical summaries from ssz file

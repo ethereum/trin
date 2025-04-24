@@ -3,36 +3,53 @@ use jsonrpsee::core::Serialize;
 use serde::Deserialize;
 use ssz::SszDecoderBuilder;
 use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum, FixedVector, VariableList};
+use ssz_types::{typenum, FixedVector};
 use tree_hash::TreeHash;
 
-use crate::types::{
-    bytes::ByteList1024,
-    consensus::{
-        beacon_block::{BeaconBlockBellatrix, BeaconBlockCapella},
-        beacon_state::{BeaconStateCapella, HistoricalBatch},
-        proof::build_merkle_proof_for_index,
-    },
-    execution::{
-        block_body::{MERGE_TIMESTAMP, SHANGHAI_TIMESTAMP},
-        ssz_header,
+use crate::{
+    consensus::{beacon_block::BeaconBlockDeneb, beacon_state::BeaconStateDeneb},
+    types::{
+        bytes::ByteList1024,
+        consensus::{
+            beacon_block::{BeaconBlockBellatrix, BeaconBlockCapella},
+            beacon_state::{BeaconStateCapella, HistoricalBatch},
+        },
+        execution::ssz_header,
     },
 };
+
+/// The timestamp of the first Merge block (block number: 15537394)
+pub const MERGE_TIMESTAMP: u64 = 1663224179;
+
+/// The timestamp of the first Shapella (Shanghai-Capella) slot.
+///
+/// - Slot: 6209536
+/// - Epoch: 194048
+/// - Block number: 17034870
+///     - Note that frst Shapella block is created at slot 6209538 (timestamp: 1681338479)
+pub const SHAPELLA_TIMESTAMP: u64 = 1681338455;
+
+/// The timestamp of the first Dencun (Cancun-Deneb) slot.
+///
+/// - Slot: 8626176
+/// - Epoch: 269568
+/// - Block number: 19426587
+pub const DENCUN_TIMESTAMP: u64 = 1710338135;
 
 /// The accumulator proof for EL BlockHeader for the pre-merge blocks.
 pub type BlockProofHistoricalHashesAccumulator = FixedVector<B256, typenum::U15>;
 
 /// Proof that EL block_hash is in BeaconBlock -> BeaconBlockBody -> ExecutionPayload
-/// for TheMerge until Capella
-pub type ExecutionBlockProof = FixedVector<B256, typenum::U11>;
+/// for Bellatrix until Deneb (exclusive)
+pub type ExecutionBlockProofBellatrix = FixedVector<B256, typenum::U11>;
 /// Proof that EL block_hash is in BeaconBlock -> BeaconBlockBody -> ExecutionPayload
-/// for Post-Capella
-pub type ExecutionBlockProofCapella = VariableList<B256, typenum::U12>;
+/// for Deneb and onwards
+pub type ExecutionBlockProofDeneb = FixedVector<B256, typenum::U12>;
 /// Proof that BeaconBlock root is part of historical_summaries and thus canonical
 /// for Capella and onwards
 pub type BeaconBlockProofHistoricalSummaries = FixedVector<B256, typenum::U13>;
 /// Proof that BeaconBlock root is part of historical_roots and thus canonical
-/// from TheMerge until Capella -> Bellatrix fork.
+/// from TheMerge until Capella fork.
 pub type BeaconBlockProofHistoricalRoots = FixedVector<B256, typenum::U14>;
 
 /// A block header with accumulator proof.
@@ -52,7 +69,9 @@ pub enum BlockHeaderProof {
     // Merge -> Capella
     HistoricalRoots(BlockProofHistoricalRoots),
     // Post-Capella
-    HistoricalSummaries(BlockProofHistoricalSummaries),
+    HistoricalSummariesCapella(BlockProofHistoricalSummariesCapella),
+    // Post-Capella
+    HistoricalSummariesDeneb(BlockProofHistoricalSummariesDeneb),
 }
 
 impl ssz::Decode for HeaderWithProof {
@@ -70,16 +89,19 @@ impl ssz::Decode for HeaderWithProof {
 
         let header = decoder.decode_next_with(ssz_header::decode::from_ssz_bytes)?;
         let proof = decoder.decode_next::<ByteList1024>()?;
-        let proof = if header.timestamp <= MERGE_TIMESTAMP {
-            BlockHeaderProof::HistoricalHashes(
+        let proof = match header.timestamp {
+            0..MERGE_TIMESTAMP => BlockHeaderProof::HistoricalHashes(
                 BlockProofHistoricalHashesAccumulator::from_ssz_bytes(&proof)?,
-            )
-        } else if header.timestamp <= SHANGHAI_TIMESTAMP {
-            BlockHeaderProof::HistoricalRoots(BlockProofHistoricalRoots::from_ssz_bytes(&proof)?)
-        } else {
-            BlockHeaderProof::HistoricalSummaries(BlockProofHistoricalSummaries::from_ssz_bytes(
-                &proof,
-            )?)
+            ),
+            MERGE_TIMESTAMP..SHAPELLA_TIMESTAMP => BlockHeaderProof::HistoricalRoots(
+                BlockProofHistoricalRoots::from_ssz_bytes(&proof)?,
+            ),
+            SHAPELLA_TIMESTAMP..DENCUN_TIMESTAMP => BlockHeaderProof::HistoricalSummariesCapella(
+                BlockProofHistoricalSummariesCapella::from_ssz_bytes(&proof)?,
+            ),
+            DENCUN_TIMESTAMP.. => BlockHeaderProof::HistoricalSummariesDeneb(
+                BlockProofHistoricalSummariesDeneb::from_ssz_bytes(&proof)?,
+            ),
         };
         Ok(Self { header, proof })
     }
@@ -98,7 +120,10 @@ impl ssz::Encode for BlockHeaderProof {
             BlockHeaderProof::HistoricalRoots(proof) => {
                 proof.ssz_append(buf);
             }
-            BlockHeaderProof::HistoricalSummaries(proof) => {
+            BlockHeaderProof::HistoricalSummariesCapella(proof) => {
+                proof.ssz_append(buf);
+            }
+            BlockHeaderProof::HistoricalSummariesDeneb(proof) => {
                 proof.ssz_append(buf);
             }
         }
@@ -108,7 +133,8 @@ impl ssz::Encode for BlockHeaderProof {
         match self {
             BlockHeaderProof::HistoricalHashes(proof) => proof.ssz_bytes_len(),
             BlockHeaderProof::HistoricalRoots(proof) => proof.ssz_bytes_len(),
-            BlockHeaderProof::HistoricalSummaries(proof) => proof.ssz_bytes_len(),
+            BlockHeaderProof::HistoricalSummariesCapella(proof) => proof.ssz_bytes_len(),
+            BlockHeaderProof::HistoricalSummariesDeneb(proof) => proof.ssz_bytes_len(),
         }
     }
 }
@@ -126,7 +152,7 @@ pub struct BlockProofHistoricalRoots {
     /// hash_tree_root of BeaconBlock used to verify the proofs
     pub beacon_block_root: B256,
     /// Proof that EL BlockHash is part of the BeaconBlock
-    pub execution_block_proof: ExecutionBlockProof,
+    pub execution_block_proof: ExecutionBlockProofBellatrix,
     /// Slot of BeaconBlock, used to calculate the historical_roots index
     pub slot: u64,
 }
@@ -135,16 +161,34 @@ pub struct BlockProofHistoricalRoots {
 /// `BlockHeader` is part of the canonical chain. The only requirement is having access to the
 /// beacon chain `historical_summaries`.
 ///
-/// Proof for EL BlockHeader for Capella and onwards
+/// Proof for EL BlockHeader for Capella until Deneb
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
-pub struct BlockProofHistoricalSummaries {
+pub struct BlockProofHistoricalSummariesCapella {
     /// Proof that the BeaconBlock is part of the historical_summaries
     /// and thus part of the canonical chain.
     pub beacon_block_proof: BeaconBlockProofHistoricalSummaries,
     /// hash_tree_root of BeaconBlock used to verify the proofs
     pub beacon_block_root: B256,
     /// Proof that EL BlockHash is part of the BeaconBlock
-    pub execution_block_proof: ExecutionBlockProofCapella,
+    pub execution_block_proof: ExecutionBlockProofBellatrix,
+    /// Slot of BeaconBlock, used to calculate the historical_summaries index
+    pub slot: u64,
+}
+
+/// The struct holds a chain of proofs. This chain of proofs allows for verifying that an EL
+/// `BlockHeader` is part of the canonical chain. The only requirement is having access to the
+/// beacon chain `historical_summaries`.
+///
+/// Proof for EL BlockHeader for Deneb and onwards
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
+pub struct BlockProofHistoricalSummariesDeneb {
+    /// Proof that the BeaconBlock is part of the historical_summaries
+    /// and thus part of the canonical chain.
+    pub beacon_block_proof: BeaconBlockProofHistoricalSummaries,
+    /// hash_tree_root of BeaconBlock used to verify the proofs
+    pub beacon_block_root: B256,
+    /// Proof that EL BlockHash is part of the BeaconBlock
+    pub execution_block_proof: ExecutionBlockProofDeneb,
     /// Slot of BeaconBlock, used to calculate the historical_summaries index
     pub slot: u64,
 }
@@ -169,21 +213,21 @@ pub fn build_historical_roots_proof(
     }
 }
 
-pub fn build_historical_summaries_proof(
+pub fn build_capella_historical_summaries_proof(
     slot: u64,
     capella_state: &BeaconStateCapella,
     beacon_block: BeaconBlockCapella,
-) -> BlockProofHistoricalSummaries {
+) -> BlockProofHistoricalSummariesCapella {
     // beacon block proof
     let block_root_proof = capella_state.build_block_root_proof(slot as usize % 8192);
-    let beacon_block_proof: FixedVector<B256, typenum::U13> = block_root_proof.into();
+    let beacon_block_proof: BeaconBlockProofHistoricalSummaries = block_root_proof.into();
 
     // execution block proof
     let mut execution_block_hash_proof = beacon_block.body.build_execution_block_hash_proof();
     let body_root_proof = beacon_block.build_body_root_proof();
     execution_block_hash_proof.extend(body_root_proof);
 
-    BlockProofHistoricalSummaries {
+    BlockProofHistoricalSummariesCapella {
         beacon_block_proof,
         beacon_block_root: beacon_block.tree_hash_root(),
         execution_block_proof: execution_block_hash_proof.into(),
@@ -191,48 +235,21 @@ pub fn build_historical_summaries_proof(
     }
 }
 
-pub fn build_block_proof_historical_roots(
+pub fn build_deneb_historical_summaries_proof(
     slot: u64,
-    historical_batch: HistoricalBatch,
-    beacon_block: BeaconBlockBellatrix,
-) -> BlockProofHistoricalRoots {
+    deneb_state: &BeaconStateDeneb,
+    beacon_block: BeaconBlockDeneb,
+) -> BlockProofHistoricalSummariesDeneb {
     // beacon block proof
-    let historical_batch_proof = historical_batch.build_block_root_proof(slot % 8192);
+    let block_root_proof = deneb_state.build_block_root_proof(slot as usize % 8192);
+    let beacon_block_proof: BeaconBlockProofHistoricalSummaries = block_root_proof.into();
 
     // execution block proof
     let mut execution_block_hash_proof = beacon_block.body.build_execution_block_hash_proof();
     let body_root_proof = beacon_block.build_body_root_proof();
     execution_block_hash_proof.extend(body_root_proof);
 
-    BlockProofHistoricalRoots {
-        beacon_block_proof: historical_batch_proof.into(),
-        beacon_block_root: beacon_block.tree_hash_root(),
-        execution_block_proof: execution_block_hash_proof.into(),
-        slot,
-    }
-}
-
-pub fn build_block_proof_historical_summaries(
-    slot: u64,
-    // block roots fields from BeaconState
-    block_roots: FixedVector<B256, typenum::U8192>,
-    beacon_block: BeaconBlockCapella,
-) -> BlockProofHistoricalSummaries {
-    // beacon block proof
-    let leaves = block_roots
-        .iter()
-        .map(|root| root.tree_hash_root().0)
-        .collect();
-    let slot_index = slot as usize % 8192;
-    let block_root_proof = build_merkle_proof_for_index(leaves, slot_index);
-    let beacon_block_proof: FixedVector<B256, typenum::U13> = block_root_proof.into();
-
-    // execution block proof
-    let mut execution_block_hash_proof = beacon_block.body.build_execution_block_hash_proof();
-    let body_root_proof = beacon_block.build_body_root_proof();
-    execution_block_hash_proof.extend(body_root_proof);
-
-    BlockProofHistoricalSummaries {
+    BlockProofHistoricalSummariesDeneb {
         beacon_block_proof,
         beacon_block_root: beacon_block.tree_hash_root(),
         execution_block_proof: execution_block_hash_proof.into(),
@@ -244,7 +261,6 @@ pub fn build_block_proof_historical_summaries(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use serde_json::Value;
-    use serde_yaml::Value as YamlValue;
     use ssz::Decode;
 
     use super::*;
@@ -283,6 +299,7 @@ mod tests {
     #[case("17034870")]
     #[case("17042287")]
     #[case("17062257")]
+    #[case("22162263")]
     fn decode_encode_more_headers_with_proofs(#[case] filename: &str) {
         let file = read_file_from_tests_submodule(format!(
             "tests/mainnet/history/headers_with_proof/{filename}.yaml"
@@ -322,18 +339,7 @@ mod tests {
             "tests/mainnet/history/headers_with_proof/block_proofs_bellatrix/beacon_block_proof-{file_path}.yaml"
         ))
         .unwrap();
-        let test_vector: YamlValue = serde_yaml::from_str(&test_vector).unwrap();
-        let expected_proof = BlockProofHistoricalRoots {
-            beacon_block_proof: serde_yaml::from_value(test_vector["beacon_block_proof"].clone())
-                .unwrap(),
-            beacon_block_root: serde_yaml::from_value(test_vector["beacon_block_root"].clone())
-                .unwrap(),
-            execution_block_proof: serde_yaml::from_value(
-                test_vector["execution_block_proof"].clone(),
-            )
-            .unwrap(),
-            slot: serde_yaml::from_value(test_vector["slot"].clone()).unwrap(),
-        };
+        let expected_proof: BlockProofHistoricalRoots = serde_yaml::from_str(&test_vector).unwrap();
 
         let test_assets_dir =
             format!("tests/mainnet/history/headers_with_proof/beacon_data/{block_number}");
@@ -344,7 +350,7 @@ mod tests {
         let block_raw =
             read_bytes_from_tests_submodule(format!("{test_assets_dir}/block.ssz",)).unwrap();
         let block = BeaconBlockBellatrix::from_ssz_bytes(&block_raw).unwrap();
-        let actual_proof = build_block_proof_historical_roots(slot, historical_batch, block);
+        let actual_proof = build_historical_roots_proof(slot, &historical_batch, block);
 
         assert_eq!(expected_proof, actual_proof);
     }
@@ -362,18 +368,8 @@ mod tests {
             "tests/mainnet/history/headers_with_proof/block_proofs_capella/beacon_block_proof-{block_number}.yaml",
         ))
         .unwrap();
-        let test_vector: YamlValue = serde_yaml::from_str(&test_vector).unwrap();
-        let expected_proof = BlockProofHistoricalSummaries {
-            beacon_block_proof: serde_yaml::from_value(test_vector["beacon_block_proof"].clone())
-                .unwrap(),
-            beacon_block_root: serde_yaml::from_value(test_vector["beacon_block_root"].clone())
-                .unwrap(),
-            execution_block_proof: serde_yaml::from_value(
-                test_vector["execution_block_proof"].clone(),
-            )
-            .unwrap(),
-            slot: serde_yaml::from_value(test_vector["slot"].clone()).unwrap(),
-        };
+        let expected_proof: BlockProofHistoricalSummariesCapella =
+            serde_yaml::from_str(&test_vector).unwrap();
 
         let test_assets_dir =
             format!("tests/mainnet/history/headers_with_proof/beacon_data/{block_number}");
@@ -382,11 +378,43 @@ mod tests {
                 .unwrap();
         let beacon_state =
             BeaconState::from_ssz_bytes(&beacon_state_raw, ForkName::Capella).unwrap();
-        let block_roots = beacon_state.as_capella().unwrap().block_roots.clone();
         let block_raw =
             read_bytes_from_tests_submodule(format!("{test_assets_dir}/block.ssz",)).unwrap();
         let block = BeaconBlockCapella::from_ssz_bytes(&block_raw).unwrap();
-        let actual_proof = build_block_proof_historical_summaries(slot, block_roots, block);
+        let actual_proof = build_capella_historical_summaries_proof(
+            slot,
+            beacon_state.as_capella().unwrap(),
+            block,
+        );
+
+        assert_eq!(expected_proof, actual_proof);
+    }
+
+    #[rstest::rstest]
+    #[case(22162263, 11378687)]
+    #[tokio::test]
+    async fn post_deneb_historical_summaries_generation(
+        #[case] block_number: u64,
+        #[case] slot: u64,
+    ) {
+        let test_vector = read_file_from_tests_submodule(format!(
+            "tests/mainnet/history/headers_with_proof/block_proofs_deneb/beacon_block_proof-{block_number}.yaml",
+        ))
+        .unwrap();
+        let expected_proof: BlockProofHistoricalSummariesDeneb =
+            serde_yaml::from_str(&test_vector).unwrap();
+
+        let test_assets_dir =
+            format!("tests/mainnet/history/headers_with_proof/beacon_data/{block_number}");
+        let beacon_state_raw =
+            read_bytes_from_tests_submodule(format!("{test_assets_dir}/beacon_state.ssz",))
+                .unwrap();
+        let beacon_state = BeaconState::from_ssz_bytes(&beacon_state_raw, ForkName::Deneb).unwrap();
+        let block_raw =
+            read_bytes_from_tests_submodule(format!("{test_assets_dir}/block.ssz",)).unwrap();
+        let block = BeaconBlockDeneb::from_ssz_bytes(&block_raw).unwrap();
+        let actual_proof =
+            build_deneb_historical_summaries_proof(slot, beacon_state.as_deneb().unwrap(), block);
 
         assert_eq!(expected_proof, actual_proof);
     }
