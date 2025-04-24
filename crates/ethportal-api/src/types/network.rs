@@ -74,8 +74,8 @@ impl std::str::FromStr for Subnetwork {
     }
 }
 
-// Convert camel_case cli args to/from the Subnetwork enum.
 impl Subnetwork {
+    /// Convert Subnetwork enum to camel_case cli arg.
     pub fn to_cli_arg(&self) -> String {
         match self {
             Subnetwork::Beacon => "beacon".to_string(),
@@ -99,5 +99,19 @@ impl Subnetwork {
             Subnetwork::TransactionGossip => false,
             Subnetwork::Utp => false,
         }
+    }
+
+    /// Returns Subnetworks that it depends on.
+    pub fn dependencies(&self) -> Vec<Subnetwork> {
+        match self {
+            Subnetwork::History => vec![Subnetwork::Beacon],
+            Subnetwork::State => vec![Subnetwork::History, Subnetwork::Beacon],
+            _ => vec![],
+        }
+    }
+
+    /// Returns itself and subnetworks that it depends on.
+    pub fn with_dependencies(&self) -> impl IntoIterator<Item = Subnetwork> {
+        Iterator::chain([*self].into_iter(), self.dependencies())
     }
 }

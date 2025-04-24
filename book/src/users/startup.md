@@ -36,7 +36,7 @@ For now, only the history network is on by default, because the others are still
 To try out state access, you can turn it on like this:
 
 ```text
-trin --mb 5000 --portal-subnetworks history,state
+trin --mb 5000 --portal-subnetworks beacon,history,state
 ```
 
 Note that to access state, you must also run with history enabled, in order to validate peer responses.

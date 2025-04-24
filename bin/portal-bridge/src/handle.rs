@@ -48,9 +48,10 @@ pub fn build_trin(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
 pub fn subnetworks_flag(bridge_config: &BridgeConfig) -> String {
     let subnetworks = match bridge_config.portal_subnetwork {
         Subnetwork::Beacon => vec![Subnetwork::Beacon],
-        Subnetwork::History => vec![Subnetwork::History],
-        // State requires both history and state
-        Subnetwork::State => vec![Subnetwork::History, Subnetwork::State],
+        // History requires beacon and history
+        Subnetwork::History => vec![Subnetwork::Beacon, Subnetwork::History],
+        // State requires beacon, history and state
+        Subnetwork::State => vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State],
         subnetwork => panic!("Unsupported subnetwork: {subnetwork:?}"),
     }
     .into_iter()

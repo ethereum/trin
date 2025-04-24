@@ -37,7 +37,7 @@ BLOCK_NUM=20987654; curl -X POST -H "Content-Type: application/json" -d '{"jsonr
 
 To read data out of a contract, use the `eth_call` method.
 
-The data needed to make this call is well populated in the Portal Network for the first 1 million blocks, and is being expanded over time. To activate contract storage access, connect to the Portal state network by running trin with the flag `--portal-subnetworks state,history`.
+The data needed to make this call is well populated in the Portal Network for the first 1 million blocks, and is being expanded over time. To activate contract storage access, connect to the Portal state network by running trin with the flag `--portal-subnetworks state,history,beacon`.
 
 Calling a contract fuction usually involves enough formatting that it's helpful to use a tool to build the request, like Web3.py.
 

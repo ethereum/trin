@@ -10,6 +10,7 @@ use ethportal_api::{
 };
 use ethportal_peertest as peertest;
 use ethportal_peertest::Peertest;
+use itertools::Itertools;
 use jsonrpsee::{async_client::Client, http_client::HttpClient};
 use portalnet::constants::{DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
 use rpc::RpcServerHandle;
@@ -177,8 +178,7 @@ mod protocol_v0 {
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn peertest_state_offer_account_trie_node() {
-        let (peertest, target, handle) =
-            setup_peertest(V0_NETWORK, &[Subnetwork::History, Subnetwork::State]).await;
+        let (peertest, target, handle) = setup_peertest(V0_NETWORK, &[Subnetwork::State]).await;
         peertest::scenarios::state::test_state_offer_account_trie_node(&peertest, &target).await;
         peertest.exit_all_nodes();
         handle.stop().unwrap();
@@ -187,8 +187,7 @@ mod protocol_v0 {
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn peertest_state_offer_contract_bytecode() {
-        let (peertest, target, handle) =
-            setup_peertest(V0_NETWORK, &[Subnetwork::History, Subnetwork::State]).await;
+        let (peertest, target, handle) = setup_peertest(V0_NETWORK, &[Subnetwork::State]).await;
         peertest::scenarios::state::test_state_gossip_contract_bytecode(&peertest, &target).await;
         peertest.exit_all_nodes();
         handle.stop().unwrap();
@@ -197,8 +196,7 @@ mod protocol_v0 {
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn peertest_state_offer_contract_storage_trie_node() {
-        let (peertest, target, handle) =
-            setup_peertest(V0_NETWORK, &[Subnetwork::History, Subnetwork::State]).await;
+        let (peertest, target, handle) = setup_peertest(V0_NETWORK, &[Subnetwork::State]).await;
         peertest::scenarios::state::test_state_gossip_contract_storage_trie_node(
             &peertest, &target,
         )
@@ -353,11 +351,8 @@ mod protocol_v1 {
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn peertest_state_offer_account_trie_node() {
-        let (peertest, target, handle) = setup_peertest(
-            Network::Angelfood,
-            &[Subnetwork::History, Subnetwork::State],
-        )
-        .await;
+        let (peertest, target, handle) =
+            setup_peertest(Network::Angelfood, &[Subnetwork::State]).await;
         peertest::scenarios::state::test_state_offer_account_trie_node(&peertest, &target).await;
         peertest.exit_all_nodes();
         handle.stop().unwrap();
@@ -366,11 +361,8 @@ mod protocol_v1 {
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn peertest_state_offer_contract_bytecode() {
-        let (peertest, target, handle) = setup_peertest(
-            Network::Angelfood,
-            &[Subnetwork::History, Subnetwork::State],
-        )
-        .await;
+        let (peertest, target, handle) =
+            setup_peertest(Network::Angelfood, &[Subnetwork::State]).await;
         peertest::scenarios::state::test_state_gossip_contract_bytecode(&peertest, &target).await;
         peertest.exit_all_nodes();
         handle.stop().unwrap();
@@ -379,11 +371,8 @@ mod protocol_v1 {
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn peertest_state_offer_contract_storage_trie_node() {
-        let (peertest, target, handle) = setup_peertest(
-            Network::Angelfood,
-            &[Subnetwork::History, Subnetwork::State],
-        )
-        .await;
+        let (peertest, target, handle) =
+            setup_peertest(Network::Angelfood, &[Subnetwork::State]).await;
         peertest::scenarios::state::test_state_gossip_contract_storage_trie_node(
             &peertest, &target,
         )
@@ -534,12 +523,17 @@ async fn peertest_ping_cross_discv5_protocol_id() {
     let test_discovery_port = 8999;
     let external_addr = format!("{}:{test_discovery_port}", Ipv4Addr::new(127, 0, 0, 1));
 
+    let subnetworks = [Subnetwork::History, Subnetwork::Beacon]
+        .iter()
+        .map(Subnetwork::to_cli_arg)
+        .join(",");
+
     let trin_config = TrinConfig::new_from([
         APP_NAME,
         "--network",
         &Network::Mainnet.to_string(),
         "--portal-subnetworks",
-        &Subnetwork::History.to_cli_arg(),
+        &subnetworks,
         "--external-address",
         external_addr.as_str(),
         "--web3-ipc-path",
@@ -584,17 +578,20 @@ async fn setup_peertest(
     let test_discovery_port = 8999;
     let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
 
+    let subnetworks = subnetworks
+        .iter()
+        .flat_map(Subnetwork::with_dependencies)
+        .unique()
+        .map(|subnetwork| subnetwork.to_cli_arg())
+        .join(",");
+
     // Run a client, to be tested
     let trin_config = TrinConfig::new_from([
         APP_NAME,
         "--network",
         &network.to_string(),
         "--portal-subnetworks",
-        &subnetworks
-            .iter()
-            .map(|s| s.to_cli_arg())
-            .collect::<Vec<String>>()
-            .join(","),
+        &subnetworks,
         "--external-address",
         external_addr.as_str(),
         "--web3-ipc-path",
@@ -634,8 +631,9 @@ async fn setup_peertest_bridge(
     let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
     let subnetworks = subnetworks
         .iter()
-        .map(|s| s.to_cli_arg())
-        .collect::<Vec<String>>()
+        .flat_map(Subnetwork::with_dependencies)
+        .unique()
+        .map(|subnetwork| subnetwork.to_cli_arg())
         .join(",");
 
     // add fake secrets for bridge activation

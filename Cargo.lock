@@ -2561,6 +2561,7 @@ dependencies = [
  "ethportal-api",
  "futures",
  "hex",
+ "itertools 0.13.0",
  "jsonrpsee",
  "portal-bridge",
  "portalnet",
