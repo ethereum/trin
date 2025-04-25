@@ -4,7 +4,7 @@ use ethportal_api::{
     consensus::historical_summaries::HistoricalSummaries,
     types::execution::header_with_proof::{
         BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummariesCapella,
-        HeaderWithProof,
+        BlockProofHistoricalSummariesDeneb, HeaderWithProof,
     },
 };
 
@@ -118,7 +118,7 @@ impl HeaderValidator {
         }
 
         // Verify the chain of proofs for post-merge/pre-capella block header
-        Self::verify_beacon_block_proof(
+        Self::verify_beacon_block_proof_bellatrix_to_deneb(
             header_hash,
             &proof.execution_block_proof,
             proof.beacon_block_root,
@@ -147,21 +147,69 @@ impl HeaderValidator {
 
     /// A method to verify the chain of proofs for post-Capella execution headers.
     #[allow(dead_code)] // TODO: Remove this when used
-    fn verify_post_capella_header(
+    fn verify_post_capella_pre_deneb_header(
         &self,
         block_number: u64,
         header_hash: B256,
         proof: &BlockProofHistoricalSummariesCapella,
-        historical_summaries: HistoricalSummaries,
+        historical_summaries: &HistoricalSummaries,
     ) -> anyhow::Result<()> {
         if block_number < SHANGHAI_BLOCK_NUMBER {
             return Err(anyhow!(
                 "Invalid HistoricalSummariesBlockProof found for pre-Shanghai header."
             ));
         }
+        if block_number >= CANCUN_BLOCK_NUMBER {
+            return Err(anyhow!(
+                "Invalid HistoricalSummariesBlockProof found for post-Cancun header."
+            ));
+        }
 
-        // Verify the chain of proofs for post-merge/pre-capella block header
-        Self::verify_beacon_block_proof(
+        // Verify the chain of proofs for post-capella/pre-deneb block header
+        Self::verify_beacon_block_proof_bellatrix_to_deneb(
+            header_hash,
+            &proof.execution_block_proof,
+            proof.beacon_block_root,
+        )?;
+
+        let block_root_index = proof.slot % EPOCH_SIZE;
+        let gen_index = EPOCH_SIZE + block_root_index;
+        let historical_summary_index =
+            (proof.slot - CAPELLA_FORK_EPOCH * SLOTS_PER_EPOCH) / EPOCH_SIZE;
+        let historical_summary =
+            historical_summaries[historical_summary_index as usize].block_summary_root;
+
+        if !verify_merkle_proof(
+            proof.beacon_block_root,
+            &proof.beacon_block_proof,
+            13,
+            gen_index as usize,
+            historical_summary,
+        ) {
+            return Err(anyhow!(
+                "Merkle proof validation failed for HistoricalSummariesProof"
+            ));
+        }
+
+        Ok(())
+    }
+
+    #[allow(dead_code)] // TODO: Remove this when used
+    fn verify_post_deneb_header(
+        &self,
+        block_number: u64,
+        header_hash: B256,
+        proof: &BlockProofHistoricalSummariesDeneb,
+        historical_summaries: &HistoricalSummaries,
+    ) -> anyhow::Result<()> {
+        if block_number < CANCUN_BLOCK_NUMBER {
+            return Err(anyhow!(
+                "Invalid HistoricalSummariesBlockProof found for pre-Cancun header."
+            ));
+        }
+
+        // Verify the chain of proofs for post-deneb block header
+        Self::verify_beacon_block_proof_deneb_onwards(
             header_hash,
             &proof.execution_block_proof,
             proof.beacon_block_root,
@@ -190,7 +238,41 @@ impl HeaderValidator {
     }
 
     /// Verify that the execution block header is included in the beacon block
-    fn verify_beacon_block_proof(
+    fn verify_beacon_block_proof_bellatrix_to_deneb(
+        header_hash: B256,
+        block_body_proof: &[B256],
+        block_body_root: B256,
+    ) -> anyhow::Result<()> {
+        // BeaconBlock level:
+        // - 8 as there are 5 fields
+        // - 4 as index (pos) of field is 4
+        // let gen_index_top_level = (1 * 1 * 8 + 4) = 12
+        // BeaconBlockBody level:
+        // - 16 as there are 10 (Bellatrix) or 11 (Capella) fields
+        // - 9 as index (pos) of field is 9
+        // let gen_index_mid_level = (gen_index_top_level * 1 * 16 + 9) = 201
+        // ExecutionPayload level:
+        // - 16 as there are 14 (Bellatrix) or 15 (Capella) fields
+        // - 12 as pos of field is 12
+        // let gen_index = (gen_index_mid_level * 1 * 16 + 12) = 3228
+        let gen_index = 3228;
+
+        if !verify_merkle_proof(
+            header_hash,
+            block_body_proof,
+            block_body_proof.len(),
+            gen_index,
+            block_body_root,
+        ) {
+            return Err(anyhow!(
+                "Merkle proof validation failed for BeaconBlockProof"
+            ));
+        }
+        Ok(())
+    }
+
+    /// Verify that the execution block header is included in the beacon block
+    fn verify_beacon_block_proof_deneb_onwards(
         header_hash: B256,
         block_body_proof: &[B256],
         block_body_root: B256,
@@ -200,14 +282,14 @@ impl HeaderValidator {
         // - 4 as index (pos) of field is 4
         // let gen_index_top_level = (1 * 1 * 8 + 4)
         // BeaconBlockBody level:
-        // - 16 as there are 10 fields
+        // - 16 as there are 12 fields
         // - 9 as index (pos) of field is 9
         // let gen_index_mid_level = (gen_index_top_level * 1 * 16 + 9)
         // ExecutionPayload level:
-        // - 16 as there are 14 fields
+        // - 32 as there are 17 fields
         // - 12 as pos of field is 12
-        // let gen_index = (gen_index_mid_level * 1 * 16 + 12) = 3228
-        let gen_index = 3228;
+        // let gen_index = (gen_index_mid_level * 1 * 32 + 12) = 6444
+        let gen_index = 6444;
 
         if !verify_merkle_proof(
             header_hash,
@@ -426,7 +508,7 @@ mod test {
     #[case(17042287)]
     #[case(17062257)]
     #[tokio::test]
-    async fn header_validator_validate_post_capella_header(#[case] block_number: u64) {
+    async fn header_validator_validate_post_capella_pre_deneb_header(#[case] block_number: u64) {
         let header_validator = get_mainnet_header_validator();
 
         // Read the historical roots block proof from a test file
@@ -445,31 +527,91 @@ mod test {
             serde_yaml::from_value(value).unwrap();
 
         // Load historical summaries from ssz file
-        let historical_summaries_bytes =
-            read_portal_spec_tests_file_as_bytes(PathBuf::from(SPEC_TESTS_DIR).join(
-                "headers_with_proof/block_proofs_capella/historical_summaries_at_slot_8953856.ssz",
-            ))
-            .expect("cannot load HistoricalSummaries bytes from test file");
+        let historical_summaries_bytes = read_portal_spec_tests_file_as_bytes(
+            PathBuf::from(SPEC_TESTS_DIR)
+                .join("headers_with_proof/beacon_data/historical_summaries_at_slot_11476992.ssz"),
+        )
+        .expect("cannot load HistoricalSummaries bytes from test file");
         let historical_summaries = HistoricalSummaries::from_ssz_bytes(&historical_summaries_bytes)
             .expect("cannot decode HistoricalSummaries bytes");
 
         header_validator
-            .verify_post_capella_header(
+            .verify_post_capella_pre_deneb_header(
                 block_number,
                 header_hash,
                 &historical_summaries_block_proof,
-                historical_summaries.clone(),
+                &historical_summaries,
             )
             .unwrap();
 
         // Test for invalid block numbers
-        let validator_result = header_validator.verify_post_capella_header(
-            SHANGHAI_BLOCK_NUMBER - 1,
-            header_hash,
-            &historical_summaries_block_proof,
-            historical_summaries,
-        );
-        assert!(validator_result.is_err());
+        assert!(header_validator
+            .verify_post_capella_pre_deneb_header(
+                SHANGHAI_BLOCK_NUMBER - 1,
+                header_hash,
+                &historical_summaries_block_proof,
+                &historical_summaries,
+            )
+            .is_err());
+
+        assert!(header_validator
+            .verify_post_capella_pre_deneb_header(
+                CANCUN_BLOCK_NUMBER,
+                header_hash,
+                &historical_summaries_block_proof,
+                &historical_summaries,
+            )
+            .is_err());
+    }
+
+    #[rstest]
+    #[case(22162263)]
+    #[tokio::test]
+    async fn header_validator_validate_post_deneb_header(#[case] block_number: u64) {
+        let header_validator = get_mainnet_header_validator();
+
+        // Read the historical roots block proof from a test file
+        let file = read_portal_spec_tests_file(PathBuf::from(SPEC_TESTS_DIR).join(format!(
+            "headers_with_proof/block_proofs_deneb/beacon_block_proof-{block_number}.yaml"
+        )))
+        .unwrap();
+        let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
+        let header_hash = value
+            .get("execution_block_header")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let header_hash = B256::from_str(header_hash).unwrap();
+        let historical_summaries_block_proof: BlockProofHistoricalSummariesDeneb =
+            serde_yaml::from_value(value).unwrap();
+
+        // Load historical summaries from ssz file
+        let historical_summaries_bytes = read_portal_spec_tests_file_as_bytes(
+            PathBuf::from(SPEC_TESTS_DIR)
+                .join("headers_with_proof/beacon_data/historical_summaries_at_slot_11476992.ssz"),
+        )
+        .expect("cannot load HistoricalSummaries bytes from test file");
+        let historical_summaries = HistoricalSummaries::from_ssz_bytes(&historical_summaries_bytes)
+            .expect("cannot decode HistoricalSummaries bytes");
+
+        header_validator
+            .verify_post_deneb_header(
+                block_number,
+                header_hash,
+                &historical_summaries_block_proof,
+                &historical_summaries,
+            )
+            .unwrap();
+
+        // Test for invalid block numbers
+        assert!(header_validator
+            .verify_post_deneb_header(
+                CANCUN_BLOCK_NUMBER - 1,
+                header_hash,
+                &historical_summaries_block_proof,
+                &historical_summaries,
+            )
+            .is_err());
     }
 
     //

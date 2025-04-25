@@ -37,6 +37,8 @@ type JustificationBitsLength = U4;
 
 pub type HistoricalRoots = VariableList<B256, HistoricalRootsLimit>;
 
+pub type HashesPerHistoricalRoot = FixedVector<B256, SlotsPerHistoricalRoot>;
+
 /// The state of the `BeaconChain` at some slot.
 #[superstruct(
     variants(Bellatrix, Capella, Deneb),
