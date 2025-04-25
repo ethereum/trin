@@ -3,14 +3,16 @@ use anyhow::anyhow;
 use ethportal_api::{
     consensus::historical_summaries::HistoricalSummaries,
     types::execution::header_with_proof::{
-        BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummaries, HeaderWithProof,
+        BlockHeaderProof, BlockProofHistoricalHashesAccumulator, BlockProofHistoricalRoots,
+        BlockProofHistoricalSummariesCapella, HeaderWithProof,
     },
 };
 
 use crate::{
     accumulator::PreMergeAccumulator,
     constants::{
-        CAPELLA_FORK_EPOCH, EPOCH_SIZE, MERGE_BLOCK_NUMBER, SHANGHAI_BLOCK_NUMBER, SLOTS_PER_EPOCH,
+        CANCUN_BLOCK_NUMBER, CAPELLA_FORK_EPOCH, EPOCH_SIZE, MERGE_BLOCK_NUMBER,
+        SHANGHAI_BLOCK_NUMBER, SLOTS_PER_EPOCH,
     },
     historical_roots_acc::HistoricalRootsAccumulator,
     merkle::proof::verify_merkle_proof,
@@ -37,58 +39,60 @@ impl HeaderValidator {
         }
     }
 
-    pub fn validate_header_with_proof(&self, hwp: &HeaderWithProof) -> anyhow::Result<()> {
-        match &hwp.proof {
+    pub fn validate_header_with_proof(
+        &self,
+        header_with_proof: &HeaderWithProof,
+    ) -> anyhow::Result<()> {
+        match &header_with_proof.proof {
             BlockHeaderProof::HistoricalHashes(proof) => {
-                if hwp.header.number > MERGE_BLOCK_NUMBER {
-                    return Err(anyhow!("Invalid proof type found for post-merge header."));
-                }
-                // Look up historical epoch hash for header from pre-merge accumulator
-                let gen_index = calculate_generalized_index(&hwp.header);
-                let epoch_index =
-                    self.pre_merge_acc.get_epoch_index_of_header(&hwp.header) as usize;
-                let epoch_hash = self.pre_merge_acc.historical_epochs[epoch_index];
-
-                match verify_merkle_proof(
-                    hwp.header.hash_slow(),
-                    proof,
-                    15,
-                    gen_index as usize,
-                    epoch_hash,
-                ) {
-                    true => Ok(()),
-                    false => Err(anyhow!(
-                        "Merkle proof validation failed for pre-merge header"
-                    )),
-                }
+                self.verify_pre_merge_header(&header_with_proof.header, proof)
             }
-            BlockHeaderProof::HistoricalRoots(proof) => self.verify_post_merge_pre_capella_header(
-                hwp.header.number,
-                hwp.header.hash_slow(),
+            BlockHeaderProof::HistoricalRoots(proof) => self.verify_merge_to_capella_header(
+                header_with_proof.header.number,
+                header_with_proof.header.hash_slow(),
                 proof,
             ),
-            BlockHeaderProof::HistoricalSummaries(_) => {
-                if hwp.header.number < SHANGHAI_BLOCK_NUMBER {
-                    return Err(anyhow!(
-                        "Invalid BlockProofHistoricalSummaries found for pre-Shanghai header."
-                    ));
-                }
-                // TODO: Validation for post-Capella headers is not implemented
-                Err(anyhow!(
-                    "Post-Capella header validation is not implemented yet."
-                ))
-            }
+            BlockHeaderProof::HistoricalSummariesCapella(_) => Err(anyhow!(
+                "HistoricalSummariesCapella header validation is not implemented yet."
+            )),
         }
     }
 
+    fn verify_pre_merge_header(
+        &self,
+        header: &Header,
+        proof: &BlockProofHistoricalHashesAccumulator,
+    ) -> anyhow::Result<()> {
+        if header.number >= MERGE_BLOCK_NUMBER {
+            return Err(anyhow!("Invalid proof type found for post-merge header."));
+        }
+        // Look up historical epoch hash for header from pre-merge accumulator
+        let gen_index = calculate_generalized_index(header);
+        let epoch_index = self.pre_merge_acc.get_epoch_index_of_header(header) as usize;
+        let epoch_hash = self.pre_merge_acc.historical_epochs[epoch_index];
+
+        if !verify_merkle_proof(
+            header.hash_slow(),
+            proof,
+            15,
+            gen_index as usize,
+            epoch_hash,
+        ) {
+            return Err(anyhow!(
+                "Merkle proof validation failed for pre-merge header"
+            ));
+        }
+        Ok(())
+    }
+
     /// A method to verify the chain of proofs for post-merge/pre-Capella execution headers.
-    fn verify_post_merge_pre_capella_header(
+    fn verify_merge_to_capella_header(
         &self,
         block_number: u64,
         header_hash: B256,
         proof: &BlockProofHistoricalRoots,
     ) -> anyhow::Result<()> {
-        if block_number <= MERGE_BLOCK_NUMBER {
+        if block_number < MERGE_BLOCK_NUMBER {
             return Err(anyhow!(
                 "Invalid HistoricalRootsBlockProof found for pre-merge header."
             ));
@@ -100,7 +104,7 @@ impl HeaderValidator {
         }
 
         // Verify the chain of proofs for post-merge/pre-capella block header
-        Self::verify_beacon_block_proof(
+        Self::verify_bellatrix_to_deneb_beacon_block_proof(
             header_hash,
             &proof.execution_block_proof,
             proof.beacon_block_root,
@@ -127,23 +131,28 @@ impl HeaderValidator {
         Ok(())
     }
 
-    /// A method to verify the chain of proofs for post-Capella execution headers.
+    /// A method to verify the chain of proofs for post-Capella/pre-Deneb execution headers.
     #[allow(dead_code)] // TODO: Remove this when used
-    fn verify_post_capella_header(
+    fn verify_capella_to_deneb_header(
         &self,
         block_number: u64,
         header_hash: B256,
-        proof: &BlockProofHistoricalSummaries,
-        historical_summaries: HistoricalSummaries,
+        proof: &BlockProofHistoricalSummariesCapella,
+        historical_summaries: &HistoricalSummaries,
     ) -> anyhow::Result<()> {
         if block_number < SHANGHAI_BLOCK_NUMBER {
             return Err(anyhow!(
-                "Invalid HistoricalSummariesBlockProof found for pre-Shanghai header."
+                "Invalid BlockProofHistoricalSummariesCapella found for pre-Shanghai header."
+            ));
+        }
+        if block_number >= CANCUN_BLOCK_NUMBER {
+            return Err(anyhow!(
+                "Invalid BlockProofHistoricalSummariesCapella found for post-Cancun header."
             ));
         }
 
         // Verify the chain of proofs for post-merge/pre-capella block header
-        Self::verify_beacon_block_proof(
+        Self::verify_bellatrix_to_deneb_beacon_block_proof(
             header_hash,
             &proof.execution_block_proof,
             proof.beacon_block_root,
@@ -164,7 +173,7 @@ impl HeaderValidator {
             historical_summary,
         ) {
             return Err(anyhow!(
-                "Merkle proof validation failed for HistoricalSummariesProof"
+                "Merkle proof validation failed for BlockProofHistoricalSummariesCapella"
             ));
         }
 
@@ -172,7 +181,7 @@ impl HeaderValidator {
     }
 
     /// Verify that the execution block header is included in the beacon block
-    fn verify_beacon_block_proof(
+    fn verify_bellatrix_to_deneb_beacon_block_proof(
         header_hash: B256,
         block_body_proof: &[B256],
         block_body_root: B256,
@@ -180,15 +189,15 @@ impl HeaderValidator {
         // BeaconBlock level:
         // - 8 as there are 5 fields
         // - 4 as index (pos) of field is 4
-        // let gen_index_top_level = (1 * 1 * 8 + 4)
+        // let gen_index_top_level = (1 * 8 + 4) = 12
         // BeaconBlockBody level:
-        // - 16 as there are 10 fields
+        // - 16 as there are 10 (Bellatrix) or 11 (Capella) fields
         // - 9 as index (pos) of field is 9
-        // let gen_index_mid_level = (gen_index_top_level * 1 * 16 + 9)
+        // let gen_index_mid_level = (gen_index_top_level * 16 + 9) = 201
         // ExecutionPayload level:
-        // - 16 as there are 14 fields
+        // - 16 as there are 14 (Bellatrix) or 15 (Capella) fields
         // - 12 as pos of field is 12
-        // let gen_index = (gen_index_mid_level * 1 * 16 + 12) = 3228
+        // let gen_index = (gen_index_mid_level * 16 + 12) = 3228
         let gen_index = 3228;
 
         if !verify_merkle_proof(
@@ -359,8 +368,9 @@ mod test {
             .validate_header_with_proof(&future_hwp)
             .unwrap();
     }
+
     #[tokio::test]
-    async fn header_validator_validate_post_merge_pre_capella_header() {
+    async fn header_validator_validate_merge_to_capella_header() {
         let header_validator = get_mainnet_header_validator();
 
         // Read the historical roots block proof from a test file
@@ -380,7 +390,7 @@ mod test {
             serde_yaml::from_value(value).unwrap();
 
         header_validator
-            .verify_post_merge_pre_capella_header(
+            .verify_merge_to_capella_header(
                 block_number,
                 header_hash,
                 &historical_roots_block_proof,
@@ -388,19 +398,20 @@ mod test {
             .unwrap();
 
         // Test for invalid block numbers
-        let validator_result = header_validator.verify_post_merge_pre_capella_header(
-            SHANGHAI_BLOCK_NUMBER,
-            header_hash,
-            &historical_roots_block_proof,
-        );
-        assert!(validator_result.is_err());
-
-        let validator_result = header_validator.verify_post_merge_pre_capella_header(
-            MERGE_BLOCK_NUMBER,
-            header_hash,
-            &historical_roots_block_proof,
-        );
-        assert!(validator_result.is_err());
+        assert!(header_validator
+            .verify_merge_to_capella_header(
+                MERGE_BLOCK_NUMBER - 1,
+                header_hash,
+                &historical_roots_block_proof,
+            )
+            .is_err());
+        assert!(header_validator
+            .verify_merge_to_capella_header(
+                SHANGHAI_BLOCK_NUMBER,
+                header_hash,
+                &historical_roots_block_proof,
+            )
+            .is_err());
     }
 
     #[rstest]
@@ -408,7 +419,7 @@ mod test {
     #[case(17042287)]
     #[case(17062257)]
     #[tokio::test]
-    async fn header_validator_validate_post_capella_header(#[case] block_number: u64) {
+    async fn header_validator_validate_capella_to_deneb_header(#[case] block_number: u64) {
         let header_validator = get_mainnet_header_validator();
 
         // Read the historical roots block proof from a test file
@@ -423,35 +434,45 @@ mod test {
             .as_str()
             .unwrap();
         let header_hash = B256::from_str(header_hash).unwrap();
-        let historical_summaries_block_proof: BlockProofHistoricalSummaries =
+        let historical_summaries_block_proof: BlockProofHistoricalSummariesCapella =
             serde_yaml::from_value(value).unwrap();
 
         // Load historical summaries from ssz file
-        let historical_summaries_bytes =
-            read_portal_spec_tests_file_as_bytes(PathBuf::from(SPEC_TESTS_DIR).join(
-                "headers_with_proof/block_proofs_capella/historical_summaries_at_slot_8953856.ssz",
-            ))
-            .expect("cannot load HistoricalSummaries bytes from test file");
+        let historical_summaries_bytes = read_portal_spec_tests_file_as_bytes(
+            PathBuf::from(SPEC_TESTS_DIR)
+                .join("headers_with_proof/beacon_data/historical_summaries_at_slot_11476992.ssz"),
+        )
+        .expect("cannot load HistoricalSummaries bytes from test file");
         let historical_summaries = HistoricalSummaries::from_ssz_bytes(&historical_summaries_bytes)
             .expect("cannot decode HistoricalSummaries bytes");
 
         header_validator
-            .verify_post_capella_header(
+            .verify_capella_to_deneb_header(
                 block_number,
                 header_hash,
                 &historical_summaries_block_proof,
-                historical_summaries.clone(),
+                &historical_summaries,
             )
             .unwrap();
 
-        // Test for invalid block numbers
-        let validator_result = header_validator.verify_post_capella_header(
-            SHANGHAI_BLOCK_NUMBER - 1,
-            header_hash,
-            &historical_summaries_block_proof,
-            historical_summaries,
-        );
-        assert!(validator_result.is_err());
+        // Test for invalid block numbers\
+        assert!(header_validator
+            .verify_capella_to_deneb_header(
+                SHANGHAI_BLOCK_NUMBER - 1,
+                header_hash,
+                &historical_summaries_block_proof,
+                &historical_summaries,
+            )
+            .is_err());
+
+        assert!(header_validator
+            .verify_capella_to_deneb_header(
+                CANCUN_BLOCK_NUMBER,
+                header_hash,
+                &historical_summaries_block_proof,
+                &historical_summaries,
+            )
+            .is_err());
     }
 
     //

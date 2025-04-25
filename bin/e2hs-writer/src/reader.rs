@@ -6,17 +6,15 @@ use alloy::{
     primitives::B256,
 };
 use anyhow::{anyhow, bail, ensure};
-use async_stream::stream;
 use ethportal_api::types::execution::{
     accumulator::EpochAccumulator,
     block_body::BlockBody,
     header_with_proof::{
-        build_historical_roots_proof, build_historical_summaries_proof, BlockHeaderProof,
+        build_capella_historical_summaries_proof, build_historical_roots_proof, BlockHeaderProof,
         BlockProofHistoricalHashesAccumulator, HeaderWithProof,
     },
     receipts::Receipts,
 };
-use futures::Stream;
 use portal_bridge::api::execution::ExecutionApi;
 use tokio::try_join;
 use trin_execution::era::beacon::decode_transactions;
@@ -129,7 +127,7 @@ impl EpochReader {
         })
     }
 
-    async fn get_merge_to_capella_block_data(
+    fn get_merge_to_capella_block_data(
         &mut self,
         block_number: u64,
     ) -> anyhow::Result<AllBlockData> {
@@ -163,7 +161,7 @@ impl EpochReader {
         })
     }
 
-    async fn get_capella_to_deneb_block_data(
+    fn get_capella_to_deneb_block_data(
         &mut self,
         block_number: u64,
     ) -> anyhow::Result<AllBlockData> {
@@ -179,11 +177,13 @@ impl EpochReader {
 
         let header_with_proof = HeaderWithProof {
             header: pre_deneb_execution_payload_to_header(payload, &transactions, &withdrawals)?,
-            proof: BlockHeaderProof::HistoricalSummaries(build_historical_summaries_proof(
-                block.slot,
-                &era.historical_batch.block_roots,
-                block,
-            )),
+            proof: BlockHeaderProof::HistoricalSummariesCapella(
+                build_capella_historical_summaries_proof(
+                    block.slot,
+                    &era.historical_batch.block_roots,
+                    block,
+                ),
+            ),
         };
         let body = BlockBody(AlloyBlockBody {
             transactions,
@@ -199,20 +199,18 @@ impl EpochReader {
         })
     }
 
-    pub fn iter_blocks(mut self) -> impl Stream<Item = anyhow::Result<AllBlockData>> {
-        stream! {
-            for current_block in self.starting_block..self.ending_block {
-                if current_block < MERGE_BLOCK_NUMBER {
-                    yield self.get_pre_merge_block_data(current_block);
-                } else if current_block < SHANGHAI_BLOCK_NUMBER {
-                    yield self.get_merge_to_capella_block_data(current_block).await;
-                } else if current_block < CANCUN_BLOCK_NUMBER {
-                    yield self.get_capella_to_deneb_block_data(current_block).await;
-                } else {
-                    yield Err(anyhow!("Unsupported block number: {current_block}"));
-                }
+    pub fn iter_blocks(mut self) -> impl Iterator<Item = anyhow::Result<AllBlockData>> {
+        (self.starting_block..self.ending_block).map(move |current_block| {
+            if current_block < MERGE_BLOCK_NUMBER {
+                self.get_pre_merge_block_data(current_block)
+            } else if current_block < SHANGHAI_BLOCK_NUMBER {
+                self.get_merge_to_capella_block_data(current_block)
+            } else if current_block < CANCUN_BLOCK_NUMBER {
+                self.get_capella_to_deneb_block_data(current_block)
+            } else {
+                Err(anyhow!("Unsupported block number: {current_block}"))
             }
-        }
+        })
     }
 
     /// Returns the receipts for a given block number and receipts root.
