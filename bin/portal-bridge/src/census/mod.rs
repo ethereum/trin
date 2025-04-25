@@ -1,15 +1,13 @@
 use std::{collections::HashSet, time::Duration};
 
 use discv5::enr::NodeId;
-use ethportal_api::{
-    jsonrpsee::http_client::HttpClient,
-    types::{network::Subnetwork, portal_wire::OfferTrace},
-};
+use ethportal_api::types::{network::Subnetwork, portal_wire::OfferTrace};
 use network::{Network, NetworkAction, NetworkInitializationConfig, NetworkManager};
 use peer::PeerInfo;
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use tracing::{error, info, Instrument};
+use trin::handle::SubnetworkOverlays;
 
 use crate::cli::BridgeConfig;
 
@@ -34,7 +32,7 @@ pub enum CensusError {
 /// The census is responsible for maintaining a list of known peers in the network,
 /// checking their liveness, updating their data radius, iterating through their
 /// rfn to find new peers, and providing interested enrs for a given content id.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Census {
     history: Network,
     state: Network,
@@ -46,7 +44,7 @@ impl Census {
     const SUPPORTED_SUBNETWORKS: [Subnetwork; 3] =
         [Subnetwork::Beacon, Subnetwork::History, Subnetwork::State];
 
-    pub fn new(client: HttpClient, bridge_config: &BridgeConfig) -> Self {
+    pub fn new(client: SubnetworkOverlays, bridge_config: &BridgeConfig) -> Self {
         Self {
             history: Network::new(client.clone(), Subnetwork::History, bridge_config),
             state: Network::new(client.clone(), Subnetwork::State, bridge_config),

@@ -1,6 +1,5 @@
 use std::{
     cmp::Ordering,
-    path::PathBuf,
     sync::{Arc, Mutex as StdMutex},
     time::{Instant, SystemTime},
 };
@@ -25,16 +24,16 @@ use ethportal_api::{
         network::Subnetwork,
         portal_wire::OfferTrace,
     },
-    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, ContentValue,
-    LightClientBootstrapKey, LightClientUpdatesByRangeKey, OverlayContentKey,
+    BeaconContentKey, BeaconContentValue, ContentValue, LightClientBootstrapKey,
+    LightClientUpdatesByRangeKey, OverlayContentKey,
 };
-use jsonrpsee::http_client::HttpClient;
 use ssz_types::VariableList;
 use tokio::{
     sync::Mutex,
     time::{interval, sleep, timeout, Duration, MissedTickBehavior},
 };
 use tracing::{error, info, warn, Instrument};
+use trin::handle::SubnetworkOverlays;
 use trin_metrics::bridge::BridgeMetricsReporter;
 
 use super::{constants::SERVE_BLOCK_TIMEOUT, offer_report::OfferReport};
@@ -43,10 +42,7 @@ use crate::{
     census::Census,
     constants::BEACON_GENESIS_TIME,
     types::mode::BridgeMode,
-    utils::{
-        duration_until_next_update, expected_current_slot, read_test_assets_from_file,
-        BeaconTestAssets,
-    },
+    utils::{duration_until_next_update, expected_current_slot},
 };
 
 /// The number of slots in an epoch.
@@ -88,7 +84,7 @@ impl FinalizedBootstrap {
 pub struct BeaconBridge {
     consensus_api: ConsensusApi,
     mode: BridgeMode,
-    portal_client: HttpClient,
+    portal_client: SubnetworkOverlays,
     metrics: BridgeMetricsReporter,
     /// Used to request all interested enrs in the network.
     census: Census,
@@ -98,7 +94,7 @@ impl BeaconBridge {
     pub fn new(
         consensus_api: ConsensusApi,
         mode: BridgeMode,
-        portal_client: HttpClient,
+        portal_client: SubnetworkOverlays,
         census: Census,
     ) -> Self {
         let metrics = BridgeMetricsReporter::new("beacon".to_string(), &format!("{mode:?}"));
@@ -116,26 +112,10 @@ impl BeaconBridge {
 
         match self.mode.clone() {
             BridgeMode::Latest => self.launch_latest().await,
-            BridgeMode::Test(test_path) => self.launch_test(test_path).await,
             other => panic!("Beacon bridge mode {other:?} not implemented!"),
         }
 
         info!("Bridge mode: {:?} complete.", self.mode);
-    }
-
-    async fn launch_test(&self, test_path: PathBuf) {
-        let assets: BeaconTestAssets = read_test_assets_from_file(test_path);
-
-        // test files have no slot number data, so report all gossiped content at height 0.
-        for asset in assets.0.into_iter() {
-            Self::spawn_offer_tasks(
-                self.portal_client.clone(),
-                asset.content_key.clone(),
-                asset.content_value().expect("Error getting content value"),
-                self.metrics.clone(),
-                self.census.clone(),
-            );
-        }
     }
 
     ///  Get and serve the latest beacon data.
@@ -286,7 +266,7 @@ impl BeaconBridge {
     /// Serve `LightClientBootstrap` data
     async fn serve_light_client_bootstrap(
         consensus_api: ConsensusApi,
-        portal_client: HttpClient,
+        portal_client: SubnetworkOverlays,
         finalized_bootstrap: Arc<Mutex<FinalizedBootstrap>>,
         metrics: BridgeMetricsReporter,
         census: Census,
@@ -337,7 +317,7 @@ impl BeaconBridge {
 
     async fn serve_light_client_update(
         consensus_api: ConsensusApi,
-        portal_client: HttpClient,
+        portal_client: SubnetworkOverlays,
         current_period: Arc<Mutex<u64>>,
         metrics: BridgeMetricsReporter,
         census: Census,
@@ -403,7 +383,7 @@ impl BeaconBridge {
 
     async fn serve_light_client_optimistic_update(
         consensus_api: ConsensusApi,
-        portal_client: HttpClient,
+        portal_client: SubnetworkOverlays,
         metrics: BridgeMetricsReporter,
         census: Census,
     ) -> anyhow::Result<()> {
@@ -422,7 +402,7 @@ impl BeaconBridge {
 
     async fn serve_light_client_finality_update(
         consensus_api: ConsensusApi,
-        portal_client: HttpClient,
+        portal_client: SubnetworkOverlays,
         finalized_slot: Arc<Mutex<u64>>,
         metrics: BridgeMetricsReporter,
         census: Census,
@@ -462,7 +442,7 @@ impl BeaconBridge {
 
     async fn serve_historical_summaries_with_proof(
         consensus_api: ConsensusApi,
-        portal_client: HttpClient,
+        portal_client: SubnetworkOverlays,
         metrics: BridgeMetricsReporter,
         census: Census,
         finalized_state_root: Arc<Mutex<FinalizedBeaconState>>,
@@ -526,7 +506,7 @@ impl BeaconBridge {
 
     // spawn individual offer tasks of the content key for each interested enr found in Census
     fn spawn_offer_tasks(
-        portal_client: HttpClient,
+        portal_client: SubnetworkOverlays,
         content_key: BeaconContentKey,
         content_value: BeaconContentValue,
         metrics: BridgeMetricsReporter,
@@ -556,12 +536,15 @@ impl BeaconBridge {
 
                 let result = timeout(
                     SERVE_BLOCK_TIMEOUT,
-                    BeaconNetworkApiClient::trace_offer(
-                        &portal_client,
-                        peer.enr.clone(),
-                        content_key.clone(),
-                        encoded_content_value,
-                    ),
+                    portal_client
+                        .beacon_overlay()
+                        .expect("Beacon Network wasn't initialized")
+                        .overlay
+                        .send_offer_trace(
+                            peer.enr.clone(),
+                            content_key.to_bytes(),
+                            encoded_content_value,
+                        ),
                 )
                 .await;
 

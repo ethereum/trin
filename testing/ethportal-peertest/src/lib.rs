@@ -5,6 +5,7 @@ pub mod utils;
 
 use std::{net::Ipv4Addr, path::PathBuf, thread, time};
 
+use anyhow::bail;
 use ethportal_api::{
     types::{
         enr::Enr,
@@ -43,7 +44,10 @@ impl Peertest {
 
 async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
     let web3_ipc_path = trin_config.web3_ipc_path.clone();
-    let rpc_handle = trin::run_trin(trin_config).await.unwrap();
+    let trin_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
+    let Some(rpc_handle) = trin_handle.rpc_server_handle else {
+        bail!("RPC server handle wasn't initialized");
+    };
 
     // Short sleep to make sure all peertest nodes can connect
     thread::sleep(time::Duration::from_secs(2));

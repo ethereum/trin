@@ -14,12 +14,11 @@ use e2store::{
     utils::get_e2hs_files,
 };
 use ethportal_api::{
-    jsonrpsee::http_client::HttpClient,
     types::{
         execution::header_with_proof::HeaderWithProof, network::Subnetwork, portal_wire::OfferTrace,
     },
-    BlockBody, ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
-    OverlayContentKey, RawContentValue, Receipts,
+    BlockBody, ContentValue, HistoryContentKey, HistoryContentValue, OverlayContentKey,
+    RawContentValue, Receipts,
 };
 use futures::{
     future::{join_all, JoinAll, Map},
@@ -37,6 +36,7 @@ use tokio::{
     time::{sleep, timeout},
 };
 use tracing::{debug, error, info, warn};
+use trin::handle::SubnetworkOverlays;
 use trin_metrics::bridge::BridgeMetricsReporter;
 use trin_validation::header_validator::HeaderValidator;
 
@@ -67,7 +67,7 @@ pub struct E2HSBridge {
 
 impl E2HSBridge {
     pub async fn new(
-        portal_client: HttpClient,
+        portal_client: SubnetworkOverlays,
         offer_limit: usize,
         block_range: BlockRange,
         random_fill: bool,
@@ -105,6 +105,7 @@ impl E2HSBridge {
 
     pub async fn launch(&self) {
         info!("Launching E2HS bridge");
+
         let epochs = block_range_to_epochs(self.block_range.start, self.block_range.end);
         let mut epoch_indexes: Vec<u64> = epochs.keys().cloned().sorted().collect();
         if self.random_fill {
@@ -118,7 +119,6 @@ impl E2HSBridge {
             // Start gossiping epoch
             let task = self.gossip_epoch(index, *block_range).await;
 
-            // Save task and make sure that previous task finished gossiping before we proceed.
             if let Some(previous_task) = latest_task.replace(task) {
                 previous_task.await;
             }
@@ -229,7 +229,7 @@ struct Gossiper {
     /// Used to request all interested enrs in the network.
     census: Census,
     /// Used to send RPC request to trin
-    portal_client: HttpClient,
+    portal_client: SubnetworkOverlays,
     /// Records and reports bridge metrics
     metrics: BridgeMetricsReporter,
     /// Global offer report for tallying total performance of history bridge
@@ -407,12 +407,11 @@ impl Gossiper {
 
         let result = timeout(
             SERVE_BLOCK_TIMEOUT,
-            HistoryNetworkApiClient::trace_offer(
-                &self.portal_client,
-                peer.enr.clone(),
-                content_key.clone(),
-                raw_content_value,
-            ),
+            self.portal_client
+                .history_overlay()
+                .expect("History Network wasn't initialized")
+                .overlay
+                .send_offer_trace(peer.enr.clone(), content_key.to_bytes(), raw_content_value),
         )
         .await;
 

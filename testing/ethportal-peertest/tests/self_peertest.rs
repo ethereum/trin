@@ -1,8 +1,5 @@
 #![cfg(unix)]
-use std::{
-    env,
-    net::{IpAddr, Ipv4Addr},
-};
+use std::net::{IpAddr, Ipv4Addr};
 
 use ethportal_api::{
     types::{
@@ -440,7 +437,7 @@ mod protocol_v1 {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "test is flaky: fails in some environments and in CI sporadically. Re-add #[serial] when re-enabling"]
 async fn peertest_offer_concurrent_utp_transfer_limit() {
-    let (peertest, target, handle) = setup_peertest_bridge(&[Subnetwork::History]).await;
+    let (peertest, target, handle) = setup_peertest_http(&[Subnetwork::History]).await;
     peertest::scenarios::offer_accept::test_offer_concurrent_utp_transfer_limit(&peertest, target)
         .await;
     peertest.exit_all_nodes();
@@ -560,7 +557,10 @@ async fn setup_peertest(
     ])
     .unwrap();
 
-    let test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
+    let trin_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
+    let Some(test_client_rpc_handle) = trin_handle.rpc_server_handle else {
+        panic!("Trin wasn't started with RPC server handle");
+    };
     let target = reth_ipc::client::IpcClientBuilder::default()
         .build(DEFAULT_WEB3_IPC_PATH)
         .await
@@ -568,7 +568,7 @@ async fn setup_peertest(
     (peertest, target, test_client_rpc_handle)
 }
 
-async fn setup_peertest_bridge(
+async fn setup_peertest_http(
     subnetworks: &[Subnetwork],
 ) -> (Peertest, HttpClient, RpcServerHandle) {
     utils::init_tracing();
@@ -591,9 +591,6 @@ async fn setup_peertest_bridge(
         .map(|subnetwork| subnetwork.to_cli_arg())
         .join(",");
 
-    // add fake secrets for bridge activation
-    env::set_var("PANDAOPS_CLIENT_ID", "xxx");
-    env::set_var("PANDAOPS_CLIENT_SECRET", "xxx");
     // Run a client, to be tested
     let trin_config = TrinConfig::new_from([
         APP_NAME,
@@ -603,7 +600,6 @@ async fn setup_peertest_bridge(
         &subnetworks,
         "--external-address",
         external_addr.as_str(),
-        // Run bridge test with http, since bridge doesn't support ipc yet.
         "--web3-transport",
         "http",
         "--web3-http-address",
@@ -618,18 +614,12 @@ async fn setup_peertest_bridge(
     ])
     .unwrap();
 
-    let test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
+    let trin_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
+    let Some(test_client_rpc_handle) = trin_handle.rpc_server_handle else {
+        panic!("Trin wasn't started with RPC server handle");
+    };
     let target = ethportal_api::jsonrpsee::http_client::HttpClientBuilder::default()
         .build(DEFAULT_WEB3_HTTP_ADDRESS)
         .unwrap();
     (peertest, target, test_client_rpc_handle)
-}
-
-#[tokio::test(flavor = "multi_thread")]
-#[serial]
-async fn peertest_beacon_bridge() {
-    let (peertest, target, handle) = setup_peertest_bridge(&[Subnetwork::Beacon]).await;
-    peertest::scenarios::bridge::test_beacon_bridge(&peertest, &target).await;
-    peertest.exit_all_nodes();
-    handle.stop().unwrap();
 }

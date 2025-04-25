@@ -4,12 +4,12 @@ use anyhow::{anyhow, bail};
 use discv5::enr::NodeId;
 use ethportal_api::{
     generate_random_node_ids,
-    jsonrpsee::http_client::HttpClient,
     types::{
-        network::Subnetwork, ping_extensions::decode::PingExtension, portal::PongInfo,
-        portal_wire::OfferTrace,
+        network::Subnetwork,
+        ping_extensions::decode::PingExtension,
+        portal_wire::{OfferTrace, Pong},
     },
-    BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, StateNetworkApiClient,
+    Enr,
 };
 use futures::{future::JoinAll, StreamExt};
 use itertools::Itertools;
@@ -18,6 +18,7 @@ use tokio::{
     time::{Instant, Interval},
 };
 use tracing::{debug, error, info, warn};
+use trin::handle::SubnetworkOverlays;
 
 use super::{
     peer::PeerInfo,
@@ -70,15 +71,19 @@ impl Default for NetworkInitializationConfig {
 ///
 /// The [Network::init] should be used to initialize our view of the network, and [NetworkManager]
 /// should be used in a background task to keep it up-to-date.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(super) struct Network {
     peers: Peers<AdditiveWeight>,
-    client: HttpClient,
+    client: SubnetworkOverlays,
     subnetwork: Subnetwork,
 }
 
 impl Network {
-    pub fn new(client: HttpClient, subnetwork: Subnetwork, bridge_config: &BridgeConfig) -> Self {
+    pub fn new(
+        client: SubnetworkOverlays,
+        subnetwork: Subnetwork,
+        bridge_config: &BridgeConfig,
+    ) -> Self {
         if !matches!(
             subnetwork,
             Subnetwork::History | Subnetwork::Beacon | Subnetwork::State
@@ -242,7 +247,7 @@ impl Network {
             return LivenessResult::Fail;
         };
 
-        let capabilities = match PingExtension::decode_json(
+        let capabilities = match PingExtension::decode_ssz(
             pong_info.payload_type,
             pong_info.payload,
         ) {
@@ -282,18 +287,31 @@ impl Network {
         LivenessResult::Pass
     }
 
-    async fn ping(&self, enr: &Enr) -> anyhow::Result<PongInfo> {
+    async fn ping(&self, enr: &Enr) -> anyhow::Result<Pong> {
         match self.subnetwork {
             Subnetwork::History => {
-                HistoryNetworkApiClient::ping(&self.client, enr.clone(), None, None)
+                self.client
+                    .history_overlay()?
+                    .overlay
+                    .send_ping(enr.clone(), None, None)
+                    .await
             }
-            Subnetwork::State => StateNetworkApiClient::ping(&self.client, enr.clone(), None, None),
+            Subnetwork::State => {
+                self.client
+                    .state_overlay()?
+                    .overlay
+                    .send_ping(enr.clone(), None, None)
+                    .await
+            }
             Subnetwork::Beacon => {
-                BeaconNetworkApiClient::ping(&self.client, enr.clone(), None, None)
+                self.client
+                    .beacon_overlay()?
+                    .overlay
+                    .send_ping(enr.clone(), None, None)
+                    .await
             }
             _ => unreachable!("ping: unsupported subnetwork: {}", self.subnetwork),
         }
-        .await
         .map_err(|err| anyhow!(err))
     }
 
@@ -315,32 +333,59 @@ impl Network {
     }
 
     async fn find_nodes(&self, enr: &Enr, distances: Vec<u16>) -> anyhow::Result<Vec<Enr>> {
-        match self.subnetwork {
+        Ok(match self.subnetwork {
             Subnetwork::History => {
-                HistoryNetworkApiClient::find_nodes(&self.client, enr.clone(), distances)
+                self.client
+                    .history_overlay()?
+                    .overlay
+                    .send_find_nodes(enr.clone(), distances)
+                    .await
             }
             Subnetwork::State => {
-                StateNetworkApiClient::find_nodes(&self.client, enr.clone(), distances)
+                self.client
+                    .state_overlay()?
+                    .overlay
+                    .send_find_nodes(enr.clone(), distances)
+                    .await
             }
             Subnetwork::Beacon => {
-                BeaconNetworkApiClient::find_nodes(&self.client, enr.clone(), distances)
+                self.client
+                    .beacon_overlay()?
+                    .overlay
+                    .send_find_nodes(enr.clone(), distances)
+                    .await
             }
             _ => unreachable!("find_nodes: unsupported subnetwork: {}", self.subnetwork),
         }
-        .await
-        .map_err(|err| anyhow!(err))
+        .map_err(|err| anyhow!(err))?
+        .enrs
+        .into_iter()
+        .map(|enr| enr.into())
+        .collect())
     }
 
     async fn recursive_find_nodes(&self, node_id: NodeId) -> anyhow::Result<Vec<Enr>> {
         let enrs = match self.subnetwork {
             Subnetwork::History => {
-                HistoryNetworkApiClient::recursive_find_nodes(&self.client, node_id).await?
+                self.client
+                    .history_overlay()?
+                    .overlay
+                    .lookup_node(node_id)
+                    .await
             }
             Subnetwork::State => {
-                StateNetworkApiClient::recursive_find_nodes(&self.client, node_id).await?
+                self.client
+                    .state_overlay()?
+                    .overlay
+                    .lookup_node(node_id)
+                    .await
             }
             Subnetwork::Beacon => {
-                BeaconNetworkApiClient::recursive_find_nodes(&self.client, node_id).await?
+                self.client
+                    .beacon_overlay()?
+                    .overlay
+                    .lookup_node(node_id)
+                    .await
             }
             _ => unreachable!(
                 "recursive_find_nodes: unsupported subnetwork: {}",

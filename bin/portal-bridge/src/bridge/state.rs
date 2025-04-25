@@ -9,11 +9,10 @@ use anyhow::ensure;
 use e2store::utils::get_e2ss_files;
 use eth_trie::{decode_node, node::Node, EthTrie, RootWithTrieDiff, Trie};
 use ethportal_api::{
-    jsonrpsee::http_client::HttpClient,
     types::{
         network::Subnetwork, portal_wire::OfferTrace, state_trie::account_state::AccountState,
     },
-    ContentValue, OverlayContentKey, StateContentKey, StateContentValue, StateNetworkApiClient,
+    ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
 };
 use humanize_duration::{prelude::DurationExt, Truncate};
 use reqwest::{
@@ -27,6 +26,7 @@ use tokio::{
     time::timeout,
 };
 use tracing::{error, info, warn};
+use trin::handle::SubnetworkOverlays;
 use trin_evm::spec_id::get_spec_block_number;
 use trin_execution::{
     cli::{ImportStateConfig, APP_NAME},
@@ -63,7 +63,7 @@ use crate::{
 
 pub struct StateBridge {
     mode: BridgeMode,
-    portal_client: HttpClient,
+    portal_client: SubnetworkOverlays,
     metrics: BridgeMetricsReporter,
     /// Semaphore used to limit the amount of active offer transfers
     /// to make sure we don't overwhelm the trin client
@@ -80,7 +80,7 @@ pub struct StateBridge {
 impl StateBridge {
     pub async fn new(
         mode: BridgeMode,
-        portal_client: HttpClient,
+        portal_client: SubnetworkOverlays,
         offer_limit: usize,
         census: Census,
         bridge_id: BridgeId,
@@ -535,12 +535,15 @@ impl StateBridge {
 
                 let result = timeout(
                     SERVE_BLOCK_TIMEOUT,
-                    StateNetworkApiClient::trace_offer(
-                        &portal_client,
-                        peer.enr.clone(),
-                        content_key.clone(),
-                        encoded_content_value,
-                    ),
+                    portal_client
+                        .state_overlay()
+                        .expect("State Network wasn't initialized")
+                        .overlay
+                        .send_offer_trace(
+                            peer.enr.clone(),
+                            content_key.to_bytes(),
+                            encoded_content_value,
+                        ),
                 )
                 .await;
 

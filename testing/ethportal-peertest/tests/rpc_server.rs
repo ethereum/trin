@@ -57,7 +57,10 @@ async fn setup_web3_server() -> (RpcServerHandle, DynProvider, Client) {
     ])
     .unwrap();
 
-    let web3_server = trin::run_trin(trin_config).await.unwrap();
+    let trin_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
+    let Some(web3_server) = trin_handle.rpc_server_handle else {
+        panic!("Trin wasn't started with RPC server handle");
+    };
     let ipc = IpcConnect::new(DEFAULT_WEB3_IPC_PATH.to_string());
     let web3_client = DynProvider::new(ProviderBuilder::new().connect_ipc(ipc).await.unwrap());
 
@@ -95,8 +98,10 @@ async fn test_batch_call() {
     ])
     .unwrap();
 
-    let web3_server = trin::run_trin(trin_config).await.unwrap();
-
+    let trin_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
+    let Some(web3_server) = trin_handle.rpc_server_handle else {
+        panic!("Trin wasn't started with RPC server handle");
+    };
     let url = Url::parse(DEFAULT_WEB3_HTTP_ADDRESS).unwrap();
     let client = ClientBuilder::default().http(url);
 

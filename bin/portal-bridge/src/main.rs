@@ -1,18 +1,16 @@
+use std::future::Future;
+
 use clap::Parser;
-use ethportal_api::{
-    jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::network::Subnetwork,
-};
+use ethportal_api::types::network::Subnetwork;
 use portal_bridge::{
     api::consensus::ConsensusApi,
     bridge::{beacon::BeaconBridge, e2hs::E2HSBridge, state::StateBridge},
     census::Census,
     cli::BridgeConfig,
-    handle::build_trin,
+    handle::start_trin,
     types::mode::BridgeMode,
 };
-use tokio::time::{sleep, Duration};
-use tracing::Instrument;
+use tracing::{info, warn, Instrument};
 use trin_utils::log::init_tracing_logger;
 
 #[tokio::main]
@@ -27,17 +25,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // start the bridge client, need to keep the handle alive
     // for bridge to work inside docker containers
-    let handle = build_trin(&bridge_config).map_err(|e| e.to_string())?;
-
-    let web3_http_address = format!("http://127.0.0.1:{}", bridge_config.base_rpc_port);
-    sleep(Duration::from_secs(10)).await;
-
-    let portal_client: HttpClient = HttpClientBuilder::default()
-        // increase default timeout to allow for trace_gossip requests that can take a long
-        // time
-        .request_timeout(Duration::from_secs(120))
-        .build(web3_http_address.clone())
-        .map_err(|e| e.to_string())?;
+    let portal_client = start_trin(&bridge_config)
+        .await
+        .map_err(|err| err.to_string())?;
 
     let census_handle = match bridge_config.portal_subnetwork {
         Subnetwork::Beacon => {
@@ -56,10 +46,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let beacon_bridge =
                 BeaconBridge::new(consensus_api, bridge_mode, portal_client_clone, census);
 
-            beacon_bridge
-                .launch()
-                .instrument(tracing::trace_span!("beacon"))
-                .await;
+            run_with_shutdown(
+                beacon_bridge
+                    .launch()
+                    .instrument(tracing::trace_span!("beacon")),
+            )
+            .await;
+
             census_handle
         }
         Subnetwork::History => {
@@ -81,10 +74,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         census,
                     )
                     .await?;
-                    e2hs_bridge
-                        .launch()
-                        .instrument(tracing::trace_span!("history(e2hs)"))
-                        .await;
+
+                    run_with_shutdown(
+                        e2hs_bridge
+                            .launch()
+                            .instrument(tracing::trace_span!("history(e2hs)")),
+                    )
+                    .await;
+
                     census_handle
                 }
                 _ => panic!("Unsupported bridge mode for History network"),
@@ -105,10 +102,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .await?;
 
-            state_bridge
-                .launch()
-                .instrument(tracing::trace_span!("state"))
-                .await;
+            run_with_shutdown(
+                state_bridge
+                    .launch()
+                    .instrument(tracing::trace_span!("state")),
+            )
+            .await;
+
             census_handle
         }
         _ => {
@@ -119,8 +119,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    drop(handle);
     census_handle.abort();
     drop(census_handle);
     Ok(())
+}
+
+/// Runs a bridge future with a shutdown handler.
+///
+/// Pass the bridge's `launch()` future into this.
+pub async fn run_with_shutdown<F>(bridge_future: F)
+where
+    F: Future<Output = ()>,
+{
+    let shutdown_handle = tokio::spawn(async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to listen for Ctrl+C");
+        info!("Ctrl+C received. Initiating shutdown...");
+    });
+
+    tokio::select! {
+        _ = bridge_future  => {
+            info!("Finished all bridge tasks");
+        }
+        _ = shutdown_handle => {
+            warn!("Shutdown signal received during bridge execution.");
+        }
+    }
 }

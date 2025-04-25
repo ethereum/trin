@@ -2,42 +2,46 @@
 #![warn(clippy::uninlined_format_args)]
 
 pub mod cli;
+pub mod handle;
 
-use std::sync::Arc;
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use cli::TrinConfig;
 use ethportal_api::{
     types::{distance::Distance, network::Subnetwork},
     version::get_trin_version,
 };
+use handle::{SubnetworkOverlays, TrinHandle};
 use portalnet::{
+    config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
     events::PortalnetEvents,
     utils::db::{configure_node_data_dir, configure_trin_data_dir},
 };
-use rpc::{launch_jsonrpc_server, RpcServerHandle};
+use rpc::{config::RpcConfig, launch_jsonrpc_server};
 use tokio::sync::{mpsc, RwLock};
 use tracing::info;
 use tree_hash::TreeHash;
 use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
-use trin_storage::PortalStorageConfigFactory;
+use trin_storage::{config::StorageCapacityConfig, PortalStorageConfigFactory};
 #[cfg(windows)]
 use trin_utils::cli::Web3TransportType;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
 
-pub async fn run_trin(
-    trin_config: TrinConfig,
-) -> Result<RpcServerHandle, Box<dyn std::error::Error>> {
-    // Panic early on a windows build that is trying to use IPC, which is unsupported for now
-    // Make sure not to panic on non-windows configurations.
-    #[cfg(windows)]
-    if let Web3TransportType::IPC = trin_config.web3_transport {
-        panic!("Tokio doesn't support Windows Unix Domain Sockets IPC, use --web3-transport http");
-    }
+pub struct NodeRuntimeConfig {
+    pub portal_subnetworks: Arc<Vec<Subnetwork>>,
+    pub max_radius: Distance,
+    pub enable_metrics_with_url: Option<SocketAddr>,
+    pub storage_capacity_config: StorageCapacityConfig,
+    pub node_data_dir: PathBuf,
+}
 
+pub async fn run_trin_from_trin_config(
+    trin_config: TrinConfig,
+) -> Result<TrinHandle, Box<dyn std::error::Error>> {
     let trin_version = get_trin_version();
     info!("Launching Trin: v{trin_version}");
     info!(config = %trin_config, "With:");
@@ -53,7 +57,26 @@ pub async fn run_trin(
         trin_config.network.network(),
     )?;
 
-    let portalnet_config = trin_config.to_portalnet_config(private_key);
+    let portalnet_config = trin_config.as_portalnet_config(private_key);
+    let node_runtime_config = trin_config.as_node_runtime_config(node_data_dir);
+    let rpc_config = RpcConfig::from(&trin_config);
+    run_trin(portalnet_config, node_runtime_config, Some(rpc_config)).await
+}
+
+pub async fn run_trin(
+    portalnet_config: PortalnetConfig,
+    node_runtime_config: NodeRuntimeConfig,
+    rpc_config: Option<RpcConfig>,
+) -> Result<TrinHandle, Box<dyn std::error::Error>> {
+    // Panic early on a windows build that is trying to use IPC, which is unsupported for now
+    // Make sure not to panic on non-windows configurations.
+    #[cfg(windows)]
+    if rpc_config
+        .as_ref()
+        .is_some_and(|rpc_config| matches!(rpc_config.web3_transport, Web3TransportType::IPC))
+    {
+        panic!("Tokio doesn't support Windows Unix Domain Sockets IPC, use --web3-transport http");
+    }
 
     // Initialize base discovery protocol
     let mut discovery = Discovery::new(portalnet_config.clone())?;
@@ -61,7 +84,7 @@ pub async fn run_trin(
     let discovery = Arc::new(discovery);
 
     // Initialize prometheus metrics
-    if let Some(addr) = trin_config.enable_metrics_with_url {
+    if let Some(addr) = node_runtime_config.enable_metrics_with_url {
         prometheus_exporter::start(addr)?;
     }
 
@@ -81,19 +104,23 @@ pub async fn run_trin(
     let utp_socket = Arc::new(utp_socket);
 
     let storage_config_factory = PortalStorageConfigFactory::new(
-        trin_config.storage_capacity_config(),
+        node_runtime_config.storage_capacity_config,
         discovery.local_enr().node_id(),
-        node_data_dir,
+        node_runtime_config.node_data_dir,
     )?;
 
     // Initialize state sub-network service and event handlers, if selected
     let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx, state_event_stream) =
-        if trin_config.portal_subnetworks.contains(&Subnetwork::State) {
+        if node_runtime_config
+            .portal_subnetworks
+            .contains(&Subnetwork::State)
+        {
             initialize_state_network(
                 &discovery,
                 utp_socket.clone(),
                 portalnet_config.clone(),
-                storage_config_factory.create(&Subnetwork::State, trin_config.max_radius)?,
+                storage_config_factory
+                    .create(&Subnetwork::State, node_runtime_config.max_radius)?,
                 header_oracle.clone(),
             )
             .await?
@@ -108,7 +135,10 @@ pub async fn run_trin(
         beacon_event_tx,
         beacon_jsonrpc_tx,
         beacon_event_stream,
-    ) = if trin_config.portal_subnetworks.contains(&Subnetwork::Beacon) {
+    ) = if node_runtime_config
+        .portal_subnetworks
+        .contains(&Subnetwork::Beacon)
+    {
         initialize_beacon_network(
             &discovery,
             utp_socket.clone(),
@@ -128,7 +158,7 @@ pub async fn run_trin(
         history_event_tx,
         history_jsonrpc_tx,
         history_event_stream,
-    ) = if trin_config
+    ) = if node_runtime_config
         .portal_subnetworks
         .contains(&Subnetwork::History)
     {
@@ -136,7 +166,7 @@ pub async fn run_trin(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config_factory.create(&Subnetwork::History, trin_config.max_radius)?,
+            storage_config_factory.create(&Subnetwork::History, node_runtime_config.max_radius)?,
             header_oracle.clone(),
         )
         .await?
@@ -145,15 +175,37 @@ pub async fn run_trin(
     };
 
     // Launch JSON-RPC server
-    let jsonrpc_discovery = Arc::clone(&discovery);
-    let rpc_handle: RpcServerHandle = launch_jsonrpc_server(
-        (&trin_config).into(),
-        jsonrpc_discovery,
-        history_jsonrpc_tx,
-        state_jsonrpc_tx,
-        beacon_jsonrpc_tx,
-    )
-    .await?;
+    let rpc_server_handle = if let Some(rpc_config) = rpc_config {
+        let jsonrpc_discovery = Arc::clone(&discovery);
+        Some(
+            launch_jsonrpc_server(
+                rpc_config,
+                node_runtime_config.portal_subnetworks,
+                jsonrpc_discovery,
+                history_jsonrpc_tx,
+                state_jsonrpc_tx,
+                beacon_jsonrpc_tx,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+
+    let trin_handle = TrinHandle {
+        rpc_server_handle,
+        subnetwork_overlays: SubnetworkOverlays {
+            history: history_handler
+                .as_ref()
+                .map(|handler| handler.network.clone()),
+            state: state_handler
+                .as_ref()
+                .map(|handler| handler.network.clone()),
+            beacon: beacon_handler
+                .as_ref()
+                .map(|handler| handler.network.clone()),
+        },
+    };
 
     if let Some(handler) = state_handler {
         tokio::spawn(async move { handler.handle_client_queries().await });
@@ -188,5 +240,5 @@ pub async fn run_trin(
         tokio::spawn(network);
     }
 
-    Ok(rpc_handle)
+    Ok(trin_handle)
 }
