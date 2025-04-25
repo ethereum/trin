@@ -173,7 +173,7 @@ pub async fn run_test_app(
         ..Default::default()
     };
 
-    let mut discovery = Discovery::new(config, MAINNET.clone()).unwrap();
+    let mut discovery = Discovery::new(config).unwrap();
     let talk_req_rx = discovery.start().await.unwrap();
     let enr = discovery.local_enr();
     let discovery = Arc::new(discovery);

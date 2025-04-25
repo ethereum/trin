@@ -6,6 +6,7 @@ use ethportal_api::{
     types::{
         distance::Metric,
         enr::{Enr, SszEnr},
+        network_spec::network_spec,
         portal_wire::{
             Content, FindContent, PopulatedOffer, Request, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
         },
@@ -101,11 +102,7 @@ impl<
                         )
                     })?;
 
-                    let content = match self
-                        .discovery
-                        .network_spec
-                        .latest_common_protocol_version(&enr)
-                    {
+                    let content = match network_spec().latest_common_protocol_version(&enr) {
                         Ok(protocol_version) if protocol_version.is_v1_enabled() => {
                             encode_content_payload(&[content])
                                 .map_err(|err| {
@@ -358,7 +355,6 @@ impl<
                             }
                         };
                         let utp_processing = UtpProcessing::from(&*self);
-                        let network_spec = self.discovery.network_spec.clone();
                         let protocol = self.protocol;
                         tokio::spawn(async move {
                             let cid = utp_rs::cid::ConnectionId {
@@ -367,7 +363,7 @@ impl<
                                 peer_id: source.node_id(),
                             };
 
-                            let protocol_version = match network_spec
+                            let protocol_version = match network_spec()
                                 .latest_common_protocol_version(&source)
                             {
                                 Ok(protocol_version) => protocol_version,

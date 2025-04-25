@@ -1,19 +1,20 @@
 use alloy::{consensus::Header, primitives::B256};
+use alloy_hardforks::EthereumHardforks;
 use anyhow::anyhow;
 use ethportal_api::{
     consensus::historical_summaries::HistoricalSummaries,
-    types::execution::header_with_proof::{
-        BlockHeaderProof, BlockProofHistoricalHashesAccumulator, BlockProofHistoricalRoots,
-        BlockProofHistoricalSummariesCapella, HeaderWithProof,
+    types::{
+        execution::header_with_proof::{
+            BlockHeaderProof, BlockProofHistoricalHashesAccumulator, BlockProofHistoricalRoots,
+            BlockProofHistoricalSummariesCapella, HeaderWithProof,
+        },
+        network_spec::network_spec,
     },
 };
 
 use crate::{
     accumulator::PreMergeAccumulator,
-    constants::{
-        CANCUN_BLOCK_NUMBER, CAPELLA_FORK_EPOCH, EPOCH_SIZE, MERGE_BLOCK_NUMBER,
-        SHANGHAI_BLOCK_NUMBER, SLOTS_PER_EPOCH,
-    },
+    constants::{CAPELLA_FORK_EPOCH, EPOCH_SIZE, SLOTS_PER_EPOCH},
     historical_roots_acc::HistoricalRootsAccumulator,
     merkle::proof::verify_merkle_proof,
 };
@@ -44,13 +45,16 @@ impl HeaderValidator {
         header_with_proof: &HeaderWithProof,
     ) -> anyhow::Result<()> {
         let HeaderWithProof { header, proof } = header_with_proof;
-        match &proof {
+        match proof {
             BlockHeaderProof::HistoricalHashes(proof) => {
                 self.verify_pre_merge_header(header, proof)
             }
-            BlockHeaderProof::HistoricalRoots(proof) => {
-                self.verify_merge_to_capella_header(header.number, header.hash_slow(), proof)
-            }
+            BlockHeaderProof::HistoricalRoots(proof) => self.verify_merge_to_capella_header(
+                header.number,
+                header.timestamp,
+                header.hash_slow(),
+                proof,
+            ),
             BlockHeaderProof::HistoricalSummariesCapella(_) => Err(anyhow!(
                 "HistoricalSummariesCapella header validation is not implemented yet."
             )),
@@ -65,7 +69,7 @@ impl HeaderValidator {
         header: &Header,
         proof: &BlockProofHistoricalHashesAccumulator,
     ) -> anyhow::Result<()> {
-        if header.number >= MERGE_BLOCK_NUMBER {
+        if network_spec().is_paris_active_at_block(header.number) {
             return Err(anyhow!("Invalid proof type found for post-merge header."));
         }
         // Look up historical epoch hash for header from pre-merge accumulator
@@ -91,15 +95,16 @@ impl HeaderValidator {
     fn verify_merge_to_capella_header(
         &self,
         block_number: u64,
+        block_timestamp: u64,
         header_hash: B256,
         proof: &BlockProofHistoricalRoots,
     ) -> anyhow::Result<()> {
-        if block_number < MERGE_BLOCK_NUMBER {
+        if !network_spec().is_paris_active_at_block(block_number) {
             return Err(anyhow!(
                 "Invalid HistoricalRootsBlockProof found for pre-merge header."
             ));
         }
-        if block_number >= SHANGHAI_BLOCK_NUMBER {
+        if network_spec().is_shanghai_active_at_timestamp(block_timestamp) {
             return Err(anyhow!(
                 "Invalid HistoricalRootsBlockProof found for post-Shanghai header."
             ));
@@ -137,17 +142,17 @@ impl HeaderValidator {
     #[allow(dead_code)] // TODO: Remove this when used
     fn verify_capella_to_deneb_header(
         &self,
-        block_number: u64,
+        block_timestamp: u64,
         header_hash: B256,
         proof: &BlockProofHistoricalSummariesCapella,
         historical_summaries: &HistoricalSummaries,
     ) -> anyhow::Result<()> {
-        if block_number < SHANGHAI_BLOCK_NUMBER {
+        if !network_spec().is_shanghai_active_at_timestamp(block_timestamp) {
             return Err(anyhow!(
                 "Invalid BlockProofHistoricalSummariesCapella found for pre-Shanghai header."
             ));
         }
-        if block_number >= CANCUN_BLOCK_NUMBER {
+        if network_spec().is_cancun_active_at_timestamp(block_timestamp) {
             return Err(anyhow!(
                 "Invalid BlockProofHistoricalSummariesCapella found for post-Cancun header."
             ));
@@ -233,6 +238,7 @@ mod test {
         primitives::{Address, B256},
         rlp::Decodable,
     };
+    use alloy_hardforks::EthereumHardfork;
     use ethportal_api::{
         types::execution::{
             accumulator::EpochAccumulator,
@@ -254,6 +260,9 @@ mod test {
 
     const SPEC_TESTS_DIR: &str = "tests/mainnet/history";
 
+    // Beacon chain mainnet genesis time: Tue Dec 01 2020 12:00:23 GMT+0000
+    pub const BEACON_GENESIS_TIME: u64 = 1606824023;
+
     #[rstest]
     #[case(1_000_001)]
     #[case(1_000_002)]
@@ -269,16 +278,16 @@ mod test {
     async fn generate_and_verify_header_with_proofs(#[case] block_number: u64) {
         // Use fluffy's proofs as test data to validate that trin
         // - generates proofs which match fluffy's
-        // - validates hwps
+        // - validates header_with_proof's
 
         let file = read_portal_spec_tests_file(
             "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
         )
         .unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
-        let hwps = json.as_object().unwrap();
+        let header_with_proofs = json.as_object().unwrap();
         let header_validator = get_mainnet_header_validator();
-        let obj = hwps.get(&block_number.to_string()).unwrap();
+        let obj = header_with_proofs.get(&block_number.to_string()).unwrap();
         // Validate content_key decodes
         let raw_ck = obj.get("content_key").unwrap().as_str().unwrap();
         let ck = HistoryContentKey::try_from_hex(raw_ck).unwrap();
@@ -286,22 +295,25 @@ mod test {
             HistoryContentKey::BlockHeaderByHash(_) => (),
             _ => panic!("Invalid test, content key decoded improperly"),
         }
-        let raw_fluffy_hwp = obj.get("content_value").unwrap().as_str().unwrap();
-        let fluffy_hwp =
-            HeaderWithProof::from_ssz_bytes(&hex_decode(raw_fluffy_hwp).unwrap()).unwrap();
+        let raw_fluffy_header_with_proof = obj.get("content_value").unwrap().as_str().unwrap();
+        let fluffy_header_with_proof =
+            HeaderWithProof::from_ssz_bytes(&hex_decode(raw_fluffy_header_with_proof).unwrap())
+                .unwrap();
         let header = get_header(block_number);
         let epoch_accumulator = read_epoch_accumulator_122();
         let trin_proof = PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
-        let fluffy_proof = match fluffy_hwp.proof {
+        let fluffy_proof = match fluffy_header_with_proof.proof {
             BlockHeaderProof::HistoricalHashes(val) => val,
             _ => panic!("test reached invalid state"),
         };
         assert_eq!(trin_proof, fluffy_proof);
-        let hwp = HeaderWithProof {
+        let header_with_proof = HeaderWithProof {
             header,
             proof: BlockHeaderProof::HistoricalHashes(trin_proof),
         };
-        header_validator.validate_header_with_proof(&hwp).unwrap();
+        header_validator
+            .validate_header_with_proof(&header_with_proof)
+            .unwrap();
     }
 
     #[rstest]
@@ -360,7 +372,7 @@ mod test {
     #[should_panic(expected = "Invalid proof type found for post-merge header.")]
     async fn header_validator_invalidates_post_merge_header_with_accumulator_proof() {
         let header_validator = get_mainnet_header_validator();
-        let future_height = MERGE_BLOCK_NUMBER + 1;
+        let future_height = EthereumHardfork::Paris.mainnet_activation_block().unwrap() + 1;
         let future_header = generate_random_header(&future_height);
         let future_hwp = HeaderWithProof {
             header: future_header,
@@ -382,6 +394,7 @@ mod test {
         .unwrap();
         let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let block_number: u64 = 15539558;
+        let slot = value.get("slot").unwrap().as_u64().unwrap();
         let header_hash = value
             .get("execution_block_header")
             .unwrap()
@@ -394,6 +407,7 @@ mod test {
         header_validator
             .verify_merge_to_capella_header(
                 block_number,
+                slot_to_timestamp(slot),
                 header_hash,
                 &historical_roots_block_proof,
             )
@@ -402,14 +416,22 @@ mod test {
         // Test for invalid block numbers
         assert!(header_validator
             .verify_merge_to_capella_header(
-                MERGE_BLOCK_NUMBER - 1,
+                EthereumHardfork::Paris.mainnet_activation_block().unwrap() - 1,
+                EthereumHardfork::Paris
+                    .mainnet_activation_timestamp()
+                    .unwrap(),
                 header_hash,
                 &historical_roots_block_proof,
             )
             .is_err());
         assert!(header_validator
             .verify_merge_to_capella_header(
-                SHANGHAI_BLOCK_NUMBER,
+                EthereumHardfork::Shanghai
+                    .mainnet_activation_block()
+                    .unwrap(),
+                EthereumHardfork::Shanghai
+                    .mainnet_activation_timestamp()
+                    .unwrap(),
                 header_hash,
                 &historical_roots_block_proof,
             )
@@ -436,6 +458,7 @@ mod test {
             .as_str()
             .unwrap();
         let header_hash = B256::from_str(header_hash).unwrap();
+        let slot = value.get("slot").unwrap().as_u64().unwrap();
         let historical_summaries_block_proof: BlockProofHistoricalSummariesCapella =
             serde_yaml::from_value(value).unwrap();
 
@@ -450,7 +473,7 @@ mod test {
 
         header_validator
             .verify_capella_to_deneb_header(
-                block_number,
+                slot_to_timestamp(slot),
                 header_hash,
                 &historical_summaries_block_proof,
                 &historical_summaries,
@@ -460,7 +483,10 @@ mod test {
         // Test for invalid block numbers\
         assert!(header_validator
             .verify_capella_to_deneb_header(
-                SHANGHAI_BLOCK_NUMBER - 1,
+                EthereumHardfork::Shanghai
+                    .mainnet_activation_block()
+                    .unwrap()
+                    - 1,
                 header_hash,
                 &historical_summaries_block_proof,
                 &historical_summaries,
@@ -469,7 +495,7 @@ mod test {
 
         assert!(header_validator
             .verify_capella_to_deneb_header(
-                CANCUN_BLOCK_NUMBER,
+                EthereumHardfork::Cancun.mainnet_activation_block().unwrap(),
                 header_hash,
                 &historical_summaries_block_proof,
                 &historical_summaries,
@@ -517,6 +543,10 @@ mod test {
         )
         .unwrap();
         EpochAccumulator::from_ssz_bytes(&epoch_acc_bytes).unwrap()
+    }
+
+    fn slot_to_timestamp(slot: u64) -> u64 {
+        BEACON_GENESIS_TIME + slot * 12
     }
 
     const HEADER_RLP_15_537_392: &str = "0xf90218a02f1dc309c7cc0a5a2e3b3dd9315fea0ffbc53c56f9237f3ca11b20de0232f153a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794ea674fdde714fd979de3edf0f56aa9716b898ec8a0fee48a40a2765ab31fcd06ab6956341d13dc2c4b9762f2447aa425bb1c089b30a082864b3a65d1ac1917c426d48915dca0fc966fbf3f30fd051659f35dc3fd9be1a013c10513b52358022f800e2f9f1c50328798427b1b4a1ebbbd20b7417fb9719db90100ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff872741c5e4f6c39283ed14f08401c9c3808401c9a028846322c95c8f617369612d65617374322d31763932a02df332ffb74ecd15c9873d3f6153b878e1c514495dfb6e89ad88e574582b02a488232b0043952c93d98508fb17c6ee";

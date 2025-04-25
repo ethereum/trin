@@ -21,7 +21,7 @@ use crate::header_validator::HeaderValidator;
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct HeaderOracle {
     // We could simply store the main portal jsonrpc tx channel here, rather than each
     // individual channel. But my sense is that this will be more useful in terms of
@@ -32,20 +32,13 @@ pub struct HeaderOracle {
     pub header_validator: HeaderValidator,
 }
 
-impl Default for HeaderOracle {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl HeaderOracle {
     pub fn new() -> Self {
-        let header_validator = HeaderValidator::new();
         Self {
             history_jsonrpc_tx: None,
             beacon_jsonrpc_tx: None,
             state_jsonrpc_tx: None,
-            header_validator,
+            header_validator: HeaderValidator::default(),
         }
     }
 

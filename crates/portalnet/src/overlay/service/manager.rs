@@ -961,7 +961,6 @@ mod tests {
             content_key::overlay::IdentityContentKey,
             distance::XorMetric,
             enr::generate_random_remote_enr,
-            network_spec::MAINNET,
             ping_extensions::{
                 extension_types::PingExtensionType,
                 extensions::type_0::ClientInfoRadiusCapabilities,
@@ -1011,7 +1010,7 @@ mod tests {
             no_upnp: true,
             ..Default::default()
         };
-        let discovery = Arc::new(Discovery::new(portal_config, MAINNET.clone()).unwrap());
+        let discovery = Arc::new(Discovery::new(portal_config).unwrap());
 
         let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
         let discv5_utp =

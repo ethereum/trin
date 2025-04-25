@@ -14,11 +14,7 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 use tree_hash_derive::TreeHash;
 
-use crate::{
-    constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
-    merkle::proof::MerkleTree,
-    TrinValidationAssets,
-};
+use crate::{constants::EPOCH_SIZE, merkle::proof::MerkleTree, TrinValidationAssets};
 
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.
@@ -50,11 +46,6 @@ impl PreMergeAccumulator {
             })?;
         PreMergeAccumulator::from_ssz_bytes(raw.data.as_ref())
             .map_err(|err| anyhow!("Unable to decode pre-merge accumulator: {err:?}"))
-    }
-
-    /// Number of the last block to be included in the accumulator
-    pub fn height(&self) -> u64 {
-        MERGE_BLOCK_NUMBER
     }
 
     pub(crate) fn get_epoch_index_of_header(&self, header: &Header) -> u64 {

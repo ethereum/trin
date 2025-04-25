@@ -361,7 +361,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_light_client_bootstrap() {
-        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::default())));
+        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::new())));
         let mut bootstrap = test_utils::get_light_client_bootstrap(0);
         let content = bootstrap.as_ssz_bytes();
         let content_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
@@ -390,7 +390,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_light_client_updates_by_range() {
-        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::default())));
+        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::new())));
         let lc_update_0 = test_utils::get_light_client_update(0);
         let updates = LightClientUpdatesByRange(VariableList::from(vec![lc_update_0.clone()]));
         let content = updates.as_ssz_bytes();
@@ -423,7 +423,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_light_client_finality_update() {
-        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::default())));
+        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::new())));
         let finality_update = test_utils::get_light_client_finality_update(0);
         let content = finality_update.as_ssz_bytes();
         let content_key =
@@ -457,7 +457,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_light_client_optimistic_update() {
-        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::default())));
+        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::new())));
         let optimistic_update = test_utils::get_light_client_optimistic_update(0);
         let content = optimistic_update.as_ssz_bytes();
         let content_key =

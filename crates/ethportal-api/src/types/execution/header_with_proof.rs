@@ -1,4 +1,5 @@
 use alloy::{consensus::Header, primitives::B256};
+use alloy_hardforks::EthereumHardforks;
 use jsonrpsee::core::Serialize;
 use serde::Deserialize;
 use ssz::SszDecoderBuilder;
@@ -19,26 +20,9 @@ use crate::{
             proof::build_merkle_proof_for_index,
         },
         execution::ssz_header,
+        network_spec::network_spec,
     },
 };
-
-/// The timestamp of the first Merge block (block number: 15537394)
-pub const MERGE_TIMESTAMP: u64 = 1663224179;
-
-/// The timestamp of the first Shapella (Shanghai-Capella) slot.
-///
-/// - Slot: 6209536
-/// - Epoch: 194048
-/// - Block number: 17034870
-///     - Note that frst Shapella block is created at slot 6209538 (timestamp: 1681338479)
-pub const SHAPELLA_TIMESTAMP: u64 = 1681338455;
-
-/// The timestamp of the first Dencun (Cancun-Deneb) slot.
-///
-/// - Slot: 8626176
-/// - Epoch: 269568
-/// - Block number: 19426587
-pub const DENCUN_TIMESTAMP: u64 = 1710338135;
 
 /// The accumulator proof for EL BlockHeader for the pre-merge blocks.
 pub type BlockProofHistoricalHashesAccumulator = FixedVector<B256, typenum::U15>;
@@ -94,20 +78,22 @@ impl ssz::Decode for HeaderWithProof {
 
         let header = decoder.decode_next_with(ssz_header::decode::from_ssz_bytes)?;
         let proof = decoder.decode_next::<ByteList1024>()?;
-        let proof = match header.timestamp {
-            0..MERGE_TIMESTAMP => BlockHeaderProof::HistoricalHashes(
-                BlockProofHistoricalHashesAccumulator::from_ssz_bytes(&proof)?,
-            ),
-            MERGE_TIMESTAMP..SHAPELLA_TIMESTAMP => BlockHeaderProof::HistoricalRoots(
-                BlockProofHistoricalRoots::from_ssz_bytes(&proof)?,
-            ),
-            SHAPELLA_TIMESTAMP..DENCUN_TIMESTAMP => BlockHeaderProof::HistoricalSummariesCapella(
-                BlockProofHistoricalSummariesCapella::from_ssz_bytes(&proof)?,
-            ),
-            DENCUN_TIMESTAMP.. => BlockHeaderProof::HistoricalSummariesDeneb(
+        let proof = if network_spec().is_cancun_active_at_timestamp(header.timestamp) {
+            BlockHeaderProof::HistoricalSummariesDeneb(
                 BlockProofHistoricalSummariesDeneb::from_ssz_bytes(&proof)?,
-            ),
+            )
+        } else if network_spec().is_shanghai_active_at_timestamp(header.timestamp) {
+            BlockHeaderProof::HistoricalSummariesCapella(
+                BlockProofHistoricalSummariesCapella::from_ssz_bytes(&proof)?,
+            )
+        } else if network_spec().is_paris_active_at_block(header.number) {
+            BlockHeaderProof::HistoricalRoots(BlockProofHistoricalRoots::from_ssz_bytes(&proof)?)
+        } else {
+            BlockHeaderProof::HistoricalHashes(
+                BlockProofHistoricalHashesAccumulator::from_ssz_bytes(&proof)?,
+            )
         };
+
         Ok(Self { header, proof })
     }
 }

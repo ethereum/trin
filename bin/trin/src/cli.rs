@@ -37,7 +37,7 @@ const DEFAULT_MAX_RADIUS: &str = "5";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
-#[derive(Parser, Debug, PartialEq, Clone)]
+#[derive(Parser, Debug, Clone)]
 #[command(name = APP_NAME,
     author = "https://github.com/ethereum/trin/graphs/contributors",
     about = "Run an eth portal client",

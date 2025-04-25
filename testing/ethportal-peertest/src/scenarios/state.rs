@@ -1,14 +1,17 @@
+use alloy_hardforks::EthereumHardforks;
 use ethportal_api::{
     jsonrpsee::async_client::Client,
-    types::execution::header_with_proof::{
-        BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummariesCapella,
-        HeaderWithProof,
+    types::{
+        execution::header_with_proof::{
+            BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummariesCapella,
+            HeaderWithProof,
+        },
+        network_spec::network_spec,
     },
     ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
     StateNetworkApiClient,
 };
 use tracing::info;
-use trin_validation::constants::{MERGE_BLOCK_NUMBER, SHANGHAI_BLOCK_NUMBER};
 
 use crate::{
     utils::{
@@ -53,24 +56,22 @@ async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &Peerte
     let history_content_key =
         HistoryContentKey::new_block_header_by_hash(fixture.block_header.hash_slow());
 
-    let proof = match fixture.block_header.number {
-        0..MERGE_BLOCK_NUMBER => BlockHeaderProof::HistoricalHashes(Default::default()),
-        MERGE_BLOCK_NUMBER..SHANGHAI_BLOCK_NUMBER => {
-            BlockHeaderProof::HistoricalRoots(BlockProofHistoricalRoots {
-                beacon_block_proof: Default::default(),
-                beacon_block_root: Default::default(),
-                execution_block_proof: Default::default(),
-                slot: 0,
-            })
-        }
-        SHANGHAI_BLOCK_NUMBER.. => {
-            BlockHeaderProof::HistoricalSummariesCapella(BlockProofHistoricalSummariesCapella {
-                beacon_block_proof: Default::default(),
-                beacon_block_root: Default::default(),
-                execution_block_proof: Default::default(),
-                slot: 0,
-            })
-        }
+    let proof = if network_spec().is_shanghai_active_at_timestamp(fixture.block_header.timestamp) {
+        BlockHeaderProof::HistoricalSummariesCapella(BlockProofHistoricalSummariesCapella {
+            beacon_block_proof: Default::default(),
+            beacon_block_root: Default::default(),
+            execution_block_proof: Default::default(),
+            slot: 0,
+        })
+    } else if network_spec().is_paris_active_at_block(fixture.block_header.number) {
+        BlockHeaderProof::HistoricalRoots(BlockProofHistoricalRoots {
+            beacon_block_proof: Default::default(),
+            beacon_block_root: Default::default(),
+            execution_block_proof: Default::default(),
+            slot: 0,
+        })
+    } else {
+        BlockHeaderProof::HistoricalHashes(Default::default())
     };
 
     let history_content_value = HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {

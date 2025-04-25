@@ -1,28 +1,32 @@
-use std::{cmp::max, collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use alloy::{
     consensus::BlockBody as AlloyBlockBody,
     eips::eip4895::{Withdrawal, Withdrawals},
     primitives::B256,
 };
+use alloy_hardforks::{EthereumHardfork, EthereumHardforks};
 use anyhow::{anyhow, bail, ensure};
-use ethportal_api::types::execution::{
-    accumulator::EpochAccumulator,
-    block_body::BlockBody,
-    header_with_proof::{
-        build_capella_historical_summaries_proof, build_deneb_historical_summaries_proof,
-        build_historical_roots_proof, BlockHeaderProof, BlockProofHistoricalHashesAccumulator,
-        HeaderWithProof,
+use ethportal_api::{
+    types::{
+        execution::{
+            accumulator::EpochAccumulator,
+            block_body::BlockBody,
+            header_with_proof::{
+                build_capella_historical_summaries_proof, build_deneb_historical_summaries_proof,
+                build_historical_roots_proof, BlockHeaderProof,
+                BlockProofHistoricalHashesAccumulator, HeaderWithProof,
+            },
+        },
+        network_spec::network_spec,
     },
-    receipts::Receipts,
+    Receipts,
 };
 use portal_bridge::api::execution::ExecutionApi;
 use tokio::try_join;
 use trin_execution::era::beacon::decode_transactions;
 use trin_validation::{
-    accumulator::PreMergeAccumulator,
-    constants::{CANCUN_BLOCK_NUMBER, EPOCH_SIZE, MERGE_BLOCK_NUMBER, SHANGHAI_BLOCK_NUMBER},
-    header_validator::HeaderValidator,
+    accumulator::PreMergeAccumulator, constants::EPOCH_SIZE, header_validator::HeaderValidator,
 };
 use url::Url;
 
@@ -66,26 +70,25 @@ impl EpochReader {
         );
 
         let starting_block = epoch_index * EPOCH_SIZE;
-        let epoch_accumulator = match starting_block < MERGE_BLOCK_NUMBER {
-            true => {
-                let header_validator = HeaderValidator::new();
-                Some(Arc::new(
-                    lookup_epoch_acc(
-                        epoch_index,
-                        &header_validator.pre_merge_acc,
-                        &epoch_acc_path,
-                    )
-                    .await?,
-                ))
-            }
-            false => None,
+        let epoch_accumulator = if network_spec().is_paris_active_at_block(starting_block) {
+            None
+        } else {
+            Some(Arc::new(
+                lookup_epoch_acc(
+                    epoch_index,
+                    &HeaderValidator::new().pre_merge_acc,
+                    &epoch_acc_path,
+                )
+                .await?,
+            ))
         };
 
         let ending_block = starting_block + EPOCH_SIZE;
+        let is_paris_active = network_spec().is_paris_active_at_block(ending_block);
         let receipts_handle = tokio::spawn(async move {
-            if ending_block >= MERGE_BLOCK_NUMBER {
+            if is_paris_active {
                 execution_api
-                    .get_receipts(max(MERGE_BLOCK_NUMBER, starting_block)..ending_block)
+                    .get_receipts(starting_block..ending_block)
                     .await
             } else {
                 Ok(HashMap::new())
@@ -241,15 +244,28 @@ impl EpochReader {
     }
 
     pub fn iter_blocks(mut self) -> impl Iterator<Item = anyhow::Result<AllBlockData>> {
-        (self.starting_block..self.ending_block).map(move |current_block| match current_block {
-            0..MERGE_BLOCK_NUMBER => self.get_pre_merge_block_data(current_block),
-            MERGE_BLOCK_NUMBER..SHANGHAI_BLOCK_NUMBER => {
+        (self.starting_block..self.ending_block).map(move |current_block| {
+            if current_block
+                < EthereumHardfork::Paris
+                    .activation_block(network_spec().network().into())
+                    .expect("Paris is available")
+            {
+                self.get_pre_merge_block_data(current_block)
+            } else if current_block
+                < EthereumHardfork::Shanghai
+                    .activation_block(network_spec().network().into())
+                    .expect("Shanghai is available")
+            {
                 self.get_merge_to_capella_block_data(current_block)
-            }
-            SHANGHAI_BLOCK_NUMBER..CANCUN_BLOCK_NUMBER => {
+            } else if current_block
+                < EthereumHardfork::Cancun
+                    .activation_block(network_spec().network().into())
+                    .expect("Cancun is available")
+            {
                 self.get_capella_to_deneb_block_data(current_block)
+            } else {
+                self.get_deneb_block_data(current_block)
             }
-            CANCUN_BLOCK_NUMBER.. => self.get_deneb_block_data(current_block),
         })
     }
 

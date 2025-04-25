@@ -1,9 +1,11 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
+use alloy_hardforks::{EthereumChainHardforks, EthereumHardfork, EthereumHardforks, ForkCondition};
 use anyhow::anyhow;
 use bimap::BiHashMap;
 use discv5::Enr;
 use once_cell::sync::Lazy;
+use parking_lot::RwLock;
 
 use super::{
     network::{Network, Subnetwork},
@@ -12,12 +14,32 @@ use super::{
     },
 };
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+static NETWORK_SPEC: LazyLock<RwLock<Arc<NetworkSpec>>> =
+    LazyLock::new(|| RwLock::new(MAINNET.clone()));
+
+/// `set_network_spec` should be called only once at the start of the application.
+///
+/// The only exception is for testing purposes, where it can be called multiple times.
+pub fn set_network_spec(network_spec: Arc<NetworkSpec>) {
+    *NETWORK_SPEC.write() = network_spec;
+}
+
+pub fn network_spec() -> Arc<NetworkSpec> {
+    NETWORK_SPEC.read().clone()
+}
+
+/// `NetworkSpec` is a struct that contains the network configuration for the portal network and the
+/// respective Ethereum Network.
+///
+/// It includes the mapping of subnetworks to protocol id hex strings, supported protocol versions,
+/// and hardforks.
+#[derive(Clone, Debug)]
 pub struct NetworkSpec {
     network: Network,
     /// mapping of subnetworks to protocol id hex strings
     portal_subnetworks: BiHashMap<Subnetwork, String>,
     supported_protocol_versions: ProtocolVersionList,
+    hardforks: EthereumChainHardforks,
 }
 
 impl NetworkSpec {
@@ -25,6 +47,7 @@ impl NetworkSpec {
         portal_subnetworks: BiHashMap<Subnetwork, String>,
         network: Network,
         supported_protocol_versions: ProtocolVersionList,
+        hardforks: EthereumChainHardforks,
     ) -> anyhow::Result<Self> {
         // Ensure supported protocol versions are ordered chronologically with no duplicates.
         supported_protocol_versions.is_strictly_sorted_and_specified();
@@ -33,6 +56,7 @@ impl NetworkSpec {
             portal_subnetworks,
             network,
             supported_protocol_versions,
+            hardforks,
         })
     }
 
@@ -86,6 +110,12 @@ impl NetworkSpec {
     }
 }
 
+impl EthereumHardforks for NetworkSpec {
+    fn ethereum_fork_activation(&self, fork: EthereumHardfork) -> ForkCondition {
+        self.hardforks.ethereum_fork_activation(fork)
+    }
+}
+
 pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     let mut portal_subnetworks = BiHashMap::new();
     portal_subnetworks.insert(Subnetwork::State, "0x500A".to_string());
@@ -95,10 +125,12 @@ pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     portal_subnetworks.insert(Subnetwork::VerkleState, "0x500E".to_string());
     portal_subnetworks.insert(Subnetwork::TransactionGossip, "0x500F".to_string());
     portal_subnetworks.insert(Subnetwork::Utp, "0x757470".to_string());
+
     NetworkSpec::new(
         portal_subnetworks,
         Network::Mainnet,
         ProtocolVersionList::new(vec![ProtocolVersion::V0, ProtocolVersion::V1]),
+        EthereumChainHardforks::mainnet(),
     )
     .expect("Failed to create mainnet network spec")
     .into()
@@ -117,6 +149,7 @@ pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
         portal_subnetworks,
         Network::Angelfood,
         ProtocolVersionList::new(vec![ProtocolVersion::V0]),
+        EthereumChainHardforks::mainnet(),
     )
     .expect("Failed to create angelfood network spec")
     .into()

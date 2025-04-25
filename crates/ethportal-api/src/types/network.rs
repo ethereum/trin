@@ -1,5 +1,6 @@
 use std::fmt;
 
+use alloy_chains::Chain;
 use serde::{Deserialize, Serialize};
 
 /// Enum for different "core" networks.
@@ -7,6 +8,15 @@ use serde::{Deserialize, Serialize};
 pub enum Network {
     Mainnet,
     Angelfood, // aka testnet
+}
+
+impl From<Network> for Chain {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Mainnet => Chain::mainnet(),
+            Network::Angelfood => Chain::mainnet(),
+        }
+    }
 }
 
 impl fmt::Display for Network {

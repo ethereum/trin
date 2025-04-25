@@ -130,7 +130,7 @@ async fn overlay() {
         external_addr: Some(SocketAddr::new(ip_addr, 8001)),
         ..PortalnetConfig::default()
     };
-    let mut discovery_one = Discovery::new(portal_config_one, MAINNET.clone()).unwrap();
+    let mut discovery_one = Discovery::new(portal_config_one).unwrap();
     let talk_req_rx_one = discovery_one.start().await.unwrap();
     let discovery_one = Arc::new(discovery_one);
     let overlay_one = Arc::new(init_overlay(Arc::clone(&discovery_one), protocol).await);
@@ -143,7 +143,7 @@ async fn overlay() {
         external_addr: Some(SocketAddr::new(ip_addr, 8002)),
         ..PortalnetConfig::default()
     };
-    let mut discovery_two = Discovery::new(portal_config_two, MAINNET.clone()).unwrap();
+    let mut discovery_two = Discovery::new(portal_config_two).unwrap();
     let talk_req_rx_two = discovery_two.start().await.unwrap();
     let discovery_two = Arc::new(discovery_two);
     let overlay_two = Arc::new(init_overlay(Arc::clone(&discovery_two), protocol).await);
@@ -156,7 +156,7 @@ async fn overlay() {
         external_addr: Some(SocketAddr::new(ip_addr, 8003)),
         ..PortalnetConfig::default()
     };
-    let mut discovery_three = Discovery::new(portal_config_three, MAINNET.clone()).unwrap();
+    let mut discovery_three = Discovery::new(portal_config_three).unwrap();
     let talk_req_rx_three = discovery_three.start().await.unwrap();
     let discovery_three = Arc::new(discovery_three);
     let overlay_three = Arc::new(init_overlay(Arc::clone(&discovery_three), protocol).await);
@@ -276,7 +276,7 @@ async fn overlay_event_stream() {
         no_upnp: true,
         ..Default::default()
     };
-    let discovery = Arc::new(Discovery::new(portal_config, MAINNET.clone()).unwrap());
+    let discovery = Arc::new(Discovery::new(portal_config).unwrap());
     let overlay = init_overlay(discovery, Subnetwork::Beacon).await;
 
     overlay.event_stream().await.unwrap();

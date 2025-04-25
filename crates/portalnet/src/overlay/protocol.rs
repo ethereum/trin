@@ -21,6 +21,7 @@ use ethportal_api::{
         distance::{Distance, Metric},
         enr::Enr,
         network::Subnetwork,
+        network_spec::network_spec,
         ping_extensions::{
             decode::PingExtension,
             extension_types::PingExtensionType,
@@ -461,11 +462,7 @@ impl<
         enr: Enr,
         content_key: RawContentKey,
     ) -> Result<FindContentResult, OverlayRequestError> {
-        let protocol_version = match self
-            .discovery
-            .network_spec
-            .latest_common_protocol_version(&enr)
-        {
+        let protocol_version = match network_spec().latest_common_protocol_version(&enr) {
             Ok(protocol_version) => protocol_version,
             Err(err) => {
                 return Err(OverlayRequestError::InvalidRequest(format!(
@@ -572,9 +569,7 @@ impl<
         enr: Enr,
         content_items: Vec<(RawContentKey, RawContentValue)>,
     ) -> Result<AcceptCodeList, OverlayRequestError> {
-        let protocol_version = match self
-            .discovery
-            .network_spec
+        let protocol_version = match network_spec()
             .latest_common_protocol_version(&enr)
         {
             Ok(protocol_version) => protocol_version,

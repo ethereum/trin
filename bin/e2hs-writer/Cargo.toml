@@ -13,6 +13,7 @@ version.workspace = true
 
 [dependencies]
 alloy.workspace = true
+alloy-hardforks.workspace = true
 anyhow.workspace = true
 async-stream = "0.3.6"
 clap.workspace = true
