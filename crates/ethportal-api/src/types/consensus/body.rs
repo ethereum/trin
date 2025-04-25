@@ -87,9 +87,9 @@ impl BeaconBlockBody {
     }
 }
 
-impl BeaconBlockBodyCapella {
+impl BeaconBlockBodyBellatrix {
     pub fn build_execution_payload_proof(&self) -> Vec<B256> {
-        let leaves = vec![
+        let leaves = [
             self.randao_reveal.tree_hash_root().0,
             self.eth1_data.tree_hash_root().0,
             self.graffiti.tree_hash_root().0,
@@ -100,42 +100,29 @@ impl BeaconBlockBodyCapella {
             self.voluntary_exits.tree_hash_root().0,
             self.sync_aggregate.tree_hash_root().0,
             self.execution_payload.tree_hash_root().0,
-            self.bls_to_execution_changes.tree_hash_root().0,
         ];
         // We want to prove the 10th leaf
         build_merkle_proof_for_index(leaves, 9)
-    }
-
-    pub fn build_execution_block_hash_proof(&self) -> Vec<B256> {
-        let mut block_hash_proof = self.execution_payload.build_block_hash_proof();
-        let execution_payload_proof = self.build_execution_payload_proof();
-        block_hash_proof.extend(execution_payload_proof);
-        block_hash_proof
     }
 }
 
-impl BeaconBlockBodyBellatrix {
+impl BeaconBlockBodyCapella {
     pub fn build_execution_payload_proof(&self) -> Vec<B256> {
-        let leaves = vec![
-            self.randao_reveal.tree_hash_root().0,
-            self.eth1_data.tree_hash_root().0,
-            self.graffiti.tree_hash_root().0,
-            self.proposer_slashings.tree_hash_root().0,
-            self.attester_slashings.tree_hash_root().0,
-            self.attestations.tree_hash_root().0,
-            self.deposits.tree_hash_root().0,
-            self.voluntary_exits.tree_hash_root().0,
-            self.sync_aggregate.tree_hash_root().0,
-            self.execution_payload.tree_hash_root().0,
+        let leaves = [
+            self.randao_reveal.tree_hash_root(),
+            self.eth1_data.tree_hash_root(),
+            self.graffiti.tree_hash_root(),
+            self.proposer_slashings.tree_hash_root(),
+            self.attester_slashings.tree_hash_root(),
+            self.attestations.tree_hash_root(),
+            self.deposits.tree_hash_root(),
+            self.voluntary_exits.tree_hash_root(),
+            self.sync_aggregate.tree_hash_root(),
+            self.execution_payload.tree_hash_root(),
+            self.bls_to_execution_changes.tree_hash_root(),
         ];
         // We want to prove the 10th leaf
         build_merkle_proof_for_index(leaves, 9)
-    }
-
-    pub fn build_execution_block_hash_proof(&self) -> Vec<B256> {
-        let mut block_hash_proof = self.execution_payload.build_block_hash_proof();
-        block_hash_proof.extend(self.build_execution_payload_proof());
-        block_hash_proof
     }
 }
 
