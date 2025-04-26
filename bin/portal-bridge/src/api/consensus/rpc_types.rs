@@ -5,7 +5,7 @@ use serde_json::Value;
 use ssz::Decode;
 use ssz_derive::Decode;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct VersionedDataResponse<T> {
     pub version: Option<String>,
     pub execution_optimistic: Option<bool>,
@@ -24,7 +24,7 @@ impl<T> VersionedDataResponse<T> {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum VersionedDataResult<T> {
     ExpectedResponse(VersionedDataResponse<T>),
@@ -47,12 +47,12 @@ impl<T> VersionedDataResult<T> {
     }
 }
 
-#[derive(Debug, Deserialize, Decode)]
+#[derive(Debug, Clone, Deserialize, Decode)]
 pub struct RootResponse {
     pub root: B256,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct VersionResponse {
     pub version: String,
 }

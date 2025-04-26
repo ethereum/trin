@@ -13,14 +13,19 @@ use ethportal_api::{
         optimistic_update::LightClientOptimisticUpdateDeneb, update::LightClientUpdateDeneb,
     },
 };
-use reqwest::header::CONTENT_TYPE;
+use reqwest::{
+    header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
+    Response,
+};
 use rpc_types::{RootResponse, VersionResponse, VersionedDataResponse, VersionedDataResult};
 use serde::de::DeserializeOwned;
 use ssz::Decode;
 use tracing::{debug, warn};
 use url::Url;
 
-use super::http_client::{ClientWithBaseUrl, ContentType, JSON_CONTENT_TYPE, SSZ_CONTENT_TYPE};
+use super::http_client::{
+    ClientWithBaseUrl, ContentType, JSON_ACCEPT_PRIORITY, JSON_CONTENT_TYPE, SSZ_CONTENT_TYPE,
+};
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug)]
@@ -94,7 +99,12 @@ impl ConsensusApi {
         let endpoint = format!(
             "/eth/v1/beacon/light_client/updates?start_period={start_period}&count={count}"
         );
-        Ok(self.request(endpoint, None).await?.data)
+        Ok(self
+            .request_list(endpoint, None)
+            .await?
+            .into_iter()
+            .map(|response| response.data)
+            .collect())
     }
 
     /// Requests the latest `LightClientOptimisticUpdate` known by the server.
@@ -136,7 +146,7 @@ impl ConsensusApi {
         custom_timeout: Option<Duration>,
     ) -> anyhow::Result<VersionedDataResponse<T>>
     where
-        T: Decode + DeserializeOwned,
+        T: Decode + DeserializeOwned + Clone,
     {
         match Self::request_no_fallback(endpoint.clone(), &self.primary, custom_timeout).await {
             Ok(response) => Ok(response),
@@ -151,19 +161,52 @@ impl ConsensusApi {
         }
     }
 
-    /// request() should be used instead of this function.
-    async fn request_no_fallback<T>(
+    /// Make a request to the cl provider. If the primary provider fails, it will retry with the
+    /// fallback.
+    ///
+    /// This is used for lists of data, where the response is a list of T.
+    async fn request_list<T>(
+        &self,
+        endpoint: String,
+        custom_timeout: Option<Duration>,
+    ) -> anyhow::Result<Vec<VersionedDataResponse<T>>>
+    where
+        T: Decode + DeserializeOwned + Clone,
+    {
+        match Self::request_list_no_fallback(endpoint.clone(), &self.primary, custom_timeout).await
+        {
+            Ok(response) => Ok(response),
+            Err(err) => {
+                warn!("Error requesting consensus data from provider, retrying with fallback provider: {err:?}");
+                Self::request_list_no_fallback(endpoint, &self.fallback, custom_timeout)
+                    .await
+                    .map_err(|err| {
+                        anyhow!("Unable to request consensus data from fallback provider: {err:?}")
+                    })
+            }
+        }
+    }
+
+    /// Makes a request and returns the response and the content type.
+    async fn base_request(
         endpoint: String,
         client: &ClientWithBaseUrl,
         custom_timeout: Option<Duration>,
-    ) -> anyhow::Result<VersionedDataResponse<T>>
-    where
-        T: Decode + DeserializeOwned,
-    {
+        response_is_list: bool,
+    ) -> anyhow::Result<(Response, ContentType)> {
         let request = client.get(&endpoint)?;
         let request = match custom_timeout {
             Some(timeout) => request.timeout(timeout),
             None => request,
+        };
+        let request = match response_is_list {
+            true => {
+                let mut headers = HeaderMap::new();
+                headers.insert(CONTENT_TYPE, HeaderValue::from_static(JSON_CONTENT_TYPE));
+                headers.insert(ACCEPT, HeaderValue::from_static(JSON_ACCEPT_PRIORITY));
+                request.headers(headers)
+            }
+            false => request,
         };
         let response = request.send().await?;
         let content_type = response.headers().get(CONTENT_TYPE);
@@ -175,7 +218,25 @@ impl ConsensusApi {
             .map_err(|_| anyhow!("Unable to convert content type to string: {content_type:?}"))?;
 
         Ok(match content_type {
-            SSZ_CONTENT_TYPE => {
+            SSZ_CONTENT_TYPE => (response, ContentType::Ssz),
+            JSON_CONTENT_TYPE => (response, ContentType::Json),
+            _ => bail!("Unexpected content type: {content_type:?} {response:?}"),
+        })
+    }
+
+    async fn request_no_fallback<T>(
+        endpoint: String,
+        client: &ClientWithBaseUrl,
+        custom_timeout: Option<Duration>,
+    ) -> anyhow::Result<VersionedDataResponse<T>>
+    where
+        T: Decode + DeserializeOwned + Clone,
+    {
+        let (response, content_type) =
+            Self::base_request(endpoint.clone(), client, custom_timeout, false).await?;
+
+        Ok(match content_type {
+            ContentType::Ssz => {
                 let eth_consensus_version = response.headers().get("Eth-Consensus-Version");
                 let version = eth_consensus_version
                     .map(|header_value| {
@@ -190,11 +251,33 @@ impl ConsensusApi {
                     version,
                 )
             }
-            JSON_CONTENT_TYPE => response
+            ContentType::Json => response
                 .json::<VersionedDataResult<T>>()
                 .await?
                 .response()?,
-            _ => bail!("Unexpected content type: {content_type:?} {response:?}"),
+        })
+    }
+
+    async fn request_list_no_fallback<T>(
+        endpoint: String,
+        client: &ClientWithBaseUrl,
+        custom_timeout: Option<Duration>,
+    ) -> anyhow::Result<Vec<VersionedDataResponse<T>>>
+    where
+        T: Decode + DeserializeOwned + Clone,
+    {
+        let (response, content_type) =
+            Self::base_request(endpoint.clone(), client, custom_timeout, true).await?;
+
+        // todo: add support for ssz lists
+        Ok(match content_type {
+            ContentType::Json => response
+                .json::<Vec<VersionedDataResult<T>>>()
+                .await?
+                .into_iter()
+                .map(|response| response.response())
+                .collect::<Result<Vec<_>, _>>()?,
+            _ => bail!("We only support JSON for lists, but got {content_type:?}"),
         })
     }
 
