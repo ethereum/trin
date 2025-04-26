@@ -11,16 +11,14 @@ use ethportal_api::types::execution::{
     accumulator::EpochAccumulator,
     block_body::BlockBody,
     header_with_proof::{
-        BlockHeaderProof, BlockProofHistoricalHashesAccumulator, BlockProofHistoricalRoots,
-        BlockProofHistoricalSummaries, HeaderWithProof,
+        build_historical_roots_proof, build_historical_summaries_proof, BlockHeaderProof,
+        BlockProofHistoricalHashesAccumulator, HeaderWithProof,
     },
     receipts::Receipts,
 };
 use futures::Stream;
 use portal_bridge::api::execution::ExecutionApi;
-use ssz_types::{typenum, FixedVector, VariableList};
 use tokio::try_join;
-use tree_hash::TreeHash;
 use trin_execution::era::beacon::decode_transactions;
 use trin_validation::{
     accumulator::PreMergeAccumulator,
@@ -131,7 +129,7 @@ impl EpochReader {
         })
     }
 
-    async fn get_pre_capella_block_data(
+    async fn get_merge_to_capella_block_data(
         &mut self,
         block_number: u64,
     ) -> anyhow::Result<AllBlockData> {
@@ -140,35 +138,16 @@ impl EpochReader {
             .block
             .message_merge()
             .map_err(|e| anyhow!("Unable to decode merge block: {e:?}"))?;
-        let payload = block.body.execution_payload.clone();
-        let transactions = decode_transactions(&payload.transactions)?;
-        let header = pre_capella_execution_payload_to_header(payload.clone(), &transactions)?;
-
-        let slot = block.slot;
-
-        // create beacon block proof
-        let historical_batch_proof = era
-            .historical_batch
-            .build_block_root_proof(slot % EPOCH_SIZE);
-        let beacon_block_proof: FixedVector<B256, typenum::U14> = historical_batch_proof.into();
-
-        // create execution block proof
-        let mut execution_block_hash_proof = block.body.build_execution_block_hash_proof();
-        let body_root_proof = block.build_body_root_proof();
-        execution_block_hash_proof.extend(body_root_proof);
-        let execution_block_proof: FixedVector<B256, typenum::U11> =
-            execution_block_hash_proof.into();
-
-        let proof = BlockProofHistoricalRoots {
-            beacon_block_proof,
-            beacon_block_root: block.tree_hash_root(),
-            slot,
-            execution_block_proof,
-        };
+        let execution_payload = &block.body.execution_payload;
+        let transactions = decode_transactions(&execution_payload.transactions)?;
 
         let header_with_proof = HeaderWithProof {
-            header,
-            proof: BlockHeaderProof::HistoricalRoots(proof),
+            header: pre_capella_execution_payload_to_header(execution_payload, &transactions)?,
+            proof: BlockHeaderProof::HistoricalRoots(build_historical_roots_proof(
+                block.slot,
+                &era.historical_batch,
+                block,
+            )),
         };
         let body = BlockBody(AlloyBlockBody {
             transactions,
@@ -184,7 +163,7 @@ impl EpochReader {
         })
     }
 
-    async fn get_pre_deneb_block_data(
+    async fn get_capella_to_deneb_block_data(
         &mut self,
         block_number: u64,
     ) -> anyhow::Result<AllBlockData> {
@@ -193,37 +172,18 @@ impl EpochReader {
             .block
             .message_capella()
             .map_err(|e| anyhow!("Unable to decode capella block: {e:?}"))?;
-        let payload = block.body.execution_payload.clone();
+        let payload = &block.body.execution_payload;
         let transactions = decode_transactions(&payload.transactions)?;
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
-        let header =
-            pre_deneb_execution_payload_to_header(payload.clone(), &transactions, &withdrawals)?;
-
-        let slot = block.slot;
-
-        // create beacon block proof
-        let historical_batch_proof = era
-            .historical_batch
-            .build_block_root_proof(slot % EPOCH_SIZE);
-        let beacon_block_proof: FixedVector<B256, typenum::U13> = historical_batch_proof.into();
-
-        // create execution block proof
-        let mut execution_block_hash_proof = block.body.build_execution_block_hash_proof();
-        let body_root_proof = block.build_body_root_proof();
-        execution_block_hash_proof.extend(body_root_proof);
-        let execution_block_proof: VariableList<B256, typenum::U12> =
-            execution_block_hash_proof.into();
-        let proof = BlockProofHistoricalSummaries {
-            beacon_block_proof,
-            beacon_block_root: block.tree_hash_root(),
-            slot,
-            execution_block_proof,
-        };
 
         let header_with_proof = HeaderWithProof {
-            header,
-            proof: BlockHeaderProof::HistoricalSummaries(proof),
+            header: pre_deneb_execution_payload_to_header(payload, &transactions, &withdrawals)?,
+            proof: BlockHeaderProof::HistoricalSummaries(build_historical_summaries_proof(
+                block.slot,
+                &era.historical_batch.block_roots,
+                block,
+            )),
         };
         let body = BlockBody(AlloyBlockBody {
             transactions,
@@ -245,9 +205,9 @@ impl EpochReader {
                 if current_block < MERGE_BLOCK_NUMBER {
                     yield self.get_pre_merge_block_data(current_block);
                 } else if current_block < SHANGHAI_BLOCK_NUMBER {
-                    yield self.get_pre_capella_block_data(current_block).await;
+                    yield self.get_merge_to_capella_block_data(current_block).await;
                 } else if current_block < CANCUN_BLOCK_NUMBER {
-                    yield self.get_pre_deneb_block_data(current_block).await;
+                    yield self.get_capella_to_deneb_block_data(current_block).await;
                 } else {
                     yield Err(anyhow!("Unsupported block number: {current_block}"));
                 }
@@ -271,123 +231,5 @@ impl EpochReader {
             .ok_or_else(|| anyhow!("Receipts not found for block number {block_number}"))?;
         ensure!(receipts.root() == receipts_root, "Receipts root mismatch");
         Ok(receipts)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use ethportal_api::types::{
-        consensus::{
-            beacon_block::{BeaconBlockBellatrix, BeaconBlockCapella},
-            beacon_state::BeaconState,
-            fork::ForkName,
-        },
-        execution::header_with_proof::{
-            build_historical_roots_proof, build_historical_summaries_proof,
-            BlockProofHistoricalRoots, BlockProofHistoricalSummaries,
-        },
-    };
-    use serde_yaml::Value;
-    use ssz::Decode;
-
-    #[rstest::rstest]
-    // epoch #575
-    #[case(15539558, 4702208, "block_proofs_bellatrix/beacon_block_proof-15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01.yaml")]
-    // epoch #576
-    #[case(15547621, 4710400, "block_proofs_bellatrix/beacon_block_proof-15547621-96a9313cd506e32893d46c82358569ad242bb32786bd5487833e0f77767aec2a.yaml")]
-    // epoch #577
-    #[case(15555729, 4718592, "block_proofs_bellatrix/beacon_block_proof-15555729-c6fd396d54f61c6d0f1dd3653f81267b0378e9a0d638a229b24586d8fd0bc499.yaml")]
-    #[tokio::test]
-    async fn test_pre_capella_proof_generation(
-        #[case] block_number: u64,
-        #[case] slot: u64,
-        #[case] file_path: &str,
-    ) {
-        use ethportal_api::consensus::beacon_state::HistoricalBatch;
-
-        let test_vector = std::fs::read_to_string(format!(
-            "../../portal-spec-tests/tests/mainnet/history/headers_with_proof/{file_path}"
-        ))
-        .unwrap();
-        let test_vector: Value = serde_yaml::from_str(&test_vector).unwrap();
-        let actual_proof = BlockProofHistoricalRoots {
-            beacon_block_proof: serde_yaml::from_value(test_vector["beacon_block_proof"].clone())
-                .unwrap(),
-            beacon_block_root: serde_yaml::from_value(test_vector["beacon_block_root"].clone())
-                .unwrap(),
-            execution_block_proof: serde_yaml::from_value(
-                test_vector["execution_block_proof"].clone(),
-            )
-            .unwrap(),
-            slot: serde_yaml::from_value(test_vector["slot"].clone()).unwrap(),
-        };
-
-        let test_assets_dir =
-            format!("../../portal-spec-tests/tests/mainnet/history/headers_with_proof/beacon_data/{block_number}");
-        let historical_batch_path = format!("{test_assets_dir}/historical_batch.ssz");
-        let historical_batch_raw = std::fs::read(historical_batch_path).unwrap();
-        let historical_batch = HistoricalBatch::from_ssz_bytes(&historical_batch_raw).unwrap();
-        let block_path = format!("{test_assets_dir}/block.ssz");
-        let block_raw = std::fs::read(block_path).unwrap();
-        let block = BeaconBlockBellatrix::from_ssz_bytes(&block_raw).unwrap();
-        let proof = build_historical_roots_proof(slot, &historical_batch, block);
-
-        assert_eq!(actual_proof, proof);
-    }
-
-    #[rstest::rstest]
-    #[case(
-        17034870,
-        6209538,
-        // epoch #759,
-        "block_proofs_capella/beacon_block_proof-17034870.yaml"
-    )]
-    #[case(
-        17042287,
-        6217730,
-        // epoch #760,
-        "block_proofs_capella/beacon_block_proof-17042287.yaml"
-    )]
-    #[case(
-        17062257,
-        6238210,
-        // epoch #762
-        "block_proofs_capella/beacon_block_proof-17062257.yaml"
-    )]
-    #[tokio::test]
-    async fn test_pre_deneb_proof_generation(
-        #[case] block_number: u64,
-        #[case] slot: u64,
-        #[case] file_path: &str,
-    ) {
-        let test_vector = std::fs::read_to_string(format!(
-            "../../portal-spec-tests/tests/mainnet/history/headers_with_proof/{file_path}"
-        ))
-        .unwrap();
-        let test_vector: Value = serde_yaml::from_str(&test_vector).unwrap();
-        let actual_proof = BlockProofHistoricalSummaries {
-            beacon_block_proof: serde_yaml::from_value(test_vector["beacon_block_proof"].clone())
-                .unwrap(),
-            beacon_block_root: serde_yaml::from_value(test_vector["beacon_block_root"].clone())
-                .unwrap(),
-            execution_block_proof: serde_yaml::from_value(
-                test_vector["execution_block_proof"].clone(),
-            )
-            .unwrap(),
-            slot: serde_yaml::from_value(test_vector["slot"].clone()).unwrap(),
-        };
-
-        let test_assets_dir =
-            format!("../../portal-spec-tests/tests/mainnet/history/headers_with_proof/beacon_data/{block_number}");
-        let state_path = format!("{test_assets_dir}/beacon_state.ssz");
-        let state_raw = std::fs::read(state_path).unwrap();
-        let beacon_state = BeaconState::from_ssz_bytes(&state_raw, ForkName::Capella).unwrap();
-        let beacon_state = beacon_state.as_capella().unwrap();
-        let block_path = format!("{test_assets_dir}/block.ssz");
-        let block_raw = std::fs::read(block_path).unwrap();
-        let block = BeaconBlockCapella::from_ssz_bytes(&block_raw).unwrap();
-        let proof = build_historical_summaries_proof(slot, beacon_state, block);
-
-        assert_eq!(actual_proof, proof);
     }
 }

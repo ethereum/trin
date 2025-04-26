@@ -92,46 +92,46 @@ impl ExecutionPayload {
     }
 }
 
-impl ExecutionPayloadCapella {
+impl ExecutionPayloadBellatrix {
     pub fn build_block_hash_proof(&self) -> Vec<B256> {
-        let leaves = vec![
-            self.parent_hash.tree_hash_root().0,
-            self.fee_recipient.tree_hash_root().0,
-            self.state_root.tree_hash_root().0,
-            self.receipts_root.tree_hash_root().0,
-            self.logs_bloom.tree_hash_root().0,
-            self.prev_randao.tree_hash_root().0,
-            self.block_number.tree_hash_root().0,
-            self.gas_limit.tree_hash_root().0,
-            self.gas_used.tree_hash_root().0,
-            self.timestamp.tree_hash_root().0,
-            self.extra_data.tree_hash_root().0,
-            self.base_fee_per_gas.tree_hash_root().0,
-            self.block_hash.tree_hash_root().0,
-            self.transactions.tree_hash_root().0,
-            self.withdrawals.tree_hash_root().0,
+        let leaves = [
+            self.parent_hash.tree_hash_root(),
+            self.fee_recipient.tree_hash_root(),
+            self.state_root.tree_hash_root(),
+            self.receipts_root.tree_hash_root(),
+            self.logs_bloom.tree_hash_root(),
+            self.prev_randao.tree_hash_root(),
+            self.block_number.tree_hash_root(),
+            self.gas_limit.tree_hash_root(),
+            self.gas_used.tree_hash_root(),
+            self.timestamp.tree_hash_root(),
+            self.extra_data.tree_hash_root(),
+            self.base_fee_per_gas.tree_hash_root(),
+            self.block_hash.tree_hash_root(),
+            self.transactions.tree_hash_root(),
         ];
         build_merkle_proof_for_index(leaves, 12)
     }
 }
 
-impl ExecutionPayloadBellatrix {
+impl ExecutionPayloadCapella {
     pub fn build_block_hash_proof(&self) -> Vec<B256> {
-        let leaves = vec![
-            self.parent_hash.tree_hash_root().0,
-            self.fee_recipient.tree_hash_root().0,
-            self.state_root.tree_hash_root().0,
-            self.receipts_root.tree_hash_root().0,
-            self.logs_bloom.tree_hash_root().0,
-            self.prev_randao.tree_hash_root().0,
-            self.block_number.tree_hash_root().0,
-            self.gas_limit.tree_hash_root().0,
-            self.gas_used.tree_hash_root().0,
-            self.timestamp.tree_hash_root().0,
-            self.extra_data.tree_hash_root().0,
-            self.base_fee_per_gas.tree_hash_root().0,
-            self.block_hash.tree_hash_root().0,
-            self.transactions.tree_hash_root().0,
+        let leaves = [
+            self.parent_hash.tree_hash_root(),
+            self.fee_recipient.tree_hash_root(),
+            self.state_root.tree_hash_root(),
+            self.receipts_root.tree_hash_root(),
+            self.logs_bloom.tree_hash_root(),
+            self.prev_randao.tree_hash_root(),
+            self.block_number.tree_hash_root(),
+            self.gas_limit.tree_hash_root(),
+            self.gas_used.tree_hash_root(),
+            self.timestamp.tree_hash_root(),
+            self.extra_data.tree_hash_root(),
+            self.base_fee_per_gas.tree_hash_root(),
+            self.block_hash.tree_hash_root(),
+            self.transactions.tree_hash_root(),
+            self.withdrawals.tree_hash_root(),
         ];
         build_merkle_proof_for_index(leaves, 12)
     }

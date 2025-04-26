@@ -35,6 +35,7 @@ type EpochsPerHistoricalVector = U65536;
 type EpochsPerSlashingsVector = U8192;
 type JustificationBitsLength = U4;
 
+pub type RootsPerHistoricalRoot = FixedVector<B256, SlotsPerHistoricalRoot>;
 pub type HistoricalRoots = VariableList<B256, HistoricalRootsLimit>;
 
 /// The state of the `BeaconChain` at some slot.
@@ -73,8 +74,8 @@ pub struct BeaconState {
 
     // History
     pub latest_block_header: BeaconBlockHeader,
-    pub block_roots: FixedVector<B256, SlotsPerHistoricalRoot>,
-    pub state_roots: FixedVector<B256, SlotsPerHistoricalRoot>,
+    pub block_roots: RootsPerHistoricalRoot,
+    pub state_roots: RootsPerHistoricalRoot,
     // Frozen in Capella, replaced by historical_summaries
     pub historical_roots: HistoricalRoots,
 
@@ -162,49 +163,37 @@ impl BeaconState {
     }
 }
 
-impl BeaconStateCapella {
-    pub fn build_block_root_proof(&self, block_root_index: usize) -> Vec<B256> {
-        // Build block hash proof for self.block_roots
-        let leaves: Vec<[u8; 32]> = self
-            .block_roots
-            .iter()
-            .map(|root| root.tree_hash_root().0)
-            .collect();
-        build_merkle_proof_for_index(leaves, block_root_index)
-    }
-}
-
 impl BeaconStateDeneb {
     pub fn build_historical_summaries_proof(&self) -> Vec<B256> {
-        let leaves = vec![
-            self.genesis_time.tree_hash_root().0,
-            self.genesis_validators_root.tree_hash_root().0,
-            self.slot.tree_hash_root().0,
-            self.fork.tree_hash_root().0,
-            self.latest_block_header.tree_hash_root().0,
-            self.block_roots.tree_hash_root().0,
-            self.state_roots.tree_hash_root().0,
-            self.historical_roots.tree_hash_root().0,
-            self.eth1_data.tree_hash_root().0,
-            self.eth1_data_votes.tree_hash_root().0,
-            self.eth1_deposit_index.tree_hash_root().0,
-            self.validators.tree_hash_root().0,
-            self.balances.tree_hash_root().0,
-            self.randao_mixes.tree_hash_root().0,
-            self.slashings.tree_hash_root().0,
-            self.previous_epoch_participation.tree_hash_root().0,
-            self.current_epoch_participation.tree_hash_root().0,
-            self.justification_bits.tree_hash_root().0,
-            self.previous_justified_checkpoint.tree_hash_root().0,
-            self.current_justified_checkpoint.tree_hash_root().0,
-            self.finalized_checkpoint.tree_hash_root().0,
-            self.inactivity_scores.tree_hash_root().0,
-            self.current_sync_committee.tree_hash_root().0,
-            self.next_sync_committee.tree_hash_root().0,
-            self.latest_execution_payload_header.tree_hash_root().0,
-            self.next_withdrawal_index.tree_hash_root().0,
-            self.next_withdrawal_validator_index.tree_hash_root().0,
-            self.historical_summaries.tree_hash_root().0,
+        let leaves = [
+            self.genesis_time.tree_hash_root(),
+            self.genesis_validators_root.tree_hash_root(),
+            self.slot.tree_hash_root(),
+            self.fork.tree_hash_root(),
+            self.latest_block_header.tree_hash_root(),
+            self.block_roots.tree_hash_root(),
+            self.state_roots.tree_hash_root(),
+            self.historical_roots.tree_hash_root(),
+            self.eth1_data.tree_hash_root(),
+            self.eth1_data_votes.tree_hash_root(),
+            self.eth1_deposit_index.tree_hash_root(),
+            self.validators.tree_hash_root(),
+            self.balances.tree_hash_root(),
+            self.randao_mixes.tree_hash_root(),
+            self.slashings.tree_hash_root(),
+            self.previous_epoch_participation.tree_hash_root(),
+            self.current_epoch_participation.tree_hash_root(),
+            self.justification_bits.tree_hash_root(),
+            self.previous_justified_checkpoint.tree_hash_root(),
+            self.current_justified_checkpoint.tree_hash_root(),
+            self.finalized_checkpoint.tree_hash_root(),
+            self.inactivity_scores.tree_hash_root(),
+            self.current_sync_committee.tree_hash_root(),
+            self.next_sync_committee.tree_hash_root(),
+            self.latest_execution_payload_header.tree_hash_root(),
+            self.next_withdrawal_index.tree_hash_root(),
+            self.next_withdrawal_validator_index.tree_hash_root(),
+            self.historical_summaries.tree_hash_root(),
         ];
 
         build_merkle_proof_for_index(leaves, 27)
@@ -307,19 +296,15 @@ pub struct Validator {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode, TreeHash)]
 pub struct HistoricalBatch {
-    pub block_roots: FixedVector<B256, SlotsPerHistoricalRoot>,
-    pub state_roots: FixedVector<B256, SlotsPerHistoricalRoot>,
+    pub block_roots: RootsPerHistoricalRoot,
+    pub state_roots: RootsPerHistoricalRoot,
 }
 
 impl HistoricalBatch {
-    pub fn build_block_root_proof(&self, block_root_index: u64) -> Vec<B256> {
+    pub fn build_block_root_proof(&self, block_root_index: usize) -> Vec<B256> {
         // Build block hash proof for self.block_roots
-        let leaves: Vec<[u8; 32]> = self
-            .block_roots
-            .iter()
-            .map(|root| root.tree_hash_root().0)
-            .collect();
-        let mut proof_hashes = build_merkle_proof_for_index(leaves, block_root_index as usize);
+        let mut proof_hashes =
+            build_merkle_proof_for_index(self.block_roots.clone(), block_root_index);
 
         // To generate proof for block root anchored to the historical batch tree_hash_root, we need
         // to add the self.state_root tree_hash_root to the proof_hashes

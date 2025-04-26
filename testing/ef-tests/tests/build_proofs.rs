@@ -92,7 +92,7 @@ fn block_body_execution_payload_proof() {
     assert_eq!(proof.len(), 4);
     assert_eq!(proof, expected_execution_payload_proof.to_vec());
 
-    let mut expected_block_hash_proof = [
+    let expected_block_hash_proof = [
         "0x7ffe241ea60187fdb0187bfa22de35d1f9bed7ab061d9401fd47e34a54fbede1",
         "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
         "0xf00e3441849a7e4228e6f48d5a5b231e153b39cb2ef283febdd9f7df1f777551",
@@ -100,10 +100,9 @@ fn block_body_execution_payload_proof() {
     ]
     .map(|x| B256::from_str(x).unwrap())
     .to_vec();
-    let proof = content.build_execution_block_hash_proof();
-    expected_block_hash_proof.extend(expected_execution_payload_proof);
+    let proof = content.execution_payload.build_block_hash_proof();
 
-    assert_eq!(proof.len(), 8);
+    assert_eq!(proof.len(), 4);
     assert_eq!(proof, expected_block_hash_proof);
 }
 
