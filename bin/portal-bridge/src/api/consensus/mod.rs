@@ -47,7 +47,7 @@ impl ConsensusApi {
         }
         let fallback = ClientWithBaseUrl::new(fallback, request_timeout, ContentType::Ssz)
             .map_err(|err| {
-                anyhow!("Unable to create primary client for consensus data provider: {err:?}")
+                anyhow!("Unable to create fallback client for consensus data provider: {err:?}")
             })?;
         if let Err(err) = Self::check_provider(&fallback).await {
             warn!("Fallback consensus data provider may be offline: {err:?}");
@@ -161,10 +161,9 @@ impl ConsensusApi {
         T: Decode + DeserializeOwned,
     {
         let request = client.get(&endpoint)?;
-        let request = if let Some(timeout) = custom_timeout {
-            request.timeout(timeout)
-        } else {
-            request
+        let request = match custom_timeout {
+            Some(timeout) => request.timeout(timeout),
+            None => request,
         };
         let response = request.send().await?;
         let content_type = response.headers().get(CONTENT_TYPE);
@@ -194,7 +193,7 @@ impl ConsensusApi {
             JSON_CONTENT_TYPE => response
                 .json::<VersionedDataResult<T>>()
                 .await?
-                .to_result()?,
+                .response()?,
             _ => bail!("Unexpected content type: {content_type:?} {response:?}"),
         })
     }

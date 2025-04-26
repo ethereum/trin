@@ -27,15 +27,22 @@ impl<T> VersionedDataResponse<T> {
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum VersionedDataResult<T> {
-    Result(VersionedDataResponse<T>),
-    Error(Value),
+    ExpectedResponse(VersionedDataResponse<T>),
+    UnexpectedResponse(Value),
 }
 
 impl<T> VersionedDataResult<T> {
-    pub fn to_result(self) -> anyhow::Result<VersionedDataResponse<T>> {
+    pub fn response(self) -> anyhow::Result<VersionedDataResponse<T>> {
         match self {
-            VersionedDataResult::Result(versioned_data_response) => Ok(versioned_data_response),
-            VersionedDataResult::Error(err) => bail!("Failed to deserialize json {err:?}"),
+            VersionedDataResult::ExpectedResponse(versioned_data_response) => {
+                Ok(versioned_data_response)
+            }
+            VersionedDataResult::UnexpectedResponse(unexpected_response) => {
+                bail!(
+                    "Failed to deserialize json {}",
+                    unexpected_response.to_string()
+                )
+            }
         }
     }
 }
