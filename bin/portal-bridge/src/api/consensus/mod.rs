@@ -1,9 +1,11 @@
+pub mod constants;
 pub mod rpc_types;
 
-use std::fmt::Display;
+use std::{fmt::Display, time::Duration};
 
 use alloy::primitives::B256;
 use anyhow::{anyhow, bail};
+use constants::DEFAULT_BEACON_STATE_REQUEST_TIMEOUT;
 use ethportal_api::{
     consensus::beacon_state::BeaconStateDeneb,
     light_client::{
@@ -12,21 +14,19 @@ use ethportal_api::{
     },
 };
 use reqwest::header::CONTENT_TYPE;
-use rpc_types::{RootResponse, VersionedDataResponse, VersionedDataResult};
+use rpc_types::{RootResponse, VersionResponse, VersionedDataResponse, VersionedDataResult};
 use serde::de::DeserializeOwned;
 use ssz::Decode;
 use tracing::{debug, warn};
 use url::Url;
 
-use super::utils::{ClientWithBaseUrl, ContentType, JSON_CONTENT_TYPE, SSZ_CONTENT_TYPE};
-use crate::api::utils::url_to_client;
+use super::http_client::{ClientWithBaseUrl, ContentType, JSON_CONTENT_TYPE, SSZ_CONTENT_TYPE};
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug)]
 pub struct ConsensusApi {
-    primary: Url,
-    fallback: Url,
-    request_timeout: u64,
+    primary: ClientWithBaseUrl,
+    fallback: ClientWithBaseUrl,
 }
 
 impl ConsensusApi {
@@ -38,24 +38,28 @@ impl ConsensusApi {
         debug!(
             "Starting ConsensusApi with primary provider: {primary} and fallback provider: {fallback}",
         );
-        let client =
-            url_to_client(primary.clone(), request_timeout, ContentType::Json).map_err(|err| {
+        let primary =
+            ClientWithBaseUrl::new(primary, request_timeout, ContentType::Ssz).map_err(|err| {
                 anyhow!("Unable to create primary client for consensus data provider: {err:?}")
             })?;
-        if let Err(err) = check_provider(&client).await {
+        if let Err(err) = Self::check_provider(&primary).await {
             warn!("Primary consensus data provider may be offline: {err:?}");
         }
-        Ok(Self {
-            primary,
-            fallback,
-            request_timeout,
-        })
+        let fallback = ClientWithBaseUrl::new(fallback, request_timeout, ContentType::Ssz)
+            .map_err(|err| {
+                anyhow!("Unable to create primary client for consensus data provider: {err:?}")
+            })?;
+        if let Err(err) = Self::check_provider(&fallback).await {
+            warn!("Fallback consensus data provider may be offline: {err:?}");
+        }
+
+        Ok(Self { primary, fallback })
     }
 
     /// Request the finalized root of the beacon state.
     pub async fn get_beacon_state_finalized_root(&self) -> anyhow::Result<RootResponse> {
         let endpoint = "/eth/v1/beacon/states/finalized/root".to_string();
-        Ok(self.request(endpoint).await?.data)
+        Ok(self.request(endpoint, None).await?.data)
     }
 
     /// Requests the `LightClientBootstrap` structure corresponding to a given post-Altair beacon
@@ -65,7 +69,7 @@ impl ConsensusApi {
         block_root: B256,
     ) -> anyhow::Result<LightClientBootstrapDeneb> {
         let endpoint = format!("/eth/v1/beacon/light_client/bootstrap/{block_root}");
-        Ok(self.request(endpoint).await?.data)
+        Ok(self.request(endpoint, None).await?.data)
     }
 
     /// Retrieves hashTreeRoot of `BeaconBlock/BeaconBlockHeader`
@@ -76,7 +80,7 @@ impl ConsensusApi {
         block_id: S,
     ) -> anyhow::Result<RootResponse> {
         let endpoint = format!("/eth/v1/beacon/blocks/{block_id}/root");
-        Ok(self.request(endpoint).await?.data)
+        Ok(self.request(endpoint, None).await?.data)
     }
 
     /// Requests the LightClientUpdate instances in the sync committee period range
@@ -90,7 +94,7 @@ impl ConsensusApi {
         let endpoint = format!(
             "/eth/v1/beacon/light_client/updates?start_period={start_period}&count={count}"
         );
-        Ok(self.request(endpoint).await?.data)
+        Ok(self.request(endpoint, None).await?.data)
     }
 
     /// Requests the latest `LightClientOptimisticUpdate` known by the server.
@@ -98,7 +102,7 @@ impl ConsensusApi {
         &self,
     ) -> anyhow::Result<LightClientOptimisticUpdateDeneb> {
         let endpoint = "/eth/v1/beacon/light_client/optimistic_update".to_string();
-        Ok(self.request(endpoint).await?.data)
+        Ok(self.request(endpoint, None).await?.data)
     }
 
     /// Requests the latest `LightClientFinalityUpdate` known by the server.
@@ -106,29 +110,39 @@ impl ConsensusApi {
         &self,
     ) -> anyhow::Result<LightClientFinalityUpdateDeneb> {
         let endpoint = "/eth/v1/beacon/light_client/finality_update".to_string();
-        Ok(self.request(endpoint).await?.data)
+        Ok(self.request(endpoint, None).await?.data)
+    }
+
+    /// Requests the Node's `Version` string.
+    pub async fn get_node_version(&self) -> anyhow::Result<VersionResponse> {
+        let endpoint = "/eth/v1/node/version".to_string();
+        Ok(self.request(endpoint, None).await?.data)
     }
 
     /// Requests the `BeaconState` structure corresponding to the current head of the beacon chain.
     pub async fn get_beacon_state(&self) -> anyhow::Result<BeaconStateDeneb> {
         let endpoint = "/eth/v2/debug/beacon/states/finalized".to_string();
-        Ok(self.request(endpoint).await?.data)
+        Ok(self
+            .request(endpoint, Some(DEFAULT_BEACON_STATE_REQUEST_TIMEOUT))
+            .await?
+            .data)
     }
 
     /// Make a request to the cl provider. If the primary provider fails, it will retry with the
     /// fallback.
-    async fn request<T>(&self, endpoint: String) -> anyhow::Result<VersionedDataResponse<T>>
+    async fn request<T>(
+        &self,
+        endpoint: String,
+        custom_timeout: Option<Duration>,
+    ) -> anyhow::Result<VersionedDataResponse<T>>
     where
         T: Decode + DeserializeOwned,
     {
-        match self
-            .request_no_fallback(endpoint.clone(), self.primary.clone())
-            .await
-        {
+        match Self::request_no_fallback(endpoint.clone(), &self.primary, custom_timeout).await {
             Ok(response) => Ok(response),
             Err(err) => {
                 warn!("Error requesting consensus data from provider, retrying with fallback provider: {err:?}");
-                self.request_no_fallback(endpoint, self.fallback.clone())
+                Self::request_no_fallback(endpoint, &self.fallback, custom_timeout)
                     .await
                     .map_err(|err| {
                         anyhow!("Unable to request consensus data from fallback provider: {err:?}")
@@ -139,17 +153,20 @@ impl ConsensusApi {
 
     /// request() should be used instead of this function.
     async fn request_no_fallback<T>(
-        &self,
         endpoint: String,
-        url: Url,
+        client: &ClientWithBaseUrl,
+        custom_timeout: Option<Duration>,
     ) -> anyhow::Result<VersionedDataResponse<T>>
     where
         T: Decode + DeserializeOwned,
     {
-        let client = url_to_client(url, self.request_timeout, ContentType::Ssz).map_err(|err| {
-            anyhow!("Unable to create client for primary consensus data provider: {err:?}")
-        })?;
-        let response = client.get(&endpoint)?.send().await?;
+        let request = client.get(&endpoint)?;
+        let request = if let Some(timeout) = custom_timeout {
+            request.timeout(timeout)
+        } else {
+            request
+        };
+        let response = request.send().await?;
         let content_type = response.headers().get(CONTENT_TYPE);
         let Some(content_type) = content_type else {
             return Err(anyhow!("No content type found in response"));
@@ -181,15 +198,13 @@ impl ConsensusApi {
             _ => bail!("Unexpected content type: {content_type:?} {response:?}"),
         })
     }
-}
 
-/// Check that provider is valid and accessible.
-async fn check_provider(client: &ClientWithBaseUrl) -> anyhow::Result<()> {
-    let endpoint = "/eth/v1/node/version".to_string();
-    match client.get(endpoint)?.send().await?.text().await {
-        Ok(_) => Ok(()),
-        Err(err) => Err(anyhow!(
-            "Unable to request consensus data from provider: {err:?}"
-        )),
+    /// Check if the provider is up and running by requesting the version.
+    /// The request will error if the provider is not reachable or if the version is not returned.
+    pub async fn check_provider(client: &ClientWithBaseUrl) -> anyhow::Result<VersionResponse> {
+        let endpoint = "/eth/v1/node/version".to_string();
+        Ok(Self::request_no_fallback(endpoint.clone(), client, None)
+            .await?
+            .data)
     }
 }

@@ -11,7 +11,7 @@ pub const BEACON_GENESIS_TIME: u64 = 1606824023;
 
 /// The timeout in seconds is applied from when the request starts connecting until the response
 /// body has finished. Also considered a total deadline.
-pub const DEFAULT_TOTAL_REQUEST_TIMEOUT: u64 = 60;
+pub const DEFAULT_TOTAL_REQUEST_TIMEOUT: u64 = 20;
 
 // The maximum number of concurrent offer jsonrpc requests that can be made simultaneously.
 // Currently, this is only used in the state bridge.

@@ -1,3 +1,3 @@
 pub mod consensus;
 pub mod execution;
-pub mod utils;
+pub mod http_client;

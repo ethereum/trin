@@ -1,7 +1,8 @@
-use alloy::primitives::B256;
+use alloy::primitives::{Bytes, B256};
 use anyhow::bail;
 use serde::Deserialize;
 use serde_json::Value;
+use ssz::Decode;
 use ssz_derive::Decode;
 
 #[derive(Debug, Deserialize)]
@@ -26,29 +27,14 @@ impl<T> VersionedDataResponse<T> {
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum VersionedDataResult<T> {
-    Result {
-        version: Option<String>,
-        execution_optimistic: Option<bool>,
-        finalized: Option<bool>,
-        data: T,
-    },
+    Result(VersionedDataResponse<T>),
     Error(Value),
 }
 
 impl<T> VersionedDataResult<T> {
     pub fn to_result(self) -> anyhow::Result<VersionedDataResponse<T>> {
         match self {
-            VersionedDataResult::Result {
-                version,
-                execution_optimistic,
-                finalized,
-                data,
-            } => Ok(VersionedDataResponse {
-                version,
-                execution_optimistic,
-                finalized,
-                data,
-            }),
+            VersionedDataResult::Result(versioned_data_response) => Ok(versioned_data_response),
             VersionedDataResult::Error(err) => bail!("Failed to deserialize json {err:?}"),
         }
     }
@@ -57,4 +43,23 @@ impl<T> VersionedDataResult<T> {
 #[derive(Debug, Deserialize, Decode)]
 pub struct RootResponse {
     pub root: B256,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VersionResponse {
+    pub version: String,
+}
+
+impl Decode for VersionResponse {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+        let version = Bytes::from_ssz_bytes(bytes)?;
+        let version = String::from_utf8(version.to_vec()).map_err(|_| {
+            ssz::DecodeError::BytesInvalid(format!("Invalid utf8 string: {version:?}"))
+        })?;
+        Ok(Self { version })
+    }
 }

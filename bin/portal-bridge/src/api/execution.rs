@@ -25,8 +25,8 @@ use trin_validation::{
 };
 use url::Url;
 
-use super::utils::{ClientWithBaseUrl, ContentType};
-use crate::{api::utils::url_to_client, constants::FALLBACK_RETRY_AFTER};
+use super::http_client::{ClientWithBaseUrl, ContentType};
+use crate::constants::FALLBACK_RETRY_AFTER;
 
 /// Limit the number of requests in a single batch to avoid exceeding the
 /// provider's batch size limit configuration of 10.
@@ -52,8 +52,8 @@ impl ExecutionApi {
         debug!(
             "Starting ExecutionApi with primary provider: {primary} and fallback provider: {fallback}",
         );
-        let client =
-            url_to_client(primary.clone(), request_timeout, ContentType::Json).map_err(|err| {
+        let client = ClientWithBaseUrl::new(primary.clone(), request_timeout, ContentType::Json)
+            .map_err(|err| {
                 anyhow!("Unable to create primary client for execution data provider: {err:?}")
             })?;
         if let Err(err) = check_provider(&client).await {
@@ -169,7 +169,7 @@ impl ExecutionApi {
                 "Attempting to send requests outnumbering provider request limit of {BATCH_LIMIT}."
             )
         }
-        let client = url_to_client(
+        let client = ClientWithBaseUrl::new(
             self.primary.clone(),
             self.request_timeout,
             ContentType::Json,
@@ -182,7 +182,7 @@ impl ExecutionApi {
             Err(msg) => {
                 warn!("Failed to send batch request to primary provider: {msg}");
                 sleep(FALLBACK_RETRY_AFTER).await;
-                let client = url_to_client(
+                let client = ClientWithBaseUrl::new(
                     self.fallback.clone(),
                     self.request_timeout,
                     ContentType::Json,
@@ -216,7 +216,7 @@ impl ExecutionApi {
     }
 
     async fn try_request(&self, request: JsonRequest) -> anyhow::Result<Value> {
-        let client = url_to_client(
+        let client = ClientWithBaseUrl::new(
             self.primary.clone(),
             self.request_timeout,
             ContentType::Json,
@@ -229,7 +229,7 @@ impl ExecutionApi {
             Err(msg) => {
                 warn!("Failed to send request to primary provider, retrying with fallback provider: {msg}");
                 sleep(FALLBACK_RETRY_AFTER).await;
-                let client = url_to_client(
+                let client = ClientWithBaseUrl::new(
                     self.fallback.clone(),
                     self.request_timeout,
                     ContentType::Json,
