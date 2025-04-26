@@ -7,7 +7,7 @@ use ssz_types::{typenum, FixedVector, VariableList};
 use tree_hash::TreeHash;
 
 use crate::{
-    consensus::beacon_state::RootsPerHistoricalRoot,
+    consensus::{beacon_state::RootsPerHistoricalRoot, constants::SLOTS_PER_HISTORICAL_ROOT},
     types::{
         bytes::ByteList1024,
         consensus::{
@@ -158,9 +158,10 @@ pub fn build_historical_roots_proof(
     historical_batch: &HistoricalBatch,
     beacon_block: &BeaconBlockBellatrix,
 ) -> BlockProofHistoricalRoots {
-    let beacon_block_proof =
-        BeaconBlockProofHistoricalRoots::new(historical_batch.build_block_root_proof(slot % 8192))
-            .expect("error creating BeaconBlockProofHistoricalRoots");
+    let beacon_block_proof = BeaconBlockProofHistoricalRoots::new(
+        historical_batch.build_block_root_proof(slot as usize % SLOTS_PER_HISTORICAL_ROOT),
+    )
+    .expect("error creating BeaconBlockProofHistoricalRoots");
 
     // execution block proof
     let execution_block_proof =
@@ -183,8 +184,10 @@ pub fn build_historical_summaries_proof(
     block_roots: &RootsPerHistoricalRoot,
     beacon_block: &BeaconBlockCapella,
 ) -> BlockProofHistoricalSummaries {
-    let beacon_block_proof =
-        build_merkle_proof_for_index(block_roots.clone(), slot as usize % 8192);
+    let beacon_block_proof = build_merkle_proof_for_index(
+        block_roots.clone(),
+        slot as usize % SLOTS_PER_HISTORICAL_ROOT,
+    );
     let beacon_block_proof = BeaconBlockProofHistoricalSummaries::new(beacon_block_proof)
         .expect("error creating BeaconBlockProofHistoricalSummaries");
 

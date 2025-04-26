@@ -129,7 +129,7 @@ impl EpochReader {
         })
     }
 
-    async fn get_pre_capella_block_data(
+    async fn get_merge_to_capella_block_data(
         &mut self,
         block_number: u64,
     ) -> anyhow::Result<AllBlockData> {
@@ -138,7 +138,7 @@ impl EpochReader {
             .block
             .message_merge()
             .map_err(|e| anyhow!("Unable to decode merge block: {e:?}"))?;
-        let execution_payload = block.body.execution_payload.clone();
+        let execution_payload = &block.body.execution_payload;
         let transactions = decode_transactions(&execution_payload.transactions)?;
 
         let header_with_proof = HeaderWithProof {
@@ -163,7 +163,7 @@ impl EpochReader {
         })
     }
 
-    async fn get_pre_deneb_block_data(
+    async fn get_capella_to_deneb_block_data(
         &mut self,
         block_number: u64,
     ) -> anyhow::Result<AllBlockData> {
@@ -172,17 +172,13 @@ impl EpochReader {
             .block
             .message_capella()
             .map_err(|e| anyhow!("Unable to decode capella block: {e:?}"))?;
-        let payload = block.body.execution_payload.clone();
+        let payload = &block.body.execution_payload;
         let transactions = decode_transactions(&payload.transactions)?;
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
 
         let header_with_proof = HeaderWithProof {
-            header: pre_deneb_execution_payload_to_header(
-                payload.clone(),
-                &transactions,
-                &withdrawals,
-            )?,
+            header: pre_deneb_execution_payload_to_header(payload, &transactions, &withdrawals)?,
             proof: BlockHeaderProof::HistoricalSummaries(build_historical_summaries_proof(
                 block.slot,
                 &era.historical_batch.block_roots,
@@ -209,9 +205,9 @@ impl EpochReader {
                 if current_block < MERGE_BLOCK_NUMBER {
                     yield self.get_pre_merge_block_data(current_block);
                 } else if current_block < SHANGHAI_BLOCK_NUMBER {
-                    yield self.get_pre_capella_block_data(current_block).await;
+                    yield self.get_merge_to_capella_block_data(current_block).await;
                 } else if current_block < CANCUN_BLOCK_NUMBER {
-                    yield self.get_pre_deneb_block_data(current_block).await;
+                    yield self.get_capella_to_deneb_block_data(current_block).await;
                 } else {
                     yield Err(anyhow!("Unsupported block number: {current_block}"));
                 }

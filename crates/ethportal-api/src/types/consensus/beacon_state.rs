@@ -301,10 +301,10 @@ pub struct HistoricalBatch {
 }
 
 impl HistoricalBatch {
-    pub fn build_block_root_proof(&self, block_root_index: u64) -> Vec<B256> {
+    pub fn build_block_root_proof(&self, block_root_index: usize) -> Vec<B256> {
         // Build block hash proof for self.block_roots
         let mut proof_hashes =
-            build_merkle_proof_for_index(self.block_roots.clone(), block_root_index as usize);
+            build_merkle_proof_for_index(self.block_roots.clone(), block_root_index);
 
         // To generate proof for block root anchored to the historical batch tree_hash_root, we need
         // to add the self.state_root tree_hash_root to the proof_hashes

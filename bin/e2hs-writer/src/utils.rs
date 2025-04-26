@@ -21,7 +21,7 @@ use trin_execution::era::beacon::EMPTY_UNCLE_ROOT_HASH;
 use trin_validation::accumulator::PreMergeAccumulator;
 
 pub fn pre_capella_execution_payload_to_header(
-    payload: ExecutionPayloadBellatrix,
+    payload: &ExecutionPayloadBellatrix,
     transactions: &[TxEnvelope],
 ) -> anyhow::Result<Header> {
     let transactions_root = calculate_transaction_root(transactions);
@@ -57,7 +57,7 @@ pub fn pre_capella_execution_payload_to_header(
 }
 
 pub fn pre_deneb_execution_payload_to_header(
-    payload: ExecutionPayloadCapella,
+    payload: &ExecutionPayloadCapella,
     transactions: &[TxEnvelope],
     withdrawals: &[Withdrawal],
 ) -> anyhow::Result<Header> {

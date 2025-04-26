@@ -5,7 +5,8 @@ use std::{
 
 use anyhow::{anyhow, ensure};
 use ethportal_api::consensus::{
-    beacon_block::SignedBeaconBlock, beacon_state::BeaconState, fork::ForkName,
+    beacon_block::SignedBeaconBlock, beacon_state::BeaconState,
+    constants::SLOTS_PER_HISTORICAL_ROOT, fork::ForkName,
 };
 use ssz::Encode;
 
@@ -16,8 +17,6 @@ use crate::{
     },
     entry_types,
 };
-
-pub const SLOTS_PER_HISTORICAL_ROOT: usize = 8192;
 
 /// group := Version | block* | era-state | other-entries* | slot-index(block)? | slot-index(state)
 /// block := CompressedSignedBeaconBlock

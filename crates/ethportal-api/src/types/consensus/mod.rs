@@ -1,6 +1,7 @@
 pub mod beacon_block;
 pub mod beacon_state;
 pub mod body;
+pub mod constants;
 pub mod execution_payload;
 pub mod fork;
 pub mod header;
