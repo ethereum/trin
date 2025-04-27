@@ -43,15 +43,14 @@ impl HeaderValidator {
         &self,
         header_with_proof: &HeaderWithProof,
     ) -> anyhow::Result<()> {
-        match &header_with_proof.proof {
+        let HeaderWithProof { header, proof } = header_with_proof;
+        match &proof {
             BlockHeaderProof::HistoricalHashes(proof) => {
-                self.verify_pre_merge_header(&header_with_proof.header, proof)
+                self.verify_pre_merge_header(header, proof)
             }
-            BlockHeaderProof::HistoricalRoots(proof) => self.verify_merge_to_capella_header(
-                header_with_proof.header.number,
-                header_with_proof.header.hash_slow(),
-                proof,
-            ),
+            BlockHeaderProof::HistoricalRoots(proof) => {
+                self.verify_merge_to_capella_header(header.number, header.hash_slow(), proof)
+            }
             BlockHeaderProof::HistoricalSummariesCapella(_) => Err(anyhow!(
                 "HistoricalSummariesCapella header validation is not implemented yet."
             )),
