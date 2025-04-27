@@ -1,7 +1,8 @@
 use ethportal_api::{
     jsonrpsee::async_client::Client,
     types::execution::header_with_proof::{
-        BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummaries, HeaderWithProof,
+        BlockHeaderProof, BlockProofHistoricalRoots, BlockProofHistoricalSummariesCapella,
+        HeaderWithProof,
     },
     ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
     StateNetworkApiClient,
@@ -63,7 +64,7 @@ async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &Peerte
             })
         }
         SHANGHAI_BLOCK_NUMBER.. => {
-            BlockHeaderProof::HistoricalSummaries(BlockProofHistoricalSummaries {
+            BlockHeaderProof::HistoricalSummariesCapella(BlockProofHistoricalSummariesCapella {
                 beacon_block_proof: Default::default(),
                 beacon_block_root: Default::default(),
                 execution_block_proof: Default::default(),
