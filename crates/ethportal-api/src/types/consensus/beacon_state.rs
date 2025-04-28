@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
 use alloy::primitives::B256;
-use discv5::enr::k256::elliptic_curve::consts::{U1099511627776, U2048, U4, U65536, U8192};
 use jsonrpsee::core::Serialize;
 use serde::Deserialize;
 use serde_this_or_that::as_u64;
 use serde_utils;
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum::U16777216, BitVector, FixedVector, VariableList};
+use ssz_types::{
+    typenum::{U1099511627776, U16777216, U2048, U4, U65536, U8192},
+    BitVector, FixedVector, VariableList,
+};
 use superstruct::superstruct;
 use tree_hash::{Hash256, TreeHash};
 use tree_hash_derive::TreeHash;

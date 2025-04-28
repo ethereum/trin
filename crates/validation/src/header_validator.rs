@@ -54,6 +54,9 @@ impl HeaderValidator {
             BlockHeaderProof::HistoricalSummariesCapella(_) => Err(anyhow!(
                 "HistoricalSummariesCapella header validation is not implemented yet."
             )),
+            BlockHeaderProof::HistoricalSummariesDeneb(_) => Err(anyhow!(
+                "HistoricalSummariesDeneb header validation is not implemented yet."
+            )),
         }
     }
 
