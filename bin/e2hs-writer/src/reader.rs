@@ -10,8 +10,9 @@ use ethportal_api::types::execution::{
     accumulator::EpochAccumulator,
     block_body::BlockBody,
     header_with_proof::{
-        build_capella_historical_summaries_proof, build_historical_roots_proof, BlockHeaderProof,
-        BlockProofHistoricalHashesAccumulator, HeaderWithProof,
+        build_capella_historical_summaries_proof, build_deneb_historical_summaries_proof,
+        build_historical_roots_proof, BlockHeaderProof, BlockProofHistoricalHashesAccumulator,
+        HeaderWithProof,
     },
     receipts::Receipts,
 };
@@ -28,8 +29,8 @@ use url::Url;
 use crate::{
     provider::EraProvider,
     utils::{
-        lookup_epoch_acc, pre_capella_execution_payload_to_header,
-        pre_deneb_execution_payload_to_header,
+        bellatrix_execution_payload_to_header, capella_execution_payload_to_header,
+        lookup_epoch_acc, post_deneb_execution_payload_to_header,
     },
 };
 
@@ -140,7 +141,7 @@ impl EpochReader {
         let transactions = decode_transactions(&execution_payload.transactions)?;
 
         let header_with_proof = HeaderWithProof {
-            header: pre_capella_execution_payload_to_header(execution_payload, &transactions)?,
+            header: bellatrix_execution_payload_to_header(execution_payload, &transactions)?,
             proof: BlockHeaderProof::HistoricalRoots(build_historical_roots_proof(
                 block.slot,
                 &era.historical_batch,
@@ -176,7 +177,7 @@ impl EpochReader {
             payload.withdrawals.iter().map(Withdrawal::from).collect();
 
         let header_with_proof = HeaderWithProof {
-            header: pre_deneb_execution_payload_to_header(payload, &transactions, &withdrawals)?,
+            header: capella_execution_payload_to_header(payload, &transactions, &withdrawals)?,
             proof: BlockHeaderProof::HistoricalSummariesCapella(
                 build_capella_historical_summaries_proof(
                     block.slot,
@@ -199,17 +200,56 @@ impl EpochReader {
         })
     }
 
+    fn get_deneb_block_data(&mut self, block_number: u64) -> anyhow::Result<AllBlockData> {
+        let (block, era) = self.era_provider.get_post_merge(block_number)?;
+        let block = block
+            .block
+            .message_deneb()
+            .map_err(|e| anyhow!("Unable to decode deneb block: {e:?}"))?;
+        let payload = &block.body.execution_payload;
+        let transactions = decode_transactions(&payload.transactions)?;
+        let withdrawals: Vec<Withdrawal> =
+            payload.withdrawals.iter().map(Withdrawal::from).collect();
+
+        let header_with_proof = HeaderWithProof {
+            header: post_deneb_execution_payload_to_header(
+                payload,
+                block.parent_root,
+                &transactions,
+                &withdrawals,
+            )?,
+            proof: BlockHeaderProof::HistoricalSummariesDeneb(
+                build_deneb_historical_summaries_proof(
+                    block.slot,
+                    &era.historical_batch.block_roots,
+                    block,
+                ),
+            ),
+        };
+        let body = BlockBody(AlloyBlockBody {
+            transactions,
+            ommers: vec![],
+            withdrawals: Some(Withdrawals::new(withdrawals)),
+        });
+        let receipts = self.get_receipts(block_number, header_with_proof.header.receipts_root)?;
+        Ok(AllBlockData {
+            block_number,
+            header_with_proof,
+            body,
+            receipts,
+        })
+    }
+
     pub fn iter_blocks(mut self) -> impl Iterator<Item = anyhow::Result<AllBlockData>> {
-        (self.starting_block..self.ending_block).map(move |current_block| {
-            if current_block < MERGE_BLOCK_NUMBER {
-                self.get_pre_merge_block_data(current_block)
-            } else if current_block < SHANGHAI_BLOCK_NUMBER {
+        (self.starting_block..self.ending_block).map(move |current_block| match current_block {
+            0..MERGE_BLOCK_NUMBER => self.get_pre_merge_block_data(current_block),
+            MERGE_BLOCK_NUMBER..SHANGHAI_BLOCK_NUMBER => {
                 self.get_merge_to_capella_block_data(current_block)
-            } else if current_block < CANCUN_BLOCK_NUMBER {
-                self.get_capella_to_deneb_block_data(current_block)
-            } else {
-                Err(anyhow!("Unsupported block number: {current_block}"))
             }
+            SHANGHAI_BLOCK_NUMBER..CANCUN_BLOCK_NUMBER => {
+                self.get_capella_to_deneb_block_data(current_block)
+            }
+            CANCUN_BLOCK_NUMBER.. => self.get_deneb_block_data(current_block),
         })
     }
 
