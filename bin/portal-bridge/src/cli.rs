@@ -1,17 +1,9 @@
-use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy::primitives::B256;
 use clap::Parser;
 use ethportal_api::types::{network::Subnetwork, network_spec::NetworkSpec};
 use portalnet::constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK, DEFAULT_WEB3_HTTP_PORT};
-use reqwest::{
-    header::{HeaderMap, HeaderValue, CONTENT_TYPE},
-    Client, IntoUrl, Request, Response,
-};
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
-use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
-use tokio::time::Duration;
-use tracing::error;
 use trin_utils::cli::{check_private_key_length, network_parser};
 use url::Url;
 
@@ -226,86 +218,6 @@ impl FromStr for BridgeId {
             return Err("Bridge id and total must each be greater than 0".to_string());
         }
         Ok(Self { id, total })
-    }
-}
-
-pub fn url_to_client(url: Url, request_timeout: u64) -> Result<ClientWithBaseUrl, String> {
-    let mut headers = HeaderMap::new();
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-    if let Some(host) = url.host_str() {
-        if host.contains("pandaops.io") {
-            let client_id = env::var("PANDAOPS_CLIENT_ID").unwrap_or_else(|_| {
-                error!("Pandaops provider detected without PANDAOPS_CLIENT_ID set");
-                "null".to_string()
-            });
-
-            let client_secret = env::var("PANDAOPS_CLIENT_SECRET").unwrap_or_else(|_| {
-                error!("Pandaops provider detected without PANDAOPS_CLIENT_SECRET set");
-                "null".to_string()
-            });
-
-            headers.insert(
-                "CF-Access-Client-Id",
-                HeaderValue::from_str(&client_id).map_err(|_| "Invalid client id header value")?,
-            );
-
-            headers.insert(
-                "CF-Access-Client-Secret",
-                HeaderValue::from_str(&client_secret)
-                    .map_err(|_| "Invalid client secret header value")?,
-            );
-        }
-    } else {
-        return Err("Failed to find host string".into());
-    }
-
-    // Add retry middleware
-    let reqwest_client = Client::builder()
-        .default_headers(headers)
-        .timeout(Duration::from_secs(request_timeout))
-        .build()
-        .map_err(|_| "Failed to build HTTP client")?;
-    let client = ClientBuilder::new(reqwest_client)
-        .with(RetryTransientMiddleware::new_with_policy(
-            ExponentialBackoff::builder().build_with_max_retries(3),
-        ))
-        .build();
-    let client_with_base_url = ClientWithBaseUrl::new(client, url);
-
-    Ok(client_with_base_url)
-}
-
-pub struct ClientWithBaseUrl {
-    client: ClientWithMiddleware,
-    base_url: Url,
-}
-
-impl ClientWithBaseUrl {
-    pub fn new(client: ClientWithMiddleware, base_url: Url) -> Self {
-        Self { client, base_url }
-    }
-
-    pub fn client(&self) -> &ClientWithMiddleware {
-        &self.client
-    }
-
-    pub fn base_url(&self) -> &Url {
-        &self.base_url
-    }
-
-    pub fn get<U: IntoUrl>(&self, url: U) -> anyhow::Result<RequestBuilder> {
-        let url = self.base_url.join(url.as_str())?;
-        Ok(self.client.get(url))
-    }
-
-    pub fn post<U: IntoUrl>(&self, url: U) -> anyhow::Result<RequestBuilder> {
-        let url = self.base_url.join(url.as_str())?;
-        Ok(self.client.post(url))
-    }
-
-    pub async fn execute(&self, request: Request) -> Result<Response, reqwest_middleware::Error> {
-        self.client.execute(request).await
     }
 }
 
