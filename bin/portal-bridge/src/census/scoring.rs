@@ -134,7 +134,11 @@ impl<W: Weight> PeerSelector<W> {
         content_id: &[u8; 32],
         peers: impl IntoIterator<Item = &'a Peer>,
     ) -> Vec<PeerInfo> {
-        let weighted_peers = self.weight.weight_all(content_id, peers).collect_vec();
+        let weighted_peers = self
+            .weight
+            .weight_all(content_id, peers)
+            .filter(|(_peer, weight)| *weight > 0)
+            .collect_vec();
 
         weighted_peers
             .choose_multiple_weighted(&mut thread_rng(), self.limit, |(_peer, weight)| *weight)
