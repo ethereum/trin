@@ -212,7 +212,12 @@ impl EpochReader {
             payload.withdrawals.iter().map(Withdrawal::from).collect();
 
         let header_with_proof = HeaderWithProof {
-            header: post_deneb_execution_payload_to_header(payload, &transactions, &withdrawals)?,
+            header: post_deneb_execution_payload_to_header(
+                payload,
+                block.parent_root,
+                &transactions,
+                &withdrawals,
+            )?,
             proof: BlockHeaderProof::HistoricalSummariesDeneb(
                 build_deneb_historical_summaries_proof(
                     block.slot,

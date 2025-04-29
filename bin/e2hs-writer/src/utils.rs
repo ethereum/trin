@@ -6,7 +6,7 @@ use alloy::{
         Header, TxEnvelope,
     },
     eips::eip4895::Withdrawal,
-    primitives::{Bloom, B64, U256},
+    primitives::{Bloom, B256, B64, U256},
 };
 use anyhow::{anyhow, ensure};
 use ethportal_api::{
@@ -97,6 +97,7 @@ pub fn capella_execution_payload_to_header(
 
 pub fn post_deneb_execution_payload_to_header(
     payload: &ExecutionPayloadDeneb,
+    parent_beacon_block_root: B256,
     transactions: &[TxEnvelope],
     withdrawals: &[Withdrawal],
 ) -> anyhow::Result<Header> {
@@ -122,7 +123,7 @@ pub fn post_deneb_execution_payload_to_header(
         withdrawals_root: Some(withdrawals_root),
         blob_gas_used: Some(payload.blob_gas_used),
         excess_blob_gas: Some(payload.excess_blob_gas),
-        parent_beacon_block_root: None,
+        parent_beacon_block_root: Some(parent_beacon_block_root),
         requests_hash: None,
     };
 
