@@ -14,14 +14,14 @@ version.workspace = true
 [dependencies]
 alloy = { workspace = true, features = ["eips", "rpc-types-engine", "serde"] }
 alloy-rlp.workspace = true
-alloy-rpc-types-engine = { version = "0.11.1", default-features = false, features = ["serde"] }
+alloy-rpc-types-engine = { version = "0.15", default-features = false, features = ["serde"] }
 anyhow.workspace = true
 clap.workspace = true
 ethportal-api.workspace = true
 e2store.workspace = true
 eth_trie.workspace = true
 futures-util.workspace = true
-hashbrown = "0.14.0"
+hashbrown = "0.15"
 humanize-duration.workspace = true
 jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"]}
 lazy_static.workspace = true
@@ -31,7 +31,7 @@ rand.workspace = true
 rayon = "1.10.0"
 reqwest =  { workspace = true, features = ["stream"] }
 revm.workspace = true
-revm-inspectors = "0.15.0"
+revm-inspectors = "0.20.0"
 revm-primitives.workspace = true
 rocksdb = "0.22.0"
 serde = { workspace = true, features = ["rc"] }

@@ -10,7 +10,7 @@ use ethportal_api::{
     },
     StateContentKey, StateContentValue,
 };
-use revm_primitives::Bytecode;
+use revm::state::Bytecode;
 
 use super::types::trie_proof::TrieProof;
 

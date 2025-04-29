@@ -2,7 +2,8 @@ use alloy::{
     consensus::{Header, TxEip4844Variant, TxEnvelope},
     eips::eip4895::Withdrawal,
 };
-use revm_primitives::{Address, SpecId, TxEnv};
+use revm::context::TxEnv;
+use revm_primitives::{hardfork::SpecId, Address};
 use trin_evm::{spec_id::get_spec_block_number, tx_env_modifier::TxEnvModifier};
 
 #[derive(Debug, Clone)]

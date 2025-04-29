@@ -1,4 +1,4 @@
-use revm_primitives::SpecId;
+use revm_primitives::hardfork::SpecId;
 
 // Execution Layer hard forks https://github.com/ethereum/execution-specs/tree/master/network-upgrades/mainnet-upgrades
 pub const SPEC_FORK_BLOCK_NUMBER: [(SpecId, u64); 18] = [
@@ -28,7 +28,7 @@ pub fn get_spec_id(block_number: u64) -> SpecId {
             return *spec_id;
         }
     }
-    SpecId::LATEST
+    SpecId::PRAGUE
 }
 
 pub fn get_spec_block_number(spec_id: SpecId) -> u64 {
@@ -108,7 +108,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_get_spec_block_number_unsupported() {
-        get_spec_block_number(SpecId::LATEST);
+        get_spec_block_number(SpecId::PRAGUE);
     }
 
     #[test]

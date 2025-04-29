@@ -59,7 +59,7 @@ async fn setup_web3_server() -> (RpcServerHandle, DynProvider, Client) {
 
     let web3_server = trin::run_trin(trin_config).await.unwrap();
     let ipc = IpcConnect::new(DEFAULT_WEB3_IPC_PATH.to_string());
-    let web3_client = DynProvider::new(ProviderBuilder::new().on_ipc(ipc).await.unwrap());
+    let web3_client = DynProvider::new(ProviderBuilder::new().connect_ipc(ipc).await.unwrap());
 
     // Tests that use native client belong in tests/self_peertest.rs, but it is convenient to use
     // the native client to populate content in the server's database.

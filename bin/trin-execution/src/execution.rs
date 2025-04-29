@@ -9,7 +9,7 @@ use alloy::{
 };
 use anyhow::ensure;
 use eth_trie::{RootWithTrieDiff, Trie};
-use revm::inspectors::TracerEip3155;
+use revm::inspector::inspectors::TracerEip3155;
 use tokio::sync::{oneshot::Receiver, Mutex};
 use tracing::{info, warn};
 
@@ -130,7 +130,7 @@ impl TrinExecution {
     async fn commit(
         &mut self,
         header: &Header,
-        block_executor: BlockExecutor<'_>,
+        block_executor: BlockExecutor,
     ) -> anyhow::Result<RootWithTrieDiff> {
         let root_with_trie_diff = block_executor.commit_bundle()?;
         ensure!(

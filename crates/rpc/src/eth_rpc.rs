@@ -18,7 +18,7 @@ use ethportal_api::{
     },
     ContentValue, EthApiServer, HistoryContentKey, HistoryContentValue,
 };
-use revm::primitives::ExecutionResult;
+use revm::context::result::ExecutionResult;
 use tokio::sync::mpsc;
 use trin_evm::{
     async_db::{execute_transaction, AsyncDatabase},

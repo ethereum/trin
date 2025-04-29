@@ -6,7 +6,7 @@ use e2store::{
 };
 use ethportal_api::consensus::constants::SLOTS_PER_HISTORICAL_ROOT;
 use reqwest::Client;
-use revm_primitives::SpecId;
+use revm_primitives::hardfork::SpecId;
 use trin_evm::spec_id::get_spec_block_number;
 
 use super::{constants::FIRST_ERA_EPOCH_WITH_EXECUTION_PAYLOAD, utils::download_raw_era};

@@ -1,3 +1,4 @@
+use revm::context::DBErrorMarker;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -20,3 +21,5 @@ pub enum EVMError {
     #[error("balance error")]
     BalanceError,
 }
+
+impl DBErrorMarker for EVMError {}

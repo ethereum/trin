@@ -7,7 +7,7 @@ use scraper::{Html, Selector};
 use url::Url;
 
 const ERA_DIR_URL: &str = "https://mainnet.era.nimbus.team/";
-const ERA1_DIR_URL: &str = "https://era1.ethportal.net/";
+const ERA1_DIR_URL: &str = "https://era1.ethportal.net/index.html";
 const E2HS_DIR_URL: &str = "https://e2hs.ethportal.net/index.html";
 const E2SS_DIR_URL: &str = "https://e2ss.ethportal.net/index.html";
 pub const ERA1_FILE_COUNT: usize = 1897;
@@ -54,13 +54,13 @@ async fn download_e2store_links(
 
 pub async fn get_era_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
     let era_files = download_e2store_links(http_client, ERA_DIR_URL).await?;
-    assert_nonempty_and_consecutive_epochs(&era_files)?;
+    assert_nonempty_and_consecutive_epochs(&era_files, ERA_DIR_URL)?;
     Ok(era_files)
 }
 
 pub async fn get_e2hs_files(http_client: &Client) -> anyhow::Result<HashMap<u64, String>> {
     let e2hs_files = download_e2store_links(http_client, E2HS_DIR_URL).await?;
-    assert_nonempty_and_consecutive_epochs(&e2hs_files)?;
+    assert_nonempty_and_consecutive_epochs(&e2hs_files, E2HS_DIR_URL)?;
     Ok(e2hs_files)
 }
 
@@ -74,7 +74,7 @@ pub async fn get_era1_files(http_client: &Client) -> anyhow::Result<HashMap<u64,
             era1_files.len()
         )
     );
-    assert_nonempty_and_consecutive_epochs(&era1_files)?;
+    assert_nonempty_and_consecutive_epochs(&era1_files, ERA1_DIR_URL)?;
     Ok(era1_files)
 }
 
@@ -83,8 +83,11 @@ pub async fn get_e2ss_files(http_client: &Client) -> anyhow::Result<HashMap<u64,
     Ok(e2ss_files)
 }
 
-fn assert_nonempty_and_consecutive_epochs(files: &HashMap<u64, String>) -> anyhow::Result<()> {
-    ensure!(!files.is_empty(), "No e2store files found at {ERA_DIR_URL}");
+fn assert_nonempty_and_consecutive_epochs(
+    files: &HashMap<u64, String>,
+    e2store_url: &str,
+) -> anyhow::Result<()> {
+    ensure!(!files.is_empty(), "No e2store files found at {e2store_url}");
     let missing_epochs: Vec<String> = (0..files.len())
         .filter(|&epoch_num| !files.contains_key(&(epoch_num as u64)))
         .map(|epoch_num| epoch_num.to_string())
@@ -92,7 +95,7 @@ fn assert_nonempty_and_consecutive_epochs(files: &HashMap<u64, String>) -> anyho
 
     ensure!(
         missing_epochs.is_empty(),
-        "Epoch indices are not starting from zero or not consecutive: missing epochs [{}]",
+        "Epoch indices are not starting from zero or not consecutive from {e2store_url}: missing epochs [{}]",
         missing_epochs.join(", ")
     );
     Ok(())
