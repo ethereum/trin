@@ -5,7 +5,7 @@ use ethportal_api::{
     Discv5ApiClient, HistoryNetworkApiClient,
 };
 use tracing::info;
-use trin::{builder::run_trin_from_trin_config, cli::TrinConfig};
+use trin::{cli::TrinConfig, run::run_trin_from_trin_config};
 
 use crate::{
     utils::{

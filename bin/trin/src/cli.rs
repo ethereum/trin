@@ -31,7 +31,7 @@ use trin_utils::cli::{
 };
 use url::Url;
 
-use crate::builder::NodeRuntimeConfig;
+use crate::run::NodeRuntimeConfig;
 
 const DEFAULT_SUBNETWORKS: &str = "beacon,history";
 /// Default max radius value percentage out of 100.

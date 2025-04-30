@@ -19,7 +19,7 @@ use itertools::Itertools;
 use jsonrpsee::async_client::Client;
 use portalnet::constants::DEFAULT_DISCOVERY_PORT;
 use rpc::RpcServerHandle;
-use trin::{builder::run_trin_from_trin_config, cli::TrinConfig};
+use trin::{cli::TrinConfig, run::run_trin_from_trin_config};
 
 pub struct PeertestNode {
     pub enr: Enr,

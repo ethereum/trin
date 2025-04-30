@@ -103,7 +103,7 @@ impl HeaderOracle {
         self.send_beacon_request(endpoint).await
     }
 
-    async fn send_history_request<T: for<'a> Deserialize<'a>>(
+    async fn send_history_request<T: for<'de> Deserialize<'de>>(
         &self,
         endpoint: HistoryEndpoint,
     ) -> anyhow::Result<T> {
@@ -119,7 +119,7 @@ impl HeaderOracle {
         }
     }
 
-    async fn send_beacon_request<T: for<'a> Deserialize<'a>>(
+    async fn send_beacon_request<T: for<'de> Deserialize<'de>>(
         &self,
         endpoint: BeaconEndpoint,
     ) -> anyhow::Result<T> {

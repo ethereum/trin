@@ -42,9 +42,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bridge_config.request_timeout,
             )
             .await?;
-            let Some(beacon_network) = subnetwork_overlays.beacon else {
-                panic!("Beacon network not found in SubnetworkOverlays");
-            };
+            let beacon_network = subnetwork_overlays
+                .beacon
+                .expect("Beacon network not found in SubnetworkOverlays");
             let beacon_bridge =
                 BeaconBridge::new(consensus_api, bridge_mode, beacon_network, census);
 
@@ -68,9 +68,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut census = Census::new(subnetwork_overlays.clone(), &bridge_config);
                     let census_handle = census.init([Subnetwork::History]).await?;
 
-                    let Some(history_network) = subnetwork_overlays.history else {
-                        panic!("History network not found in SubnetworkOverlays");
-                    };
+                    let history_network = subnetwork_overlays
+                        .history
+                        .expect("History network not found in SubnetworkOverlays");
                     let e2hs_bridge = E2HSBridge::new(
                         history_network,
                         bridge_config.offer_limit,
@@ -96,9 +96,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Create and initialize the census to acquire critical view of network before gossiping
             let mut census = Census::new(subnetwork_overlays.clone(), &bridge_config);
             let census_handle = census.init([Subnetwork::State]).await?;
-            let Some(state_network) = subnetwork_overlays.state else {
-                panic!("State network not found in SubnetworkOverlays");
-            };
+            let state_network = subnetwork_overlays
+                .state
+                .expect("State network not found in SubnetworkOverlays");
             let state_bridge = StateBridge::new(
                 bridge_config.mode.clone(),
                 state_network,

@@ -2,7 +2,7 @@
 
 use ethportal_api::types::network_spec::set_network_spec;
 use tracing::error;
-use trin::{builder::run_trin_from_trin_config, cli::TrinConfig};
+use trin::{cli::TrinConfig, run::run_trin_from_trin_config};
 use trin_utils::log::init_tracing_logger;
 
 #[tokio::main]
