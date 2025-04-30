@@ -5,7 +5,10 @@ use std::{
 };
 
 use ethportal_api::{
-    types::network::{Network, Subnetwork},
+    types::{
+        network::{Network, Subnetwork},
+        network_spec::set_network_spec,
+    },
     version::APP_NAME,
 };
 use ethportal_peertest as peertest;
@@ -17,6 +20,7 @@ use rpc::RpcServerHandle;
 use serial_test::serial;
 use tokio::time::{sleep, Duration};
 use trin::cli::TrinConfig;
+use trin_utils::cli::network_parser;
 
 mod utils;
 
@@ -511,62 +515,12 @@ async fn peertest_invalidate_header_by_hash() {
     handle.stop().unwrap();
 }
 
-#[tokio::test(flavor = "multi_thread")]
-#[serial]
-async fn peertest_ping_cross_discv5_protocol_id() {
-    // Run peernodes on angelfood
-    let angelfood_peertest =
-        peertest::launch_peertest_nodes(2, Network::Angelfood, &[Subnetwork::History]).await;
-
-    // Run a client on the mainnet, to be tested
-    // Use an uncommon port for the peertest to avoid clashes.
-    let test_discovery_port = 8999;
-    let external_addr = format!("{}:{test_discovery_port}", Ipv4Addr::new(127, 0, 0, 1));
-
-    let subnetworks = [Subnetwork::History, Subnetwork::Beacon]
-        .iter()
-        .map(Subnetwork::to_cli_arg)
-        .join(",");
-
-    let trin_config = TrinConfig::new_from([
-        APP_NAME,
-        "--network",
-        &Network::Mainnet.to_string(),
-        "--portal-subnetworks",
-        &subnetworks,
-        "--external-address",
-        external_addr.as_str(),
-        "--web3-ipc-path",
-        DEFAULT_WEB3_IPC_PATH,
-        "--ephemeral",
-        "--discovery-port",
-        test_discovery_port.to_string().as_ref(),
-        "--bootnodes",
-        "none",
-        "--max-radius",
-        "100",
-    ])
-    .unwrap();
-    let mainnet_handle = trin::run_trin(trin_config).await.unwrap();
-    let mainnet_target = reth_ipc::client::IpcClientBuilder::default()
-        .build(DEFAULT_WEB3_IPC_PATH)
-        .await
-        .unwrap();
-
-    peertest::scenarios::ping::test_ping_cross_network(
-        &mainnet_target,
-        &angelfood_peertest.bootnode,
-    )
-    .await;
-    angelfood_peertest.exit_all_nodes();
-    mainnet_handle.stop().unwrap();
-}
-
 async fn setup_peertest(
     network: Network,
     subnetworks: &[Subnetwork],
 ) -> (peertest::Peertest, Client, RpcServerHandle) {
     utils::init_tracing();
+    set_network_spec(network_parser(&network.to_string()).expect("Failed to parse network"));
 
     // Run a client, as a buddy peer for ping tests, etc.
     let peertest = peertest::launch_peertest_nodes(2, network, subnetworks).await;
@@ -620,6 +574,7 @@ async fn setup_peertest_bridge(
     utils::init_tracing();
 
     let network = Network::Mainnet;
+    set_network_spec(network_parser(&network.to_string()).expect("Failed to parse network"));
     // Run a client, as a buddy peer for ping tests, etc.
     let peertest = peertest::launch_peertest_nodes(1, network, subnetworks).await;
     // Short sleep to make sure all peertest nodes can connect

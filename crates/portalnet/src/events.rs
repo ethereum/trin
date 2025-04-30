@@ -1,11 +1,8 @@
-use std::{
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use discv5::TalkRequest;
 use ethportal_api::{
-    types::{network::Subnetwork, network_spec::NetworkSpec},
+    types::{network::Subnetwork, network_spec::network_spec},
     utils::bytes::{hex_encode, hex_encode_upper},
 };
 use futures::stream::{select_all, StreamExt};
@@ -62,8 +59,6 @@ pub struct PortalnetEvents {
     pub beacon_handle: OverlayHandle,
     /// Send TalkReq events with "utp" protocol id to `UtpListener`
     pub utp_talk_reqs: mpsc::UnboundedSender<TalkRequest>,
-    /// The Portal Network to Protocol Id Map etc MAINNET, ANGELFOOD
-    network_spec: Arc<NetworkSpec>,
 }
 
 impl PortalnetEvents {
@@ -73,7 +68,6 @@ impl PortalnetEvents {
         state_channels: OverlayChannels,
         beacon_channels: OverlayChannels,
         utp_talk_reqs: mpsc::UnboundedSender<TalkRequest>,
-        network_spec: Arc<NetworkSpec>,
     ) -> Self {
         Self {
             talk_req_receiver,
@@ -81,7 +75,6 @@ impl PortalnetEvents {
             state_handle: state_channels.into(),
             beacon_handle: beacon_channels.into(),
             utp_talk_reqs,
-            network_spec,
         }
     }
 
@@ -121,8 +114,7 @@ impl PortalnetEvents {
 
     /// Dispatch Discv5 TalkRequest event to overlay networks or uTP socket
     fn dispatch_discv5_talk_req(&self, request: TalkRequest) {
-        let subnetwork = self
-            .network_spec
+        let subnetwork = network_spec()
             .get_subnetwork_from_protocol_identifier(&hex_encode_upper(request.protocol()));
 
         match subnetwork {

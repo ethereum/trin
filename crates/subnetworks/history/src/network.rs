@@ -55,7 +55,7 @@ impl HistoryNetwork {
             ..Default::default()
         };
         let storage = Arc::new(Mutex::new(HistoryStorage::new(storage_config)?));
-        let validator = Arc::new(ChainHistoryValidator { header_oracle });
+        let validator = Arc::new(ChainHistoryValidator::new(header_oracle));
         let ping_extensions = Arc::new(HistoryPingExtensions {});
         let overlay = OverlayProtocol::new(
             config,

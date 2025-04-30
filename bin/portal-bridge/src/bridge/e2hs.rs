@@ -77,7 +77,6 @@ impl E2HSBridge {
         let block_semaphore = Arc::new(Semaphore::new(offer_limit));
         let mode = format!("{}-{}:{}", block_range.start, block_range.end, random_fill);
         let metrics = BridgeMetricsReporter::new("e2hs".to_string(), &mode);
-        let header_validator = HeaderValidator::new();
         let http_client = Client::builder()
             .default_headers(HeaderMap::from_iter([(
                 CONTENT_TYPE,
@@ -96,7 +95,7 @@ impl E2HSBridge {
         Ok(Self {
             gossiper,
             block_semaphore,
-            header_validator,
+            header_validator: HeaderValidator::new(),
             block_range,
             random_fill,
             e2hs_files,

@@ -1,19 +1,20 @@
 use std::sync::Arc;
 
+use alloy_hardforks::EthereumHardforks;
 use anyhow::{anyhow, bail, ensure};
 use e2store::{
     era::{CompressedSignedBeaconBlock, Era},
     era1::{BlockTuple, Era1},
     utils::{get_era1_files, get_era_files},
 };
-use ethportal_api::consensus::beacon_state::HistoricalBatch;
+use ethportal_api::{consensus::beacon_state::HistoricalBatch, types::network_spec::network_spec};
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client,
 };
 use tracing::info;
 use trin_execution::era::binary_search::EraBinarySearch;
-use trin_validation::constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER};
+use trin_validation::constants::EPOCH_SIZE;
 
 pub enum EraSource {
     // processed era1 file
@@ -105,7 +106,7 @@ impl EraProvider {
         let mut previous_era_epoch_index = None;
         let era_links = get_era_files(&http_client).await?;
         while next_block < ending_block {
-            let source = if next_block < MERGE_BLOCK_NUMBER {
+            let source = if !network_spec().is_paris_active_at_block(next_block) {
                 let era1_paths = get_era1_files(&http_client).await?;
                 let epoch_index = next_block / EPOCH_SIZE;
                 let era1_path = era1_paths.get(&epoch_index).ok_or(anyhow!(
@@ -156,7 +157,7 @@ impl EraProvider {
 
     pub fn get_pre_merge(&self, block_number: u64) -> anyhow::Result<BlockTuple> {
         ensure!(
-            block_number < MERGE_BLOCK_NUMBER,
+            !network_spec().is_paris_active_at_block(block_number),
             "Invalid logic, tried to lookup era1 file for post-merge block"
         );
         Ok(match &self.sources[0] {
@@ -179,7 +180,7 @@ impl EraProvider {
         block_number: u64,
     ) -> anyhow::Result<(CompressedSignedBeaconBlock, &MinimalEra)> {
         ensure!(
-            block_number >= MERGE_BLOCK_NUMBER,
+            network_spec().is_paris_active_at_block(block_number),
             "Invalid logic, tried to lookup era file for pre-merge block"
         );
         for sources in self.sources.iter() {

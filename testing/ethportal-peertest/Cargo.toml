@@ -13,6 +13,7 @@ version.workspace = true
 
 [dependencies]
 alloy = { workspace = true, features = ["getrandom"] }
+alloy-hardforks.workspace = true
 anyhow.workspace = true
 discv5.workspace = true
 e2store.workspace = true

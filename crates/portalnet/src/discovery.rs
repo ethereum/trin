@@ -17,7 +17,7 @@ use discv5::{
 };
 use ethportal_api::{
     types::{
-        discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, network_spec::NetworkSpec,
+        discv5::RoutingTableInfo, enr::Enr, network::Subnetwork, network_spec::network_spec,
         protocol_versions::ENR_PROTOCOL_VERSION_KEY,
     },
     utils::bytes::hex_decode,
@@ -63,8 +63,6 @@ pub struct Discovery {
     pub started: bool,
     /// The socket address that the Discv5 service listens on.
     pub listen_socket: SocketAddr,
-    /// The Portal Network to Protocol Id Map etc MAINNET, ANGELFOOD
-    pub network_spec: Arc<NetworkSpec>,
 }
 
 impl fmt::Debug for Discovery {
@@ -80,10 +78,7 @@ impl fmt::Debug for Discovery {
 }
 
 impl Discovery {
-    pub fn new(
-        portal_config: PortalnetConfig,
-        network_spec: Arc<NetworkSpec>,
-    ) -> Result<Self, String> {
+    pub fn new(portal_config: PortalnetConfig) -> Result<Self, String> {
         let listen_all_ips = SocketAddr::new(
             "0.0.0.0"
                 .parse()
@@ -153,7 +148,7 @@ impl Discovery {
             // Add clients supported protocol versions to the ENR
             builder.add_value(
                 ENR_PROTOCOL_VERSION_KEY,
-                network_spec.supported_protocol_versions(),
+                network_spec().supported_protocol_versions(),
             );
 
             builder
@@ -193,7 +188,6 @@ impl Discovery {
             node_addr_cache,
             started: false,
             listen_socket: listen_all_ips,
-            network_spec,
         })
     }
 
@@ -349,10 +343,7 @@ impl Discovery {
         request: ProtocolRequest,
     ) -> Result<Bytes, RequestError> {
         // Send empty protocol id if unable to convert it to bytes
-        let protocol = match self
-            .network_spec
-            .get_protocol_identifier_from_subnetwork(&subnetwork)
-        {
+        let protocol = match network_spec().get_protocol_identifier_from_subnetwork(&subnetwork) {
             Ok(protocol_id) => hex_decode(&protocol_id).unwrap_or_default(),
             Err(err) => {
                 unreachable!(

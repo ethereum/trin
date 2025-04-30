@@ -38,6 +38,8 @@ version = "0.2.6"
 
 [workspace.dependencies]
 alloy = { version = "0.15", default-features = false, features = ["std", "serde", "getrandom"] }
+alloy-chains = "0.2"
+alloy-hardforks = "0.2.0"
 alloy-rlp = { version = "0.3.8", default-features = false, features = ["derive"] }
 anyhow = "1.0.68"
 async-trait = "0.1.68"

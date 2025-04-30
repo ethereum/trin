@@ -44,7 +44,8 @@ use crate::{
     constants::BEACON_GENESIS_TIME,
     types::mode::BridgeMode,
     utils::{
-        duration_until_next_update, expected_current_slot, read_test_assets_from_file, TestAssets,
+        duration_until_next_update, expected_current_slot, read_test_assets_from_file,
+        BeaconTestAssets,
     },
 };
 
@@ -123,10 +124,7 @@ impl BeaconBridge {
     }
 
     async fn launch_test(&self, test_path: PathBuf) {
-        let assets: TestAssets = read_test_assets_from_file(test_path);
-        let assets = assets
-            .into_beacon_assets()
-            .expect("Error parsing beacon test assets.");
+        let assets: BeaconTestAssets = read_test_assets_from_file(test_path);
 
         // test files have no slot number data, so report all gossiped content at height 0.
         for asset in assets.0.into_iter() {

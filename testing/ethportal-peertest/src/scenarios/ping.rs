@@ -18,7 +18,7 @@ use jsonrpsee::async_client::Client;
 use tracing::info;
 use ureq::json;
 
-use crate::{Peertest, PeertestNode};
+use crate::Peertest;
 
 pub async fn test_ping_no_specified_ping_payload(
     subnetwork: Subnetwork,
@@ -180,15 +180,6 @@ pub async fn test_ping_failed_to_decode_payload(target: &Client, peertest: &Peer
     .to_string();
     assert!(error.contains("Failed to decode payload"));
     assert!(error.contains("-39005"));
-}
-
-pub async fn test_ping_cross_network(mainnet_target: &Client, angelfood_node: &PeertestNode) {
-    info!("Testing ping for history cross mainnet and angelfood discv5 protocol id");
-    let angelfood_enr = angelfood_node.enr.clone();
-    if let Ok(pong) = HistoryNetworkApiClient::ping(mainnet_target, angelfood_enr, None, None).await
-    {
-        panic!("Expected ping to fail as mainnet/angelfood history nodes shouldn't be able to communicate {pong:?}");
-    };
 }
 
 pub async fn test_ping_capabilities_payload_type(target: &Client, peertest: &Peertest) {

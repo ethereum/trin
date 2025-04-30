@@ -621,7 +621,6 @@ impl WsHttpServerKind {
 mod tests {
     use std::{io, sync::Arc};
 
-    use ethportal_api::types::network_spec::MAINNET;
     use portalnet::discovery::Discovery;
 
     use super::*;
@@ -645,7 +644,7 @@ mod tests {
     pub fn test_rpc_builder() -> RpcModuleBuilder {
         let (history_tx, _) = tokio::sync::mpsc::unbounded_channel();
         let (beacon_tx, _) = tokio::sync::mpsc::unbounded_channel();
-        let discv5 = Arc::new(Discovery::new(Default::default(), MAINNET.clone()).unwrap());
+        let discv5 = Arc::new(Discovery::new(Default::default()).unwrap());
         RpcModuleBuilder::new(discv5)
             .with_history(history_tx)
             .with_beacon(beacon_tx)

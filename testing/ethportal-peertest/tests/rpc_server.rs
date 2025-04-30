@@ -358,7 +358,7 @@ fn get_full_block_14764013() -> (HeaderWithProof, BlockBody) {
     let hwp_file =
         read_portal_spec_tests_file("tests/mainnet/history/headers_with_proof/14764013.yaml")
             .unwrap();
-    let hwp = get_content_value::<HeaderWithProof>(&hwp_file);
+    let hwp = get_content_value(&hwp_file);
 
     let body_file =
         read_portal_spec_tests_file("tests/mainnet/history/bodies/14764013.yaml").unwrap();

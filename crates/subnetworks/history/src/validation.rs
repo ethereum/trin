@@ -20,6 +20,12 @@ pub struct ChainHistoryValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
 }
 
+impl ChainHistoryValidator {
+    pub fn new(header_oracle: Arc<RwLock<HeaderOracle>>) -> Self {
+        Self { header_oracle }
+    }
+}
+
 impl Validator<HistoryContentKey> for ChainHistoryValidator {
     async fn validate_content(
         &self,
@@ -152,7 +158,7 @@ mod tests {
         let header_with_proof =
             HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key =
             HistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash_slow());
         chain_history_validator
@@ -173,7 +179,7 @@ mod tests {
 
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash_slow());
         chain_history_validator
             .validate_content(&content_key, &content_value)
@@ -194,7 +200,7 @@ mod tests {
 
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash_slow());
         chain_history_validator
             .validate_content(&content_key, &content_value)
@@ -208,7 +214,7 @@ mod tests {
         let header_with_proof =
             HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key =
             HistoryContentKey::new_block_header_by_number(header_with_proof.header.number);
         chain_history_validator
@@ -229,7 +235,7 @@ mod tests {
 
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key = HistoryContentKey::new_block_header_by_number(header.header.number);
         chain_history_validator
             .validate_content(&content_key, &content_value)
@@ -250,7 +256,7 @@ mod tests {
 
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key = HistoryContentKey::new_block_header_by_number(header.header.number);
         chain_history_validator
             .validate_content(&content_key, &content_value)
@@ -259,6 +265,6 @@ mod tests {
     }
 
     fn default_header_oracle() -> Arc<RwLock<HeaderOracle>> {
-        Arc::new(RwLock::new(HeaderOracle::default()))
+        Arc::new(RwLock::new(HeaderOracle::new()))
     }
 }

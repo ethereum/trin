@@ -4,6 +4,7 @@ use alloy::{
     consensus::{Block, BlockBody as AlloyBlockBody, Header, TxEnvelope},
     rpc::types::Block as RpcBlock,
 };
+use alloy_hardforks::EthereumHardforks;
 use anyhow::{anyhow, bail, ensure};
 use ethportal_api::{
     types::{
@@ -13,16 +14,14 @@ use ethportal_api::{
             header_with_proof::{BlockHeaderProof, HeaderWithProof},
         },
         jsonrpc::{params::Params, request::JsonRequest},
+        network_spec::network_spec,
     },
     HistoryContentKey, HistoryContentValue, Receipts,
 };
 use serde_json::{json, Value};
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
-use trin_validation::{
-    accumulator::PreMergeAccumulator, constants::MERGE_BLOCK_NUMBER,
-    header_validator::HeaderValidator,
-};
+use trin_validation::accumulator::PreMergeAccumulator;
 use url::Url;
 
 use super::http_client::{ClientWithBaseUrl, ContentType};
@@ -38,7 +37,6 @@ const BATCH_LIMIT: usize = 10;
 pub struct ExecutionApi {
     pub primary: Url,
     pub fallback: Url,
-    pub header_validator: HeaderValidator,
     pub request_timeout: u64,
 }
 
@@ -59,11 +57,9 @@ impl ExecutionApi {
         if let Err(err) = check_provider(&client).await {
             error!("Primary el provider is offline: {err:?}");
         }
-        let header_validator = HeaderValidator::default();
         Ok(Self {
             primary,
             fallback,
-            header_validator,
             request_timeout,
         })
     }
@@ -80,7 +76,7 @@ impl ExecutionApi {
             .ok_or_else(|| anyhow!("Unable to fetch block: {height:?}"))?;
         let block = serde_json::from_str::<RpcBlock>(&result.to_string())?;
         ensure!(
-            block.header.number >= MERGE_BLOCK_NUMBER,
+            network_spec().is_paris_active_at_block(block.header.number),
             "We only support post-merge blocks"
         );
         Ok(AlloyBlockBody {

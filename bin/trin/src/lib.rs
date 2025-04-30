@@ -8,7 +8,6 @@ use std::sync::Arc;
 use cli::TrinConfig;
 use ethportal_api::{
     types::{distance::Distance, network::Subnetwork},
-    utils::bytes::hex_encode,
     version::get_trin_version,
 };
 use portalnet::{
@@ -57,7 +56,7 @@ pub async fn run_trin(
     let portalnet_config = trin_config.to_portalnet_config(private_key);
 
     // Initialize base discovery protocol
-    let mut discovery = Discovery::new(portalnet_config.clone(), trin_config.network.clone())?;
+    let mut discovery = Discovery::new(portalnet_config.clone())?;
     let talk_req_rx = discovery.start().await?;
     let discovery = Arc::new(discovery);
 
@@ -69,7 +68,7 @@ pub async fn run_trin(
     // Initialize validation oracle
     let header_oracle = HeaderOracle::default();
     info!(
-        hash_tree_root = %hex_encode(header_oracle.header_validator.pre_merge_acc.tree_hash_root().0),
+        hash_tree_root = %header_oracle.header_validator.pre_merge_acc.tree_hash_root(),
         "Loaded pre-merge accumulator."
     );
     let header_oracle = Arc::new(RwLock::new(header_oracle));
@@ -174,7 +173,6 @@ pub async fn run_trin(
             (state_event_tx, state_event_stream),
             (beacon_event_tx, beacon_event_stream),
             utp_talk_reqs_tx,
-            trin_config.network.clone(),
         )
         .await;
         events.start().await;

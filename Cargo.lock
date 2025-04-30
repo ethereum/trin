@@ -137,6 +137,7 @@ checksum = "7734aecfc58a597dde036e4c5cace2ae43e2f8bf3d406b022a1ef34da178dd49"
 dependencies = [
  "alloy-primitives",
  "num_enum",
+ "serde",
  "strum 0.27.1",
 ]
 
@@ -317,6 +318,19 @@ dependencies = [
  "alloy-serde 0.15.6",
  "alloy-trie",
  "serde",
+]
+
+[[package]]
+name = "alloy-hardforks"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7d3b2243e2adfaea41da41982f91ecab8083fa51b240d0427955d709f65b1b4"
+dependencies = [
+ "alloy-chains",
+ "alloy-eip2124",
+ "alloy-primitives",
+ "auto_impl",
+ "dyn-clone",
 ]
 
 [[package]]
@@ -2317,10 +2331,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
+name = "dyn-clone"
+version = "1.0.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c7a8fb8a9fbf66c1f703fe16184d10ca0ee9d23be5b4436400408ba54a95005"
+
+[[package]]
 name = "e2hs-writer"
 version = "0.2.6"
 dependencies = [
  "alloy",
+ "alloy-hardforks",
  "anyhow",
  "async-stream",
  "clap",
@@ -2663,6 +2684,8 @@ name = "ethportal-api"
 version = "0.8.1"
 dependencies = [
  "alloy",
+ "alloy-chains",
+ "alloy-hardforks",
  "alloy-rlp",
  "alloy-rpc-types-eth",
  "anyhow",
@@ -2683,6 +2706,7 @@ dependencies = [
  "keccak-hash 0.10.0",
  "lazy_static",
  "once_cell",
+ "parking_lot 0.11.2",
  "quickcheck",
  "rand 0.8.5",
  "rs_merkle",
@@ -2714,6 +2738,7 @@ name = "ethportal-peertest"
 version = "0.2.6"
 dependencies = [
  "alloy",
+ "alloy-hardforks",
  "anyhow",
  "discv5",
  "e2store",
@@ -4951,6 +4976,7 @@ name = "portal-bridge"
 version = "0.2.6"
 dependencies = [
  "alloy",
+ "alloy-hardforks",
  "anyhow",
  "bytes",
  "chrono",
@@ -7726,6 +7752,7 @@ name = "trin-validation"
 version = "0.2.6"
 dependencies = [
  "alloy",
+ "alloy-hardforks",
  "anyhow",
  "enr",
  "ethereum_hashing",

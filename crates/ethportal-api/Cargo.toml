@@ -13,6 +13,8 @@ rust-version.workspace = true
 
 [dependencies]
 alloy = { workspace = true, features = ["consensus", "eips", "k256", "rlp", "rpc-types-eth", "serde"] }
+alloy-chains.workspace = true
+alloy-hardforks.workspace = true
 alloy-rlp.workspace = true
 alloy-rpc-types-eth = { version = "0.15", default-features = false, features = ["serde"] }
 anyhow.workspace = true
@@ -32,6 +34,7 @@ jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", 
 keccak-hash.workspace = true
 lazy_static.workspace = true
 once_cell = "1.17"
+parking_lot.workspace = true
 quickcheck.workspace = true
 rand.workspace = true
 rs_merkle = "1.4.2"

@@ -8,6 +8,7 @@ use ethportal_api::{
         accept_code::{AcceptCode, AcceptCodeList},
         distance::Metric,
         enr::Enr,
+        network_spec::network_spec,
         portal_wire::{Accept, Content, FindContent, Offer, OfferTrace, Request, Response},
         protocol_versions::ProtocolVersion,
     },
@@ -73,11 +74,7 @@ impl<
             ))
         })?;
 
-        let protocol_version = match self
-            .discovery
-            .network_spec
-            .latest_common_protocol_version(&enr)
-        {
+        let protocol_version = match network_spec().latest_common_protocol_version(&enr) {
             Ok(protocol_version) => protocol_version,
             Err(err) => {
                 return Err(OverlayRequestError::AcceptError(format!(
@@ -343,11 +340,7 @@ impl<
             }
         };
 
-        let protocol_version = match self
-            .discovery
-            .network_spec
-            .latest_common_protocol_version(&enr)
-        {
+        let protocol_version = match network_spec().latest_common_protocol_version(&enr) {
             Ok(protocol_version) => protocol_version,
             Err(err) => {
                 bail!("Unable to get latest common protocol version with peer: {err:?}");

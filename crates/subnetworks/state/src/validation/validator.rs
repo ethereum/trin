@@ -186,7 +186,7 @@ mod tests {
     const TEST_DIRECTORY: &str = "tests/mainnet/state/validation";
 
     fn create_validator() -> StateValidator {
-        let header_oracle = Arc::new(RwLock::new(HeaderOracle::default()));
+        let header_oracle = Arc::new(RwLock::new(HeaderOracle::new()));
         StateValidator { header_oracle }
     }
 
@@ -207,10 +207,8 @@ mod tests {
             )
             .or_fail();
 
-        let header_oracle = HeaderOracle {
-            history_jsonrpc_tx: Some(history_jsonrpc_tx),
-            ..Default::default()
-        };
+        let mut header_oracle = HeaderOracle::new();
+        header_oracle.history_jsonrpc_tx = Some(history_jsonrpc_tx);
 
         StateValidator {
             header_oracle: Arc::new(RwLock::new(header_oracle)),

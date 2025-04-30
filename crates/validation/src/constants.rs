@@ -1,13 +1,4 @@
 // Execution Layer hard forks https://ethereum.org/en/history/
-pub const CANCUN_BLOCK_NUMBER: u64 = 19_426_587;
-pub const SHANGHAI_BLOCK_NUMBER: u64 = 17_034_870;
-pub const MERGE_BLOCK_NUMBER: u64 = 15_537_394;
-pub const LONDON_BLOCK_NUMBER: u64 = 12_965_000;
-pub const BERLIN_BLOCK_NUMBER: u64 = 12_244_000;
-pub const ISTANBUL_BLOCK_NUMBER: u64 = 9_069_000;
-pub const CONSTANTINOPLE_BLOCK_NUMBER: u64 = 7_280_000;
-pub const BYZANTIUM_BLOCK_NUMBER: u64 = 4_370_000;
-pub const HOMESTEAD_BLOCK_NUMBER: u64 = 1_150_000;
 pub const CAPELLA_FORK_EPOCH: u64 = 194_048;
 pub const SLOTS_PER_EPOCH: u64 = 32;
 

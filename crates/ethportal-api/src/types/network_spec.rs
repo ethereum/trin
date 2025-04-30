@@ -1,9 +1,11 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
+use alloy_hardforks::{EthereumChainHardforks, EthereumHardfork, EthereumHardforks, ForkCondition};
 use anyhow::anyhow;
 use bimap::BiHashMap;
 use discv5::Enr;
 use once_cell::sync::Lazy;
+use parking_lot::RwLock;
 
 use super::{
     network::{Network, Subnetwork},
@@ -12,12 +14,41 @@ use super::{
     },
 };
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Beacon chain mainnet genesis time: Tue Dec 01 2020 12:00:23 GMT+0000
+const MAINNET_BEACON_GENESIS_TIMESTAMP: u64 = 1606824023;
+
+static NETWORK_SPEC: LazyLock<RwLock<Arc<NetworkSpec>>> =
+    LazyLock::new(|| RwLock::new(MAINNET.clone()));
+
+/// Should be called only once at the start of the application to initialize static [NetworkSpec].
+///
+/// The static `NetworkSpec` can be accessed using [network_spec].
+///
+/// Tests can also use this, but should be more careful. See [NetworkSpec] for details.
+pub fn set_network_spec(network_spec: Arc<NetworkSpec>) {
+    *NETWORK_SPEC.write() = network_spec;
+}
+
+pub fn network_spec() -> Arc<NetworkSpec> {
+    NETWORK_SPEC.read().clone()
+}
+
+/// It includes the mapping of subnetworks to protocol id hex strings, supported protocol versions,
+/// and hardforks.
+///
+/// It should be initialized at the start of the application using [set_network_spec] and can be
+/// accessed from anywhere using [network_spec]. The tests are exception to this case, as they
+/// can set value at the start (if they test something other than mainnet data) and reset the value
+/// at the end, while making sure that they are no other tests running in parallel (e.g. using
+/// `serial_test` crate).
+#[derive(Clone, Debug)]
 pub struct NetworkSpec {
     network: Network,
     /// mapping of subnetworks to protocol id hex strings
     portal_subnetworks: BiHashMap<Subnetwork, String>,
     supported_protocol_versions: ProtocolVersionList,
+    hardforks: EthereumChainHardforks,
+    beacon_genesis_timestamp: u64,
 }
 
 impl NetworkSpec {
@@ -25,6 +56,8 @@ impl NetworkSpec {
         portal_subnetworks: BiHashMap<Subnetwork, String>,
         network: Network,
         supported_protocol_versions: ProtocolVersionList,
+        hardforks: EthereumChainHardforks,
+        beacon_genesis_timestamp: u64,
     ) -> anyhow::Result<Self> {
         // Ensure supported protocol versions are ordered chronologically with no duplicates.
         supported_protocol_versions.is_strictly_sorted_and_specified();
@@ -33,6 +66,8 @@ impl NetworkSpec {
             portal_subnetworks,
             network,
             supported_protocol_versions,
+            hardforks,
+            beacon_genesis_timestamp,
         })
     }
 
@@ -84,6 +119,16 @@ impl NetworkSpec {
             .copied()
             .ok_or(ProtocolVersionError::NoMatchingVersion)
     }
+
+    pub fn slot_to_timestamp(&self, slot: u64) -> u64 {
+        self.beacon_genesis_timestamp + slot * 12
+    }
+}
+
+impl EthereumHardforks for NetworkSpec {
+    fn ethereum_fork_activation(&self, fork: EthereumHardfork) -> ForkCondition {
+        self.hardforks.ethereum_fork_activation(fork)
+    }
 }
 
 pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
@@ -95,10 +140,13 @@ pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     portal_subnetworks.insert(Subnetwork::VerkleState, "0x500E".to_string());
     portal_subnetworks.insert(Subnetwork::TransactionGossip, "0x500F".to_string());
     portal_subnetworks.insert(Subnetwork::Utp, "0x757470".to_string());
+
     NetworkSpec::new(
         portal_subnetworks,
         Network::Mainnet,
         ProtocolVersionList::new(vec![ProtocolVersion::V0, ProtocolVersion::V1]),
+        EthereumChainHardforks::mainnet(),
+        MAINNET_BEACON_GENESIS_TIMESTAMP,
     )
     .expect("Failed to create mainnet network spec")
     .into()
@@ -117,6 +165,8 @@ pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
         portal_subnetworks,
         Network::Angelfood,
         ProtocolVersionList::new(vec![ProtocolVersion::V0]),
+        EthereumChainHardforks::mainnet(),
+        MAINNET_BEACON_GENESIS_TIMESTAMP,
     )
     .expect("Failed to create angelfood network spec")
     .into()

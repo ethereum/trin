@@ -307,7 +307,7 @@ impl TryFrom<&HeaderWithProofEntry> for Entry {
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&ssz_encoded)?;
-        let encoded = encoder.into_inner().map_err(|e| e.into_error())?;
+        let encoded = encoder.into_inner().map_err(|err| err.into_error())?;
         Ok(Entry::new(
             entry_types::COMPRESSED_HEADER_WITH_PROOF,
             encoded,

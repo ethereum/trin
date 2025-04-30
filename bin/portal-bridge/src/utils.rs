@@ -5,12 +5,12 @@ use std::{
 };
 
 use alloy::primitives::B256;
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use chrono::Duration;
 use discv5::enr::{CombinedKey, Enr, NodeId};
 use ethportal_api::{
-    utils::bytes::hex_encode, BeaconContentKey, BeaconContentValue, ContentValue,
-    HistoryContentKey, HistoryContentValue, RawContentValue,
+    types::network_spec::network_spec, utils::bytes::hex_encode, BeaconContentKey,
+    BeaconContentValue, ContentValue, RawContentValue,
 };
 use serde::{Deserialize, Serialize};
 
@@ -59,17 +59,6 @@ fn random_node_id() -> (NodeId, CombinedKey) {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HistoryTestAssets(pub Vec<HistoryAsset>);
-
-impl Deref for HistoryTestAssets {
-    type Target = Vec<HistoryAsset>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BeaconTestAssets(pub Vec<BeaconAsset>);
 
 impl Deref for BeaconTestAssets {
@@ -77,47 +66,6 @@ impl Deref for BeaconTestAssets {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-// Struct definitions for test assets
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum TestAssets {
-    History(HistoryTestAssets),
-    Beacon(BeaconTestAssets),
-}
-
-impl TestAssets {
-    pub fn into_history_assets(self) -> anyhow::Result<HistoryTestAssets> {
-        match self {
-            TestAssets::History(assets) => Ok(assets),
-            _ => bail!("Test assets are not of type History"),
-        }
-    }
-
-    pub fn into_beacon_assets(self) -> anyhow::Result<BeaconTestAssets> {
-        match self {
-            TestAssets::Beacon(assets) => Ok(assets),
-            _ => bail!("Test assets are not of type Beacon"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HistoryAsset {
-    pub content_key: HistoryContentKey,
-    content_value: RawContentValue,
-}
-
-impl HistoryAsset {
-    pub fn content_value(&self) -> anyhow::Result<HistoryContentValue> {
-        HistoryContentValue::decode(&self.content_key, &self.content_value).map_err(|err| {
-            anyhow!(
-                "Unable to parse history content value: {}. Error: {err}",
-                self.content_value
-            )
-        })
     }
 }
 
@@ -138,7 +86,7 @@ impl BeaconAsset {
     }
 }
 
-pub fn read_test_assets_from_file(test_path: PathBuf) -> TestAssets {
+pub fn read_test_assets_from_file(test_path: PathBuf) -> BeaconTestAssets {
     let extension = test_path
         .extension()
         .and_then(|path| path.to_str())
@@ -146,7 +94,7 @@ pub fn read_test_assets_from_file(test_path: PathBuf) -> TestAssets {
         .to_string();
     let test_asset = std::fs::read_to_string(test_path).expect("Error reading test asset.");
 
-    let assets: TestAssets = match &extension[..] {
+    let assets: BeaconTestAssets = match &extension[..] {
         "json" => serde_json::from_str(&test_asset).expect("Unable to parse json test asset."),
         "yaml" => serde_yaml::from_str(&test_asset).expect("Unable to parse yaml test asset."),
         _ => panic!("Invalid file extension"),
@@ -159,7 +107,7 @@ pub fn read_test_assets_from_file(test_path: PathBuf) -> TestAssets {
 pub fn duration_until_next_update(genesis_time: u64, now: SystemTime) -> Duration {
     let current_slot = expected_current_slot(genesis_time, now);
     let next_slot = current_slot + 1;
-    let next_slot_timestamp = slot_timestamp(next_slot, genesis_time);
+    let next_slot_timestamp = network_spec().slot_to_timestamp(next_slot);
 
     let now = now
         .duration_since(UNIX_EPOCH)
@@ -179,10 +127,6 @@ pub fn expected_current_slot(genesis_time: u64, now: SystemTime) -> u64 {
     since_genesis.as_secs() / 12
 }
 
-fn slot_timestamp(slot: u64, genesis_time: u64) -> u64 {
-    slot * 12 + genesis_time
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -192,12 +136,9 @@ mod tests {
         utils::bytes::hex_decode,
     };
     use rstest::rstest;
-    use serde_json::json;
 
     use super::*;
-    use crate::constants::{
-        BEACON_GENESIS_TIME, HEADER_WITH_PROOF_CONTENT_KEY, HEADER_WITH_PROOF_CONTENT_VALUE,
-    };
+    use crate::constants::BEACON_GENESIS_TIME;
 
     #[rstest]
     #[case(2)]
@@ -224,38 +165,6 @@ mod tests {
             distance > min_spread,
             "{distance} vs {min_spread}, first bytes: {first_byte1} vs {first_byte2}"
         );
-    }
-
-    #[test]
-    fn test_read_test_assets_from_file_json() {
-        let assets: HistoryTestAssets = read_test_assets_from_file(PathBuf::from(
-            "../../test_assets/portalnet/bridge_data.json",
-        ))
-        .into_history_assets()
-        .unwrap();
-        let content_key =
-            HistoryContentKey::deserialize(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
-        let content_value =
-            RawContentValue::deserialize(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
-
-        assert_eq!(assets[0].content_key, content_key);
-        assert_eq!(assets[0].content_value, content_value);
-    }
-
-    #[test]
-    fn test_read_test_assets_from_file_yaml() {
-        let assets: HistoryTestAssets = read_test_assets_from_file(PathBuf::from(
-            "../../test_assets/portalnet/bridge_data.yaml",
-        ))
-        .into_history_assets()
-        .unwrap();
-        let content_key =
-            HistoryContentKey::deserialize(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
-        let content_value =
-            RawContentValue::deserialize(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
-
-        assert_eq!(assets[0].content_key, content_key);
-        assert_eq!(assets[0].content_value, content_value);
     }
 
     #[rstest]
