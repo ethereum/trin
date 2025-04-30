@@ -72,7 +72,7 @@ impl HeaderValidator {
         proof: &BlockProofHistoricalHashesAccumulator,
     ) -> anyhow::Result<()> {
         if network_spec().is_paris_active_at_block(header.number) {
-            return Err(anyhow!("Invalid proof type found for post-merge header."));
+            bail!("Invalid proof type found for post-merge header.");
         }
 
         // Calculate generalized index for header
@@ -105,14 +105,10 @@ impl HeaderValidator {
         proof: &BlockProofHistoricalRoots,
     ) -> anyhow::Result<()> {
         if !network_spec().is_paris_active_at_block(block_number) {
-            return Err(anyhow!(
-                "Invalid BlockProofHistoricalRoots found for pre-Merge header."
-            ));
+            bail!("Invalid BlockProofHistoricalRoots found for pre-Merge header.");
         }
         if network_spec().is_shanghai_active_at_timestamp(block_timestamp) {
-            return Err(anyhow!(
-                "Invalid BlockProofHistoricalRoots found for post-Shanghai header."
-            ));
+            bail!("Invalid BlockProofHistoricalRoots found for post-Shanghai header.");
         }
 
         // Verify the chain of proofs for execution block header inclusion in beacon block
@@ -146,14 +142,10 @@ impl HeaderValidator {
         historical_summaries: &HistoricalSummaries,
     ) -> anyhow::Result<()> {
         if !network_spec().is_shanghai_active_at_timestamp(block_timestamp) {
-            return Err(anyhow!(
-                "Invalid BlockProofHistoricalSummariesCapella found for pre-Shanghai header."
-            ));
+            bail!("Invalid BlockProofHistoricalSummariesCapella found for pre-Shanghai header.");
         }
         if network_spec().is_cancun_active_at_timestamp(block_timestamp) {
-            return Err(anyhow!(
-                "Invalid BlockProofHistoricalSummariesCapella found for post-Cancun header."
-            ));
+            bail!("Invalid BlockProofHistoricalSummariesCapella found for post-Cancun header.");
         }
 
         // Verify the chain of proofs for execution block header inclusion in beacon block
@@ -188,9 +180,7 @@ impl HeaderValidator {
         historical_summaries: &HistoricalSummaries,
     ) -> anyhow::Result<()> {
         if !network_spec().is_cancun_active_at_timestamp(block_timestamp) {
-            return Err(anyhow!(
-                "Invalid BlockProofHistoricalSummariesDeneb found for pre-Cancun header."
-            ));
+            bail!("Invalid BlockProofHistoricalSummariesDeneb found for pre-Cancun header.");
         }
 
         // Verify the chain of proofs for execution block header inclusion in beacon block
@@ -466,7 +456,7 @@ mod test {
         #[should_panic = "Invalid proof type found for post-merge header."]
         async fn header_validator_invalidates_post_merge_header_with_accumulator_proof() {
             let header_validator = get_mainnet_header_validator();
-            let future_height = EthereumHardfork::Paris.mainnet_activation_block().unwrap() + 1;
+            let future_height = EthereumHardfork::Paris.mainnet_activation_block().unwrap();
             let future_header = generate_random_header(&future_height);
             let future_hwp = HeaderWithProof {
                 header: future_header,
@@ -479,8 +469,6 @@ mod test {
     }
 
     mod merge_to_capella {
-        use ethportal_api::types::network_spec::network_spec;
-
         use super::*;
 
         #[rstest]
@@ -532,7 +520,8 @@ mod test {
                     EthereumHardfork::Paris.mainnet_activation_block().unwrap() - 1,
                     EthereumHardfork::Paris
                         .mainnet_activation_timestamp()
-                        .unwrap(),
+                        .unwrap()
+                        - 1,
                     B256::random(),
                     &dummy_proof,
                 )
@@ -552,8 +541,7 @@ mod test {
                 .verify_merge_to_capella_header(
                     EthereumHardfork::Shanghai
                         .mainnet_activation_block()
-                        .unwrap()
-                        - 1,
+                        .unwrap(),
                     EthereumHardfork::Shanghai
                         .mainnet_activation_timestamp()
                         .unwrap(),
@@ -585,7 +573,7 @@ mod test {
 
             header_validator
                 .verify_capella_to_deneb_header(
-                    block_number,
+                    network_spec().slot_to_timestamp(proof.slot),
                     header_hash,
                     &proof,
                     &historical_summaries,
@@ -605,7 +593,7 @@ mod test {
             get_mainnet_header_validator()
                 .verify_capella_to_deneb_header(
                     EthereumHardfork::Shanghai
-                        .mainnet_activation_block()
+                        .mainnet_activation_timestamp()
                         .unwrap()
                         - 1,
                     B256::random(),
@@ -626,7 +614,9 @@ mod test {
             };
             get_mainnet_header_validator()
                 .verify_capella_to_deneb_header(
-                    EthereumHardfork::Cancun.mainnet_activation_block().unwrap(),
+                    EthereumHardfork::Cancun
+                        .mainnet_activation_timestamp()
+                        .unwrap(),
                     B256::random(),
                     &dummy_proof,
                     &read_historical_summaries(),
@@ -653,7 +643,12 @@ mod test {
             let historical_summaries = read_historical_summaries();
 
             header_validator
-                .verify_post_deneb_header(block_number, header_hash, &proof, &historical_summaries)
+                .verify_post_deneb_header(
+                    network_spec().slot_to_timestamp(proof.slot),
+                    header_hash,
+                    &proof,
+                    &historical_summaries,
+                )
                 .unwrap();
         }
 
@@ -668,7 +663,10 @@ mod test {
             };
             get_mainnet_header_validator()
                 .verify_post_deneb_header(
-                    EthereumHardfork::Cancun.mainnet_activation_block().unwrap() - 1,
+                    EthereumHardfork::Cancun
+                        .mainnet_activation_timestamp()
+                        .unwrap()
+                        - 1,
                     B256::random(),
                     &dummy_proof,
                     &read_historical_summaries(),
