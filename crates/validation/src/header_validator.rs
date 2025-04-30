@@ -5,7 +5,8 @@ use ethportal_api::{
     consensus::historical_summaries::HistoricalSummaries,
     types::{
         execution::header_with_proof::{
-            BlockHeaderProof, BlockProofHistoricalHashesAccumulator, BlockProofHistoricalRoots,
+            BeaconBlockProofHistoricalRoots, BeaconBlockProofHistoricalSummaries, BlockHeaderProof,
+            BlockProofHistoricalHashesAccumulator, BlockProofHistoricalRoots,
             BlockProofHistoricalSummariesCapella, BlockProofHistoricalSummariesDeneb,
             HeaderWithProof,
         },
@@ -73,8 +74,13 @@ impl HeaderValidator {
         if network_spec().is_paris_active_at_block(header.number) {
             return Err(anyhow!("Invalid proof type found for post-merge header."));
         }
+
+        // Calculate generalized index for header
+        // https://github.com/ethereum/consensus-specs/blob/v0.11.1/ssz/merkle-proofs.md#generalized-merkle-tree-index
+        let header_index = header.number % EPOCH_SIZE;
+        let gen_index = (EPOCH_SIZE * 2 * 2) + (header_index * 2);
+
         // Look up historical epoch hash for header from pre-merge accumulator
-        let gen_index = calculate_generalized_index(header);
         let epoch_index = self.pre_merge_acc.get_epoch_index_of_header(header) as usize;
         let epoch_hash = self.pre_merge_acc.historical_epochs[epoch_index];
 
@@ -86,7 +92,7 @@ impl HeaderValidator {
             epoch_hash,
         ) {
             return Err(anyhow!(
-                "Merkle proof validation failed for pre-merge header"
+                "Execution block proof verification failed for pre-Merge header"
             ));
         }
         Ok(())
@@ -111,28 +117,25 @@ impl HeaderValidator {
             ));
         }
 
-        // Verify the chain of proofs for post-merge/pre-capella block header
-        Self::verify_bellatrix_to_deneb_beacon_block_proof(
+        // Verify the chain of proofs for execution block header inclusion in beacon block
+        if !self.verify_bellatrix_to_deneb_execution_block_proo(
             header_hash,
             &proof.execution_block_proof,
             proof.beacon_block_root,
-        )?;
-
-        let block_root_index = proof.slot % EPOCH_SIZE;
-        let gen_index = 2 * EPOCH_SIZE + block_root_index;
-        let historical_root_index = proof.slot / EPOCH_SIZE;
-        let historical_root =
-            self.historical_roots_acc.historical_roots[historical_root_index as usize];
-
-        if !verify_merkle_proof(
-            proof.beacon_block_root,
-            &proof.beacon_block_proof,
-            14,
-            gen_index as usize,
-            historical_root,
         ) {
             return Err(anyhow!(
-                "Merkle proof validation failed for HistoricalRootsProof"
+                "Execution block proof verification failed for Merge-Capella header"
+            ));
+        }
+
+        // Verify beacon block inclusion in historical roots
+        if !self.verify_historical_roots_beacon_block_proof(
+            proof.slot,
+            proof.beacon_block_root,
+            &proof.beacon_block_proof,
+        ) {
+            return Err(anyhow!(
+                "Beacon block proof verification failed for Merge-Capella header"
             ));
         }
 
@@ -159,29 +162,26 @@ impl HeaderValidator {
             ));
         }
 
-        // Verify the chain of proofs for post-merge/pre-capella block header
-        Self::verify_bellatrix_to_deneb_beacon_block_proof(
+        // Verify the chain of proofs for execution block header inclusion in beacon block
+        if !self.verify_bellatrix_to_deneb_execution_block_proo(
             header_hash,
             &proof.execution_block_proof,
             proof.beacon_block_root,
-        )?;
-
-        let block_root_index = proof.slot % EPOCH_SIZE;
-        let gen_index = EPOCH_SIZE + block_root_index;
-        let historical_summary_index =
-            (proof.slot - CAPELLA_FORK_EPOCH * SLOTS_PER_EPOCH) / EPOCH_SIZE;
-        let historical_summary =
-            historical_summaries[historical_summary_index as usize].block_summary_root;
-
-        if !verify_merkle_proof(
-            proof.beacon_block_root,
-            &proof.beacon_block_proof,
-            13,
-            gen_index as usize,
-            historical_summary,
         ) {
             return Err(anyhow!(
-                "Merkle proof validation failed for BlockProofHistoricalSummariesCapella"
+                "Execution block proof verification failed for Capella-Deneb header"
+            ));
+        }
+
+        // Verify beacon block inclusion in historical summaries
+        if !self.verify_historical_summaries_beacon_block_proof(
+            proof.slot,
+            proof.beacon_block_root,
+            &proof.beacon_block_proof,
+            historical_summaries,
+        ) {
+            return Err(anyhow!(
+                "Beacon block proof verification failed for Capella-Deneb header"
             ));
         }
 
@@ -203,41 +203,40 @@ impl HeaderValidator {
             ));
         }
 
-        // Verify the chain of proofs for post-merge/pre-capella block header
-        Self::verify_post_deneb_beacon_block_proof(
+        // Verify the chain of proofs for execution block header inclusion in beacon block
+        if !self.verify_post_deneb_execution_block_proof(
             header_hash,
             &proof.execution_block_proof,
             proof.beacon_block_root,
-        )?;
-
-        let block_root_index = proof.slot % EPOCH_SIZE;
-        let gen_index = EPOCH_SIZE + block_root_index;
-        let historical_summary_index =
-            (proof.slot - CAPELLA_FORK_EPOCH * SLOTS_PER_EPOCH) / EPOCH_SIZE;
-        let historical_summary =
-            historical_summaries[historical_summary_index as usize].block_summary_root;
-
-        if !verify_merkle_proof(
-            proof.beacon_block_root,
-            &proof.beacon_block_proof,
-            13,
-            gen_index as usize,
-            historical_summary,
         ) {
             return Err(anyhow!(
-                "Merkle proof validation failed for BlockProofHistoricalSummariesDeneb"
+                "Execution block proof verification failed for post-Deneb header"
+            ));
+        }
+
+        // Verify beacon block inclusion in historical summaries
+        if !self.verify_historical_summaries_beacon_block_proof(
+            proof.slot,
+            proof.beacon_block_root,
+            &proof.beacon_block_proof,
+            historical_summaries,
+        ) {
+            return Err(anyhow!(
+                "Beacon block proof verification failed for post-Deneb header"
             ));
         }
 
         Ok(())
     }
 
-    /// Verify that the execution block header is included in the beacon block
-    fn verify_bellatrix_to_deneb_beacon_block_proof(
-        header_hash: B256,
-        block_body_proof: &[B256],
+    /// Verify that the execution block header is included in Bellatrix/Capella beacon block
+    #[must_use]
+    fn verify_bellatrix_to_deneb_execution_block_proo(
+        &self,
+        execution_header_hash: B256,
+        execution_block_proof: &[B256],
         block_body_root: B256,
-    ) -> anyhow::Result<()> {
+    ) -> bool {
         // BeaconBlock level:
         // - 8 as there are 5 fields
         // - 4 as index (pos) of field is 4
@@ -252,26 +251,23 @@ impl HeaderValidator {
         // let gen_index = (gen_index_mid_level * 16 + 12) = 3228
         let gen_index = 3228;
 
-        if !verify_merkle_proof(
-            header_hash,
-            block_body_proof,
-            block_body_proof.len(),
+        verify_merkle_proof(
+            execution_header_hash,
+            execution_block_proof,
+            execution_block_proof.len(),
             gen_index,
             block_body_root,
-        ) {
-            return Err(anyhow!(
-                "Merkle proof validation failed for Bellatrix BeaconBlockProof"
-            ));
-        }
-        Ok(())
+        )
     }
 
-    /// Verify that the execution block header is included in the beacon block
-    fn verify_post_deneb_beacon_block_proof(
-        header_hash: B256,
-        block_body_proof: &[B256],
+    /// Verify that the execution block header is included in Deneb/Electra beacon block
+    #[must_use]
+    fn verify_post_deneb_execution_block_proof(
+        &self,
+        execution_header_hash: B256,
+        execution_block_proof: &[B256],
         block_body_root: B256,
-    ) -> anyhow::Result<()> {
+    ) -> bool {
         // BeaconBlock level:
         // - 8 as there are 5 fields
         // - 4 as index (pos) of field is 4
@@ -286,26 +282,61 @@ impl HeaderValidator {
         // let gen_index = (gen_index_mid_level * 32 + 12) = 6444
         let gen_index = 6444;
 
-        if !verify_merkle_proof(
-            header_hash,
-            block_body_proof,
-            block_body_proof.len(),
+        verify_merkle_proof(
+            execution_header_hash,
+            execution_block_proof,
+            execution_block_proof.len(),
             gen_index,
             block_body_root,
-        ) {
-            return Err(anyhow!(
-                "Merkle proof validation failed for Deneb BeaconBlockProof"
-            ));
-        }
-        Ok(())
+        )
     }
-}
 
-fn calculate_generalized_index(header: &Header) -> u64 {
-    // Calculate generalized index for header
-    // https://github.com/ethereum/consensus-specs/blob/v0.11.1/ssz/merkle-proofs.md#generalized-merkle-tree-index
-    let hr_index = header.number % EPOCH_SIZE;
-    (EPOCH_SIZE * 2 * 2) + (hr_index * 2)
+    /// Verifies that pre-Capella Beacon Block root is included in the `HistoricalRoots`.
+    #[must_use]
+    fn verify_historical_roots_beacon_block_proof(
+        &self,
+        slot: u64,
+        beacon_block_root: B256,
+        beacon_block_proof: &BeaconBlockProofHistoricalRoots,
+    ) -> bool {
+        let block_root_index = slot % EPOCH_SIZE;
+        let gen_index = 2 * EPOCH_SIZE + block_root_index;
+        let historical_root_index = slot / EPOCH_SIZE;
+        let historical_root =
+            self.historical_roots_acc.historical_roots[historical_root_index as usize];
+
+        verify_merkle_proof(
+            beacon_block_root,
+            beacon_block_proof,
+            14,
+            gen_index as usize,
+            historical_root,
+        )
+    }
+
+    /// Verifies that post-Capella Beacon Block root is included in the [HistoricalSummaries].
+    #[must_use]
+    fn verify_historical_summaries_beacon_block_proof(
+        &self,
+        slot: u64,
+        beacon_block_root: B256,
+        beacon_block_proof: &BeaconBlockProofHistoricalSummaries,
+        historical_summaries: &HistoricalSummaries,
+    ) -> bool {
+        let block_root_index = slot % EPOCH_SIZE;
+        let gen_index = EPOCH_SIZE + block_root_index;
+        let historical_summary_index = (slot - CAPELLA_FORK_EPOCH * SLOTS_PER_EPOCH) / EPOCH_SIZE;
+        let historical_summary =
+            historical_summaries[historical_summary_index as usize].block_summary_root;
+
+        verify_merkle_proof(
+            beacon_block_root,
+            beacon_block_proof,
+            13,
+            gen_index as usize,
+            historical_summary,
+        )
+    }
 }
 
 #[cfg(test)]
