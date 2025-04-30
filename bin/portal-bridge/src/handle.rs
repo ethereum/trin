@@ -1,52 +1,55 @@
-use ethportal_api::{types::network::Subnetwork, utils::bytes::hex_encode};
-use tokio::process::{Child, Command};
+use std::str::FromStr;
+
+use anyhow::anyhow;
+use ethportal_api::types::network::Subnetwork;
+use portalnet::{
+    bootnodes::Bootnodes,
+    config::{PortalnetConfig, DISCV5_SESSION_CACHE_CAPACITY},
+    utils::db::configure_node_data_dir,
+};
+use trin::{run_trin, SubnetworkOverlays};
+use trin_utils::dir::setup_data_dir;
 
 use crate::cli::BridgeConfig;
 
-pub fn build_trin(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
-    if !bridge_config.executable_path.is_file() {
-        return Err(anyhow::anyhow!(
-            "Trin executable path is not a file: {:?}",
-            bridge_config.executable_path
-        ));
-    }
-    let rpc_port = bridge_config.base_rpc_port;
-    let udp_port = bridge_config.base_discovery_port;
-    let private_key = hex_encode(bridge_config.private_key);
-    let mut command = Command::new(bridge_config.executable_path.clone());
+const APP_NAME: &str = "portal-bridge";
 
-    command
-        .kill_on_drop(true)
-        .args(["--ephemeral"])
-        .args(["--no-upnp"])
-        .args(["--mb", "0"])
-        .args(["--web3-transport", "http"])
-        .args(["--network", &bridge_config.network.network().to_string()])
-        .args(["--portal-subnetworks", &subnetworks_flag(bridge_config)])
-        .args(["--unsafe-private-key", &private_key])
-        .args(["--web3-http-address", &format!("http://0.0.0.0:{rpc_port}")])
-        .args(["--discovery-port", &format!("{udp_port}")])
-        .args(["--bootnodes", &bridge_config.bootnodes])
-        .args([
-            "--utp-transfer-limit",
-            &bridge_config.offer_limit.to_string(),
-        ]);
-    if let Some(ip) = bridge_config.external_ip.clone() {
-        command.args(["--external-address", &format!("{ip}:{udp_port}")]);
-    }
-    if let Some(client_metrics_url) = bridge_config.client_metrics_url {
-        let url: String = client_metrics_url.to_string();
-        command.args(["--enable-metrics-with-url", &url]);
-    }
+pub async fn start_trin(bridge_config: &BridgeConfig) -> anyhow::Result<SubnetworkOverlays> {
+    // Setup temp trin data directory if we're in ephemeral mode
+    let trin_data_dir = setup_data_dir(APP_NAME, None, true)?;
 
-    Ok(command.spawn()?)
+    // Configure node data dir based on the provided private key
+    let (node_data_dir, private_key) = configure_node_data_dir(
+        &trin_data_dir,
+        Some(bridge_config.private_key),
+        bridge_config.network.network(),
+    )?;
+
+    let portalnet_config = PortalnetConfig {
+        external_addr: bridge_config.external_ip,
+        private_key,
+        listen_port: bridge_config.base_discovery_port,
+        bootnodes: Bootnodes::from_str(&bridge_config.bootnodes)?
+            .to_enrs(bridge_config.network.network()),
+        no_stun: false,
+        no_upnp: true,
+        discv5_session_cache_capacity: DISCV5_SESSION_CACHE_CAPACITY,
+        disable_poke: false,
+        trusted_block_root: None,
+        utp_transfer_limit: bridge_config.offer_limit,
+    };
+    let node_runtime_config = bridge_config.as_node_runtime_config(node_data_dir);
+
+    run_trin(portalnet_config, node_runtime_config)
+        .await
+        .map_err(|err| anyhow!("Failed to run trin error: {err:?}"))
 }
 
 /// Returns the subnetwork flag to be passed to the trin handle.
 ///
 /// This is a union of required subnetworks for each subnetwork from the config.
-pub fn subnetworks_flag(bridge_config: &BridgeConfig) -> String {
-    let subnetworks = match bridge_config.portal_subnetwork {
+pub fn subnetworks_flag(bridge_config: &BridgeConfig) -> Vec<Subnetwork> {
+    match bridge_config.portal_subnetwork {
         Subnetwork::Beacon => vec![Subnetwork::Beacon],
         // History requires beacon and history
         Subnetwork::History => vec![Subnetwork::Beacon, Subnetwork::History],
@@ -54,7 +57,4 @@ pub fn subnetworks_flag(bridge_config: &BridgeConfig) -> String {
         Subnetwork::State => vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State],
         subnetwork => panic!("Unsupported subnetwork: {subnetwork:?}"),
     }
-    .into_iter()
-    .map(|subnetwork| subnetwork.to_cli_arg());
-    Vec::from_iter(subnetworks).join(",")
 }

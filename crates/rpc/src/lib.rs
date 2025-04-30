@@ -48,6 +48,7 @@ use crate::{jsonrpsee::server::ServerBuilder, rpc_server::RpcServerConfig};
 
 pub async fn launch_jsonrpc_server(
     rpc_config: RpcConfig,
+    portal_subnetworks: Arc<Vec<Subnetwork>>,
     discv5: Arc<Discovery>,
     history_handler: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
     state_handler: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
@@ -56,7 +57,7 @@ pub async fn launch_jsonrpc_server(
     // Discv5 and Web3 modules are enabled with every network
     let mut modules = vec![PortalRpcModule::Discv5, PortalRpcModule::Web3];
 
-    for network in rpc_config.portal_subnetworks.iter() {
+    for network in portal_subnetworks.iter() {
         match network {
             Subnetwork::History => {
                 modules.push(PortalRpcModule::History);

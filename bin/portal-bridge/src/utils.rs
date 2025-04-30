@@ -1,18 +1,9 @@
-use std::{
-    ops::Deref,
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use alloy::primitives::B256;
-use anyhow::anyhow;
 use chrono::Duration;
 use discv5::enr::{CombinedKey, Enr, NodeId};
-use ethportal_api::{
-    types::network_spec::network_spec, utils::bytes::hex_encode, BeaconContentKey,
-    BeaconContentValue, ContentValue, RawContentValue,
-};
-use serde::{Deserialize, Serialize};
+use ethportal_api::{types::network_spec::network_spec, utils::bytes::hex_encode};
 
 /// Generates a set of N private keys, with node ids that are equally spaced
 /// around the 256-bit keys space.
@@ -58,50 +49,6 @@ fn random_node_id() -> (NodeId, CombinedKey) {
     (enr.node_id(), random_private_key)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BeaconTestAssets(pub Vec<BeaconAsset>);
-
-impl Deref for BeaconTestAssets {
-    type Target = Vec<BeaconAsset>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BeaconAsset {
-    pub content_key: BeaconContentKey,
-    content_value: RawContentValue,
-}
-
-impl BeaconAsset {
-    pub fn content_value(&self) -> anyhow::Result<BeaconContentValue> {
-        BeaconContentValue::decode(&self.content_key, &self.content_value).map_err(|err| {
-            anyhow!(
-                "Unable to parse beacon content value: {}. Error: {err}",
-                self.content_value
-            )
-        })
-    }
-}
-
-pub fn read_test_assets_from_file(test_path: PathBuf) -> BeaconTestAssets {
-    let extension = test_path
-        .extension()
-        .and_then(|path| path.to_str())
-        .expect("Unable to parse test path extension")
-        .to_string();
-    let test_asset = std::fs::read_to_string(test_path).expect("Error reading test asset.");
-
-    let assets: BeaconTestAssets = match &extension[..] {
-        "json" => serde_json::from_str(&test_asset).expect("Unable to parse json test asset."),
-        "yaml" => serde_yaml::from_str(&test_asset).expect("Unable to parse yaml test asset."),
-        _ => panic!("Invalid file extension"),
-    };
-
-    assets
-}
 /// Gets the duration until the next light client update
 /// Updates are scheduled for 4 seconds into each slot
 pub fn duration_until_next_update(genesis_time: u64, now: SystemTime) -> Duration {

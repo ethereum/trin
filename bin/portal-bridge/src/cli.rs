@@ -2,21 +2,23 @@ use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy::primitives::B256;
 use clap::Parser;
-use ethportal_api::types::{network::Subnetwork, network_spec::NetworkSpec};
+use ethportal_api::types::{distance::Distance, network::Subnetwork, network_spec::NetworkSpec};
 use portalnet::constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK, DEFAULT_WEB3_HTTP_PORT};
+use trin::NodeRuntimeConfig;
+use trin_storage::config::StorageCapacityConfig;
 use trin_utils::cli::{check_private_key_length, network_parser};
 use url::Url;
 
 use crate::{
     bridge::e2hs::BlockRange,
     constants::{DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
+    handle::subnetworks_flag,
     types::mode::BridgeMode,
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
     FALLBACK_BASE_EL_ENDPOINT,
 };
 
 pub const DEFAULT_SUBNETWORK: &str = "history";
-pub const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
 
 /// The maximum number of peers to send each piece of content.
 ///
@@ -26,9 +28,6 @@ pub const ENR_OFFER_LIMIT: usize = 8;
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Trin Bridge", about = "Feed the network")]
 pub struct BridgeConfig {
-    #[arg(long, help = "path to portalnet client executable", default_value = DEFAULT_EXECUTABLE_PATH)]
-    pub executable_path: PathBuf,
-
     #[arg(
         long,
         default_value = "latest",
@@ -87,7 +86,7 @@ pub struct BridgeConfig {
         long = "external-ip",
         help = "(Only use this if you are behind a NAT) The address which will be advertised to peers (in an ENR). Changing it does not change which address trin binds to, ex: 127.0.0.1"
     )]
-    pub external_ip: Option<String>,
+    pub external_ip: Option<SocketAddr>,
 
     #[arg(
         long = "private-key",
@@ -174,6 +173,22 @@ pub struct BridgeConfig {
     pub data_dir: Option<PathBuf>,
 }
 
+impl BridgeConfig {
+    pub fn as_node_runtime_config(&self, node_data_dir: PathBuf) -> NodeRuntimeConfig {
+        let portal_subnetworks = subnetworks_flag(self);
+        NodeRuntimeConfig {
+            portal_subnetworks: Arc::new(portal_subnetworks.clone()),
+            max_radius: Distance::ZERO,
+            enable_metrics_with_url: self.client_metrics_url,
+            storage_capacity_config: StorageCapacityConfig::Combined {
+                total_mb: 0,
+                subnetworks: portal_subnetworks,
+            },
+            node_data_dir,
+        }
+    }
+}
+
 /// Used to identify the bridge amongst a set of bridges,
 /// each responsible for offering a subset of the total content.
 #[derive(Parser, Debug, Clone)]
@@ -227,18 +242,7 @@ mod test {
 
     #[test]
     fn test_default_bridge_config() {
-        const EXECUTABLE_PATH: &str = "path/to/executable";
-        let bridge_config = BridgeConfig::parse_from([
-            "bridge",
-            "--executable-path",
-            EXECUTABLE_PATH,
-            "--portal-subnetwork",
-            "history",
-        ]);
-        assert_eq!(
-            bridge_config.executable_path,
-            PathBuf::from(EXECUTABLE_PATH)
-        );
+        let bridge_config = BridgeConfig::parse_from(["bridge", "--portal-subnetwork", "history"]);
         assert_eq!(bridge_config.mode, BridgeMode::Latest);
         assert_eq!(
             bridge_config.el_provider.to_string(),
@@ -261,19 +265,8 @@ mod test {
 
     #[test]
     fn test_bridge_config_with_epoch() {
-        const EXECUTABLE_PATH: &str = "path/to/executable";
         const MODE: &str = "snapshot:60";
-        let bridge_config = BridgeConfig::parse_from([
-            "bridge",
-            "--executable-path",
-            EXECUTABLE_PATH,
-            "--mode",
-            MODE,
-        ]);
-        assert_eq!(
-            bridge_config.executable_path,
-            PathBuf::from(EXECUTABLE_PATH)
-        );
+        let bridge_config = BridgeConfig::parse_from(["bridge", "--mode", MODE]);
         assert_eq!(bridge_config.mode, BridgeMode::Snapshot(60));
         assert_eq!(bridge_config.portal_subnetwork, Subnetwork::History);
     }

@@ -31,11 +31,13 @@ use trin_utils::cli::{
 };
 use url::Url;
 
+use crate::run::NodeRuntimeConfig;
+
 const DEFAULT_SUBNETWORKS: &str = "beacon,history";
 /// Default max radius value percentage out of 100.
 const DEFAULT_MAX_RADIUS: &str = "5";
-pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
-pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
+const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
+const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = APP_NAME,
@@ -381,6 +383,31 @@ impl TrinConfig {
             },
         }
     }
+
+    pub fn as_portalnet_config(&self, private_key: B256) -> PortalnetConfig {
+        PortalnetConfig {
+            external_addr: self.external_addr,
+            private_key,
+            listen_port: self.discovery_port,
+            bootnodes: self.bootnodes.to_enrs(self.network.network()),
+            no_stun: self.no_stun,
+            no_upnp: self.no_upnp,
+            discv5_session_cache_capacity: DISCV5_SESSION_CACHE_CAPACITY,
+            disable_poke: self.disable_poke,
+            trusted_block_root: self.trusted_block_root,
+            utp_transfer_limit: self.utp_transfer_limit,
+        }
+    }
+
+    pub fn as_node_runtime_config(&self, node_data_dir: PathBuf) -> NodeRuntimeConfig {
+        NodeRuntimeConfig {
+            portal_subnetworks: self.portal_subnetworks.clone(),
+            storage_capacity_config: self.storage_capacity_config(),
+            max_radius: self.max_radius,
+            enable_metrics_with_url: self.enable_metrics_with_url,
+            node_data_dir,
+        }
+    }
 }
 
 fn check_trusted_block_root(trusted_root: &str) -> Result<B256, String> {
@@ -418,27 +445,9 @@ impl fmt::Display for TrinConfig {
     }
 }
 
-impl TrinConfig {
-    pub fn to_portalnet_config(&self, private_key: B256) -> PortalnetConfig {
-        PortalnetConfig {
-            external_addr: self.external_addr,
-            private_key,
-            listen_port: self.discovery_port,
-            bootnodes: self.bootnodes.to_enrs(self.network.network()),
-            no_stun: self.no_stun,
-            no_upnp: self.no_upnp,
-            discv5_session_cache_capacity: DISCV5_SESSION_CACHE_CAPACITY,
-            disable_poke: self.disable_poke,
-            trusted_block_root: self.trusted_block_root,
-            utp_transfer_limit: self.utp_transfer_limit,
-        }
-    }
-}
-
 impl From<&TrinConfig> for RpcConfig {
     fn from(config: &TrinConfig) -> Self {
         RpcConfig {
-            portal_subnetworks: config.portal_subnetworks.clone(),
             web3_transport: config.web3_transport.clone(),
             web3_ipc_path: config.web3_ipc_path.clone(),
             web3_http_address: config.web3_http_address.clone(),

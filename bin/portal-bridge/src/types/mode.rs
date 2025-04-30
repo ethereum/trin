@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
+use std::str::FromStr;
 
 /// Used to help decode cli args identifying the desired bridge mode.
 /// - Latest: tracks the latest header
@@ -13,7 +13,6 @@ pub enum BridgeMode {
     E2HS,
     Single(ModeType),
     Snapshot(u64),
-    Test(PathBuf),
 }
 
 type ParseError = String;
@@ -40,11 +39,6 @@ impl FromStr for BridgeMode {
                             .parse()
                             .map_err(|_| "Invalid snapshot arg: snapshot number")?;
                         Ok(BridgeMode::Snapshot(snapshot))
-                    }
-                    "test" => {
-                        let path =
-                            PathBuf::from_str(&val[1..]).map_err(|_| "Invalid test asset path")?;
-                        Ok(BridgeMode::Test(path))
                     }
                     _ => Err("Invalid bridge mode arg: type prefix".to_string()),
                 }
@@ -103,10 +97,6 @@ mod test {
 
     #[rstest]
     #[case("latest", BridgeMode::Latest)]
-    #[case(
-        "test:/usr/eth/test.json",
-        BridgeMode::Test(PathBuf::from("/usr/eth/test.json"))
-    )]
     fn test_mode_flag(#[case] actual: String, #[case] expected: BridgeMode) {
         let bridge_mode = BridgeMode::from_str(&actual).unwrap();
         assert_eq!(bridge_mode, expected);

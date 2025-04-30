@@ -16,14 +16,13 @@ RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 # Copy over all project folders specified in the .dockerignore
 COPY . .
-RUN cargo build --release --locked -p trin -p portal-bridge
+RUN cargo build --release --locked -p portal-bridge
 
 # We do not need the Rust toolchain to run the binary!
 FROM ubuntu
 WORKDIR /app
 
 # copy build artifacts from build stage
-COPY --from=builder /app/target/release/trin /usr/bin/
 COPY --from=builder /app/target/release/portal-bridge /usr/bin/
 
 RUN apt-get update && apt-get install libcurl4 -y
