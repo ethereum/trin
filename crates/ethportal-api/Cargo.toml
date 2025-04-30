@@ -14,12 +14,12 @@ rust-version.workspace = true
 [dependencies]
 alloy = { workspace = true, features = ["consensus", "eips", "k256", "rlp", "rpc-types-eth", "serde"] }
 alloy-rlp.workspace = true
-alloy-rpc-types-eth = { version = "0.12", default-features = false, features = ["serde"] }
+alloy-rpc-types-eth = { version = "0.15", default-features = false, features = ["serde"] }
 anyhow.workspace = true
 base64 = "0.13.0"
 bimap = "0.6.3"
 bytes.workspace = true
-c-kzg = "1.0.0"
+c-kzg = "2.1.0"
 discv5.workspace = true
 eth_trie.workspace = true
 ethereum_hashing.workspace = true

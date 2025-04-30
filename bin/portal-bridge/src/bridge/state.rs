@@ -20,8 +20,8 @@ use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client,
 };
-use revm::{Database, DatabaseRef};
-use revm_primitives::{keccak256, Bytecode, SpecId, B256};
+use revm::{state::Bytecode, Database, DatabaseRef};
+use revm_primitives::{hardfork::SpecId, keccak256, B256};
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
     time::timeout,

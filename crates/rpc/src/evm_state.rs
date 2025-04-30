@@ -20,7 +20,11 @@ use ethportal_api::{
     },
     ContentValue, ContentValueError, OverlayContentKey, StateContentKey, StateContentValue,
 };
-use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
+use revm::{
+    context::DBErrorMarker,
+    primitives::KECCAK_EMPTY,
+    state::{AccountInfo, Bytecode},
+};
 use tokio::sync::mpsc;
 use tracing::debug;
 use trin_evm::async_db::AsyncDatabase;
@@ -44,6 +48,8 @@ pub enum EvmStateError {
     #[error("Internal Error: {0}")]
     InternalError(String),
 }
+
+impl DBErrorMarker for EvmStateError {}
 
 impl From<EvmStateError> for RpcServeError {
     fn from(value: EvmStateError) -> Self {

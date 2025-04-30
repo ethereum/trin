@@ -4,8 +4,8 @@ use alloy::{
     consensus::constants::{ETH_TO_WEI, GWEI_TO_WEI},
     primitives::Address,
 };
-use revm::{db::State, Evm};
-use revm_primitives::SpecId;
+use revm::{context::ContextTr, database::State, handler::MainnetContext, MainnetEvm};
+use revm_primitives::hardfork::SpecId;
 use trin_evm::spec_id::get_spec_block_number;
 
 use super::dao_fork::{DAO_HARDFORK_BENEFICIARY, DAO_HARDKFORK_ACCOUNTS};
@@ -50,13 +50,13 @@ pub fn process_withdrawals(block: &ProcessedBlock, beneficiaries: &mut HashMap<A
 }
 
 fn process_dao_fork(
-    evm: &mut Evm<(), State<EvmDB>>,
+    evm: &mut MainnetEvm<MainnetContext<State<EvmDB>>, ()>,
     block: &ProcessedBlock,
     beneficiaries: &mut HashMap<Address, u128>,
 ) -> anyhow::Result<()> {
     if block.header.number == get_spec_block_number(SpecId::DAO_FORK) {
         // drain balances from DAO hardfork accounts
-        let drained_balances = evm.db_mut().drain_balances(DAO_HARDKFORK_ACCOUNTS)?;
+        let drained_balances = evm.db().drain_balances(DAO_HARDKFORK_ACCOUNTS)?;
         let drained_balance_sum: u128 = drained_balances.iter().sum();
 
         // transfer drained balance to beneficiary
@@ -67,7 +67,7 @@ fn process_dao_fork(
 }
 
 pub fn get_post_block_beneficiaries(
-    evm: &mut Evm<(), State<EvmDB>>,
+    evm: &mut MainnetEvm<MainnetContext<State<EvmDB>>, ()>,
     block: &ProcessedBlock,
 ) -> anyhow::Result<HashMap<Address, u128>> {
     let mut beneficiaries = HashMap::new();

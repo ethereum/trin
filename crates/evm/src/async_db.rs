@@ -1,8 +1,14 @@
-use std::future::Future;
+use std::{error::Error, future::Future};
 
-use revm_primitives::{
-    db::Database, AccountInfo, Address, BlockEnv, Bytecode, EVMError, EVMResult, B256, U256,
+use revm::{
+    context::{
+        result::{EVMError, ResultAndState},
+        BlockEnv, DBErrorMarker,
+    },
+    state::{AccountInfo, Bytecode},
+    Database, ExecuteEvm,
 };
+use revm_primitives::{Address, B256, U256};
 use tokio::{runtime, task};
 
 use super::{create_evm, tx_env_modifier::TxEnvModifier};
@@ -10,7 +16,7 @@ use super::{create_evm, tx_env_modifier::TxEnvModifier};
 /// The async version of the [revm::Database].
 pub trait AsyncDatabase {
     /// The database error type.
-    type Error;
+    type Error: DBErrorMarker + Error;
 
     /// Get basic account information.
     fn basic_async(
@@ -76,7 +82,7 @@ pub async fn execute_transaction<DB, DBError, Tx>(
     block_env: BlockEnv,
     tx: Tx,
     db: DB,
-) -> EVMResult<DB::Error>
+) -> Result<ResultAndState, EVMError<DBError>>
 where
     DB: AsyncDatabase<Error = DBError> + Send + 'static,
     DBError: Send + 'static,
@@ -86,7 +92,7 @@ where
         let rt = runtime::Runtime::new().expect("to create Runtime within spawn_blocking");
         let mut db = WrapAsyncDatabase::new(db, rt);
         let mut evm = create_evm(block_env, &tx, &mut db);
-        evm.transact()
+        evm.replay()
     })
     .await
     .unwrap_or_else(|err| {

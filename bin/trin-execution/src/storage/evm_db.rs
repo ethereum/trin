@@ -11,10 +11,11 @@ use hashbrown::{HashMap as BrownHashMap, HashSet};
 use parking_lot::Mutex;
 use prometheus_exporter::prometheus::HistogramTimer;
 use revm::{
-    db::{states::PlainStorageChangeset, BundleState, OriginalValuesKnown},
+    database::{states::PlainStorageChangeset, BundleState, OriginalValuesKnown},
+    state::{AccountInfo, Bytecode},
     Database, DatabaseRef,
 };
-use revm_primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
+use revm_primitives::KECCAK_EMPTY;
 use rocksdb::DB as RocksDB;
 use tracing::info;
 
@@ -289,7 +290,7 @@ impl EvmDB {
         // Currently we don't use reverts, so we can ignore them, but they are here for when we do.
         let timer = start_commit_timer("generate_plain_state_and_reverts");
         let (plain_state, _reverts) =
-            bundle_state.into_plain_state_and_reverts(OriginalValuesKnown::Yes);
+            bundle_state.to_plain_state_and_reverts(OriginalValuesKnown::Yes);
         stop_timer(timer);
 
         info!(

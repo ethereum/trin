@@ -8,11 +8,13 @@ use anyhow::ensure;
 use eth_trie::{RootWithTrieDiff, Trie};
 use ethportal_api::types::state_trie::account_state::AccountState;
 use revm::{
-    db::{states::bundle_state::BundleRetention, State},
-    inspectors::TracerEip3155,
-    DatabaseCommit, Evm,
+    context::{result::ResultAndState, ContextTr, TxEnv},
+    database::{states::bundle_state::BundleRetention, State},
+    handler::MainnetContext,
+    inspector::inspectors::TracerEip3155,
+    Context, DatabaseCommit, ExecuteEvm, MainBuilder, MainnetEvm,
 };
-use revm_primitives::{keccak256, Address, ResultAndState, SpecId, B256, U256};
+use revm_primitives::{hardfork::SpecId, keccak256, Address, B256, U256};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use trin_evm::{
@@ -50,9 +52,9 @@ struct GenesisConfig {
 /// - initialize the BlockExecutor with a database
 /// - execute blocks
 /// - commit the changes and retrieve the result
-pub struct BlockExecutor<'a> {
+pub struct BlockExecutor {
     /// The evm used for block execution.
-    evm: Evm<'a, (), State<EvmDB>>,
+    evm: MainnetEvm<MainnetContext<State<EvmDB>>, ()>,
     /// The time when BlockExecutor was created.
     creation_time: Instant,
     /// The number of executed blocks.
@@ -61,13 +63,13 @@ pub struct BlockExecutor<'a> {
     cumulative_gas_used: u64,
 }
 
-impl BlockExecutor<'_> {
+impl BlockExecutor {
     pub fn new(database: EvmDB) -> Self {
         let state_database = State::builder()
             .with_database(database)
             .with_bundle_update()
             .build();
-        let evm: Evm<(), State<EvmDB>> = Evm::builder().with_db(state_database).build();
+        let evm = Context::new(state_database, SpecId::FRONTIER).build_mainnet();
 
         Self {
             evm,
@@ -82,14 +84,14 @@ impl BlockExecutor<'_> {
 
         // update spec id
         let spec_id = get_spec_id(header.number);
-        self.evm.modify_spec_id(spec_id);
+        self.evm.cfg.spec = spec_id;
         self.evm
-            .db_mut()
+            .db()
             .set_state_clear_flag(spec_id.is_enabled_in(SpecId::SPURIOUS_DRAGON));
 
         // initialize evm environment
-        *self.evm.block_mut() = create_block_env(header);
-        self.evm.tx_mut().clear();
+        self.evm.block = create_block_env(header);
+        self.evm.tx = TxEnv::default();
 
         stop_timer(timer);
     }
@@ -98,22 +100,20 @@ impl BlockExecutor<'_> {
         &mut self,
         balances: impl IntoIterator<Item = (Address, u128)>,
     ) -> anyhow::Result<()> {
-        Ok(self.evm.db_mut().increment_balances(balances)?)
+        Ok(self.evm.db().increment_balances(balances)?)
     }
 
     pub fn commit_bundle(mut self) -> anyhow::Result<RootWithTrieDiff> {
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_bundle"]);
-        self.evm
-            .db_mut()
-            .merge_transitions(BundleRetention::PlainState);
-        let state_bundle = self.evm.db_mut().take_bundle();
-        self.evm.db_mut().database.commit_bundle(state_bundle)?;
+        self.evm.db().merge_transitions(BundleRetention::PlainState);
+        let state_bundle = self.evm.db().take_bundle();
+        self.evm.db().database.commit_bundle(state_bundle)?;
         stop_timer(timer);
 
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["get_root_with_trie_diff"]);
         let root_with_trie_diff = self
             .evm
-            .db_mut()
+            .db()
             .database
             .trie
             .lock()
@@ -182,7 +182,7 @@ impl BlockExecutor<'_> {
             block_gas_used += evm_result.result.gas_used();
 
             let commit_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["commit_state"]);
-            self.evm.db_mut().commit(evm_result.state);
+            self.evm.db().commit(evm_result.state);
             stop_timer(commit_timer);
 
             stop_timer(transaction_timer);
@@ -216,21 +216,21 @@ impl BlockExecutor<'_> {
         tx: &TransactionsWithSender,
         tracer_fn: impl Fn(&TxEnvelope) -> Option<TracerEip3155>,
     ) -> anyhow::Result<ResultAndState> {
-        let block_number = self.evm.block().number.to();
+        let block_number = self.evm.block().number;
 
         // Set transaction environment
         let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["modify_tx"]);
-        tx.modify(block_number, self.evm.tx_mut());
+        tx.modify(block_number, &mut self.evm.tx);
         stop_timer(timer);
 
         // Execute transaction
         let timer = start_timer_vec(&TRANSACTION_PROCESSING_TIMES, &["transact"]);
         let result = match tracer_fn(&tx.transaction) {
             Some(tracer) => {
-                create_evm_with_tracer(self.evm.block().clone(), tx, self.evm.db_mut(), tracer)
-                    .transact()?
+                create_evm_with_tracer(self.evm.block().clone(), tx, self.evm.db(), tracer)
+                    .replay()?
             }
-            None => self.evm.transact()?,
+            None => self.evm.replay()?,
         };
         stop_timer(timer);
 
@@ -238,7 +238,7 @@ impl BlockExecutor<'_> {
     }
 
     /// insert block hash into database and remove old one
-    fn manage_block_hash_serve_window(&self, header: &Header) -> anyhow::Result<()> {
+    fn manage_block_hash_serve_window(&mut self, header: &Header) -> anyhow::Result<()> {
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["insert_blockhash"]);
         self.evm.db().database.db.put(
             keccak256(B256::from(U256::from(header.number))),
@@ -266,7 +266,7 @@ impl BlockExecutor<'_> {
     ///
     /// The various limits are arbitrary and can be adjusted as needed,
     /// but are based on the current state of the network and what we have seen so far.
-    pub fn should_commit(&self) -> bool {
+    pub fn should_commit(&mut self) -> bool {
         self.executed_blocks >= 500_000
             || self.evm.db().bundle_size_hint() >= 5_000_000
             || self.cumulative_gas_used >= 30_000_000 * 50_000

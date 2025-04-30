@@ -37,7 +37,7 @@ rust-version = "1.85.0"
 version = "0.2.6"
 
 [workspace.dependencies]
-alloy = { version = "0.12", default-features = false, features = ["std", "serde"] }
+alloy = { version = "0.15", default-features = false, features = ["std", "serde", "getrandom"] }
 alloy-rlp = { version = "0.3.8", default-features = false, features = ["derive"] }
 anyhow = "1.0.68"
 async-trait = "0.1.68"
@@ -48,11 +48,11 @@ delay_map = "0.4.0"
 directories = "3.0"
 discv5 = { version = "0.9.1", features = ["serde"] }
 env_logger = "0.9.0"
-eth_trie = "0.5.0"
+eth_trie = "0.6"
 ethereum_hashing = "0.7.0"
-ethereum_serde_utils = "0.7.0"
-ethereum_ssz = "0.7.1"
-ethereum_ssz_derive = "0.7.1"
+ethereum_serde_utils = "0.8"
+ethereum_ssz = "0.9"
+ethereum_ssz_derive = "0.9"
 futures = "0.3.23"
 futures-util = "0.3.23"
 hex = "0.4.3"
@@ -69,8 +69,8 @@ r2d2_sqlite = "0.24.0"
 rand = "0.8.5"
 reqwest = { version = "0.12.7", features = ["native-tls-vendored", "json"] }
 reth-ipc = { tag = "v1.0.8", git = "https://github.com/paradigmxyz/reth.git"}
-revm = { version = "14.0.3", default-features = false, features = ["std", "secp256k1", "serde-json", "c-kzg"] }
-revm-primitives = { version = "10.0.0", default-features = false, features = ["std", "serde"] }
+revm = { version = "22.0", default-features = false, features = ["std", "secp256k1", "serde-json", "c-kzg"] }
+revm-primitives = { version = "18.0.0", default-features = false, features = ["std", "serde"] }
 rstest = "0.18.2"
 rust-embed = "8.5.0"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
@@ -82,7 +82,7 @@ serde-this-or-that = "0.4.2"
 serial_test = "0.5.1"
 sha3 = "0.9.1"
 snap = "1.1.1"
-ssz_types = "0.8.0"
+ssz_types = "0.11.0"
 strum = { version = "0.26.1", features = ["derive"] }
 tempfile = "3.3.0"
 test-log = { version = "0.2.11", features = ["trace"] }
@@ -92,8 +92,8 @@ tokio-test = "0.4.2"
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
 tracing-test = "0.1"
-tree_hash = "0.8.0"
-tree_hash_derive = "0.8.0"
+tree_hash = "0.10"
+tree_hash_derive = "0.10"
 uds_windows = "1.0.1"
 ureq = { version = "2.5.0", features = ["json"] }
 url = "2.3.1"

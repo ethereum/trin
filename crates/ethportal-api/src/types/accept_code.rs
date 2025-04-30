@@ -123,6 +123,9 @@ pub enum AcceptCodeListError {
 
     #[error("SSZ types error: {0}")]
     SSZTypesError(String),
+
+    #[error("SSZ Bitfield error: {0}")]
+    SSZBitfieldError(String),
 }
 
 impl From<ssz::DecodeError> for AcceptCodeListError {
@@ -134,6 +137,12 @@ impl From<ssz::DecodeError> for AcceptCodeListError {
 impl From<ssz_types::Error> for AcceptCodeListError {
     fn from(err: ssz_types::Error) -> Self {
         AcceptCodeListError::SSZTypesError(format!("{err:?}"))
+    }
+}
+
+impl From<ssz::BitfieldError> for AcceptCodeListError {
+    fn from(err: ssz::BitfieldError) -> Self {
+        AcceptCodeListError::SSZBitfieldError(format!("{err:?}"))
     }
 }
 
