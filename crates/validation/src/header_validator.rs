@@ -260,9 +260,6 @@ mod test {
 
     const SPEC_TESTS_DIR: &str = "tests/mainnet/history";
 
-    // Beacon chain mainnet genesis time: Tue Dec 01 2020 12:00:23 GMT+0000
-    pub const BEACON_GENESIS_TIME: u64 = 1606824023;
-
     #[rstest]
     #[case(1_000_001)]
     #[case(1_000_002)]
@@ -407,7 +404,7 @@ mod test {
         header_validator
             .verify_merge_to_capella_header(
                 block_number,
-                slot_to_timestamp(slot),
+                network_spec().slot_to_timestamp(slot),
                 header_hash,
                 &historical_roots_block_proof,
             )
@@ -473,7 +470,7 @@ mod test {
 
         header_validator
             .verify_capella_to_deneb_header(
-                slot_to_timestamp(slot),
+                network_spec().slot_to_timestamp(slot),
                 header_hash,
                 &historical_summaries_block_proof,
                 &historical_summaries,
@@ -543,10 +540,6 @@ mod test {
         )
         .unwrap();
         EpochAccumulator::from_ssz_bytes(&epoch_acc_bytes).unwrap()
-    }
-
-    fn slot_to_timestamp(slot: u64) -> u64 {
-        BEACON_GENESIS_TIME + slot * 12
     }
 
     const HEADER_RLP_15_537_392: &str = "0xf90218a02f1dc309c7cc0a5a2e3b3dd9315fea0ffbc53c56f9237f3ca11b20de0232f153a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794ea674fdde714fd979de3edf0f56aa9716b898ec8a0fee48a40a2765ab31fcd06ab6956341d13dc2c4b9762f2447aa425bb1c089b30a082864b3a65d1ac1917c426d48915dca0fc966fbf3f30fd051659f35dc3fd9be1a013c10513b52358022f800e2f9f1c50328798427b1b4a1ebbbd20b7417fb9719db90100ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff872741c5e4f6c39283ed14f08401c9c3808401c9a028846322c95c8f617369612d65617374322d31763932a02df332ffb74ecd15c9873d3f6153b878e1c514495dfb6e89ad88e574582b02a488232b0043952c93d98508fb17c6ee";

@@ -248,19 +248,19 @@ impl EpochReader {
             if current_block
                 < EthereumHardfork::Paris
                     .activation_block(network_spec().network().into())
-                    .expect("Paris is available")
+                    .expect("Paris should be available")
             {
                 self.get_pre_merge_block_data(current_block)
             } else if current_block
                 < EthereumHardfork::Shanghai
                     .activation_block(network_spec().network().into())
-                    .expect("Shanghai is available")
+                    .expect("Shanghai should be available")
             {
                 self.get_merge_to_capella_block_data(current_block)
             } else if current_block
                 < EthereumHardfork::Cancun
                     .activation_block(network_spec().network().into())
-                    .expect("Cancun is available")
+                    .expect("Cancun should be available")
             {
                 self.get_capella_to_deneb_block_data(current_block)
             } else {

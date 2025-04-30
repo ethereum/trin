@@ -9,7 +9,8 @@ use anyhow::anyhow;
 use chrono::Duration;
 use discv5::enr::{CombinedKey, Enr, NodeId};
 use ethportal_api::{
-    utils::bytes::hex_encode, BeaconContentKey, BeaconContentValue, ContentValue, RawContentValue,
+    types::network_spec::network_spec, utils::bytes::hex_encode, BeaconContentKey,
+    BeaconContentValue, ContentValue, RawContentValue,
 };
 use serde::{Deserialize, Serialize};
 
@@ -106,7 +107,7 @@ pub fn read_test_assets_from_file(test_path: PathBuf) -> BeaconTestAssets {
 pub fn duration_until_next_update(genesis_time: u64, now: SystemTime) -> Duration {
     let current_slot = expected_current_slot(genesis_time, now);
     let next_slot = current_slot + 1;
-    let next_slot_timestamp = slot_timestamp(next_slot, genesis_time);
+    let next_slot_timestamp = network_spec().slot_to_timestamp(next_slot);
 
     let now = now
         .duration_since(UNIX_EPOCH)
@@ -124,10 +125,6 @@ pub fn expected_current_slot(genesis_time: u64, now: SystemTime) -> u64 {
     let since_genesis = now - std::time::Duration::from_secs(genesis_time);
 
     since_genesis.as_secs() / 12
-}
-
-fn slot_timestamp(slot: u64, genesis_time: u64) -> u64 {
-    slot * 12 + genesis_time
 }
 
 #[cfg(test)]

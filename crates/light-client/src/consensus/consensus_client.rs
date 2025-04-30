@@ -16,6 +16,7 @@ use ethportal_api::{
         store::LightClientStore,
         update::{FinalizedRootProofLen, LightClientUpdateDeneb},
     },
+    types::network_spec::network_spec,
     utils::bytes::hex_encode,
 };
 use milagro_bls::PublicKey;
@@ -434,7 +435,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     }
 
     fn age(&self, slot: u64) -> Duration {
-        let expected_time = self.slot_timestamp(slot);
+        let expected_time = network_spec().slot_to_timestamp(slot);
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("`now` is ahead of `UNIX_EPOCH`");
@@ -453,16 +454,12 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         since_genesis.as_secs() / 12
     }
 
-    fn slot_timestamp(&self, slot: u64) -> u64 {
-        slot * 12 + self.config.chain.genesis_time
-    }
-
     /// Gets the duration until the next update
     /// Updates are scheduled for 4 seconds into each slot
     pub fn duration_until_next_update(&self) -> Duration {
         let current_slot = self.expected_current_slot();
         let next_slot = current_slot + 1;
-        let next_slot_timestamp = self.slot_timestamp(next_slot);
+        let next_slot_timestamp = network_spec().slot_to_timestamp(next_slot);
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -478,8 +475,8 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     // Determines blockhash_slot age and returns true if it is less than 14 days old
     fn is_valid_checkpoint(&self, blockhash_slot: u64) -> bool {
         let current_slot = self.expected_current_slot();
-        let current_slot_timestamp = self.slot_timestamp(current_slot);
-        let blockhash_slot_timestamp = self.slot_timestamp(blockhash_slot);
+        let current_slot_timestamp = network_spec().slot_to_timestamp(current_slot);
+        let blockhash_slot_timestamp = network_spec().slot_to_timestamp(blockhash_slot);
 
         let slot_age = current_slot_timestamp - blockhash_slot_timestamp;
 

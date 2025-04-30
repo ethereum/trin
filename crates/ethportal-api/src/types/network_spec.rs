@@ -14,12 +14,17 @@ use super::{
     },
 };
 
+/// Beacon chain mainnet genesis time: Tue Dec 01 2020 12:00:23 GMT+0000
+const MAINNET_BEACON_GENESIS_TIMESTAMP: u64 = 1606824023;
+
 static NETWORK_SPEC: LazyLock<RwLock<Arc<NetworkSpec>>> =
     LazyLock::new(|| RwLock::new(MAINNET.clone()));
 
-/// `set_network_spec` should be called only once at the start of the application.
+/// Should be called only once at the start of the application to initialize static [NetworkSpec].
 ///
-/// The only exception is for testing purposes, where it can be called multiple times.
+/// The static `NetworkSpec` can be accessed using [network_spec].
+///
+/// Tests can also use this, but should be more careful. See [NetworkSpec] for details.
 pub fn set_network_spec(network_spec: Arc<NetworkSpec>) {
     *NETWORK_SPEC.write() = network_spec;
 }
@@ -28,11 +33,14 @@ pub fn network_spec() -> Arc<NetworkSpec> {
     NETWORK_SPEC.read().clone()
 }
 
-/// `NetworkSpec` is a struct that contains the network configuration for the portal network and the
-/// respective Ethereum Network.
-///
 /// It includes the mapping of subnetworks to protocol id hex strings, supported protocol versions,
 /// and hardforks.
+///
+/// It should be initialized at the start of the application using [set_network_spec] and can be
+/// accessed from anywhere using [network_spec]. The tests are exception to this case, as they
+/// can set value at the start (if they test something other than mainnet data) and reset the value
+/// at the end, while making sure that they are no other tests running in parallel (e.g. using
+/// `serial_test` crate).
 #[derive(Clone, Debug)]
 pub struct NetworkSpec {
     network: Network,
@@ -40,6 +48,7 @@ pub struct NetworkSpec {
     portal_subnetworks: BiHashMap<Subnetwork, String>,
     supported_protocol_versions: ProtocolVersionList,
     hardforks: EthereumChainHardforks,
+    beacon_genesis_timestamp: u64,
 }
 
 impl NetworkSpec {
@@ -48,6 +57,7 @@ impl NetworkSpec {
         network: Network,
         supported_protocol_versions: ProtocolVersionList,
         hardforks: EthereumChainHardforks,
+        beacon_genesis_timestamp: u64,
     ) -> anyhow::Result<Self> {
         // Ensure supported protocol versions are ordered chronologically with no duplicates.
         supported_protocol_versions.is_strictly_sorted_and_specified();
@@ -57,6 +67,7 @@ impl NetworkSpec {
             network,
             supported_protocol_versions,
             hardforks,
+            beacon_genesis_timestamp,
         })
     }
 
@@ -108,6 +119,10 @@ impl NetworkSpec {
             .copied()
             .ok_or(ProtocolVersionError::NoMatchingVersion)
     }
+
+    pub fn slot_to_timestamp(&self, slot: u64) -> u64 {
+        self.beacon_genesis_timestamp + slot * 12
+    }
 }
 
 impl EthereumHardforks for NetworkSpec {
@@ -131,6 +146,7 @@ pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
         Network::Mainnet,
         ProtocolVersionList::new(vec![ProtocolVersion::V0, ProtocolVersion::V1]),
         EthereumChainHardforks::mainnet(),
+        MAINNET_BEACON_GENESIS_TIMESTAMP,
     )
     .expect("Failed to create mainnet network spec")
     .into()
@@ -150,6 +166,7 @@ pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
         Network::Angelfood,
         ProtocolVersionList::new(vec![ProtocolVersion::V0]),
         EthereumChainHardforks::mainnet(),
+        MAINNET_BEACON_GENESIS_TIMESTAMP,
     )
     .expect("Failed to create angelfood network spec")
     .into()
