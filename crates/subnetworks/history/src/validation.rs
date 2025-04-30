@@ -168,7 +168,7 @@ mod tests {
     }
 
     #[test_log::test(tokio::test)]
-    #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
+    #[should_panic(expected = "Execution block proof verification failed for pre-Merge header")]
     async fn invalidate_header_by_hash_with_invalid_number() {
         let header_with_proof_ssz = get_header_with_proof_ssz();
         let mut header =
@@ -188,7 +188,7 @@ mod tests {
     }
 
     #[test_log::test(tokio::test)]
-    #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
+    #[should_panic(expected = "Execution block proof verification failed for pre-Merge header")]
     async fn invalidate_header_by_hash_with_invalid_gaslimit() {
         let header_with_proof_ssz = get_header_with_proof_ssz();
         let mut header =
@@ -224,7 +224,7 @@ mod tests {
     }
 
     #[test_log::test(tokio::test)]
-    #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
+    #[should_panic(expected = "Execution block proof verification failed for pre-Merge header")]
     async fn invalidate_header_by_number_with_invalid_number() {
         let header_with_proof_ssz = get_header_with_proof_ssz();
         let mut header =
@@ -244,7 +244,7 @@ mod tests {
     }
 
     #[test_log::test(tokio::test)]
-    #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
+    #[should_panic(expected = "Execution block proof verification failed for pre-Merge header")]
     async fn invalidate_header_by_number_with_invalid_gaslimit() {
         let header_with_proof_ssz: Vec<u8> = get_header_with_proof_ssz();
         let mut header =

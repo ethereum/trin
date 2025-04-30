@@ -1,6 +1,6 @@
 use alloy::{consensus::Header, primitives::B256};
 use alloy_hardforks::EthereumHardforks;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use ethportal_api::{
     consensus::historical_summaries::HistoricalSummaries,
     types::{
@@ -91,9 +91,7 @@ impl HeaderValidator {
             gen_index as usize,
             epoch_hash,
         ) {
-            return Err(anyhow!(
-                "Execution block proof verification failed for pre-Merge header"
-            ));
+            bail!("Execution block proof verification failed for pre-Merge header");
         }
         Ok(())
     }
@@ -123,9 +121,7 @@ impl HeaderValidator {
             &proof.execution_block_proof,
             proof.beacon_block_root,
         ) {
-            return Err(anyhow!(
-                "Execution block proof verification failed for Merge-Capella header"
-            ));
+            bail!("Execution block proof verification failed for Merge-Capella header");
         }
 
         // Verify beacon block inclusion in historical roots
@@ -134,9 +130,7 @@ impl HeaderValidator {
             proof.beacon_block_root,
             &proof.beacon_block_proof,
         ) {
-            return Err(anyhow!(
-                "Beacon block proof verification failed for Merge-Capella header"
-            ));
+            bail!("Beacon block proof verification failed for Merge-Capella header");
         }
 
         Ok(())
@@ -168,9 +162,7 @@ impl HeaderValidator {
             &proof.execution_block_proof,
             proof.beacon_block_root,
         ) {
-            return Err(anyhow!(
-                "Execution block proof verification failed for Capella-Deneb header"
-            ));
+            bail!("Execution block proof verification failed for Capella-Deneb header");
         }
 
         // Verify beacon block inclusion in historical summaries
@@ -180,9 +172,7 @@ impl HeaderValidator {
             &proof.beacon_block_proof,
             historical_summaries,
         ) {
-            return Err(anyhow!(
-                "Beacon block proof verification failed for Capella-Deneb header"
-            ));
+            bail!("Beacon block proof verification failed for Capella-Deneb header");
         }
 
         Ok(())
@@ -209,9 +199,7 @@ impl HeaderValidator {
             &proof.execution_block_proof,
             proof.beacon_block_root,
         ) {
-            return Err(anyhow!(
-                "Execution block proof verification failed for post-Deneb header"
-            ));
+            bail!("Execution block proof verification failed for post-Deneb header");
         }
 
         // Verify beacon block inclusion in historical summaries
@@ -221,9 +209,7 @@ impl HeaderValidator {
             &proof.beacon_block_proof,
             historical_summaries,
         ) {
-            return Err(anyhow!(
-                "Beacon block proof verification failed for post-Deneb header"
-            ));
+            bail!("Beacon block proof verification failed for post-Deneb header");
         }
 
         Ok(())
@@ -461,7 +447,7 @@ mod test {
         }
 
         #[tokio::test]
-        #[should_panic = "Merkle proof validation failed"]
+        #[should_panic = "Execution block proof verification failed for pre-Merge header"]
         async fn invalidate_invalid_proofs() {
             let header_validator = get_mainnet_header_validator();
             let header = get_header(1_000_001);
@@ -477,7 +463,7 @@ mod test {
         }
 
         #[tokio::test]
-        #[should_panic(expected = "Invalid proof type found for post-merge header.")]
+        #[should_panic = "Invalid proof type found for post-merge header."]
         async fn header_validator_invalidates_post_merge_header_with_accumulator_proof() {
             let header_validator = get_mainnet_header_validator();
             let future_height = EthereumHardfork::Paris.mainnet_activation_block().unwrap() + 1;
