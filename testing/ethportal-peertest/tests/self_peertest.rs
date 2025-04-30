@@ -16,7 +16,7 @@ use portalnet::constants::{DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
 use rpc::RpcServerHandle;
 use serial_test::serial;
 use tokio::time::{sleep, Duration};
-use trin::{cli::TrinConfig, run::run_trin_from_trin_config};
+use trin::{run_trin_from_trin_config, TrinConfig};
 use trin_utils::cli::network_parser;
 
 mod utils;

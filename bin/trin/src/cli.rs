@@ -36,8 +36,8 @@ use crate::run::NodeRuntimeConfig;
 const DEFAULT_SUBNETWORKS: &str = "beacon,history";
 /// Default max radius value percentage out of 100.
 const DEFAULT_MAX_RADIUS: &str = "5";
-pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
-pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
+const DEFAULT_STORAGE_CAPACITY_MB: &str = "1000";
+const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = APP_NAME,

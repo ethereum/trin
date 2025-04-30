@@ -7,7 +7,7 @@ use peer::PeerInfo;
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use tracing::{error, info, Instrument};
-use trin::handle::SubnetworkOverlays;
+use trin::SubnetworkOverlays;
 
 use crate::cli::BridgeConfig;
 

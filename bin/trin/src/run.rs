@@ -25,8 +25,8 @@ use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
 
 use crate::{
-    cli::TrinConfig,
     handle::{SubnetworkOverlays, TrinHandle},
+    TrinConfig,
 };
 
 pub struct NodeRuntimeConfig {

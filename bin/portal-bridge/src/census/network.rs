@@ -18,7 +18,7 @@ use tokio::{
     time::{Instant, Interval},
 };
 use tracing::{debug, error, info, warn};
-use trin::handle::SubnetworkOverlays;
+use trin::SubnetworkOverlays;
 
 use super::{
     peer::PeerInfo,

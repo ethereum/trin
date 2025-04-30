@@ -7,7 +7,7 @@ use portalnet::{
     config::{PortalnetConfig, DISCV5_SESSION_CACHE_CAPACITY},
     utils::db::configure_node_data_dir,
 };
-use trin::{handle::SubnetworkOverlays, run::run_trin};
+use trin::{run_trin, SubnetworkOverlays};
 use trin_utils::dir::setup_data_dir;
 
 use crate::cli::BridgeConfig;

@@ -27,7 +27,7 @@ use serial_test::serial;
 use ssz::Decode;
 
 mod utils;
-use trin::{cli::TrinConfig, run::run_trin_from_trin_config};
+use trin::{run_trin_from_trin_config, TrinConfig};
 use trin_utils::submodules::read_portal_spec_tests_file;
 use url::Url;
 use utils::init_tracing;

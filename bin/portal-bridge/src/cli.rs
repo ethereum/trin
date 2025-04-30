@@ -4,7 +4,7 @@ use alloy::primitives::B256;
 use clap::Parser;
 use ethportal_api::types::{distance::Distance, network::Subnetwork, network_spec::NetworkSpec};
 use portalnet::constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK, DEFAULT_WEB3_HTTP_PORT};
-use trin::run::NodeRuntimeConfig;
+use trin::NodeRuntimeConfig;
 use trin_storage::config::StorageCapacityConfig;
 use trin_utils::cli::{check_private_key_length, network_parser};
 use url::Url;
