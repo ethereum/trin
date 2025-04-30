@@ -7,7 +7,7 @@ use portalnet::{
     config::{PortalnetConfig, DISCV5_SESSION_CACHE_CAPACITY},
     utils::db::configure_node_data_dir,
 };
-use trin::{handle::SubnetworkOverlays, run_trin};
+use trin::{builder::run_trin, handle::SubnetworkOverlays};
 use trin_utils::dir::setup_data_dir;
 
 use crate::cli::BridgeConfig;
@@ -40,10 +40,9 @@ pub async fn start_trin(bridge_config: &BridgeConfig) -> anyhow::Result<Subnetwo
     };
     let node_runtime_config = bridge_config.as_node_runtime_config(node_data_dir);
 
-    Ok(run_trin(portalnet_config, node_runtime_config, None)
+    run_trin(portalnet_config, node_runtime_config)
         .await
-        .map_err(|err| anyhow!("Failed to run trin error: {err:?}"))?
-        .subnetwork_overlays)
+        .map_err(|err| anyhow!("Failed to run trin error: {err:?}"))
 }
 
 /// Returns the subnetwork flag to be passed to the trin handle.

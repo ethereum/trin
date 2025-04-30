@@ -1,5 +1,5 @@
 use alloy::primitives::B256;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use ethportal_api::{
     consensus::header::BeaconBlockHeader,
     light_client::store::LightClientStore,
@@ -13,6 +13,7 @@ use ethportal_api::{
     },
     ContentValue, HistoryContentKey, HistoryContentValue,
 };
+use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -72,9 +73,8 @@ impl HeaderOracle {
     ) -> anyhow::Result<HeaderWithProof> {
         let content_key = HistoryContentKey::new_block_header_by_hash(block_hash);
         let endpoint = HistoryEndpoint::GetContent(content_key.clone());
-        let response = self.send_history_request(endpoint).await?;
 
-        let GetContentInfo { content, .. } = serde_json::from_value(response)?;
+        let GetContentInfo { content, .. } = self.send_history_request(endpoint).await?;
         let content: HistoryContentValue = HistoryContentValue::decode(&content_key, &content)?;
 
         match content {
@@ -88,46 +88,51 @@ impl HeaderOracle {
     /// Return latest finalized root of the beacon state.
     pub async fn get_finalized_state_root(&self) -> anyhow::Result<B256> {
         let endpoint = BeaconEndpoint::FinalizedStateRoot;
-        let response = self.send_beacon_request(endpoint).await?;
-        Ok(serde_json::from_value(response)?)
+        self.send_beacon_request(endpoint).await
     }
 
     /// Return latest finalized beacon header.
     pub async fn get_finalized_header(&self) -> anyhow::Result<BeaconBlockHeader> {
         let endpoint = BeaconEndpoint::FinalizedHeader;
-        let response = self.send_beacon_request(endpoint).await?;
-        Ok(serde_json::from_value(response)?)
+        self.send_beacon_request(endpoint).await
     }
 
     /// Return current light client store
     pub async fn get_light_client_store(&self) -> anyhow::Result<LightClientStore> {
         let endpoint = BeaconEndpoint::LightClientStore;
-        let response = self.send_beacon_request(endpoint).await?;
-        Ok(serde_json::from_value(response)?)
+        self.send_beacon_request(endpoint).await
     }
 
-    async fn send_history_request(&self, endpoint: HistoryEndpoint) -> anyhow::Result<Value> {
+    async fn send_history_request<T: for<'a> Deserialize<'a>>(
+        &self,
+        endpoint: HistoryEndpoint,
+    ) -> anyhow::Result<T> {
         let (resp, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
         let request = HistoryJsonRpcRequest { endpoint, resp };
         let tx = self.history_jsonrpc_tx()?;
         tx.send(request)?;
 
-        Ok(match resp_rx.recv().await {
-            Some(val) => val.map_err(|err| anyhow!("History network request error: {err:?}"))?,
-            None => return Err(anyhow!("No response from History network")),
-        })
+        match resp_rx.recv().await {
+            Some(Ok(response)) => Ok(serde_json::from_value(response)?),
+            Some(Err(err)) => bail!("History network request error: {err:?}"),
+            None => bail!("No response from History network"),
+        }
     }
 
-    async fn send_beacon_request(&self, endpoint: BeaconEndpoint) -> anyhow::Result<Value> {
+    async fn send_beacon_request<T: for<'a> Deserialize<'a>>(
+        &self,
+        endpoint: BeaconEndpoint,
+    ) -> anyhow::Result<T> {
         let (resp, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
         let request = BeaconJsonRpcRequest { endpoint, resp };
         let tx = self.beacon_jsonrpc_tx()?;
         tx.send(request)?;
 
-        Ok(match resp_rx.recv().await {
-            Some(val) => val.map_err(|err| anyhow!("Beacon network request error: {err:?}"))?,
-            None => return Err(anyhow!("No response from Beacon network")),
-        })
+        match resp_rx.recv().await {
+            Some(Ok(response)) => Ok(serde_json::from_value(response)?),
+            Some(Err(err)) => bail!("Beacon network request error: {err:?}"),
+            None => bail!("No response from Beacon network"),
+        }
     }
 }
 

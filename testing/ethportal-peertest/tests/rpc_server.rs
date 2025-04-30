@@ -27,7 +27,7 @@ use serial_test::serial;
 use ssz::Decode;
 
 mod utils;
-use trin::cli::TrinConfig;
+use trin::{builder::run_trin_from_trin_config, cli::TrinConfig};
 use trin_utils::submodules::read_portal_spec_tests_file;
 use url::Url;
 use utils::init_tracing;
@@ -57,10 +57,8 @@ async fn setup_web3_server() -> (RpcServerHandle, DynProvider, Client) {
     ])
     .unwrap();
 
-    let trin_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
-    let Some(web3_server) = trin_handle.rpc_server_handle else {
-        panic!("Trin wasn't started with RPC server handle");
-    };
+    let trin_handle = run_trin_from_trin_config(trin_config).await.unwrap();
+
     let ipc = IpcConnect::new(DEFAULT_WEB3_IPC_PATH.to_string());
     let web3_client = DynProvider::new(ProviderBuilder::new().connect_ipc(ipc).await.unwrap());
 
@@ -70,7 +68,7 @@ async fn setup_web3_server() -> (RpcServerHandle, DynProvider, Client) {
         .build(DEFAULT_WEB3_IPC_PATH)
         .await
         .unwrap();
-    (web3_server, web3_client, native_client)
+    (trin_handle.rpc_server_handle, web3_client, native_client)
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -98,10 +96,7 @@ async fn test_batch_call() {
     ])
     .unwrap();
 
-    let trin_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
-    let Some(web3_server) = trin_handle.rpc_server_handle else {
-        panic!("Trin wasn't started with RPC server handle");
-    };
+    let trin_handle = run_trin_from_trin_config(trin_config).await.unwrap();
     let url = Url::parse(DEFAULT_WEB3_HTTP_ADDRESS).unwrap();
     let client = ClientBuilder::default().http(url);
 
@@ -118,7 +113,7 @@ async fn test_batch_call() {
     client_version_future.await.unwrap();
     node_info_future.await.unwrap();
 
-    web3_server.stop().unwrap();
+    trin_handle.rpc_server_handle.stop().unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]

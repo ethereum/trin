@@ -36,7 +36,7 @@ use tokio::{
     time::{sleep, timeout},
 };
 use tracing::{debug, error, info, warn};
-use trin::handle::SubnetworkOverlays;
+use trin_history::network::HistoryNetwork;
 use trin_metrics::bridge::BridgeMetricsReporter;
 use trin_validation::header_validator::HeaderValidator;
 
@@ -67,7 +67,7 @@ pub struct E2HSBridge {
 
 impl E2HSBridge {
     pub async fn new(
-        portal_client: SubnetworkOverlays,
+        history_network: Arc<HistoryNetwork>,
         offer_limit: usize,
         block_range: BlockRange,
         random_fill: bool,
@@ -87,7 +87,7 @@ impl E2HSBridge {
         let global_offer_report = Arc::new(Mutex::new(GlobalOfferReport::default()));
         let gossiper = Gossiper {
             census,
-            portal_client,
+            history_network,
             metrics,
             global_offer_report,
             offer_semaphore,
@@ -229,7 +229,7 @@ struct Gossiper {
     /// Used to request all interested enrs in the network.
     census: Census,
     /// Used to send RPC request to trin
-    portal_client: SubnetworkOverlays,
+    history_network: Arc<HistoryNetwork>,
     /// Records and reports bridge metrics
     metrics: BridgeMetricsReporter,
     /// Global offer report for tallying total performance of history bridge
@@ -407,11 +407,11 @@ impl Gossiper {
 
         let result = timeout(
             SERVE_BLOCK_TIMEOUT,
-            self.portal_client
-                .history_overlay()
-                .expect("History Network wasn't initialized")
-                .overlay
-                .send_offer_trace(peer.enr.clone(), content_key.to_bytes(), raw_content_value),
+            self.history_network.overlay.send_offer_trace(
+                peer.enr.clone(),
+                content_key.to_bytes(),
+                raw_content_value,
+            ),
         )
         .await;
 

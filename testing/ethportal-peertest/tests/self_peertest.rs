@@ -16,7 +16,7 @@ use portalnet::constants::{DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
 use rpc::RpcServerHandle;
 use serial_test::serial;
 use tokio::time::{sleep, Duration};
-use trin::cli::TrinConfig;
+use trin::{builder::run_trin_from_trin_config, cli::TrinConfig};
 use trin_utils::cli::network_parser;
 
 mod utils;
@@ -557,15 +557,12 @@ async fn setup_peertest(
     ])
     .unwrap();
 
-    let trin_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
-    let Some(test_client_rpc_handle) = trin_handle.rpc_server_handle else {
-        panic!("Trin wasn't started with RPC server handle");
-    };
+    let test_client_rpc_handle = run_trin_from_trin_config(trin_config).await.unwrap();
     let target = reth_ipc::client::IpcClientBuilder::default()
         .build(DEFAULT_WEB3_IPC_PATH)
         .await
         .unwrap();
-    (peertest, target, test_client_rpc_handle)
+    (peertest, target, test_client_rpc_handle.rpc_server_handle)
 }
 
 async fn setup_peertest_http(
@@ -614,12 +611,9 @@ async fn setup_peertest_http(
     ])
     .unwrap();
 
-    let trin_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
-    let Some(test_client_rpc_handle) = trin_handle.rpc_server_handle else {
-        panic!("Trin wasn't started with RPC server handle");
-    };
+    let test_client_rpc_handle = run_trin_from_trin_config(trin_config).await.unwrap();
     let target = ethportal_api::jsonrpsee::http_client::HttpClientBuilder::default()
         .build(DEFAULT_WEB3_HTTP_ADDRESS)
         .unwrap();
-    (peertest, target, test_client_rpc_handle)
+    (peertest, target, test_client_rpc_handle.rpc_server_handle)
 }

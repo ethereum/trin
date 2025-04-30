@@ -4,11 +4,7 @@ use anyhow::{anyhow, bail};
 use discv5::enr::NodeId;
 use ethportal_api::{
     generate_random_node_ids,
-    types::{
-        network::Subnetwork,
-        ping_extensions::decode::PingExtension,
-        portal_wire::{OfferTrace, Pong},
-    },
+    types::{network::Subnetwork, ping_extensions::decode::PingExtension, portal_wire::OfferTrace},
     Enr,
 };
 use futures::{future::JoinAll, StreamExt};
@@ -74,13 +70,13 @@ impl Default for NetworkInitializationConfig {
 #[derive(Clone)]
 pub(super) struct Network {
     peers: Peers<AdditiveWeight>,
-    client: SubnetworkOverlays,
+    subnetwork_overlays: SubnetworkOverlays,
     subnetwork: Subnetwork,
 }
 
 impl Network {
     pub fn new(
-        client: SubnetworkOverlays,
+        subnetwork_overlays: SubnetworkOverlays,
         subnetwork: Subnetwork,
         bridge_config: &BridgeConfig,
     ) -> Self {
@@ -96,7 +92,7 @@ impl Network {
                 AdditiveWeight::default(),
                 bridge_config.enr_offer_limit,
             )),
-            client,
+            subnetwork_overlays,
             subnetwork,
         }
     }
@@ -154,7 +150,9 @@ impl Network {
                 .iter()
                 .map(|node_id| async {
                     if let Ok(_permit) = semaphore.acquire().await {
-                        self.recursive_find_nodes(*node_id).await
+                        self.subnetwork_overlays
+                            .recursive_find_nodes(self.subnetwork, *node_id)
+                            .await
                     } else {
                         bail!("failed to acquire permit")
                     }
@@ -242,7 +240,7 @@ impl Network {
             return LivenessResult::Fresh;
         }
 
-        let Ok(pong_info) = self.ping(&enr).await else {
+        let Ok(pong_info) = self.subnetwork_overlays.ping(self.subnetwork, &enr).await else {
             self.peers.record_failed_liveness_check(enr);
             return LivenessResult::Fail;
         };
@@ -287,39 +285,14 @@ impl Network {
         LivenessResult::Pass
     }
 
-    async fn ping(&self, enr: &Enr) -> anyhow::Result<Pong> {
-        match self.subnetwork {
-            Subnetwork::History => {
-                self.client
-                    .history_overlay()?
-                    .overlay
-                    .send_ping(enr.clone(), None, None)
-                    .await
-            }
-            Subnetwork::State => {
-                self.client
-                    .state_overlay()?
-                    .overlay
-                    .send_ping(enr.clone(), None, None)
-                    .await
-            }
-            Subnetwork::Beacon => {
-                self.client
-                    .beacon_overlay()?
-                    .overlay
-                    .send_ping(enr.clone(), None, None)
-                    .await
-            }
-            _ => unreachable!("ping: unsupported subnetwork: {}", self.subnetwork),
-        }
-        .map_err(|err| anyhow!(err))
-    }
-
     /// Fetches node's ENR.
     ///
     /// Should be used when ENR sequence returned by Ping request is higher than the one we know.
     async fn fetch_enr(&self, enr: &Enr) -> anyhow::Result<Enr> {
-        let enrs = self.find_nodes(enr, /* distances= */ vec![0]).await?;
+        let enrs = self
+            .subnetwork_overlays
+            .find_nodes(self.subnetwork, enr, /* distances= */ vec![0])
+            .await?;
         if enrs.len() != 1 {
             warn!(
                 subnetwork = %self.subnetwork,
@@ -330,69 +303,6 @@ impl Network {
         enrs.into_iter()
             .find(|response_enr| response_enr.node_id() == enr.node_id())
             .ok_or_else(|| anyhow!("fetch_enr: response doesn't contain requested NodeId"))
-    }
-
-    async fn find_nodes(&self, enr: &Enr, distances: Vec<u16>) -> anyhow::Result<Vec<Enr>> {
-        Ok(match self.subnetwork {
-            Subnetwork::History => {
-                self.client
-                    .history_overlay()?
-                    .overlay
-                    .send_find_nodes(enr.clone(), distances)
-                    .await
-            }
-            Subnetwork::State => {
-                self.client
-                    .state_overlay()?
-                    .overlay
-                    .send_find_nodes(enr.clone(), distances)
-                    .await
-            }
-            Subnetwork::Beacon => {
-                self.client
-                    .beacon_overlay()?
-                    .overlay
-                    .send_find_nodes(enr.clone(), distances)
-                    .await
-            }
-            _ => unreachable!("find_nodes: unsupported subnetwork: {}", self.subnetwork),
-        }
-        .map_err(|err| anyhow!(err))?
-        .enrs
-        .into_iter()
-        .map(|enr| enr.into())
-        .collect())
-    }
-
-    async fn recursive_find_nodes(&self, node_id: NodeId) -> anyhow::Result<Vec<Enr>> {
-        let enrs = match self.subnetwork {
-            Subnetwork::History => {
-                self.client
-                    .history_overlay()?
-                    .overlay
-                    .lookup_node(node_id)
-                    .await
-            }
-            Subnetwork::State => {
-                self.client
-                    .state_overlay()?
-                    .overlay
-                    .lookup_node(node_id)
-                    .await
-            }
-            Subnetwork::Beacon => {
-                self.client
-                    .beacon_overlay()?
-                    .overlay
-                    .lookup_node(node_id)
-                    .await
-            }
-            _ => unreachable!(
-                "recursive_find_nodes: unsupported subnetwork: {}",
-                self.subnetwork
-            ),
-        };
-        Ok(enrs)
     }
 }
 
@@ -480,7 +390,12 @@ impl NetworkManager {
 
     async fn peer_discovery(&mut self) {
         let node_id = NodeId::random();
-        let enrs = match self.network.recursive_find_nodes(node_id).await {
+        let enrs = match self
+            .network
+            .subnetwork_overlays
+            .recursive_find_nodes(self.network.subnetwork, node_id)
+            .await
+        {
             Ok(enrs) => enrs,
             Err(err) => {
                 error!(

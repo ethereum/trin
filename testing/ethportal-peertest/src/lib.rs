@@ -5,7 +5,6 @@ pub mod utils;
 
 use std::{net::Ipv4Addr, path::PathBuf, thread, time};
 
-use anyhow::bail;
 use ethportal_api::{
     types::{
         enr::Enr,
@@ -20,7 +19,7 @@ use itertools::Itertools;
 use jsonrpsee::async_client::Client;
 use portalnet::constants::DEFAULT_DISCOVERY_PORT;
 use rpc::RpcServerHandle;
-use trin::cli::TrinConfig;
+use trin::{builder::run_trin_from_trin_config, cli::TrinConfig};
 
 pub struct PeertestNode {
     pub enr: Enr,
@@ -44,10 +43,7 @@ impl Peertest {
 
 async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
     let web3_ipc_path = trin_config.web3_ipc_path.clone();
-    let trin_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
-    let Some(rpc_handle) = trin_handle.rpc_server_handle else {
-        bail!("RPC server handle wasn't initialized");
-    };
+    let trin_handle = run_trin_from_trin_config(trin_config).await.unwrap();
 
     // Short sleep to make sure all peertest nodes can connect
     thread::sleep(time::Duration::from_secs(2));
@@ -59,7 +55,7 @@ async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
     Ok(PeertestNode {
         enr: ipc_client.node_info().await.unwrap().enr,
         ipc_client,
-        rpc_handle,
+        rpc_handle: trin_handle.rpc_server_handle,
     })
 }
 

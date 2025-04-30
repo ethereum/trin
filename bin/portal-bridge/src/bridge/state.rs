@@ -26,7 +26,6 @@ use tokio::{
     time::timeout,
 };
 use tracing::{error, info, warn};
-use trin::handle::SubnetworkOverlays;
 use trin_evm::spec_id::get_spec_block_number;
 use trin_execution::{
     cli::{ImportStateConfig, APP_NAME},
@@ -49,6 +48,7 @@ use trin_execution::{
     utils::full_nibble_path_to_address_hash,
 };
 use trin_metrics::bridge::BridgeMetricsReporter;
+use trin_state::network::StateNetwork;
 use trin_utils::dir::{create_temp_dir, setup_data_dir};
 
 use super::{
@@ -63,7 +63,7 @@ use crate::{
 
 pub struct StateBridge {
     mode: BridgeMode,
-    portal_client: SubnetworkOverlays,
+    state_network: Arc<StateNetwork>,
     metrics: BridgeMetricsReporter,
     /// Semaphore used to limit the amount of active offer transfers
     /// to make sure we don't overwhelm the trin client
@@ -80,7 +80,7 @@ pub struct StateBridge {
 impl StateBridge {
     pub async fn new(
         mode: BridgeMode,
-        portal_client: SubnetworkOverlays,
+        state_network: Arc<StateNetwork>,
         offer_limit: usize,
         census: Census,
         bridge_id: BridgeId,
@@ -91,7 +91,7 @@ impl StateBridge {
         let global_offer_report = Arc::new(Mutex::new(GlobalOfferReport::default()));
         Ok(Self {
             mode,
-            portal_client,
+            state_network,
             metrics,
             offer_semaphore,
             census,
@@ -521,7 +521,7 @@ impl StateBridge {
         for peer in peers.clone() {
             let permit = self.acquire_offer_permit().await;
             let census = self.census.clone();
-            let portal_client = self.portal_client.clone();
+            let state_network = self.state_network.clone();
             let content_key = content_key.clone();
             let encoded_content_value = encoded_content_value.clone();
             let offer_report = offer_report.clone();
@@ -535,15 +535,11 @@ impl StateBridge {
 
                 let result = timeout(
                     SERVE_BLOCK_TIMEOUT,
-                    portal_client
-                        .state_overlay()
-                        .expect("State Network wasn't initialized")
-                        .overlay
-                        .send_offer_trace(
-                            peer.enr.clone(),
-                            content_key.to_bytes(),
-                            encoded_content_value,
-                        ),
+                    state_network.overlay.send_offer_trace(
+                        peer.enr.clone(),
+                        content_key.to_bytes(),
+                        encoded_content_value,
+                    ),
                 )
                 .await;
 

@@ -25,14 +25,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // start the bridge client, need to keep the handle alive
     // for bridge to work inside docker containers
-    let portal_client = start_trin(&bridge_config)
+    let subnetwork_overlays = start_trin(&bridge_config)
         .await
         .map_err(|err| err.to_string())?;
 
     let census_handle = match bridge_config.portal_subnetwork {
         Subnetwork::Beacon => {
             // Create and initialize the census to acquire critical view of network before gossiping
-            let mut census = Census::new(portal_client.clone(), &bridge_config);
+            let mut census = Census::new(subnetwork_overlays.clone(), &bridge_config);
             let census_handle = census.init([Subnetwork::Beacon]).await?;
 
             let bridge_mode = bridge_config.mode.clone();
@@ -42,9 +42,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bridge_config.request_timeout,
             )
             .await?;
-            let portal_client_clone = portal_client.clone();
+            let Some(beacon_network) = subnetwork_overlays.beacon else {
+                panic!("Beacon network not found in SubnetworkOverlays");
+            };
             let beacon_bridge =
-                BeaconBridge::new(consensus_api, bridge_mode, portal_client_clone, census);
+                BeaconBridge::new(consensus_api, bridge_mode, beacon_network, census);
 
             run_with_shutdown(
                 beacon_bridge
@@ -63,11 +65,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
                     // Create and initialize the census to acquire critical view of network before
                     // gossiping
-                    let mut census = Census::new(portal_client.clone(), &bridge_config);
+                    let mut census = Census::new(subnetwork_overlays.clone(), &bridge_config);
                     let census_handle = census.init([Subnetwork::History]).await?;
 
+                    let Some(history_network) = subnetwork_overlays.history else {
+                        panic!("History network not found in SubnetworkOverlays");
+                    };
                     let e2hs_bridge = E2HSBridge::new(
-                        portal_client,
+                        history_network,
                         bridge_config.offer_limit,
                         e2hs_range,
                         bridge_config.e2hs_randomize,
@@ -89,12 +94,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Subnetwork::State => {
             // Create and initialize the census to acquire critical view of network before gossiping
-            let mut census = Census::new(portal_client.clone(), &bridge_config);
+            let mut census = Census::new(subnetwork_overlays.clone(), &bridge_config);
             let census_handle = census.init([Subnetwork::State]).await?;
-
+            let Some(state_network) = subnetwork_overlays.state else {
+                panic!("State network not found in SubnetworkOverlays");
+            };
             let state_bridge = StateBridge::new(
                 bridge_config.mode.clone(),
-                portal_client.clone(),
+                state_network,
                 bridge_config.offer_limit,
                 census,
                 bridge_config.bridge_id,

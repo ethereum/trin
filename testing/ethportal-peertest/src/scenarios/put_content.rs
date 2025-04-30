@@ -5,7 +5,7 @@ use ethportal_api::{
     Discv5ApiClient, HistoryNetworkApiClient,
 };
 use tracing::info;
-use trin::cli::TrinConfig;
+use trin::{builder::run_trin_from_trin_config, cli::TrinConfig};
 
 use crate::{
     utils::{
@@ -40,7 +40,7 @@ pub async fn test_put_content(peertest: &Peertest, target: &Client, network: Net
 
     // Spin up a fresh client, not connected to existing peertest
     let (fresh_ipc_path, trin_config) = fresh_node_config(network);
-    let _test_client_rpc_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
+    let _test_client_rpc_handle = run_trin_from_trin_config(trin_config).await.unwrap();
     let fresh_target = reth_ipc::client::IpcClientBuilder::default()
         .build(&fresh_ipc_path)
         .await
@@ -90,7 +90,7 @@ pub async fn test_gossip_dropped_with_offer(
 
     // Spin up a fresh client, not connected to existing peertest
     let (fresh_ipc_path, trin_config) = fresh_node_config(network);
-    let _test_client_rpc_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
+    let _test_client_rpc_handle = run_trin_from_trin_config(trin_config).await.unwrap();
     let fresh_target = reth_ipc::client::IpcClientBuilder::default()
         .build(&fresh_ipc_path)
         .await
@@ -259,7 +259,7 @@ pub async fn test_gossip_dropped_with_find_content(
 
     // Spin up a fresh client, not connected to existing peertest
     let (fresh_ipc_path, trin_config) = fresh_node_config(network);
-    let _test_client_rpc_handle = trin::run_trin_from_trin_config(trin_config).await.unwrap();
+    let _test_client_rpc_handle = run_trin_from_trin_config(trin_config).await.unwrap();
     let fresh_target = reth_ipc::client::IpcClientBuilder::default()
         .build(&fresh_ipc_path)
         .await

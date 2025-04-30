@@ -44,11 +44,23 @@ impl Census {
     const SUPPORTED_SUBNETWORKS: [Subnetwork; 3] =
         [Subnetwork::Beacon, Subnetwork::History, Subnetwork::State];
 
-    pub fn new(client: SubnetworkOverlays, bridge_config: &BridgeConfig) -> Self {
+    pub fn new(subnetwork_overlays: SubnetworkOverlays, bridge_config: &BridgeConfig) -> Self {
         Self {
-            history: Network::new(client.clone(), Subnetwork::History, bridge_config),
-            state: Network::new(client.clone(), Subnetwork::State, bridge_config),
-            beacon: Network::new(client.clone(), Subnetwork::Beacon, bridge_config),
+            history: Network::new(
+                subnetwork_overlays.clone(),
+                Subnetwork::History,
+                bridge_config,
+            ),
+            state: Network::new(
+                subnetwork_overlays.clone(),
+                Subnetwork::State,
+                bridge_config,
+            ),
+            beacon: Network::new(
+                subnetwork_overlays.clone(),
+                Subnetwork::Beacon,
+                bridge_config,
+            ),
             initialized: false,
         }
     }
