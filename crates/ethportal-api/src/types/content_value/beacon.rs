@@ -548,32 +548,22 @@ impl ContentValue for BeaconContentValue {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
-
-    use alloy::primitives::Bytes;
     use serde::Deserialize;
-    use serde_yaml::Value;
 
     use super::*;
-    use crate::test_utils::read_file_from_tests_submodule;
+    use crate::test_utils::{read_yaml_portal_spec_tests_file, types::ContentItem};
 
     #[rstest::rstest]
     #[case("capella", 6718368)]
     #[case("deneb", 10248000)]
     fn light_client_bootstrap_encode_decode(#[case] fork_name: &str, #[case] expected_slot: u64) {
-        let file = read_file_from_tests_submodule(format!(
+        let test_data: ContentItem<BeaconContentKey> = read_yaml_portal_spec_tests_file(format!(
             "tests/mainnet/beacon_chain/light_client/{fork_name}/bootstrap.yaml",
         ))
         .unwrap();
+        let content_value: BeaconContentValue = test_data.content_value().unwrap();
 
-        let value: Value = serde_yaml::from_str(&file).unwrap();
-        let content_key: BeaconContentKey =
-            serde_yaml::from_value(value["content_key"].clone()).unwrap();
-        let raw_content_value = Bytes::from_str(value["content_value"].as_str().unwrap()).unwrap();
-        let content_value = BeaconContentValue::decode(&content_key, raw_content_value.as_ref())
-            .expect("unable to decode content value");
-
-        assert_str_roundtrip(content_key, content_value.clone());
+        assert_str_roundtrip(test_data.content_key, content_value.clone());
 
         match content_value {
             BeaconContentValue::LightClientBootstrap(value) => {
@@ -590,19 +580,13 @@ mod test {
         #[case] fork_name: &str,
         #[case] expected_slot: u64,
     ) {
-        let file = read_file_from_tests_submodule(format!(
+        let test_data: ContentItem<BeaconContentKey> = read_yaml_portal_spec_tests_file(format!(
             "tests/mainnet/beacon_chain/light_client/{fork_name}/updates.yaml",
         ))
         .unwrap();
+        let content_value: BeaconContentValue = test_data.content_value().unwrap();
 
-        let value: Value = serde_yaml::from_str(&file).unwrap();
-        let content_key: BeaconContentKey =
-            serde_yaml::from_value(value["content_key"].clone()).unwrap();
-        let raw_content_value = Bytes::from_str(value["content_value"].as_str().unwrap()).unwrap();
-        let content_value = BeaconContentValue::decode(&content_key, raw_content_value.as_ref())
-            .expect("unable to decode content value");
-
-        assert_str_roundtrip(content_key, content_value.clone());
+        assert_str_roundtrip(test_data.content_key, content_value.clone());
 
         let update = match content_value {
             BeaconContentValue::LightClientUpdatesByRange(value) => value[0].update.clone(),
@@ -623,19 +607,13 @@ mod test {
         #[case] fork_name: &str,
         #[case] expected_slot: u64,
     ) {
-        let file = read_file_from_tests_submodule(format!(
+        let test_data: ContentItem<BeaconContentKey> = read_yaml_portal_spec_tests_file(format!(
             "tests/mainnet/beacon_chain/light_client/{fork_name}/optimistic_update.yaml",
         ))
         .unwrap();
+        let content_value: BeaconContentValue = test_data.content_value().unwrap();
 
-        let value: Value = serde_yaml::from_str(&file).unwrap();
-        let content_key: BeaconContentKey =
-            serde_yaml::from_value(value["content_key"].clone()).unwrap();
-        let raw_content_value = Bytes::from_str(value["content_value"].as_str().unwrap()).unwrap();
-        let content_value = BeaconContentValue::decode(&content_key, raw_content_value.as_ref())
-            .expect("unable to decode content value");
-
-        assert_str_roundtrip(content_key, content_value.clone());
+        assert_str_roundtrip(test_data.content_key, content_value.clone());
 
         let update = match content_value {
             BeaconContentValue::LightClientOptimisticUpdate(value) => value.update,
@@ -656,19 +634,13 @@ mod test {
         #[case] fork_name: &str,
         #[case] expected_slot: u64,
     ) {
-        let file = read_file_from_tests_submodule(format!(
-            "tests/mainnet/beacon_chain/light_client/{fork_name}/finality_update.yaml"
+        let test_data: ContentItem<BeaconContentKey> = read_yaml_portal_spec_tests_file(format!(
+            "tests/mainnet/beacon_chain/light_client/{fork_name}/finality_update.yaml",
         ))
         .unwrap();
+        let content_value: BeaconContentValue = test_data.content_value().unwrap();
 
-        let value: Value = serde_yaml::from_str(&file).unwrap();
-        let content_key: BeaconContentKey =
-            serde_yaml::from_value(value["content_key"].clone()).unwrap();
-        let raw_content_value = Bytes::from_str(value["content_value"].as_str().unwrap()).unwrap();
-        let content_value = BeaconContentValue::decode(&content_key, raw_content_value.as_ref())
-            .expect("unable to decode content value");
-
-        assert_str_roundtrip(content_key, content_value.clone());
+        assert_str_roundtrip(test_data.content_key, content_value.clone());
 
         let update = match content_value {
             BeaconContentValue::LightClientFinalityUpdate(value) => value.update,
@@ -684,10 +656,9 @@ mod test {
 
     #[test]
     fn deneb_historical_summaries_with_proof_encode_decode() {
-        let file = read_file_from_tests_submodule(
+        let value: serde_yaml::Value = read_yaml_portal_spec_tests_file(
             "tests/mainnet/beacon_chain/historical_summaries_with_proof/deneb/historical_summaries_with_proof.yaml",
         ).unwrap();
-        let value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
         let content_key = BeaconContentKey::deserialize(&value["content_key"]).unwrap();
         let content_bytes = RawContentValue::deserialize(&value["content_value"]).unwrap();
         let beacon_content = BeaconContentValue::decode(&content_key, &content_bytes).unwrap();

@@ -346,18 +346,13 @@ mod test {
         use super::*;
 
         #[rstest]
-        #[case::block_number_1_000_001(1_000_001)]
-        #[case::block_number_1_000_002(1_000_002)]
-        #[case::block_number_1_000_003(1_000_003)]
-        #[case::block_number_1_000_004(1_000_004)]
-        #[case::block_number_1_000_005(1_000_005)]
-        #[case::block_number_1_000_006(1_000_006)]
-        #[case::block_number_1_000_007(1_000_007)]
-        #[case::block_number_1_000_008(1_000_008)]
-        #[case::block_number_1_000_009(1_000_009)]
-        #[case::block_number_1_000_010(1_000_010)]
-        #[tokio::test]
-        async fn verify_header(#[case] block_number: u64) {
+        fn verify_header(
+            #[values(
+                1_000_001, 1_000_002, 1_000_003, 1_000_004, 1_000_005, 1_000_006, 1_000_007,
+                1_000_008, 1_000_009, 1_000_010
+            )]
+            block_number: u64,
+        ) {
             let test_data: HashMap<u64, ContentItem<HistoryContentKey>> =
                 read_json_portal_spec_tests_file(
                     "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
@@ -374,9 +369,7 @@ mod test {
         }
 
         #[rstest]
-        #[case::block_number_15_537_392(15_537_392)]
-        #[case::block_number_15_537_393(15_537_393)]
-        fn verify_header_from_partial_epoch(#[case] block_number: u64) {
+        fn verify_header_from_partial_epoch(#[values(15_537_392, 15_537_393)] block_number: u64) {
             let test_data: ContentItem<HistoryContentKey> = read_yaml_portal_spec_tests_file(
                 format!("tests/mainnet/history/headers_with_proof/{block_number}.yaml"),
             )
@@ -390,9 +383,9 @@ mod test {
                 .unwrap();
         }
 
-        #[tokio::test]
+        #[test]
         #[should_panic = "Execution block proof verification failed for pre-Merge header"]
-        async fn invalidate_invalid_proofs() {
+        fn invalidate_invalid_proofs() {
             let test_data: ContentItem<HistoryContentKey> = read_yaml_portal_spec_tests_file(
                 "tests/mainnet/history/headers_with_proof/1000010.yaml",
             )
@@ -411,9 +404,9 @@ mod test {
                 .unwrap()
         }
 
-        #[tokio::test]
+        #[test]
         #[should_panic = "Invalid proof type found for post-merge header."]
-        async fn header_validator_invalidates_post_merge_header_with_accumulator_proof() {
+        fn header_validator_invalidates_post_merge_header_with_accumulator_proof() {
             let header_validator = get_mainnet_header_validator();
             let future_height = EthereumHardfork::Paris.mainnet_activation_block().unwrap();
             let future_header = generate_random_header(&future_height);
@@ -431,27 +424,15 @@ mod test {
         use super::*;
 
         #[rstest]
-        #[case::block_number_15_539_558(
-            15_539_558,
-            "beacon_block_proof-15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01.yaml",
-        )]
-        #[case::block_number_15_547_621(
-            15_547_621,
-            "beacon_block_proof-15547621-96a9313cd506e32893d46c82358569ad242bb32786bd5487833e0f77767aec2a.yaml",
-        )]
-        #[case::block_number_15_555_729(
-            15_555_729,
-            "beacon_block_proof-15555729-c6fd396d54f61c6d0f1dd3653f81267b0378e9a0d638a229b24586d8fd0bc499.yaml",
-        )]
-        #[tokio::test]
-        async fn verify_header(#[case] block_number: u64, #[case] filename: &str) {
+        fn verify_header(
+            #[values(15_537_394, 15_539_558, 15_547_621, 15_555_729, 17_034_869)] block_number: u64,
+        ) {
             let header_validator = get_mainnet_header_validator();
 
             let BlockHashWithProof::<BlockProofHistoricalRoots> { header_hash, proof } =
                 read_yaml_portal_spec_tests_file(
                     PathBuf::from(SPEC_TESTS_DIR)
-                        .join("headers_with_proof/block_proofs_bellatrix")
-                        .join(filename),
+                        .join(format!("headers_with_proof/block_proofs_bellatrix/beacon_block_proof-{block_number}.yaml")),
                 )
                 .unwrap();
 
@@ -515,11 +496,9 @@ mod test {
         use super::*;
 
         #[rstest]
-        #[case::block_number_17_034_870(17_034_870)]
-        #[case::block_number_17_042_287(17_042_287)]
-        #[case::block_number_17_062_257(17_062_257)]
-        #[tokio::test]
-        async fn verify_header(#[case] block_number: u64) {
+        fn verify_header(
+            #[values(17_034_870, 17_042_287, 17_062_257, 19_426_586)] block_number: u64,
+        ) {
             let header_validator = get_mainnet_header_validator();
 
             let BlockHashWithProof::<BlockProofHistoricalSummariesCapella> { header_hash, proof } =
@@ -588,9 +567,7 @@ mod test {
         use super::*;
 
         #[rstest]
-        #[case::block_number_22_162_263(22_162_263)]
-        #[tokio::test]
-        async fn verify_header(#[case] block_number: u64) {
+        fn verify_header(#[values(19_426_587, 22_162_263)] block_number: u64) {
             let header_validator = get_mainnet_header_validator();
 
             let BlockHashWithProof::<BlockProofHistoricalSummariesDeneb> { header_hash, proof } =
