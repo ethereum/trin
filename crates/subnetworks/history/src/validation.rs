@@ -11,10 +11,8 @@ use ethportal_api::{
 };
 use ssz::Decode;
 use tokio::sync::RwLock;
-use tracing::info;
-use tree_hash::TreeHash;
 use trin_validation::{
-    header_validator::{HeaderValidator, HistoricalSummariesProvider, HistoricalSummariesSource},
+    header_validator::HeaderValidator,
     oracle::HeaderOracle,
     validator::{ValidationResult, Validator},
 };
@@ -26,13 +24,7 @@ pub struct ChainHistoryValidator {
 
 impl ChainHistoryValidator {
     pub fn new(header_oracle: Arc<RwLock<HeaderOracle>>) -> Self {
-        let header_validator = HeaderValidator::new(HistoricalSummariesProvider::new(
-            HistoricalSummariesSource::HeaderOracle(header_oracle.clone()),
-        ));
-        info!(
-            hash_tree_root = %header_validator.pre_merge_acc.tree_hash_root(),
-            "Loaded pre-merge accumulator."
-        );
+        let header_validator = HeaderValidator::new_with_header_oracle(header_oracle.clone());
         Self {
             header_oracle,
             header_validator,

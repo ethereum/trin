@@ -14,7 +14,7 @@ use reqwest::{
 };
 use tracing::info;
 use trin_execution::era::binary_search::EraBinarySearch;
-use trin_validation::constants::EPOCH_SIZE;
+use trin_validation::constants::SLOTS_PER_HISTORICAL_ROOT;
 
 pub enum EraSource {
     // processed era1 file
@@ -91,8 +91,8 @@ pub struct EraProvider {
 impl EraProvider {
     pub async fn new(epoch: u64) -> anyhow::Result<Self> {
         info!("Fetching e2store files for epoch: {epoch}");
-        let starting_block = epoch * EPOCH_SIZE;
-        let ending_block = starting_block + EPOCH_SIZE;
+        let starting_block = epoch * SLOTS_PER_HISTORICAL_ROOT;
+        let ending_block = starting_block + SLOTS_PER_HISTORICAL_ROOT;
         let http_client = Client::builder()
             .default_headers(HeaderMap::from_iter([(
                 CONTENT_TYPE,
@@ -108,7 +108,7 @@ impl EraProvider {
         while next_block < ending_block {
             let source = if !network_spec().is_paris_active_at_block(next_block) {
                 let era1_paths = get_era1_files(&http_client).await?;
-                let epoch_index = next_block / EPOCH_SIZE;
+                let epoch_index = next_block / SLOTS_PER_HISTORICAL_ROOT;
                 let era1_path = era1_paths.get(&epoch_index).ok_or(anyhow!(
                     "Era1 file not found for epoch index: {epoch_index}",
                 ))?;
@@ -162,7 +162,8 @@ impl EraProvider {
         );
         Ok(match &self.sources[0] {
             EraSource::PreMerge(era1) => {
-                let block_tuple = era1.block_tuples[(block_number % EPOCH_SIZE) as usize].clone();
+                let block_tuple =
+                    era1.block_tuples[(block_number % SLOTS_PER_HISTORICAL_ROOT) as usize].clone();
                 ensure!(
                     block_tuple.header.header.number == block_number,
                     "Block number mismatch",

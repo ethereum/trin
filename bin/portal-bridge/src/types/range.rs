@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use trin_validation::constants::EPOCH_SIZE;
+use trin_validation::constants::SLOTS_PER_HISTORICAL_ROOT;
 
 /// Converts a block range into a mapping of epoch indexes to block ranges.
 ///
@@ -16,14 +16,14 @@ pub fn block_range_to_epochs(start_block: u64, end_block: u64) -> HashMap<u64, O
     let mut epoch_map = HashMap::new();
 
     // Calculate start and end epochs
-    let start_epoch = start_block / EPOCH_SIZE;
-    let end_epoch = end_block / EPOCH_SIZE;
+    let start_epoch = start_block / SLOTS_PER_HISTORICAL_ROOT;
+    let end_epoch = end_block / SLOTS_PER_HISTORICAL_ROOT;
 
     // Process each epoch in the range
     for epoch in start_epoch..=end_epoch {
         // Calculate the first and last block of the current epoch
-        let epoch_first_block = epoch * EPOCH_SIZE;
-        let epoch_last_block = epoch_first_block + EPOCH_SIZE - 1;
+        let epoch_first_block = epoch * SLOTS_PER_HISTORICAL_ROOT;
+        let epoch_last_block = epoch_first_block + SLOTS_PER_HISTORICAL_ROOT - 1;
 
         // Determine if the epoch is fully or partially covered
         if epoch_first_block >= start_block && epoch_last_block <= end_block {

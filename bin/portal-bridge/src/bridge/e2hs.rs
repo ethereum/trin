@@ -14,6 +14,7 @@ use e2store::{
     utils::get_e2hs_files,
 };
 use ethportal_api::{
+    consensus::historical_summaries::HistoricalSummaries,
     types::{
         execution::header_with_proof::{BlockHeaderProof, HeaderWithProof},
         network::Subnetwork,
@@ -97,7 +98,9 @@ impl E2HSBridge {
         Ok(Self {
             gossiper,
             block_semaphore,
-            header_validator: HeaderValidator::new_without_historical_summaries(),
+            header_validator: HeaderValidator::new_with_historical_summaries(
+                HistoricalSummaries::default(),
+            ),
             block_range,
             random_fill,
             e2hs_files,

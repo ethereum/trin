@@ -25,9 +25,7 @@ use ethportal_api::{
 use portal_bridge::api::execution::ExecutionApi;
 use tokio::try_join;
 use trin_execution::era::beacon::decode_transactions;
-use trin_validation::{
-    accumulator::PreMergeAccumulator, constants::EPOCH_SIZE, header_validator::HeaderValidator,
-};
+use trin_validation::{accumulator::PreMergeAccumulator, constants::SLOTS_PER_HISTORICAL_ROOT};
 use url::Url;
 
 use crate::{
@@ -63,27 +61,27 @@ impl EpochReader {
     ) -> anyhow::Result<Self> {
         let execution_api = ExecutionApi::new(el_provider_url.clone(), el_provider_url, 10).await?;
         let latest_block = execution_api.get_latest_block_number().await?;
-        let maximum_epoch = latest_block / EPOCH_SIZE;
+        let maximum_epoch = latest_block / SLOTS_PER_HISTORICAL_ROOT;
         ensure!(
             epoch_index <= maximum_epoch,
             "Epoch {epoch_index} is greater than the maximum epoch {maximum_epoch}"
         );
 
-        let starting_block = epoch_index * EPOCH_SIZE;
+        let starting_block = epoch_index * SLOTS_PER_HISTORICAL_ROOT;
         let epoch_accumulator = if network_spec().is_paris_active_at_block(starting_block) {
             None
         } else {
             Some(Arc::new(
                 lookup_epoch_acc(
                     epoch_index,
-                    &HeaderValidator::new_without_historical_summaries().pre_merge_acc,
+                    &PreMergeAccumulator::default(),
                     &epoch_acc_path,
                 )
                 .await?,
             ))
         };
 
-        let ending_block = starting_block + EPOCH_SIZE;
+        let ending_block = starting_block + SLOTS_PER_HISTORICAL_ROOT;
         let is_paris_active = network_spec().is_paris_active_at_block(ending_block);
         let receipts_handle = tokio::spawn(async move {
             if is_paris_active {
