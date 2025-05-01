@@ -26,6 +26,7 @@ serde.workspace = true
 serde_json.workspace = true
 ssz_types.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 tree_hash.workspace = true
 tree_hash_derive.workspace = true
 

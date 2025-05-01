@@ -14,8 +14,11 @@ use e2store::{
     utils::get_e2hs_files,
 };
 use ethportal_api::{
+    consensus::historical_summaries::HistoricalSummaries,
     types::{
-        execution::header_with_proof::HeaderWithProof, network::Subnetwork, portal_wire::OfferTrace,
+        execution::header_with_proof::{BlockHeaderProof, HeaderWithProof},
+        network::Subnetwork,
+        portal_wire::OfferTrace,
     },
     BlockBody, ContentValue, HistoryContentKey, HistoryContentValue, OverlayContentKey,
     RawContentValue, Receipts,
@@ -95,7 +98,9 @@ impl E2HSBridge {
         Ok(Self {
             gossiper,
             block_semaphore,
-            header_validator: HeaderValidator::new(),
+            header_validator: HeaderValidator::new_with_historical_summaries(
+                HistoricalSummaries::default(),
+            ),
             block_range,
             random_fill,
             e2hs_files,
@@ -171,7 +176,7 @@ impl E2HSBridge {
                     continue;
                 }
             }
-            if let Err(err) = self.validate_block_tuple(&block_tuple) {
+            if let Err(err) = self.validate_block_tuple(&block_tuple).await {
                 error!("Failed to validate block tuple: {err:?}");
                 continue;
             }
@@ -206,10 +211,19 @@ impl E2HSBridge {
             .unwrap_or_else(|err| panic!("unable to read e2hs file at path: {e2hs_path:?} : {err}"))
     }
 
-    fn validate_block_tuple(&self, block_tuple: &BlockTuple) -> anyhow::Result<()> {
+    async fn validate_block_tuple(&self, block_tuple: &BlockTuple) -> anyhow::Result<()> {
         let header_with_proof = &block_tuple.header_with_proof.header_with_proof;
-        self.header_validator
-            .validate_header_with_proof(header_with_proof)?;
+        // The E2HS bridge doesn't have access to a provider so it can't validate historical summary
+        // Header with Proofs
+        if !matches!(
+            header_with_proof.proof,
+            BlockHeaderProof::HistoricalSummariesCapella(_)
+                | BlockHeaderProof::HistoricalSummariesDeneb(_)
+        ) {
+            self.header_validator
+                .validate_header_with_proof(header_with_proof)
+                .await?;
+        }
         let body = &block_tuple.body.body;
         body.validate_against_header(&header_with_proof.header)?;
         let receipts = &block_tuple.receipts.receipts;

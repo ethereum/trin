@@ -5,6 +5,7 @@ pub mod accumulator;
 pub mod constants;
 pub mod header_validator;
 pub mod historical_roots_acc;
+pub mod historical_summaries_provider;
 pub mod merkle;
 pub mod oracle;
 pub mod validator;

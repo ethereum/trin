@@ -14,7 +14,9 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 use tree_hash_derive::TreeHash;
 
-use crate::{constants::EPOCH_SIZE, merkle::proof::MerkleTree, TrinValidationAssets};
+use crate::{
+    constants::SLOTS_PER_HISTORICAL_ROOT, merkle::proof::MerkleTree, TrinValidationAssets,
+};
 
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.
@@ -49,7 +51,7 @@ impl PreMergeAccumulator {
     }
 
     pub(crate) fn get_epoch_index_of_header(&self, header: &Header) -> u64 {
-        header.number / EPOCH_SIZE
+        header.number / SLOTS_PER_HISTORICAL_ROOT
     }
 
     pub fn construct_proof(
@@ -57,7 +59,7 @@ impl PreMergeAccumulator {
         epoch_acc: &EpochAccumulator,
     ) -> anyhow::Result<BlockProofHistoricalHashesAccumulator> {
         // Validate header hash matches historical hash from epoch accumulator
-        let hr_index = (header.number % EPOCH_SIZE) as usize;
+        let hr_index = (header.number % SLOTS_PER_HISTORICAL_ROOT) as usize;
         let header_record = epoch_acc[hr_index];
         if header_record.block_hash != header.hash_slow() {
             return Err(anyhow!(
