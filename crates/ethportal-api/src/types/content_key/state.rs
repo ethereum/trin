@@ -177,7 +177,7 @@ mod test {
     use serde_yaml::Value;
 
     use super::*;
-    use crate::{test_utils::read_file_from_tests_submodule, utils::bytes::hex_decode};
+    use crate::{test_utils::read_yaml_portal_spec_tests_file, utils::bytes::hex_decode};
 
     const TEST_DATA_DIRECTORY: &str = "tests/mainnet/state/serialization";
 
@@ -293,9 +293,7 @@ mod test {
     }
 
     fn read_yaml_file(filename: &str) -> anyhow::Result<Value> {
-        let path = PathBuf::from(TEST_DATA_DIRECTORY).join(filename);
-        let file = read_file_from_tests_submodule(path)?;
-        Ok(serde_yaml::from_str(&file)?)
+        read_yaml_portal_spec_tests_file(PathBuf::from(TEST_DATA_DIRECTORY).join(filename))
     }
 
     fn yaml_as_address(value: &Value) -> Address {
