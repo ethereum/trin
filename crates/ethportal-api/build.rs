@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Trin's version is the same as the git tag.
     let git_describe = env::var("VERGEN_GIT_DESCRIBE")?;
     let trin_version = git_describe.split('-').collect::<Vec<&str>>()[0];
-    println!("cargo:rustc-env=TRIN_VERSION={}", trin_version);
+    println!("cargo:rustc-env=TRIN_VERSION={trin_version}");
 
     let cargo_target_triple = env::var("VERGEN_CARGO_TARGET_TRIPLE")?;
     let target_triple = cargo_target_triple.split('-').collect::<Vec<&str>>();
