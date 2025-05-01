@@ -120,3 +120,80 @@ impl PreMergeAccumulator {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use alloy::primitives::map::HashMap;
+    use ethportal_api::{
+        types::execution::header_with_proof::{BlockHeaderProof, HeaderWithProof},
+        HistoryContentKey, HistoryContentValue,
+    };
+    use rstest::rstest;
+    use trin_utils::{
+        submodules::{
+            read_json_portal_spec_tests_file, read_ssz_portal_spec_tests_file,
+            read_yaml_portal_spec_tests_file,
+        },
+        testing::ContentItem,
+    };
+
+    use super::*;
+
+    #[rstest]
+    fn construct_proof(
+        #[values(
+            1_000_001, 1_000_002, 1_000_003, 1_000_004, 1_000_005, 1_000_006, 1_000_007, 1_000_008,
+            1_000_009, 1_000_010
+        )]
+        block_number: u64,
+    ) {
+        let all_test_data: HashMap<u64, ContentItem<HistoryContentKey>> =
+            read_json_portal_spec_tests_file(
+                "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
+            )
+            .unwrap();
+        let test_data = all_test_data[&block_number].clone();
+
+        let epoch_accumulator = read_ssz_portal_spec_tests_file(
+            "tests/mainnet/history/accumulator/epoch-record-00122.ssz",
+        )
+        .unwrap();
+
+        test_construct_proof(test_data, epoch_accumulator);
+    }
+
+    #[rstest]
+    fn construct_proof_from_partial_epoch(#[values(15_537_392, 15_537_393)] block_number: u64) {
+        let test_data: ContentItem<HistoryContentKey> = read_yaml_portal_spec_tests_file(format!(
+            "tests/mainnet/history/headers_with_proof/{block_number}.yaml"
+        ))
+        .unwrap();
+
+        let epoch_accumulator_bytes = fs::read("./src/assets/epoch_accs/0xe6ebe562c89bc8ecb94dc9b2889a27a816ec05d3d6bd1625acad72227071e721.bin").unwrap();
+        let epoch_accumulator = EpochAccumulator::from_ssz_bytes(&epoch_accumulator_bytes).unwrap();
+        assert_eq!(epoch_accumulator.len(), 5362);
+
+        test_construct_proof(test_data, epoch_accumulator);
+    }
+
+    fn test_construct_proof(
+        content_item: ContentItem<HistoryContentKey>,
+        epoch_accumulator: EpochAccumulator,
+    ) {
+        let HistoryContentValue::BlockHeaderWithProof(HeaderWithProof { header, proof }) =
+            content_item.content_value().unwrap()
+        else {
+            panic!("Expected BlockHeaderWithProof content value");
+        };
+
+        let BlockHeaderProof::HistoricalHashes(expected_proof) = proof else {
+            panic!("Expected HistoricalHashes proof")
+        };
+
+        let generated_proof =
+            PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
+        assert_eq!(generated_proof, expected_proof);
+    }
+}

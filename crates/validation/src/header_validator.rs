@@ -112,7 +112,7 @@ impl HeaderValidator {
         }
 
         // Verify the chain of proofs for execution block header inclusion in beacon block
-        if !self.verify_bellatrix_to_deneb_execution_block_proo(
+        if !self.verify_bellatrix_to_deneb_execution_block_proof(
             header_hash,
             &proof.execution_block_proof,
             proof.beacon_block_root,
@@ -149,7 +149,7 @@ impl HeaderValidator {
         }
 
         // Verify the chain of proofs for execution block header inclusion in beacon block
-        if !self.verify_bellatrix_to_deneb_execution_block_proo(
+        if !self.verify_bellatrix_to_deneb_execution_block_proof(
             header_hash,
             &proof.execution_block_proof,
             proof.beacon_block_root,
@@ -207,7 +207,7 @@ impl HeaderValidator {
 
     /// Verify that the execution block header is included in Bellatrix/Capella beacon block
     #[must_use]
-    fn verify_bellatrix_to_deneb_execution_block_proo(
+    fn verify_bellatrix_to_deneb_execution_block_proof(
         &self,
         execution_header_hash: B256,
         execution_block_proof: &[B256],
@@ -302,15 +302,14 @@ impl HeaderValidator {
         let block_root_index = slot % EPOCH_SIZE;
         let gen_index = EPOCH_SIZE + block_root_index;
         let historical_summary_index = (slot - CAPELLA_FORK_EPOCH * SLOTS_PER_EPOCH) / EPOCH_SIZE;
-        let historical_summary =
-            historical_summaries[historical_summary_index as usize].block_summary_root;
+        let historical_summary = &historical_summaries[historical_summary_index as usize];
 
         verify_merkle_proof(
             beacon_block_root,
             beacon_block_proof,
             13,
             gen_index as usize,
-            historical_summary,
+            historical_summary.block_summary_root,
         )
     }
 }
@@ -318,29 +317,24 @@ impl HeaderValidator {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use std::{fs, path::PathBuf, str::FromStr};
+    use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-    use alloy::{
-        primitives::{Address, B256},
-        rlp::Decodable,
-    };
+    use alloy::primitives::{Address, B256};
     use alloy_hardforks::EthereumHardfork;
     use ethportal_api::{
-        types::execution::{
-            accumulator::EpochAccumulator,
-            header_with_proof::{BlockHeaderProof, HeaderWithProof},
-        },
-        utils::bytes::{hex_decode, hex_encode},
-        HistoryContentKey, OverlayContentKey,
+        types::execution::header_with_proof::{BlockHeaderProof, HeaderWithProof},
+        HistoryContentKey,
     };
     use rstest::*;
     use serde::Deserialize;
-    use serde_json::Value;
-    use ssz::{Decode, Encode};
+    use ssz::Decode;
     use tree_hash::TreeHash;
-    use trin_utils::submodules::{
-        read_portal_spec_tests_file, read_ssz_portal_spec_tests_file,
-        read_yaml_portal_spec_tests_file,
+    use trin_utils::{
+        submodules::{
+            read_json_portal_spec_tests_file, read_ssz_portal_spec_tests_file,
+            read_yaml_portal_spec_tests_file,
+        },
+        testing::ContentItem,
     };
 
     use super::*;
@@ -363,93 +357,58 @@ mod test {
         #[case::block_number_1_000_009(1_000_009)]
         #[case::block_number_1_000_010(1_000_010)]
         #[tokio::test]
-        async fn generate_and_verify_header_with_proofs(#[case] block_number: u64) {
-            // Use fluffy's proofs as test data to validate that trin
-            // - generates proofs which match fluffy's
-            // - validates hwps
+        async fn verify_header(#[case] block_number: u64) {
+            let test_data: HashMap<u64, ContentItem<HistoryContentKey>> =
+                read_json_portal_spec_tests_file(
+                    "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
+                )
+                .unwrap();
 
-            let file = read_portal_spec_tests_file(
-                "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
-            )
-            .unwrap();
-            let json: Value = serde_json::from_str(&file).unwrap();
-            let hwps = json.as_object().unwrap();
-            let header_validator = get_mainnet_header_validator();
-            let obj = hwps.get(&block_number.to_string()).unwrap();
-            // Validate content_key decodes
-            let raw_ck = obj.get("content_key").unwrap().as_str().unwrap();
-            let ck = HistoryContentKey::try_from_hex(raw_ck).unwrap();
-            match ck {
-                HistoryContentKey::BlockHeaderByHash(_) => (),
-                _ => panic!("Invalid test, content key decoded improperly"),
-            }
-            let raw_fluffy_hwp = obj.get("content_value").unwrap().as_str().unwrap();
-            let fluffy_hwp =
-                HeaderWithProof::from_ssz_bytes(&hex_decode(raw_fluffy_hwp).unwrap()).unwrap();
-            let header = get_header(block_number);
-            let epoch_accumulator = read_epoch_accumulator_122();
-            let trin_proof =
-                PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
-            let fluffy_proof = match fluffy_hwp.proof {
-                BlockHeaderProof::HistoricalHashes(val) => val,
-                _ => panic!("test reached invalid state"),
-            };
-            assert_eq!(trin_proof, fluffy_proof);
-            let hwp = HeaderWithProof {
-                header,
-                proof: BlockHeaderProof::HistoricalHashes(trin_proof),
-            };
-            header_validator.validate_header_with_proof(&hwp).unwrap();
+            let header_with_proof =
+                HeaderWithProof::from_ssz_bytes(&test_data[&block_number].raw_content_value)
+                    .unwrap();
+
+            get_mainnet_header_validator()
+                .validate_header_with_proof(&header_with_proof)
+                .unwrap();
         }
 
         #[rstest]
-        #[case::block_number_15_537_392(HEADER_RLP_15_537_392, 15_537_392)]
-        #[case::block_number_15_537_393(HEADER_RLP_15_537_393, 15_537_393)]
-        fn generate_and_verify_header_with_proofs_from_partial_epoch(
-            #[case] header_rlp: &str,
-            #[case] block_number: u64,
-        ) {
-            let header = Header::decode(&mut hex_decode(header_rlp).unwrap().as_slice()).unwrap();
-            assert_eq!(header.number, block_number);
-            let epoch_acc_bytes = fs::read("./src/assets/epoch_accs/0xe6ebe562c89bc8ecb94dc9b2889a27a816ec05d3d6bd1625acad72227071e721.bin").unwrap();
-            let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc_bytes).unwrap();
-            assert_eq!(epoch_acc.len(), 5362);
-            let proof = PreMergeAccumulator::construct_proof(&header, &epoch_acc).unwrap();
-            assert_eq!(proof.len(), 15);
-            let header_with_proof = HeaderWithProof {
-                header,
-                proof: BlockHeaderProof::HistoricalHashes(proof),
-            };
-            HeaderValidator::new()
-                .validate_header_with_proof(&header_with_proof)
-                .unwrap();
-            let encoded_hwp = hex_encode(header_with_proof.as_ssz_bytes());
-
-            let hwp_test_vector = serde_yaml::from_str::<serde_yaml::Value>(
-                &read_portal_spec_tests_file(format!(
-                    "tests/mainnet/history/headers_with_proof/{block_number}.yaml",
-                ))
-                .unwrap(),
+        #[case::block_number_15_537_392(15_537_392)]
+        #[case::block_number_15_537_393(15_537_393)]
+        fn verify_header_from_partial_epoch(#[case] block_number: u64) {
+            let test_data: ContentItem<HistoryContentKey> = read_yaml_portal_spec_tests_file(
+                format!("tests/mainnet/history/headers_with_proof/{block_number}.yaml"),
             )
             .unwrap();
-            let expected_hwp = hwp_test_vector["content_value"].as_str().unwrap();
-            assert_eq!(encoded_hwp, expected_hwp);
+
+            let header_with_proof =
+                HeaderWithProof::from_ssz_bytes(&test_data.raw_content_value).unwrap();
+
+            get_mainnet_header_validator()
+                .validate_header_with_proof(&header_with_proof)
+                .unwrap();
         }
 
         #[tokio::test]
         #[should_panic = "Execution block proof verification failed for pre-Merge header"]
         async fn invalidate_invalid_proofs() {
-            let header_validator = get_mainnet_header_validator();
-            let header = get_header(1_000_001);
-            let epoch_accumulator = read_epoch_accumulator_122();
-            let mut proof =
-                PreMergeAccumulator::construct_proof(&header, &epoch_accumulator).unwrap();
-            proof.swap(0, 1);
-            let hwp = HeaderWithProof {
-                header,
-                proof: BlockHeaderProof::HistoricalHashes(proof),
+            let test_data: ContentItem<HistoryContentKey> = read_yaml_portal_spec_tests_file(
+                "tests/mainnet/history/headers_with_proof/1000010.yaml",
+            )
+            .unwrap();
+            let mut header_with_proof =
+                HeaderWithProof::from_ssz_bytes(&test_data.raw_content_value).unwrap();
+
+            // Change order of hashes in the proof to make it invalid
+            let BlockHeaderProof::HistoricalHashes(proof) = &mut header_with_proof.proof else {
+                panic!("Expected HistoricalHashes proof");
             };
-            header_validator.validate_header_with_proof(&hwp).unwrap()
+            proof.swap(0, 1);
+
+            get_mainnet_header_validator()
+                .validate_header_with_proof(&header_with_proof)
+                .unwrap()
         }
 
         #[tokio::test]
@@ -458,12 +417,12 @@ mod test {
             let header_validator = get_mainnet_header_validator();
             let future_height = EthereumHardfork::Paris.mainnet_activation_block().unwrap();
             let future_header = generate_random_header(&future_height);
-            let future_hwp = HeaderWithProof {
+            let future_header_with_proof = HeaderWithProof {
                 header: future_header,
                 proof: BlockHeaderProof::HistoricalHashes(Default::default()),
             };
             header_validator
-                .validate_header_with_proof(&future_hwp)
+                .validate_header_with_proof(&future_header_with_proof)
                 .unwrap();
         }
     }
@@ -696,14 +655,6 @@ mod test {
         header_validator
     }
 
-    pub(crate) fn get_header(number: u64) -> Header {
-        let file = fs::read_to_string("./src/assets/header_rlps.json").unwrap();
-        let json: Value = serde_json::from_str(&file).unwrap();
-        let json = json.as_object().unwrap();
-        let raw_header = json.get(&number.to_string()).unwrap().as_str().unwrap();
-        Decodable::decode(&mut hex_decode(raw_header).unwrap().as_slice()).unwrap()
-    }
-
     fn generate_random_header(height: &u64) -> Header {
         Header {
             parent_hash: B256::random(),
@@ -725,14 +676,4 @@ mod test {
         )
         .unwrap()
     }
-
-    fn read_epoch_accumulator_122() -> EpochAccumulator {
-        read_ssz_portal_spec_tests_file(
-            PathBuf::from(SPEC_TESTS_DIR).join("accumulator/epoch-record-00122.ssz"),
-        )
-        .unwrap()
-    }
-
-    const HEADER_RLP_15_537_392: &str = "0xf90218a02f1dc309c7cc0a5a2e3b3dd9315fea0ffbc53c56f9237f3ca11b20de0232f153a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794ea674fdde714fd979de3edf0f56aa9716b898ec8a0fee48a40a2765ab31fcd06ab6956341d13dc2c4b9762f2447aa425bb1c089b30a082864b3a65d1ac1917c426d48915dca0fc966fbf3f30fd051659f35dc3fd9be1a013c10513b52358022f800e2f9f1c50328798427b1b4a1ebbbd20b7417fb9719db90100ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff872741c5e4f6c39283ed14f08401c9c3808401c9a028846322c95c8f617369612d65617374322d31763932a02df332ffb74ecd15c9873d3f6153b878e1c514495dfb6e89ad88e574582b02a488232b0043952c93d98508fb17c6ee";
-    const HEADER_RLP_15_537_393: &str = "0xf9021ba02b3ea3cd4befcab070812443affb08bf17a91ce382c714a536ca3cacab82278ba01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794829bd824b016326a401d083b33d092293333a830a04919dafa6ac8becfbbd0c2808f6c9511a057c21e42839caff5dfb6d3ef514951a0dd5eec02b019ff76e359b09bfa19395a2a0e97bc01e70d8d5491e640167c96a8a0baa842cfd552321a9c2450576126311e071680a1258032219c6490b663c1dab8b90100000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000000000080000000000000000000000000000000000000000000000000200000000000000000008000000000040000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000084000000000010020000000000000000000000000000000000020000000200000000200000000000000000000000000000000000000000400000000000000000000000008727472e1db3626a83ed14f18401c9c3808401c9a205846322c96292e4b883e5bda9e7a59ee4bb99e9b1bc460021a04cbec03dddd4b939730a7fe6048729604d4266e82426d472a2b2024f3cc4043f8862a3ee77461d4fc9850a1a4e5f06";
 }
