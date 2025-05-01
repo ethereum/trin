@@ -458,7 +458,7 @@ impl BeaconBridge {
         // Serve the latest historical summaries from the new finalized beacon state
         info!("Downloading beacon state for HistoricalSummariesWithProof generation...");
         finalized_state_root.lock().await.in_progress = true;
-        let beacon_state = consensus_api.get_beacon_state().await?;
+        let beacon_state = consensus_api.get_beacon_state("finalized").await?;
         let beacon_state_epoch = beacon_state.slot / SLOTS_PER_EPOCH;
 
         let historical_summaries_proof = beacon_state.build_historical_summaries_proof();

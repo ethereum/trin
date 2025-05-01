@@ -150,7 +150,7 @@ pub struct E2HSMemory {
 }
 
 impl E2HSMemory {
-    pub fn read_from_file(path: String) -> anyhow::Result<Self> {
+    pub fn read_from_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let buf = fs::read(path)?;
         Self::deserialize(&buf)
     }

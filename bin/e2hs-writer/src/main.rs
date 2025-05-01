@@ -2,19 +2,15 @@
 #![warn(clippy::uninlined_format_args)]
 
 pub mod cli;
-pub mod provider;
-pub mod reader;
-pub mod utils;
-pub mod writer;
-
-use std::time::Instant;
+pub mod subcommands;
 
 use clap::Parser;
-use humanize_duration::{prelude::DurationExt, Truncate};
+use cli::E2HSWriterSubCommands;
+use subcommands::{head_generator::HeadGenerator, single_generator};
 use tracing::info;
 use trin_utils::log::init_tracing_logger;
 
-use crate::{reader::EpochReader, writer::EpochWriter};
+use crate::single_generator::single_generator;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -23,21 +19,15 @@ async fn main() -> anyhow::Result<()> {
     let config = cli::WriterConfig::parse();
     info!("With configuration: {config:?}");
 
-    let start = Instant::now();
-    let epoch_reader =
-        EpochReader::new(config.epoch, config.epoch_acc_path, config.el_provider).await?;
-    info!(
-        "Time taken to download Era/Era1 and Receipts {}",
-        start.elapsed().human(Truncate::Second)
-    );
-
-    let start = Instant::now();
-    let epoch_writer = EpochWriter::new(config.target_dir, config.epoch);
-    epoch_writer.write_epoch(epoch_reader).await?;
-    info!(
-        "Time taken to finished writing blocks  {}",
-        start.elapsed().human(Truncate::Second)
-    );
+    match config.command {
+        E2HSWriterSubCommands::SingleGenerator(config) => {
+            single_generator(config).await?;
+        }
+        E2HSWriterSubCommands::HeadGenerator(config) => {
+            let mut head_generator = HeadGenerator::new(config).await?;
+            head_generator.run().await?;
+        }
+    }
 
     Ok(())
 }

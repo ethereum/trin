@@ -1,28 +1,34 @@
-use std::{fs, path::Path};
-
 use alloy::{
     consensus::{
         proofs::{calculate_transaction_root, calculate_withdrawals_root},
-        Header, TxEnvelope,
+        BlockBody as AlloyBlockBody, Header, TxEnvelope,
     },
-    eips::eip4895::Withdrawal,
+    eips::eip4895::{Withdrawal, Withdrawals},
     primitives::{Bloom, B256, B64, U256},
 };
-use anyhow::{anyhow, ensure};
+use anyhow::ensure;
 use ethportal_api::{
     consensus::{
+        beacon_block::{
+            BeaconBlockBellatrix, BeaconBlockCapella, BeaconBlockDeneb, BeaconBlockElectra,
+        },
+        beacon_state::HistoricalBatch,
         execution_payload::{
             ExecutionPayloadBellatrix, ExecutionPayloadCapella, ExecutionPayloadDeneb,
             ExecutionPayloadElectra,
         },
         execution_requests::ExecutionRequests,
     },
-    types::execution::accumulator::EpochAccumulator,
-    utils::bytes::hex_encode,
+    types::execution::{
+        block_body::BlockBody,
+        header_with_proof::{
+            build_capella_historical_summaries_proof, build_deneb_historical_summaries_proof,
+            build_electra_historical_summaries_proof, build_historical_roots_proof,
+            BlockHeaderProof, HeaderWithProof,
+        },
+    },
 };
-use ssz::Decode;
-use trin_execution::era::beacon::EMPTY_UNCLE_ROOT_HASH;
-use trin_validation::accumulator::PreMergeAccumulator;
+use trin_execution::era::beacon::{decode_transactions, EMPTY_UNCLE_ROOT_HASH};
 
 pub fn bellatrix_execution_payload_to_header(
     payload: &ExecutionPayloadBellatrix,
@@ -177,26 +183,120 @@ pub fn electra_execution_payload_to_header(
     Ok(header)
 }
 
-/// Lookup the epoch accumulator & epoch hash for the given epoch index.
-pub async fn lookup_epoch_acc(
-    epoch_index: u64,
-    pre_merge_acc: &PreMergeAccumulator,
-    epoch_acc_path: &Path,
-) -> anyhow::Result<EpochAccumulator> {
-    let epoch_hash = pre_merge_acc.historical_epochs[epoch_index as usize];
-    let epoch_hash_pretty = hex_encode(epoch_hash);
-    let epoch_hash_pretty = epoch_hash_pretty.trim_start_matches("0x");
-    let epoch_acc_path = format!(
-        "{}/bridge_content/0x03{epoch_hash_pretty}.portalcontent",
-        epoch_acc_path.display(),
-    );
-    let epoch_acc = match fs::read(&epoch_acc_path) {
-        Ok(val) => EpochAccumulator::from_ssz_bytes(&val).map_err(|err| anyhow!("{err:?}"))?,
-        Err(_) => {
-            return Err(anyhow!(
-                "Unable to find local epoch acc at path: {epoch_acc_path:?}"
-            ))
-        }
+pub fn get_merge_to_capella_header_and_body(
+    block: &BeaconBlockBellatrix,
+    historical_batch: &HistoricalBatch,
+) -> anyhow::Result<(HeaderWithProof, BlockBody)> {
+    let payload = &block.body.execution_payload;
+
+    let transactions = decode_transactions(&payload.transactions)?;
+
+    let header_with_proof = HeaderWithProof {
+        header: bellatrix_execution_payload_to_header(payload, &transactions)?,
+        proof: BlockHeaderProof::HistoricalRoots(build_historical_roots_proof(
+            block.slot,
+            historical_batch,
+            block,
+        )),
     };
-    Ok(epoch_acc)
+    let body = BlockBody(AlloyBlockBody {
+        transactions,
+        ommers: vec![],
+        withdrawals: None,
+    });
+
+    Ok((header_with_proof, body))
+}
+
+pub fn get_capella_to_deneb_header_and_body(
+    block: &BeaconBlockCapella,
+    historical_batch: &HistoricalBatch,
+) -> anyhow::Result<(HeaderWithProof, BlockBody)> {
+    let payload = &block.body.execution_payload;
+
+    let transactions = decode_transactions(&payload.transactions)?;
+    let withdrawals: Vec<Withdrawal> = payload.withdrawals.iter().map(Withdrawal::from).collect();
+
+    let header_with_proof = HeaderWithProof {
+        header: capella_execution_payload_to_header(payload, &transactions, &withdrawals)?,
+        proof: BlockHeaderProof::HistoricalSummariesCapella(
+            build_capella_historical_summaries_proof(
+                block.slot,
+                &historical_batch.block_roots,
+                block,
+            ),
+        ),
+    };
+    let body = BlockBody(AlloyBlockBody {
+        transactions,
+        ommers: vec![],
+        withdrawals: Some(Withdrawals::new(withdrawals)),
+    });
+
+    Ok((header_with_proof, body))
+}
+
+pub fn get_deneb_to_electra_header_and_body(
+    block: &BeaconBlockDeneb,
+    historical_batch: &HistoricalBatch,
+) -> anyhow::Result<(HeaderWithProof, BlockBody)> {
+    let payload = &block.body.execution_payload;
+
+    let transactions = decode_transactions(&payload.transactions)?;
+    let withdrawals: Vec<Withdrawal> = payload.withdrawals.iter().map(Withdrawal::from).collect();
+
+    let header_with_proof = HeaderWithProof {
+        header: deneb_execution_payload_to_header(
+            payload,
+            block.parent_root,
+            &transactions,
+            &withdrawals,
+        )?,
+        proof: BlockHeaderProof::HistoricalSummariesDeneb(build_deneb_historical_summaries_proof(
+            block.slot,
+            &historical_batch.block_roots,
+            block,
+        )),
+    };
+    let body = BlockBody(AlloyBlockBody {
+        transactions,
+        ommers: vec![],
+        withdrawals: Some(Withdrawals::new(withdrawals)),
+    });
+
+    Ok((header_with_proof, body))
+}
+
+pub fn get_post_electra_header_and_body(
+    block: &BeaconBlockElectra,
+    historical_batch: &HistoricalBatch,
+) -> anyhow::Result<(HeaderWithProof, BlockBody)> {
+    let payload = &block.body.execution_payload;
+
+    let transactions = decode_transactions(&payload.transactions)?;
+    let withdrawals: Vec<Withdrawal> = payload.withdrawals.iter().map(Withdrawal::from).collect();
+
+    let header_with_proof = HeaderWithProof {
+        header: electra_execution_payload_to_header(
+            payload,
+            block.parent_root,
+            &transactions,
+            &withdrawals,
+            &block.body.execution_requests,
+        )?,
+        proof: BlockHeaderProof::HistoricalSummariesDeneb(
+            build_electra_historical_summaries_proof(
+                block.slot,
+                &historical_batch.block_roots,
+                block,
+            ),
+        ),
+    };
+    let body = BlockBody(AlloyBlockBody {
+        transactions,
+        ommers: vec![],
+        withdrawals: Some(Withdrawals::new(withdrawals)),
+    });
+
+    Ok((header_with_proof, body))
 }
