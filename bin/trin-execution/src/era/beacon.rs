@@ -10,7 +10,7 @@ use alloy::{
 use ethportal_api::consensus::{
     beacon_block::{
         SignedBeaconBlock, SignedBeaconBlockBellatrix, SignedBeaconBlockCapella,
-        SignedBeaconBlockDeneb,
+        SignedBeaconBlockDeneb, SignedBeaconBlockElectra,
     },
     body::Transactions,
 };
@@ -32,6 +32,7 @@ impl ProcessBeaconBlock for SignedBeaconBlock {
             SignedBeaconBlock::Bellatrix(block) => block.process_beacon_block(),
             SignedBeaconBlock::Capella(block) => block.process_beacon_block(),
             SignedBeaconBlock::Deneb(block) => block.process_beacon_block(),
+            SignedBeaconBlock::Electra(block) => block.process_beacon_block(),
         }
     }
 }
@@ -123,6 +124,51 @@ impl ProcessBeaconBlock for SignedBeaconBlockCapella {
 }
 
 impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
+    fn process_beacon_block(&self) -> anyhow::Result<ProcessedBlock> {
+        let payload = &self.message.body.execution_payload;
+
+        let transactions = decode_transactions(&payload.transactions)?;
+        let transactions_root = calculate_transaction_root(&transactions);
+        let transactions = process_transactions(transactions)?;
+
+        let withdrawals: Vec<Withdrawal> =
+            payload.withdrawals.iter().map(Withdrawal::from).collect();
+        let withdrawals_root = calculate_withdrawals_root(&withdrawals);
+
+        let header = Header {
+            parent_hash: payload.parent_hash,
+            ommers_hash: EMPTY_UNCLE_ROOT_HASH,
+            beneficiary: payload.fee_recipient,
+            state_root: payload.state_root,
+            transactions_root,
+            receipts_root: payload.receipts_root,
+            logs_bloom: Bloom::from_slice(payload.logs_bloom.to_vec().as_slice()),
+            difficulty: U256::ZERO,
+            number: payload.block_number,
+            gas_limit: payload.gas_limit,
+            gas_used: payload.gas_used,
+            timestamp: payload.timestamp,
+            extra_data: payload.extra_data.to_vec().into(),
+            mix_hash: payload.prev_randao,
+            nonce: B64::ZERO,
+            base_fee_per_gas: Some(payload.base_fee_per_gas.to()),
+            withdrawals_root: Some(withdrawals_root),
+            blob_gas_used: Some(payload.blob_gas_used),
+            excess_blob_gas: Some(payload.excess_blob_gas),
+            parent_beacon_block_root: Some(self.message.parent_root),
+            requests_hash: None,
+        };
+
+        Ok(ProcessedBlock {
+            header: header.clone(),
+            uncles: None,
+            withdrawals: Some(withdrawals),
+            transactions,
+        })
+    }
+}
+
+impl ProcessBeaconBlock for SignedBeaconBlockElectra {
     fn process_beacon_block(&self) -> anyhow::Result<ProcessedBlock> {
         let payload = &self.message.body.execution_payload;
 

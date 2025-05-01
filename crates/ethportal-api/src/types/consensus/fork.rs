@@ -20,6 +20,7 @@ pub enum ForkName {
     Bellatrix,
     Capella,
     Deneb,
+    Electra,
 }
 
 impl TryFrom<ForkDigest> for ForkName {
@@ -30,6 +31,7 @@ impl TryFrom<ForkDigest> for ForkName {
             [0x0, 0x0, 0x0, 0x0] => Ok(ForkName::Bellatrix),
             [0xbb, 0xa4, 0xda, 0x96] => Ok(ForkName::Capella),
             [0x6a, 0x95, 0xa1, 0xa9] => Ok(ForkName::Deneb),
+            [0x1, 0x1, 0x1, 0x1] => Ok(ForkName::Electra), // Placeholder for Electra
             _ => Err(ParseForkNameError(hex_encode(fork_digest))),
         }
     }
@@ -41,6 +43,7 @@ impl ForkName {
             ForkName::Bellatrix => [0x0, 0x0, 0x0, 0x0],
             ForkName::Capella => [0xbb, 0xa4, 0xda, 0x96],
             ForkName::Deneb => [0x6a, 0x95, 0xa1, 0xa9],
+            ForkName::Electra => [0x1, 0x1, 0x1, 0x1], // Placeholder for Electra
         }
     }
 
@@ -49,6 +52,7 @@ impl ForkName {
             ForkName::Bellatrix => "Bellatrix",
             ForkName::Capella => "Capella",
             ForkName::Deneb => "Deneb",
+            ForkName::Electra => "Electra",
         }
     }
 }
@@ -61,6 +65,7 @@ impl FromStr for ForkName {
             "bellatrix" | "merge" => ForkName::Bellatrix,
             "capella" => ForkName::Capella,
             "deneb" => ForkName::Deneb,
+            "electra" => ForkName::Electra,
             _ => return Err(format!("unknown fork name: {fork_name}")),
         })
     }
@@ -72,6 +77,7 @@ impl Display for ForkName {
             ForkName::Bellatrix => "bellatrix".fmt(f),
             ForkName::Capella => "capella".fmt(f),
             ForkName::Deneb => "deneb".fmt(f),
+            ForkName::Electra => "electra".fmt(f),
         }
     }
 }
@@ -99,8 +105,10 @@ mod test {
         assert_eq!(ForkName::from_str("bellatrix"), Ok(ForkName::Bellatrix));
         assert_eq!(ForkName::from_str("capella"), Ok(ForkName::Capella));
         assert_eq!(ForkName::from_str("deneb"), Ok(ForkName::Deneb));
+        assert_eq!(ForkName::from_str("electra"), Ok(ForkName::Electra));
         assert_eq!(ForkName::Bellatrix.to_string(), "bellatrix");
         assert_eq!(ForkName::Capella.to_string(), "capella");
         assert_eq!(ForkName::Deneb.to_string(), "deneb");
+        assert_eq!(ForkName::Electra.to_string(), "electra");
     }
 }

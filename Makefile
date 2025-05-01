@@ -101,15 +101,16 @@ build-release-tarballs: ## Create a series of `.tar.gz` files in the BIN_DIR dir
 
 EF_TESTS_TARGET = mainnet.tar.gz
 EF_TESTS_DIR = ./testing/ef-tests/mainnet
-LATEST_RELEASE_URL = https://api.github.com/repos/ethereum/consensus-spec-tests/releases/latest
+LATEST_RELEASE_URL = https://api.github.com/repos/ethereum/consensus-spec-tests/releases
 
 download_test_data:
 	@if [ -d $(EF_TESTS_DIR) ]; then \
 		echo "$(EF_TESTS_DIR) already downloaded. Skipping download."; \
 	else \
-		echo "Fetching the latest release URL for $(EF_TESTS_TARGET)..."; \
-		curl -s $(LATEST_RELEASE_URL) \
+		echo "Fetching the latest release (including pre-releases) for $(EF_TESTS_TARGET)..."; \
+		curl -s $(ALL_RELEASES_URL) \
 		| grep "browser_download_url.*$(EF_TESTS_TARGET)" \
+		| head -n 1 \
 		| cut -d : -f 2,3 \
 		| tr -d \" \
 		| wget -qi -; \

@@ -6,8 +6,10 @@ use ssz_types::{typenum::U128, VariableList};
 
 use crate::{
     light_client::{
-        bootstrap::LightClientBootstrapDeneb, finality_update::LightClientFinalityUpdateDeneb,
-        optimistic_update::LightClientOptimisticUpdateDeneb, update::LightClientUpdateDeneb,
+        bootstrap::{LightClientBootstrapDeneb, LightClientBootstrapElectra},
+        finality_update::{LightClientFinalityUpdateDeneb, LightClientFinalityUpdateElectra},
+        optimistic_update::{LightClientOptimisticUpdateDeneb, LightClientOptimisticUpdateElectra},
+        update::{LightClientUpdateDeneb, LightClientUpdateElectra},
     },
     types::{
         consensus::{
@@ -88,6 +90,9 @@ impl ForkVersionedLightClientBootstrap {
             ForkName::Deneb => {
                 LightClientBootstrap::Deneb(LightClientBootstrapDeneb::from_ssz_bytes(&bytes[4..])?)
             }
+            ForkName::Electra => LightClientBootstrap::Electra(
+                LightClientBootstrapElectra::from_ssz_bytes(&bytes[4..])?,
+            ),
         };
 
         Ok(Self {
@@ -102,6 +107,7 @@ impl ForkVersionedLightClientBootstrap {
             LightClientBootstrap::Bellatrix(bootstrap) => bootstrap.header.beacon.slot,
             LightClientBootstrap::Capella(bootstrap) => bootstrap.header.beacon.slot,
             LightClientBootstrap::Deneb(bootstrap) => bootstrap.header.beacon.slot,
+            LightClientBootstrap::Electra(bootstrap) => bootstrap.header.beacon.slot,
         }
     }
 }
@@ -163,6 +169,9 @@ impl ForkVersionedLightClientUpdate {
             }
             ForkName::Deneb => {
                 LightClientUpdate::Deneb(LightClientUpdateDeneb::from_ssz_bytes(&bytes[4..])?)
+            }
+            ForkName::Electra => {
+                LightClientUpdate::Electra(LightClientUpdateElectra::from_ssz_bytes(&bytes[4..])?)
             }
         };
 
@@ -304,6 +313,9 @@ impl ForkVersionedLightClientOptimisticUpdate {
             ForkName::Deneb => LightClientOptimisticUpdate::Deneb(
                 LightClientOptimisticUpdateDeneb::from_ssz_bytes(&buf[4..])?,
             ),
+            ForkName::Electra => LightClientOptimisticUpdate::Electra(
+                LightClientOptimisticUpdateElectra::from_ssz_bytes(&buf[4..])?,
+            ),
         };
 
         Ok(Self {
@@ -389,6 +401,9 @@ impl ForkVersionedLightClientFinalityUpdate {
             ForkName::Deneb => LightClientFinalityUpdate::Deneb(
                 LightClientFinalityUpdateDeneb::from_ssz_bytes(&buf[4..])?,
             ),
+            ForkName::Electra => LightClientFinalityUpdate::Electra(
+                LightClientFinalityUpdateElectra::from_ssz_bytes(&buf[4..])?,
+            ),
         };
 
         Ok(Self {
@@ -403,6 +418,7 @@ impl ForkVersionedLightClientFinalityUpdate {
             LightClientFinalityUpdate::Bellatrix(update) => update.finalized_header.beacon.slot,
             LightClientFinalityUpdate::Capella(update) => update.finalized_header.beacon.slot,
             LightClientFinalityUpdate::Deneb(update) => update.finalized_header.beacon.slot,
+            LightClientFinalityUpdate::Electra(update) => update.finalized_header.beacon.slot,
         }
     }
 }
