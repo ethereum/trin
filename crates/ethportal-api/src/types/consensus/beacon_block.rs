@@ -144,6 +144,29 @@ impl BeaconBlockDeneb {
     }
 }
 
+impl BeaconBlockElectra {
+    pub fn build_body_root_proof(&self) -> Vec<B256> {
+        let leaves = [
+            self.slot.tree_hash_root(),
+            self.proposer_index.tree_hash_root(),
+            self.parent_root.tree_hash_root(),
+            self.state_root.tree_hash_root(),
+            self.body.tree_hash_root(),
+        ];
+        // We want to prove the body root, which is the 5th leaf
+        build_merkle_proof_for_index(leaves, 4)
+    }
+
+    pub fn build_execution_block_hash_proof(&self) -> Vec<B256> {
+        [
+            self.body.execution_payload.build_block_hash_proof(),
+            self.body.build_execution_payload_proof(),
+            self.build_body_root_proof(),
+        ]
+        .concat()
+    }
+}
+
 /// A `BeaconBlock` and a signature from its proposer.
 #[superstruct(
     variants(Bellatrix, Capella, Deneb, Electra),

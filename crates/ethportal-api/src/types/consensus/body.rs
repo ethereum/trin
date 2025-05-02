@@ -168,6 +168,28 @@ impl BeaconBlockBodyDeneb {
     }
 }
 
+impl BeaconBlockBodyElectra {
+    pub fn build_execution_payload_proof(&self) -> Vec<B256> {
+        let leaves = [
+            self.randao_reveal.tree_hash_root(),
+            self.eth1_data.tree_hash_root(),
+            self.graffiti.tree_hash_root(),
+            self.proposer_slashings.tree_hash_root(),
+            self.attester_slashings.tree_hash_root(),
+            self.attestations.tree_hash_root(),
+            self.deposits.tree_hash_root(),
+            self.voluntary_exits.tree_hash_root(),
+            self.sync_aggregate.tree_hash_root(),
+            self.execution_payload.tree_hash_root(),
+            self.bls_to_execution_changes.tree_hash_root(),
+            self.blob_kzg_commitments.tree_hash_root(),
+            self.execution_requests.tree_hash_root(),
+        ];
+        // We want to prove the 10th leaf
+        build_merkle_proof_for_index(leaves, 9)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Decode, Encode, TreeHash)]
 pub struct SyncAggregate {
     pub sync_committee_bits: BitVector<typenum::U512>,

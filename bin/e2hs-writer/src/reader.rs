@@ -14,8 +14,8 @@ use ethportal_api::{
             block_body::BlockBody,
             header_with_proof::{
                 build_capella_historical_summaries_proof, build_deneb_historical_summaries_proof,
-                build_historical_roots_proof, BlockHeaderProof,
-                BlockProofHistoricalHashesAccumulator, HeaderWithProof,
+                build_electra_historical_summaries_proof, build_historical_roots_proof,
+                BlockHeaderProof, BlockProofHistoricalHashesAccumulator, HeaderWithProof,
             },
         },
         network_spec::network_spec,
@@ -33,6 +33,7 @@ use crate::{
     utils::{
         bellatrix_execution_payload_to_header, capella_execution_payload_to_header,
         lookup_epoch_acc, post_deneb_execution_payload_to_header,
+        post_electra_execution_payload_to_header,
     },
 };
 
@@ -221,6 +222,48 @@ impl EpochReader {
             )?,
             proof: BlockHeaderProof::HistoricalSummariesDeneb(
                 build_deneb_historical_summaries_proof(
+                    block.slot,
+                    &era.historical_batch.block_roots,
+                    block,
+                ),
+            ),
+        };
+        let body = BlockBody(AlloyBlockBody {
+            transactions,
+            ommers: vec![],
+            withdrawals: Some(Withdrawals::new(withdrawals)),
+        });
+        let receipts = self.get_receipts(block_number, header_with_proof.header.receipts_root)?;
+        Ok(AllBlockData {
+            block_number,
+            header_with_proof,
+            body,
+            receipts,
+        })
+    }
+
+    #[allow(dead_code)]
+    fn get_electra_block_data(&mut self, block_number: u64) -> anyhow::Result<AllBlockData> {
+        let (block, era) = self.era_provider.get_post_merge(block_number)?;
+        let block = block
+            .block
+            .message_electra()
+            .map_err(|e| anyhow!("Unable to decode ekectra block: {e:?}"))?;
+        let payload = &block.body.execution_payload;
+        let transactions = decode_transactions(&payload.transactions)?;
+        let withdrawals: Vec<Withdrawal> =
+            payload.withdrawals.iter().map(Withdrawal::from).collect();
+
+        let header_with_proof = HeaderWithProof {
+            header: post_electra_execution_payload_to_header(
+                payload,
+                block.parent_root,
+                &transactions,
+                &withdrawals,
+                &block.body.execution_requests,
+            )?,
+            proof: BlockHeaderProof::HistoricalSummariesDeneb(
+                build_electra_historical_summaries_proof(
                     block.slot,
                     &era.historical_batch.block_roots,
                     block,
