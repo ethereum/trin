@@ -1,4 +1,4 @@
-use alloy::primitives::B256;
+use alloy::{eips::eip6110::DEPOSIT_REQUEST_TYPE, primitives::B256};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz_derive::{Decode, Encode};
@@ -15,4 +15,8 @@ pub struct DepositRequest {
     pub signature: BlsSignature,
     #[serde(deserialize_with = "as_u64")]
     pub index: u64,
+}
+
+impl DepositRequest {
+    pub const REQUEST_TYPE: u8 = DEPOSIT_REQUEST_TYPE;
 }

@@ -1,4 +1,4 @@
-use alloy::primitives::Address;
+use alloy::{eips::eip7002::WITHDRAWAL_REQUEST_TYPE, primitives::Address};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz_derive::{Decode, Encode};
@@ -12,4 +12,8 @@ pub struct WithdrawalRequest {
     pub validator_pubkey: PubKey,
     #[serde(deserialize_with = "as_u64")]
     pub amount: u64,
+}
+
+impl WithdrawalRequest {
+    pub const REQUEST_TYPE: u8 = WITHDRAWAL_REQUEST_TYPE;
 }

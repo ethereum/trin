@@ -201,7 +201,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockElectra {
             blob_gas_used: Some(payload.blob_gas_used),
             excess_blob_gas: Some(payload.excess_blob_gas),
             parent_beacon_block_root: Some(self.message.parent_root),
-            requests_hash: None,
+            requests_hash: Some(self.message.body.execution_requests.requests_hash()),
         };
 
         Ok(ProcessedBlock {

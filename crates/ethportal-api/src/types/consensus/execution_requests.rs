@@ -1,4 +1,6 @@
+use alloy::{eips::eip7685::Requests as AlloyRequests, primitives::B256};
 use serde::{Deserialize, Serialize};
+use ssz::Encode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{
     typenum::{U16, U2, U8192},
@@ -25,4 +27,33 @@ pub struct ExecutionRequests {
     pub deposits: DepositRequests,
     pub withdrawals: WithdrawalRequests,
     pub consolidations: ConsolidationRequests,
+}
+
+impl ExecutionRequests {
+    pub fn requests_hash(&self) -> B256 {
+        let mut requests = AlloyRequests::with_capacity(
+            self.deposits.len() + self.withdrawals.len() + self.consolidations.len(),
+        );
+
+        for deposit_request in &self.deposits {
+            requests.push_request_with_type(
+                DepositRequest::REQUEST_TYPE,
+                deposit_request.as_ssz_bytes(),
+            );
+        }
+        for withdrawal_request in &self.withdrawals {
+            requests.push_request_with_type(
+                WithdrawalRequest::REQUEST_TYPE,
+                withdrawal_request.as_ssz_bytes(),
+            );
+        }
+        for consolidation_request in &self.consolidations {
+            requests.push_request_with_type(
+                ConsolidationRequest::REQUEST_TYPE,
+                consolidation_request.as_ssz_bytes(),
+            );
+        }
+
+        requests.requests_hash()
+    }
 }
