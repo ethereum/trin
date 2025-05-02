@@ -63,6 +63,15 @@ impl From<LightClientBootstrapDeneb> for ForkVersionedLightClientBootstrap {
     }
 }
 
+impl From<LightClientBootstrapElectra> for ForkVersionedLightClientBootstrap {
+    fn from(bootstrap: LightClientBootstrapElectra) -> Self {
+        Self {
+            fork_name: ForkName::Electra,
+            bootstrap: LightClientBootstrap::Electra(bootstrap),
+        }
+    }
+}
+
 impl ForkVersionedLightClientBootstrap {
     pub fn encode(&self) -> Vec<u8> {
         let fork_digest = self.fork_name.as_fork_digest();
@@ -285,6 +294,15 @@ impl From<LightClientOptimisticUpdateDeneb> for ForkVersionedLightClientOptimist
     }
 }
 
+impl From<LightClientOptimisticUpdateElectra> for ForkVersionedLightClientOptimisticUpdate {
+    fn from(update: LightClientOptimisticUpdateElectra) -> Self {
+        Self {
+            fork_name: ForkName::Electra,
+            update: LightClientOptimisticUpdate::Electra(update),
+        }
+    }
+}
+
 impl ForkVersionedLightClientOptimisticUpdate {
     fn encode(&self) -> Vec<u8> {
         let fork_digest = self.fork_name.as_fork_digest();
@@ -364,11 +382,21 @@ impl From<LightClientFinalityUpdateCapella> for ForkVersionedLightClientFinality
         }
     }
 }
+
 impl From<LightClientFinalityUpdateDeneb> for ForkVersionedLightClientFinalityUpdate {
     fn from(update: LightClientFinalityUpdateDeneb) -> Self {
         Self {
             fork_name: ForkName::Deneb,
             update: LightClientFinalityUpdate::Deneb(update),
+        }
+    }
+}
+
+impl From<LightClientFinalityUpdateElectra> for ForkVersionedLightClientFinalityUpdate {
+    fn from(update: LightClientFinalityUpdateElectra) -> Self {
+        Self {
+            fork_name: ForkName::Electra,
+            update: LightClientFinalityUpdate::Electra(update),
         }
     }
 }

@@ -19,16 +19,23 @@ use ethportal_api::{
             ProposerSlashing, SignedBLSToExecutionChange, SignedVoluntaryExit, SyncAggregate,
             VoluntaryExit,
         },
+        consolidation_request::ConsolidationRequest,
+        deposit_request::DepositRequest,
         execution_payload::{
             ExecutionPayloadBellatrix, ExecutionPayloadCapella, ExecutionPayloadDeneb,
             ExecutionPayloadElectra, ExecutionPayloadHeaderBellatrix,
             ExecutionPayloadHeaderCapella, ExecutionPayloadHeaderDeneb,
             ExecutionPayloadHeaderElectra, Withdrawal,
         },
+        execution_requests::ExecutionRequests,
         fork::ForkName,
         header::BeaconBlockHeader,
         historical_summaries::HistoricalSummary,
+        pending_balance_deposit::PendingDeposit,
+        pending_consolidation::PendingConsolidation,
+        pending_partial_withdrawal::PendingPartialWithdrawal,
         sync_committee::SyncCommittee,
+        withdrawal_request::WithdrawalRequest,
     },
     light_client::{
         bootstrap::{
@@ -117,6 +124,15 @@ test_consensus_type!(LightClientHeaderDeneb, ForkName::Deneb);
 test_consensus_type!(LightClientOptimisticUpdateDeneb, ForkName::Deneb);
 test_consensus_type!(LightClientUpdateDeneb, ForkName::Deneb);
 test_consensus_type!(SignedBeaconBlockDeneb, ForkName::Deneb);
+
+// Generic types added in Electra
+test_consensus_type!(ConsolidationRequest, ForkName::Electra);
+test_consensus_type!(DepositRequest, ForkName::Electra);
+test_consensus_type!(ExecutionRequests, ForkName::Electra);
+test_consensus_type!(PendingConsolidation, ForkName::Electra);
+test_consensus_type!(PendingDeposit, ForkName::Electra);
+test_consensus_type!(PendingPartialWithdrawal, ForkName::Electra);
+test_consensus_type!(WithdrawalRequest, ForkName::Electra);
 
 // Electra types
 test_consensus_type!(BeaconBlockElectra, ForkName::Electra);

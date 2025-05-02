@@ -28,10 +28,10 @@ impl TryFrom<ForkDigest> for ForkName {
 
     fn try_from(fork_digest: ForkDigest) -> Result<Self, Self::Error> {
         match fork_digest {
-            [0x0, 0x0, 0x0, 0x0] => Ok(ForkName::Bellatrix),
+            [0x4a, 0x26, 0xc5, 0x8b] => Ok(ForkName::Bellatrix),
             [0xbb, 0xa4, 0xda, 0x96] => Ok(ForkName::Capella),
             [0x6a, 0x95, 0xa1, 0xa9] => Ok(ForkName::Deneb),
-            [0x1, 0x1, 0x1, 0x1] => Ok(ForkName::Electra), // Placeholder for Electra
+            [0xad, 0x53, 0x2c, 0xeb] => Ok(ForkName::Electra),
             _ => Err(ParseForkNameError(hex_encode(fork_digest))),
         }
     }
@@ -40,10 +40,10 @@ impl TryFrom<ForkDigest> for ForkName {
 impl ForkName {
     pub fn as_fork_digest(&self) -> [u8; 4] {
         match self {
-            ForkName::Bellatrix => [0x0, 0x0, 0x0, 0x0],
+            ForkName::Bellatrix => [0x4a, 0x26, 0xc5, 0x8b],
             ForkName::Capella => [0xbb, 0xa4, 0xda, 0x96],
             ForkName::Deneb => [0x6a, 0x95, 0xa1, 0xa9],
-            ForkName::Electra => [0x1, 0x1, 0x1, 0x1], // Placeholder for Electra
+            ForkName::Electra => [0xad, 0x53, 0x2c, 0xeb],
         }
     }
 
@@ -100,8 +100,22 @@ impl TryFrom<String> for ForkName {
 mod test {
     use super::*;
 
+    #[rstest::rstest]
+    fn to_and_from_digest(
+        #[values(
+            ForkName::Bellatrix,
+            ForkName::Capella,
+            ForkName::Deneb,
+            ForkName::Electra
+        )]
+        fork_name: ForkName,
+    ) {
+        let digest = fork_name.as_fork_digest();
+        assert_eq!(ForkName::try_from(digest), Ok(fork_name))
+    }
+
     #[test]
-    fn fork_name_bellatrix_or_merge() {
+    fn to_and_from_string() {
         assert_eq!(ForkName::from_str("bellatrix"), Ok(ForkName::Bellatrix));
         assert_eq!(ForkName::from_str("capella"), Ok(ForkName::Capella));
         assert_eq!(ForkName::from_str("deneb"), Ok(ForkName::Deneb));

@@ -5,6 +5,7 @@ use figment::{
     Figment,
 };
 use serde::Deserialize;
+use trin_validation::constants::SLOTS_PER_EPOCH;
 
 use crate::config::{
     networks,
@@ -67,9 +68,11 @@ impl Config {
     }
 
     pub fn fork_version(&self, slot: u64) -> Vec<u8> {
-        let epoch = slot / 32;
+        let epoch = slot / SLOTS_PER_EPOCH;
 
-        if epoch >= self.forks.deneb.epoch {
+        if epoch >= self.forks.electra.epoch {
+            self.forks.electra.fork_version.clone()
+        } else if epoch >= self.forks.deneb.epoch {
             self.forks.deneb.fork_version.clone()
         } else if epoch >= self.forks.capella.epoch {
             self.forks.capella.fork_version.clone()

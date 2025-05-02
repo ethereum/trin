@@ -7,6 +7,8 @@ use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 use trin_validation::merkle::proof::merkle_root_from_branch;
 
+use crate::utils::compute_fork_data_root;
+
 pub fn calc_sync_period(slot: u64) -> u64 {
     let epoch = slot / 32; // 32 slots per epoch
     epoch / 256 // 256 epochs per sync committee
@@ -41,12 +43,6 @@ struct SigningData {
     domain: B256,
 }
 
-#[derive(Default, Debug, TreeHash)]
-struct ForkData {
-    current_version: FixedVector<u8, U4>,
-    genesis_validator_root: B256,
-}
-
 pub fn compute_signing_root(object_root: B256, domain: B256) -> B256 {
     let data = SigningData {
         object_root,
@@ -65,15 +61,4 @@ pub fn compute_domain(
     let end = &fork_data_root.as_slice()[..28];
     let d = [start, end].concat();
     Ok(B256::from_slice(&d))
-}
-
-fn compute_fork_data_root(
-    current_version: FixedVector<u8, U4>,
-    genesis_validator_root: B256,
-) -> B256 {
-    let fork_data = ForkData {
-        current_version,
-        genesis_validator_root,
-    };
-    fork_data.tree_hash_root()
 }

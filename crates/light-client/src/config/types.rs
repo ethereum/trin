@@ -20,6 +20,7 @@ pub struct Forks {
     pub bellatrix: Fork,
     pub capella: Fork,
     pub deneb: Fork,
+    pub electra: Fork,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]

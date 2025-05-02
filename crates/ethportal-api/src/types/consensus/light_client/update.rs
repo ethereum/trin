@@ -22,13 +22,14 @@ use crate::{
 
 type NextSyncCommitteeProofLen = U5;
 type NextSyncCommitteeProofLenElectra = U6;
+
 pub type FinalizedRootProofLen = U6;
 pub type FinalizedRootProofLenElectra = U7;
+
 type FinalityBranch = FixedVector<B256, FinalizedRootProofLen>;
 type FinalityBranchElectra = FixedVector<B256, FinalizedRootProofLenElectra>;
 
 type NextSyncCommitteeBranch = FixedVector<B256, NextSyncCommitteeProofLen>;
-
 type NextSyncCommitteeBranchElectra = FixedVector<B256, NextSyncCommitteeProofLenElectra>;
 
 #[superstruct(

@@ -101,7 +101,7 @@ build-release-tarballs: ## Create a series of `.tar.gz` files in the BIN_DIR dir
 
 EF_TESTS_TARGET = mainnet.tar.gz
 EF_TESTS_DIR = ./testing/ef-tests/mainnet
-LATEST_RELEASE_URL = https://api.github.com/repos/ethereum/consensus-spec-tests/releases
+ALL_RELEASES_URL = https://api.github.com/repos/ethereum/consensus-spec-tests/releases
 
 download_test_data:
 	@if [ -d $(EF_TESTS_DIR) ]; then \
