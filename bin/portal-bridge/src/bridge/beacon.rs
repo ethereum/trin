@@ -8,7 +8,8 @@ use alloy::primitives::B256;
 use anyhow::{bail, ensure};
 use ethportal_api::{
     consensus::historical_summaries::{
-        HistoricalSummariesStateProof, HistoricalSummariesWithProof,
+        HistoricalSummariesProofDeneb, HistoricalSummariesWithProof,
+        HistoricalSummariesWithProofDeneb,
     },
     light_client::update::LightClientUpdate,
     types::{
@@ -17,10 +18,7 @@ use ethportal_api::{
             HistoricalSummariesWithProofKey, LightClientFinalityUpdateKey,
             LightClientOptimisticUpdateKey,
         },
-        content_value::beacon::{
-            ForkVersionedHistoricalSummariesWithProof, ForkVersionedLightClientUpdate,
-            LightClientUpdatesByRange,
-        },
+        content_value::beacon::{ForkVersionedLightClientUpdate, LightClientUpdatesByRange},
         network::Subnetwork,
         portal_wire::OfferTrace,
     },
@@ -478,14 +476,12 @@ impl BeaconBridge {
             "Historical summaries proof length is not 5"
         );
         let historical_summaries = beacon_state.historical_summaries;
-        let historical_summaries_with_proof = ForkVersionedHistoricalSummariesWithProof {
-            fork_name: ForkName::Deneb,
-            historical_summaries_with_proof: HistoricalSummariesWithProof {
+        let historical_summaries_with_proof =
+            HistoricalSummariesWithProof::Deneb(HistoricalSummariesWithProofDeneb {
                 epoch: state_epoch,
                 historical_summaries,
-                proof: HistoricalSummariesStateProof::from(historical_summaries_proof),
-            },
-        };
+                proof: HistoricalSummariesProofDeneb::from(historical_summaries_proof),
+            });
         info!(
             epoch = %state_epoch,
             "Generated HistoricalSummariesWithProof",
@@ -494,8 +490,9 @@ impl BeaconBridge {
             BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
                 epoch: state_epoch,
             });
-        let content_value =
-            BeaconContentValue::HistoricalSummariesWithProof(historical_summaries_with_proof);
+        let content_value = BeaconContentValue::HistoricalSummariesWithProof(
+            historical_summaries_with_proof.into(),
+        );
 
         Self::spawn_offer_tasks(beacon_network, content_key, content_value, metrics, census);
         finalized_state_root.lock().await.state_root = latest_finalized_state_root;

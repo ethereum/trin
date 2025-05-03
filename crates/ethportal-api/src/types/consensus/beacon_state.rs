@@ -240,6 +240,52 @@ impl BeaconStateDeneb {
     }
 }
 
+impl BeaconStateElectra {
+    pub fn build_historical_summaries_proof(&self) -> Vec<B256> {
+        let leaves = [
+            self.genesis_time.tree_hash_root(),
+            self.genesis_validators_root.tree_hash_root(),
+            self.slot.tree_hash_root(),
+            self.fork.tree_hash_root(),
+            self.latest_block_header.tree_hash_root(),
+            self.block_roots.tree_hash_root(),
+            self.state_roots.tree_hash_root(),
+            self.historical_roots.tree_hash_root(),
+            self.eth1_data.tree_hash_root(),
+            self.eth1_data_votes.tree_hash_root(),
+            self.eth1_deposit_index.tree_hash_root(),
+            self.validators.tree_hash_root(),
+            self.balances.tree_hash_root(),
+            self.randao_mixes.tree_hash_root(),
+            self.slashings.tree_hash_root(),
+            self.previous_epoch_participation.tree_hash_root(),
+            self.current_epoch_participation.tree_hash_root(),
+            self.justification_bits.tree_hash_root(),
+            self.previous_justified_checkpoint.tree_hash_root(),
+            self.current_justified_checkpoint.tree_hash_root(),
+            self.finalized_checkpoint.tree_hash_root(),
+            self.inactivity_scores.tree_hash_root(),
+            self.current_sync_committee.tree_hash_root(),
+            self.next_sync_committee.tree_hash_root(),
+            self.latest_execution_payload_header.tree_hash_root(),
+            self.next_withdrawal_index.tree_hash_root(),
+            self.next_withdrawal_validator_index.tree_hash_root(),
+            self.historical_summaries.tree_hash_root(),
+            self.deposit_requests_start_index.tree_hash_root(),
+            self.deposit_balance_to_consume.tree_hash_root(),
+            self.exit_balance_to_consume.tree_hash_root(),
+            self.earliest_exit_epoch.tree_hash_root(),
+            self.consolidation_balance_to_consume.tree_hash_root(),
+            self.earliest_consolidation_epoch.tree_hash_root(),
+            self.pending_deposits.tree_hash_root(),
+            self.pending_partial_withdrawals.tree_hash_root(),
+            self.pending_consolidations.tree_hash_root(),
+        ];
+
+        build_merkle_proof_for_index(leaves, 27)
+    }
+}
+
 /// Specifies a fork of the `BeaconChain`, to prevent replay attacks.
 ///
 /// Spec v0.12.1

@@ -3,20 +3,20 @@ use ethportal_api::{
     consensus::{
         beacon_state::BeaconStateDeneb,
         fork::ForkName,
-        historical_summaries::{HistoricalSummariesStateProof, HistoricalSummariesWithProof},
+        historical_summaries::{HistoricalSummariesProofDeneb, HistoricalSummariesWithProofDeneb},
     },
     light_client::{
         bootstrap::LightClientBootstrap, finality_update::LightClientFinalityUpdate,
         optimistic_update::LightClientOptimisticUpdate, update::LightClientUpdate,
     },
     types::content_value::beacon::{
-        ForkVersionedHistoricalSummariesWithProof, ForkVersionedLightClientBootstrap,
-        ForkVersionedLightClientFinalityUpdate, ForkVersionedLightClientOptimisticUpdate,
-        ForkVersionedLightClientUpdate,
+        ForkVersionedLightClientBootstrap, ForkVersionedLightClientFinalityUpdate,
+        ForkVersionedLightClientOptimisticUpdate, ForkVersionedLightClientUpdate,
     },
 };
 use ssz::Decode;
 use tree_hash::TreeHash;
+use trin_validation::constants::SLOTS_PER_EPOCH;
 
 // Valid number range for the test cases is 0..=1
 pub fn get_light_client_bootstrap(number: u8) -> ForkVersionedLightClientBootstrap {
@@ -86,7 +86,7 @@ pub fn get_light_client_optimistic_update(number: u8) -> ForkVersionedLightClien
     }
 }
 
-pub fn get_history_summaries_with_proof() -> (ForkVersionedHistoricalSummariesWithProof, B256) {
+pub fn get_deneb_historical_summaries_with_proof() -> (HistoricalSummariesWithProofDeneb, B256) {
     let value = std::fs::read(
         "../../../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/serialized.ssz_snappy",
     )
@@ -97,20 +97,17 @@ pub fn get_history_summaries_with_proof() -> (ForkVersionedHistoricalSummariesWi
 
     let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
     let historical_summaries_state_proof =
-        HistoricalSummariesStateProof::from(historical_summaries_proof);
+        HistoricalSummariesProofDeneb::from(historical_summaries_proof);
     let historical_summaries = beacon_state.historical_summaries.clone();
-    let historical_summaries_epoch = beacon_state.slot / 32;
-    let historical_summaries_with_proof = HistoricalSummariesWithProof {
+    let historical_summaries_epoch = beacon_state.slot / SLOTS_PER_EPOCH;
+    let historical_summaries_with_proof = HistoricalSummariesWithProofDeneb {
         epoch: historical_summaries_epoch,
         historical_summaries,
         proof: historical_summaries_state_proof.clone(),
     };
 
     (
-        ForkVersionedHistoricalSummariesWithProof {
-            fork_name: ForkName::Deneb,
-            historical_summaries_with_proof,
-        },
+        historical_summaries_with_proof,
         beacon_state.tree_hash_root(),
     )
 }

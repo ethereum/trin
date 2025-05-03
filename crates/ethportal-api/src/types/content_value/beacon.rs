@@ -5,6 +5,9 @@ use ssz::{Decode, DecodeError, Encode};
 use ssz_types::{typenum::U128, VariableList};
 
 use crate::{
+    consensus::historical_summaries::{
+        HistoricalSummariesWithProof, HistoricalSummariesWithProofElectra,
+    },
     light_client::{
         bootstrap::{LightClientBootstrapDeneb, LightClientBootstrapElectra},
         finality_update::{LightClientFinalityUpdateDeneb, LightClientFinalityUpdateElectra},
@@ -14,7 +17,7 @@ use crate::{
     types::{
         consensus::{
             fork::{ForkDigest, ForkName},
-            historical_summaries::HistoricalSummariesWithProof,
+            historical_summaries::HistoricalSummariesWithProofDeneb,
             light_client::{
                 bootstrap::{
                     LightClientBootstrap, LightClientBootstrapBellatrix,
@@ -482,38 +485,22 @@ pub struct ForkVersionedHistoricalSummariesWithProof {
     pub historical_summaries_with_proof: HistoricalSummariesWithProof,
 }
 
-impl ForkVersionedHistoricalSummariesWithProof {
-    pub fn encode(&self) -> Vec<u8> {
-        let fork_digest = self.fork_name.as_fork_digest();
-
-        let mut data = fork_digest.to_vec();
-        data.extend(self.historical_summaries_with_proof.as_ssz_bytes());
-        data
-    }
-
-    pub fn decode(buf: &[u8]) -> Result<Self, DecodeError> {
-        let fork_digest = ForkDigest::try_from(&buf[0..4]).map_err(|err| {
-            DecodeError::BytesInvalid(format!("Unable to decode fork digest: {err:?}"))
-        })?;
-        let fork_name = ForkName::try_from(fork_digest).map_err(|_| {
-            DecodeError::BytesInvalid(format!("Unable to decode fork name: {fork_digest:?}"))
-        })?;
-        let summaries_with_proof = HistoricalSummariesWithProof::from_ssz_bytes(&buf[4..])?;
-
-        Ok(Self {
+impl From<HistoricalSummariesWithProof> for ForkVersionedHistoricalSummariesWithProof {
+    fn from(historical_summaries_with_proof: HistoricalSummariesWithProof) -> Self {
+        let fork_name = match &historical_summaries_with_proof {
+            HistoricalSummariesWithProof::Deneb(_) => ForkName::Deneb,
+            HistoricalSummariesWithProof::Electra(_) => ForkName::Electra,
+        };
+        Self {
             fork_name,
-            historical_summaries_with_proof: summaries_with_proof,
-        })
+            historical_summaries_with_proof,
+        }
     }
 }
 
-impl Decode for ForkVersionedHistoricalSummariesWithProof {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        Self::decode(bytes)
+impl ForkVersionedHistoricalSummariesWithProof {
+    pub fn epoch(&self) -> u64 {
+        *self.historical_summaries_with_proof.epoch()
     }
 }
 
@@ -523,11 +510,67 @@ impl Encode for ForkVersionedHistoricalSummariesWithProof {
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.encode());
+        self.fork_name.as_fork_digest().ssz_append(buf);
+        self.historical_summaries_with_proof.ssz_append(buf);
+    }
+
+    fn ssz_fixed_len() -> usize {
+        ssz::BYTES_PER_LENGTH_OFFSET
     }
 
     fn ssz_bytes_len(&self) -> usize {
-        self.encode().len()
+        self.fork_name.as_fork_digest().ssz_bytes_len()
+            + self.historical_summaries_with_proof.ssz_bytes_len()
+    }
+}
+
+impl Decode for ForkVersionedHistoricalSummariesWithProof {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_fixed_len() -> usize {
+        ssz::BYTES_PER_LENGTH_OFFSET
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let fork_digest_len = <ForkDigest as Decode>::ssz_fixed_len();
+        let Some((fork_digest_bytes, historical_summaries_with_proof_bytes)) =
+            bytes.split_at_checked(fork_digest_len)
+        else {
+            return Err(DecodeError::InvalidByteLength {
+                len: bytes.len(),
+                expected: fork_digest_len,
+            });
+        };
+
+        let fork_digest = ForkDigest::from_ssz_bytes(fork_digest_bytes)?;
+        let fork_name = match ForkName::try_from(fork_digest) {
+            Ok(fork_name) => fork_name,
+            Err(err) => return Err(DecodeError::BytesInvalid(err.to_string())),
+        };
+
+        let historical_summaries_with_proof = match fork_name {
+            ForkName::Bellatrix | ForkName::Capella => {
+                return Err(DecodeError::BytesInvalid(format!(
+                    "HistoricalSummariesWithProof not supported for fork digest: {fork_digest:?}"
+                )))
+            }
+            ForkName::Deneb => HistoricalSummariesWithProof::Deneb(
+                HistoricalSummariesWithProofDeneb::from_ssz_bytes(
+                    historical_summaries_with_proof_bytes,
+                )?,
+            ),
+            ForkName::Electra => HistoricalSummariesWithProof::Electra(
+                HistoricalSummariesWithProofElectra::from_ssz_bytes(
+                    historical_summaries_with_proof_bytes,
+                )?,
+            ),
+        };
+        Ok(Self {
+            fork_name,
+            historical_summaries_with_proof,
+        })
     }
 }
 
@@ -710,11 +753,14 @@ mod test {
 
         match &beacon_content {
             BeaconContentValue::HistoricalSummariesWithProof(content) => {
-                assert_eq!(
-                    expected_epoch,
-                    content.historical_summaries_with_proof.epoch
-                );
                 assert_eq!(ForkName::Deneb, content.fork_name);
+
+                let Ok(historical_summaries_with_proof) =
+                    content.historical_summaries_with_proof.as_deneb()
+                else {
+                    panic!("Expected Deneb historical summaries, actual: {content:?}");
+                };
+                assert_eq!(expected_epoch, historical_summaries_with_proof.epoch);
             }
             _ => panic!("Invalid beacon content type!"),
         }

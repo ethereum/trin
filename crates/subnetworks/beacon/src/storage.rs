@@ -717,11 +717,12 @@ fn prune_old_bootstrap_data(
 #[allow(clippy::unwrap_used)]
 mod test {
     use ethportal_api::{
+        consensus::historical_summaries::HistoricalSummariesWithProof,
         types::content_key::beacon::{
             HistoricalSummariesWithProofKey, LightClientFinalityUpdateKey,
             LightClientOptimisticUpdateKey,
         },
-        LightClientBootstrapKey, LightClientUpdatesByRangeKey,
+        BeaconContentValue, ContentValue, LightClientBootstrapKey, LightClientUpdatesByRangeKey,
     };
     use tree_hash::TreeHash;
     use trin_storage::test_utils::create_test_portal_storage_config_with_capacity;
@@ -872,14 +873,18 @@ mod test {
     fn test_beacon_storage_get_put_historical_summaries() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
         let mut storage = BeaconStorage::new(config).unwrap();
-        let (value, _) = test_utils::get_history_summaries_with_proof();
-        let epoch = value.historical_summaries_with_proof.epoch;
+        let (historical_summaries_with_proof, _) =
+            test_utils::get_deneb_historical_summaries_with_proof();
+        let epoch = historical_summaries_with_proof.epoch;
+        let value = BeaconContentValue::HistoricalSummariesWithProof(
+            HistoricalSummariesWithProof::Deneb(historical_summaries_with_proof).into(),
+        );
         let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
             epoch,
         });
-        storage.put(key.clone(), value.as_ssz_bytes()).unwrap();
+        storage.put(key.clone(), value.encode()).unwrap();
         let result = storage.get(&key).unwrap().unwrap();
-        assert_eq!(result, value.as_ssz_bytes());
+        assert_eq!(result, value.encode());
 
         // Test is_key_within_radius_and_unavailable for the same epoch
         let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
@@ -911,7 +916,7 @@ mod test {
             epoch: 0,
         });
         let result = storage.get(&key).unwrap().unwrap();
-        assert_eq!(result, value.as_ssz_bytes());
+        assert_eq!(result, value.encode());
     }
 
     #[test]
