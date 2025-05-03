@@ -163,6 +163,31 @@ impl ExecutionPayloadDeneb {
     }
 }
 
+impl ExecutionPayloadElectra {
+    pub fn build_block_hash_proof(&self) -> Vec<B256> {
+        let leaves = [
+            self.parent_hash.tree_hash_root(),
+            self.fee_recipient.tree_hash_root(),
+            self.state_root.tree_hash_root(),
+            self.receipts_root.tree_hash_root(),
+            self.logs_bloom.tree_hash_root(),
+            self.prev_randao.tree_hash_root(),
+            self.block_number.tree_hash_root(),
+            self.gas_limit.tree_hash_root(),
+            self.gas_used.tree_hash_root(),
+            self.timestamp.tree_hash_root(),
+            self.extra_data.tree_hash_root(),
+            self.base_fee_per_gas.tree_hash_root(),
+            self.block_hash.tree_hash_root(),
+            self.transactions.tree_hash_root(),
+            self.withdrawals.tree_hash_root(),
+            self.blob_gas_used.tree_hash_root(),
+            self.excess_blob_gas.tree_hash_root(),
+        ];
+        build_merkle_proof_for_index(leaves, 12)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize, Encode, Decode, TreeHash)]
 pub struct Withdrawal {
     #[serde(deserialize_with = "as_u64")]

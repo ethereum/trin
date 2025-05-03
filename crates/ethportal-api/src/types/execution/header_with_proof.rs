@@ -9,7 +9,8 @@ use tree_hash::TreeHash;
 
 use crate::{
     consensus::{
-        beacon_block::BeaconBlockDeneb, beacon_state::RootsPerHistoricalRoot,
+        beacon_block::{BeaconBlockDeneb, BeaconBlockElectra},
+        beacon_state::RootsPerHistoricalRoot,
         constants::SLOTS_PER_HISTORICAL_ROOT,
     },
     types::{
@@ -200,7 +201,7 @@ pub fn build_historical_roots_proof(
     }
 }
 
-/// Builds `BlockProofHistoricalSummariesCapella` for a given slot.
+/// Builds `BlockProofHistoricalSummariesCapella` for a given slot, from Capella `BeaconBlock`.
 ///
 /// The `block_roots` represents the `block_roots` fields from `BeaconState`.
 pub fn build_capella_historical_summaries_proof(
@@ -227,13 +228,40 @@ pub fn build_capella_historical_summaries_proof(
     }
 }
 
-/// Builds `BlockProofHistoricalSummariesDeneb` for a given slot.
+/// Builds `BlockProofHistoricalSummariesDeneb` for a given slot, from Deneb `BeaconBlock`.
 ///
 /// The `block_roots` represents the `block_roots` fields from `BeaconState`.
 pub fn build_deneb_historical_summaries_proof(
     slot: u64,
     block_roots: &RootsPerHistoricalRoot,
     beacon_block: &BeaconBlockDeneb,
+) -> BlockProofHistoricalSummariesDeneb {
+    let beacon_block_proof = build_merkle_proof_for_index(
+        block_roots.clone(),
+        slot as usize % SLOTS_PER_HISTORICAL_ROOT,
+    );
+    let beacon_block_proof = BeaconBlockProofHistoricalSummaries::new(beacon_block_proof)
+        .expect("error creating BeaconBlockProofHistoricalSummaries");
+
+    let execution_block_proof =
+        ExecutionBlockProofDeneb::new(beacon_block.build_execution_block_hash_proof())
+            .expect("error creating ExecutionBlockProofDeneb");
+
+    BlockProofHistoricalSummariesDeneb {
+        beacon_block_proof,
+        beacon_block_root: beacon_block.tree_hash_root(),
+        execution_block_proof,
+        slot,
+    }
+}
+
+/// Builds `BlockProofHistoricalSummariesDeneb` for a given slot, from Electra `BeaconBlock`.
+///
+/// The `block_roots` represents the `block_roots` fields from `BeaconState`.
+pub fn build_electra_historical_summaries_proof(
+    slot: u64,
+    block_roots: &RootsPerHistoricalRoot,
+    beacon_block: &BeaconBlockElectra,
 ) -> BlockProofHistoricalSummariesDeneb {
     let beacon_block_proof = build_merkle_proof_for_index(
         block_roots.clone(),

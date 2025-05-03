@@ -5,17 +5,24 @@ use alloy::{
     eips::eip4895::{Withdrawal, Withdrawals},
     primitives::B256,
 };
-use alloy_hardforks::{EthereumHardfork, EthereumHardforks};
+use alloy_hardforks::EthereumHardforks;
 use anyhow::{anyhow, bail, ensure};
 use ethportal_api::{
+    consensus::{
+        beacon_block::{
+            BeaconBlockBellatrix, BeaconBlockCapella, BeaconBlockDeneb, BeaconBlockElectra,
+            SignedBeaconBlock,
+        },
+        beacon_state::HistoricalBatch,
+    },
     types::{
         execution::{
             accumulator::EpochAccumulator,
             block_body::BlockBody,
             header_with_proof::{
                 build_capella_historical_summaries_proof, build_deneb_historical_summaries_proof,
-                build_historical_roots_proof, BlockHeaderProof,
-                BlockProofHistoricalHashesAccumulator, HeaderWithProof,
+                build_electra_historical_summaries_proof, build_historical_roots_proof,
+                BlockHeaderProof, BlockProofHistoricalHashesAccumulator, HeaderWithProof,
             },
         },
         network_spec::network_spec,
@@ -32,7 +39,7 @@ use crate::{
     provider::EraProvider,
     utils::{
         bellatrix_execution_payload_to_header, capella_execution_payload_to_header,
-        lookup_epoch_acc, post_deneb_execution_payload_to_header,
+        deneb_execution_payload_to_header, electra_execution_payload_to_header, lookup_epoch_acc,
     },
 };
 
@@ -107,6 +114,16 @@ impl EpochReader {
         })
     }
 
+    pub fn iter_blocks(mut self) -> impl Iterator<Item = anyhow::Result<AllBlockData>> {
+        (self.starting_block..self.ending_block).map(move |current_block| {
+            if network_spec().is_paris_active_at_block(current_block) {
+                self.get_post_merge_block_data(current_block)
+            } else {
+                self.get_pre_merge_block_data(current_block)
+            }
+        })
+    }
+
     fn get_pre_merge_block_data(&self, block_number: u64) -> anyhow::Result<AllBlockData> {
         let tuple = self.era_provider.get_pre_merge(block_number)?;
         let header = tuple.header.header;
@@ -129,32 +146,31 @@ impl EpochReader {
         })
     }
 
-    fn get_merge_to_capella_block_data(
-        &mut self,
-        block_number: u64,
-    ) -> anyhow::Result<AllBlockData> {
-        let (block, era) = self.era_provider.get_post_merge(block_number)?;
-        let block = block
-            .block
-            .message_merge()
-            .map_err(|e| anyhow!("Unable to decode merge block: {e:?}"))?;
-        let execution_payload = &block.body.execution_payload;
-        let transactions = decode_transactions(&execution_payload.transactions)?;
+    fn get_post_merge_block_data(&mut self, block_number: u64) -> anyhow::Result<AllBlockData> {
+        let (block, historical_batch) = self.era_provider.get_post_merge(block_number)?;
+        ensure!(
+            block.execution_block_number() == block_number,
+            "Post-merge block data is for wrong block! Expected: {block_number}, actual: {}",
+            block.execution_block_number()
+        );
 
-        let header_with_proof = HeaderWithProof {
-            header: bellatrix_execution_payload_to_header(execution_payload, &transactions)?,
-            proof: BlockHeaderProof::HistoricalRoots(build_historical_roots_proof(
-                block.slot,
-                &era.historical_batch,
-                block,
-            )),
+        let (header_with_proof, body) = match &block {
+            SignedBeaconBlock::Bellatrix(beacon_block) => {
+                self.get_merge_to_capella_header_and_body(&beacon_block.message, historical_batch)?
+            }
+            SignedBeaconBlock::Capella(beacon_block) => {
+                self.get_capella_to_deneb_header_and_body(&beacon_block.message, historical_batch)?
+            }
+            SignedBeaconBlock::Deneb(beacon_block) => {
+                self.get_deneb_to_electra_header_and_body(&beacon_block.message, historical_batch)?
+            }
+            SignedBeaconBlock::Electra(beacon_block) => {
+                self.get_post_electra_header_and_body(&beacon_block.message, historical_batch)?
+            }
         };
-        let body = BlockBody(AlloyBlockBody {
-            transactions,
-            ommers: vec![],
-            withdrawals: None,
-        });
+
         let receipts = self.get_receipts(block_number, header_with_proof.header.receipts_root)?;
+
         Ok(AllBlockData {
             block_number,
             header_with_proof,
@@ -163,16 +179,39 @@ impl EpochReader {
         })
     }
 
-    fn get_capella_to_deneb_block_data(
-        &mut self,
-        block_number: u64,
-    ) -> anyhow::Result<AllBlockData> {
-        let (block, era) = self.era_provider.get_post_merge(block_number)?;
-        let block = block
-            .block
-            .message_capella()
-            .map_err(|e| anyhow!("Unable to decode capella block: {e:?}"))?;
+    fn get_merge_to_capella_header_and_body(
+        &self,
+        block: &BeaconBlockBellatrix,
+        historical_batch: &HistoricalBatch,
+    ) -> anyhow::Result<(HeaderWithProof, BlockBody)> {
         let payload = &block.body.execution_payload;
+
+        let transactions = decode_transactions(&payload.transactions)?;
+
+        let header_with_proof = HeaderWithProof {
+            header: bellatrix_execution_payload_to_header(payload, &transactions)?,
+            proof: BlockHeaderProof::HistoricalRoots(build_historical_roots_proof(
+                block.slot,
+                historical_batch,
+                block,
+            )),
+        };
+        let body = BlockBody(AlloyBlockBody {
+            transactions,
+            ommers: vec![],
+            withdrawals: None,
+        });
+
+        Ok((header_with_proof, body))
+    }
+
+    fn get_capella_to_deneb_header_and_body(
+        &self,
+        block: &BeaconBlockCapella,
+        historical_batch: &HistoricalBatch,
+    ) -> anyhow::Result<(HeaderWithProof, BlockBody)> {
+        let payload = &block.body.execution_payload;
+
         let transactions = decode_transactions(&payload.transactions)?;
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
@@ -182,7 +221,7 @@ impl EpochReader {
             proof: BlockHeaderProof::HistoricalSummariesCapella(
                 build_capella_historical_summaries_proof(
                     block.slot,
-                    &era.historical_batch.block_roots,
+                    &historical_batch.block_roots,
                     block,
                 ),
             ),
@@ -192,28 +231,23 @@ impl EpochReader {
             ommers: vec![],
             withdrawals: Some(Withdrawals::new(withdrawals)),
         });
-        let receipts = self.get_receipts(block_number, header_with_proof.header.receipts_root)?;
-        Ok(AllBlockData {
-            block_number,
-            header_with_proof,
-            body,
-            receipts,
-        })
+
+        Ok((header_with_proof, body))
     }
 
-    fn get_deneb_block_data(&mut self, block_number: u64) -> anyhow::Result<AllBlockData> {
-        let (block, era) = self.era_provider.get_post_merge(block_number)?;
-        let block = block
-            .block
-            .message_deneb()
-            .map_err(|e| anyhow!("Unable to decode deneb block: {e:?}"))?;
+    fn get_deneb_to_electra_header_and_body(
+        &self,
+        block: &BeaconBlockDeneb,
+        historical_batch: &HistoricalBatch,
+    ) -> anyhow::Result<(HeaderWithProof, BlockBody)> {
         let payload = &block.body.execution_payload;
+
         let transactions = decode_transactions(&payload.transactions)?;
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
 
         let header_with_proof = HeaderWithProof {
-            header: post_deneb_execution_payload_to_header(
+            header: deneb_execution_payload_to_header(
                 payload,
                 block.parent_root,
                 &transactions,
@@ -222,7 +256,7 @@ impl EpochReader {
             proof: BlockHeaderProof::HistoricalSummariesDeneb(
                 build_deneb_historical_summaries_proof(
                     block.slot,
-                    &era.historical_batch.block_roots,
+                    &historical_batch.block_roots,
                     block,
                 ),
             ),
@@ -232,39 +266,44 @@ impl EpochReader {
             ommers: vec![],
             withdrawals: Some(Withdrawals::new(withdrawals)),
         });
-        let receipts = self.get_receipts(block_number, header_with_proof.header.receipts_root)?;
-        Ok(AllBlockData {
-            block_number,
-            header_with_proof,
-            body,
-            receipts,
-        })
+
+        Ok((header_with_proof, body))
     }
 
-    pub fn iter_blocks(mut self) -> impl Iterator<Item = anyhow::Result<AllBlockData>> {
-        (self.starting_block..self.ending_block).map(move |current_block| {
-            if current_block
-                < EthereumHardfork::Paris
-                    .activation_block(network_spec().network().into())
-                    .expect("Paris should be available")
-            {
-                self.get_pre_merge_block_data(current_block)
-            } else if current_block
-                < EthereumHardfork::Shanghai
-                    .activation_block(network_spec().network().into())
-                    .expect("Shanghai should be available")
-            {
-                self.get_merge_to_capella_block_data(current_block)
-            } else if current_block
-                < EthereumHardfork::Cancun
-                    .activation_block(network_spec().network().into())
-                    .expect("Cancun should be available")
-            {
-                self.get_capella_to_deneb_block_data(current_block)
-            } else {
-                self.get_deneb_block_data(current_block)
-            }
-        })
+    fn get_post_electra_header_and_body(
+        &self,
+        block: &BeaconBlockElectra,
+        historical_batch: &HistoricalBatch,
+    ) -> anyhow::Result<(HeaderWithProof, BlockBody)> {
+        let payload = &block.body.execution_payload;
+
+        let transactions = decode_transactions(&payload.transactions)?;
+        let withdrawals: Vec<Withdrawal> =
+            payload.withdrawals.iter().map(Withdrawal::from).collect();
+
+        let header_with_proof = HeaderWithProof {
+            header: electra_execution_payload_to_header(
+                payload,
+                block.parent_root,
+                &transactions,
+                &withdrawals,
+                &block.body.execution_requests,
+            )?,
+            proof: BlockHeaderProof::HistoricalSummariesDeneb(
+                build_electra_historical_summaries_proof(
+                    block.slot,
+                    &historical_batch.block_roots,
+                    block,
+                ),
+            ),
+        };
+        let body = BlockBody(AlloyBlockBody {
+            transactions,
+            ommers: vec![],
+            withdrawals: Some(Withdrawals::new(withdrawals)),
+        });
+
+        Ok((header_with_proof, body))
     }
 
     /// Returns the receipts for a given block number and receipts root.
