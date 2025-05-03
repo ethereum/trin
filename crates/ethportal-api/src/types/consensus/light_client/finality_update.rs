@@ -3,12 +3,12 @@ use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
-use ssz_types::FixedVector;
+use ssz_types::{typenum::U7, FixedVector};
 use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
 use crate::{
-    light_client::header::LightClientHeaderDeneb,
+    light_client::header::{LightClientHeaderDeneb, LightClientHeaderElectra},
     types::consensus::{
         body::SyncAggregate,
         fork::ForkName,
@@ -19,10 +19,12 @@ use crate::{
     },
 };
 
+type FinalizedRootProofLenElectra = U7;
+
 /// A LightClientFinalityUpdate is the update that
 /// signal a new finalized beacon block header for the light client sync protocol.
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Bellatrix, Capella, Deneb, Electra),
     variant_attributes(
         derive(
             Debug,
@@ -47,6 +49,8 @@ pub struct LightClientFinalityUpdate {
     pub attested_header: LightClientHeaderCapella,
     #[superstruct(only(Deneb), partial_getter(rename = "attested_header_deneb"))]
     pub attested_header: LightClientHeaderDeneb,
+    #[superstruct(only(Electra), partial_getter(rename = "attested_header_electra"))]
+    pub attested_header: LightClientHeaderElectra,
     /// The last `LightClientHeader` from the last attested finalized block (end of epoch).
     #[superstruct(only(Bellatrix), partial_getter(rename = "finalized_header_bellatrix"))]
     pub finalized_header: LightClientHeaderBellatrix,
@@ -54,8 +58,16 @@ pub struct LightClientFinalityUpdate {
     pub finalized_header: LightClientHeaderCapella,
     #[superstruct(only(Deneb), partial_getter(rename = "finalized_header_deneb"))]
     pub finalized_header: LightClientHeaderDeneb,
+    #[superstruct(only(Electra), partial_getter(rename = "finalized_header_electra"))]
+    pub finalized_header: LightClientHeaderElectra,
     /// Merkle proof attesting finalized header.
+    #[superstruct(
+        only(Bellatrix, Capella, Deneb),
+        partial_getter(rename = "finality_branch_base")
+    )]
     pub finality_branch: FixedVector<B256, FinalizedRootProofLen>,
+    #[superstruct(only(Electra), partial_getter(rename = "finality_branch_electra"))]
+    pub finality_branch: FixedVector<B256, FinalizedRootProofLenElectra>,
     /// current sync aggregate
     pub sync_aggregate: SyncAggregate,
     /// Slot of the sync aggregated signature
@@ -74,6 +86,9 @@ impl LightClientFinalityUpdate {
             }
             ForkName::Deneb => {
                 LightClientFinalityUpdateDeneb::from_ssz_bytes(bytes).map(Self::Deneb)
+            }
+            ForkName::Electra => {
+                LightClientFinalityUpdateElectra::from_ssz_bytes(bytes).map(Self::Electra)
             }
         }
     }

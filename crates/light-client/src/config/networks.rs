@@ -66,7 +66,43 @@ pub fn mainnet() -> BaseConfig {
                 epoch: 269568,
                 fork_version: hex_str_to_bytes("0x04000000").expect("should be a valid hex str"),
             },
+            electra: Fork {
+                epoch: 364032,
+                fork_version: hex_str_to_bytes("0x05000000").expect("should be a valid hex str"),
+            },
         },
         max_checkpoint_age: 1_209_600, // 14 days
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy::primitives::B256;
+    use ethportal_api::consensus::fork::ForkName;
+    use ssz_types::FixedVector;
+
+    use super::*;
+    use crate::utils::compute_fork_data_root;
+
+    #[test]
+    fn fork_digest() {
+        let config = mainnet();
+
+        let check_fork = |fork: &Fork, fork_name: ForkName| {
+            let fork_data_root = compute_fork_data_root(
+                FixedVector::new(fork.fork_version.clone()).unwrap(),
+                B256::from_slice(&config.chain.genesis_root),
+            );
+            assert_eq!(
+                fork_name.as_fork_digest().as_slice(),
+                &fork_data_root[..4],
+                "Checking fork digest for {fork_name}"
+            )
+        };
+
+        check_fork(&config.forks.bellatrix, ForkName::Bellatrix);
+        check_fork(&config.forks.capella, ForkName::Capella);
+        check_fork(&config.forks.deneb, ForkName::Deneb);
+        check_fork(&config.forks.electra, ForkName::Electra);
     }
 }

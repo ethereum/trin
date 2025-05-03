@@ -8,7 +8,7 @@ use serde_utils;
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{
-    typenum::{U1099511627776, U16777216, U2048, U4, U65536, U8192},
+    typenum::{U1099511627776, U134217728, U16777216, U2048, U262144, U4, U65536, U8192},
     BitVector, FixedVector, VariableList,
 };
 use superstruct::superstruct;
@@ -18,12 +18,16 @@ use tree_hash_derive::TreeHash;
 use crate::consensus::{
     body::{Checkpoint, Eth1Data},
     execution_payload::{
-        ExecutionPayloadHeaderBellatrix, ExecutionPayloadHeaderCapella, ExecutionPayloadHeaderDeneb,
+        ExecutionPayloadHeaderBellatrix, ExecutionPayloadHeaderCapella,
+        ExecutionPayloadHeaderDeneb, ExecutionPayloadHeaderElectra,
     },
     fork::ForkName,
     header::BeaconBlockHeader,
     historical_summaries::HistoricalSummaries,
     participation_flags::ParticipationFlags,
+    pending_balance_deposit::PendingDeposit,
+    pending_consolidation::PendingConsolidation,
+    pending_partial_withdrawal::PendingPartialWithdrawal,
     proof::build_merkle_proof_for_index,
     pubkey::PubKey,
     sync_committee::SyncCommittee,
@@ -39,10 +43,13 @@ type JustificationBitsLength = U4;
 
 pub type RootsPerHistoricalRoot = FixedVector<B256, SlotsPerHistoricalRoot>;
 pub type HistoricalRoots = VariableList<B256, HistoricalRootsLimit>;
+pub type PendingDepositsLimit = U134217728;
+pub type PendingPartialWithdrawalsLimit = U134217728;
+pub type PendingConsolidationsLimit = U262144;
 
 /// The state of the `BeaconChain` at some slot.
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Bellatrix, Capella, Deneb, Electra),
     variant_attributes(
         derive(
             Clone,
@@ -101,9 +108,9 @@ pub struct BeaconState {
     pub slashings: FixedVector<u64, EpochsPerSlashingsVector>,
 
     // Participation (Altair and later)
-    #[superstruct(only(Bellatrix, Capella, Deneb))]
+    #[superstruct(only(Bellatrix, Capella, Deneb, Electra))]
     pub previous_epoch_participation: VariableList<ParticipationFlags, ValidatorRegistryLimit>,
-    #[superstruct(only(Bellatrix, Capella, Deneb))]
+    #[superstruct(only(Bellatrix, Capella, Deneb, Electra))]
     pub current_epoch_participation: VariableList<ParticipationFlags, ValidatorRegistryLimit>,
 
     // Finality
@@ -116,14 +123,14 @@ pub struct BeaconState {
     pub finalized_checkpoint: Checkpoint,
 
     // Inactivity
-    #[superstruct(only(Bellatrix, Capella, Deneb))]
+    #[superstruct(only(Bellatrix, Capella, Deneb, Electra))]
     #[serde(deserialize_with = "ssz_types::serde_utils::quoted_u64_var_list::deserialize")]
     pub inactivity_scores: VariableList<u64, ValidatorRegistryLimit>,
 
     // Light-client sync committees
-    #[superstruct(only(Bellatrix, Capella, Deneb))]
+    #[superstruct(only(Bellatrix, Capella, Deneb, Electra))]
     pub current_sync_committee: Arc<SyncCommittee>,
-    #[superstruct(only(Bellatrix, Capella, Deneb))]
+    #[superstruct(only(Bellatrix, Capella, Deneb, Electra))]
     pub next_sync_committee: Arc<SyncCommittee>,
 
     // Execution
@@ -142,17 +149,47 @@ pub struct BeaconState {
         partial_getter(rename = "latest_execution_payload_header_deneb")
     )]
     pub latest_execution_payload_header: ExecutionPayloadHeaderDeneb,
+    #[superstruct(
+        only(Electra),
+        partial_getter(rename = "latest_execution_payload_header_electra")
+    )]
+    pub latest_execution_payload_header: ExecutionPayloadHeaderElectra,
 
     // Capella
-    #[superstruct(only(Capella, Deneb), partial_getter(copy))]
+    #[superstruct(only(Capella, Deneb, Electra), partial_getter(copy))]
     #[serde(deserialize_with = "as_u64")]
     pub next_withdrawal_index: u64,
-    #[superstruct(only(Capella, Deneb), partial_getter(copy))]
+    #[superstruct(only(Capella, Deneb, Electra), partial_getter(copy))]
     #[serde(deserialize_with = "as_u64")]
     pub next_withdrawal_validator_index: u64,
     // Deep history valid from Capella onwards.
-    #[superstruct(only(Capella, Deneb))]
+    #[superstruct(only(Capella, Deneb, Electra))]
     pub historical_summaries: HistoricalSummaries,
+
+    // Electra
+    #[superstruct(only(Electra), partial_getter(copy))]
+    #[serde(deserialize_with = "as_u64")]
+    pub deposit_requests_start_index: u64,
+    #[superstruct(only(Electra), partial_getter(copy))]
+    #[serde(deserialize_with = "as_u64")]
+    pub deposit_balance_to_consume: u64,
+    #[superstruct(only(Electra), partial_getter(copy))]
+    #[serde(deserialize_with = "as_u64")]
+    pub exit_balance_to_consume: u64,
+    #[superstruct(only(Electra), partial_getter(copy))]
+    pub earliest_exit_epoch: Epoch,
+    #[superstruct(only(Electra), partial_getter(copy))]
+    #[serde(deserialize_with = "as_u64")]
+    pub consolidation_balance_to_consume: u64,
+    #[superstruct(only(Electra), partial_getter(copy))]
+    pub earliest_consolidation_epoch: Epoch,
+    #[superstruct(only(Electra))]
+    pub pending_deposits: VariableList<PendingDeposit, PendingDepositsLimit>,
+    #[superstruct(only(Electra))]
+    pub pending_partial_withdrawals:
+        VariableList<PendingPartialWithdrawal, PendingPartialWithdrawalsLimit>,
+    #[superstruct(only(Electra))]
+    pub pending_consolidations: VariableList<PendingConsolidation, PendingConsolidationsLimit>,
 }
 
 impl BeaconState {
@@ -161,6 +198,7 @@ impl BeaconState {
             ForkName::Bellatrix => BeaconStateBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix),
             ForkName::Capella => BeaconStateCapella::from_ssz_bytes(bytes).map(Self::Capella),
             ForkName::Deneb => BeaconStateDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
+            ForkName::Electra => BeaconStateElectra::from_ssz_bytes(bytes).map(Self::Electra),
         }
     }
 }
