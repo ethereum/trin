@@ -11,13 +11,13 @@ use alloy::{
 use anyhow::{anyhow, ensure};
 use ethportal_api::{
     consensus::{
-        execution_payload::{ExecutionPayloadDeneb, ExecutionPayloadElectra},
+        execution_payload::{
+            ExecutionPayloadBellatrix, ExecutionPayloadCapella, ExecutionPayloadDeneb,
+            ExecutionPayloadElectra,
+        },
         execution_requests::ExecutionRequests,
     },
-    types::{
-        consensus::execution_payload::{ExecutionPayloadBellatrix, ExecutionPayloadCapella},
-        execution::accumulator::EpochAccumulator,
-    },
+    types::execution::accumulator::EpochAccumulator,
     utils::bytes::hex_encode,
 };
 use ssz::Decode;
@@ -98,7 +98,7 @@ pub fn capella_execution_payload_to_header(
     Ok(header)
 }
 
-pub fn post_deneb_execution_payload_to_header(
+pub fn deneb_execution_payload_to_header(
     payload: &ExecutionPayloadDeneb,
     parent_beacon_block_root: B256,
     transactions: &[TxEnvelope],
@@ -137,7 +137,7 @@ pub fn post_deneb_execution_payload_to_header(
     Ok(header)
 }
 
-pub fn post_electra_execution_payload_to_header(
+pub fn electra_execution_payload_to_header(
     payload: &ExecutionPayloadElectra,
     parent_beacon_block_root: B256,
     transactions: &[TxEnvelope],

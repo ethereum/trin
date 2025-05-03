@@ -7,7 +7,10 @@ use e2store::{
     era1::{BlockTuple, Era1},
     utils::{get_era1_files, get_era_files},
 };
-use ethportal_api::{consensus::beacon_state::HistoricalBatch, types::network_spec::network_spec};
+use ethportal_api::{
+    consensus::{beacon_block::SignedBeaconBlock, beacon_state::HistoricalBatch},
+    types::network_spec::network_spec,
+};
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client,
@@ -46,10 +49,7 @@ pub struct MinimalEra {
 }
 
 impl MinimalEra {
-    pub fn get_block(
-        &self,
-        block_number: u64,
-    ) -> Option<(CompressedSignedBeaconBlock, &MinimalEra)> {
+    pub fn get_block(&self, block_number: u64) -> Option<&SignedBeaconBlock> {
         let first_block_number = self.blocks[0].block.execution_block_number();
         let last_block_number = self.blocks[self.blocks.len() - 1]
             .block
@@ -60,7 +60,7 @@ impl MinimalEra {
                 .iter()
                 .find(|block| block.block.execution_block_number() == block_number)
             {
-                return Some((block.clone(), self));
+                return Some(&block.block);
             }
         }
         None
@@ -179,7 +179,7 @@ impl EraProvider {
     pub fn get_post_merge(
         &self,
         block_number: u64,
-    ) -> anyhow::Result<(CompressedSignedBeaconBlock, &MinimalEra)> {
+    ) -> anyhow::Result<(&SignedBeaconBlock, &HistoricalBatch)> {
         ensure!(
             network_spec().is_paris_active_at_block(block_number),
             "Invalid logic, tried to lookup era file for pre-merge block"
@@ -187,7 +187,7 @@ impl EraProvider {
         for sources in self.sources.iter() {
             if let EraSource::PostMerge(era) = sources {
                 if let Some(block) = era.get_block(block_number) {
-                    return Ok(block);
+                    return Ok((block, &era.historical_batch));
                 }
             }
         }
