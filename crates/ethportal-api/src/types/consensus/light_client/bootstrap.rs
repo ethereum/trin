@@ -84,12 +84,12 @@ impl LightClientBootstrap {
     }
 
     /// Returns the `BeaconBlockHeader` from the `LightClientBootstrap` object.
-    pub fn get_beacon_block_header(self) -> BeaconBlockHeader {
+    pub fn get_beacon_block_header(&self) -> &BeaconBlockHeader {
         match self {
-            LightClientBootstrap::Bellatrix(bootstrap) => bootstrap.header.beacon,
-            LightClientBootstrap::Capella(bootstrap) => bootstrap.header.beacon,
-            LightClientBootstrap::Deneb(bootstrap) => bootstrap.header.beacon,
-            LightClientBootstrap::Electra(bootstrap) => bootstrap.header.beacon,
+            Self::Bellatrix(bootstrap) => &bootstrap.header.beacon,
+            Self::Capella(bootstrap) => &bootstrap.header.beacon,
+            Self::Deneb(bootstrap) => &bootstrap.header.beacon,
+            Self::Electra(bootstrap) => &bootstrap.header.beacon,
         }
     }
 }

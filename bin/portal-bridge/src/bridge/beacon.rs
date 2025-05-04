@@ -5,20 +5,21 @@ use std::{
 };
 
 use alloy::primitives::B256;
-use anyhow::{bail, ensure};
+use anyhow::bail;
 use ethportal_api::{
-    consensus::historical_summaries::{
-        HistoricalSummariesProofDeneb, HistoricalSummariesWithProof,
-        HistoricalSummariesWithProofDeneb,
+    consensus::{
+        beacon_state::BeaconState,
+        historical_summaries::{
+            HistoricalSummariesWithProof, HistoricalSummariesWithProofDeneb,
+            HistoricalSummariesWithProofElectra,
+        },
     },
-    light_client::update::LightClientUpdate,
     types::{
-        consensus::fork::ForkName,
         content_key::beacon::{
             HistoricalSummariesWithProofKey, LightClientFinalityUpdateKey,
             LightClientOptimisticUpdateKey,
         },
-        content_value::beacon::{ForkVersionedLightClientUpdate, LightClientUpdatesByRange},
+        content_value::beacon::LightClientUpdatesByRange,
         network::Subnetwork,
         portal_wire::OfferTrace,
     },
@@ -33,6 +34,7 @@ use tokio::{
 use tracing::{error, info, warn, Instrument};
 use trin_beacon::network::BeaconNetwork;
 use trin_metrics::bridge::BridgeMetricsReporter;
+use trin_validation::constants::SLOTS_PER_EPOCH;
 
 use super::{constants::SERVE_BLOCK_TIMEOUT, offer_report::OfferReport};
 use crate::{
@@ -43,12 +45,8 @@ use crate::{
     utils::{duration_until_next_update, expected_current_slot},
 };
 
-/// The number of slots in an epoch.
-const SLOTS_PER_EPOCH: u64 = 32;
 /// The number of slots in a sync committee period.
 const SLOTS_PER_PERIOD: u64 = SLOTS_PER_EPOCH * 256;
-/// The historical summaries proof always has a length of 5 hashes.
-const HISTORICAL_SUMMARIES_PROOF_LENGTH: usize = 5;
 
 /// A helper struct to hold the finalized beacon state metadata.
 #[derive(Clone, Debug, Default)]
@@ -296,7 +294,7 @@ impl BeaconBridge {
             .await?;
 
         info!(
-            header_slot=%bootstrap.header.beacon.slot,
+            header_slot=%bootstrap.get_beacon_block_header().slot,
             "Generated LightClientBootstrap",
         );
 
@@ -338,10 +336,12 @@ impl BeaconBridge {
             }
         }
 
-        let update = &consensus_api
+        let update = consensus_api
             .get_light_client_updates(expected_current_period, 1)
-            .await?[0];
-        let finalized_header_period = update.finalized_header.beacon.slot / SLOTS_PER_PERIOD;
+            .await?
+            .remove(0);
+        let finalized_header_period =
+            update.finalized_beacon_block_header().slot / SLOTS_PER_PERIOD;
 
         // We don't serve a `LightClientUpdate` if its finalized header slot is not within the
         // expected current period.
@@ -354,10 +354,7 @@ impl BeaconBridge {
             return Ok(());
         }
 
-        let fork_versioned_update = ForkVersionedLightClientUpdate {
-            fork_name: ForkName::Deneb,
-            update: LightClientUpdate::Deneb(update.clone()),
-        };
+        let fork_versioned_update = update.into();
 
         let content_value = BeaconContentValue::LightClientUpdatesByRange(
             LightClientUpdatesByRange(VariableList::from(vec![fork_versioned_update])),
@@ -387,11 +384,11 @@ impl BeaconBridge {
     ) -> anyhow::Result<()> {
         let update = consensus_api.get_light_client_optimistic_update().await?;
         info!(
-            signature_slot = %update.signature_slot,
+            signature_slot = %update.signature_slot(),
             "Generated LightClientOptimisticUpdate",
         );
         let content_key = BeaconContentKey::LightClientOptimisticUpdate(
-            LightClientOptimisticUpdateKey::new(update.signature_slot),
+            LightClientOptimisticUpdateKey::new(*update.signature_slot()),
         );
         let content_value = BeaconContentValue::LightClientOptimisticUpdate(update.into());
         Self::spawn_offer_tasks(beacon_network, content_key, content_value, metrics, census);
@@ -406,11 +403,11 @@ impl BeaconBridge {
         census: Census,
     ) -> anyhow::Result<()> {
         let update = consensus_api.get_light_client_finality_update().await?;
+        let new_finalized_slot = update.finalized_beacon_block_header().slot;
         info!(
-            finalized_slot = %update.finalized_header.beacon.slot,
+            finalized_slot = new_finalized_slot,
             "Generated LightClientFinalityUpdate",
         );
-        let new_finalized_slot = update.finalized_header.beacon.slot;
 
         match new_finalized_slot.cmp(&*finalized_slot.lock().await) {
             Ordering::Equal => {
@@ -468,20 +465,31 @@ impl BeaconBridge {
         info!("Downloading beacon state for HistoricalSummariesWithProof generation...");
         finalized_state_root.lock().await.in_progress = true;
         let beacon_state = consensus_api.get_beacon_state().await?;
-        let state_epoch = beacon_state.slot / SLOTS_PER_EPOCH;
-        let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
-        // Ensure the historical summaries proof is of the correct length
-        ensure!(
-            historical_summaries_proof.len() == HISTORICAL_SUMMARIES_PROOF_LENGTH,
-            "Historical summaries proof length is not 5"
-        );
-        let historical_summaries = beacon_state.historical_summaries;
-        let historical_summaries_with_proof =
-            HistoricalSummariesWithProof::Deneb(HistoricalSummariesWithProofDeneb {
-                epoch: state_epoch,
-                historical_summaries,
-                proof: HistoricalSummariesProofDeneb::from(historical_summaries_proof),
-            });
+        let state_epoch = beacon_state.slot() / SLOTS_PER_EPOCH;
+        let historical_summaries_with_proof = match beacon_state {
+            BeaconState::Bellatrix(_) => {
+                bail!("Unexpected Bellatrix BeaconState while serving historical summaries")
+            }
+            BeaconState::Capella(_) => {
+                bail!("Unexpected Capella BeaconState while serving historical summaries")
+            }
+            BeaconState::Deneb(beacon_state) => {
+                let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
+                HistoricalSummariesWithProof::Deneb(HistoricalSummariesWithProofDeneb {
+                    epoch: state_epoch,
+                    historical_summaries: beacon_state.historical_summaries,
+                    proof: historical_summaries_proof,
+                })
+            }
+            BeaconState::Electra(beacon_state) => {
+                let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
+                HistoricalSummariesWithProof::Electra(HistoricalSummariesWithProofElectra {
+                    epoch: state_epoch,
+                    historical_summaries: beacon_state.historical_summaries,
+                    proof: historical_summaries_proof,
+                })
+            }
+        };
         info!(
             epoch = %state_epoch,
             "Generated HistoricalSummariesWithProof",

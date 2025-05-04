@@ -1,9 +1,8 @@
 use alloy::primitives::B256;
 use ethportal_api::{
     consensus::{
-        beacon_state::BeaconStateDeneb,
-        fork::ForkName,
-        historical_summaries::{HistoricalSummariesProofDeneb, HistoricalSummariesWithProofDeneb},
+        beacon_state::BeaconStateDeneb, fork::ForkName,
+        historical_summaries::HistoricalSummariesWithProofDeneb,
     },
     light_client::{
         bootstrap::LightClientBootstrap, finality_update::LightClientFinalityUpdate,
@@ -96,14 +95,12 @@ pub fn get_deneb_historical_summaries_with_proof() -> (HistoricalSummariesWithPr
     let beacon_state = BeaconStateDeneb::from_ssz_bytes(&value).unwrap();
 
     let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
-    let historical_summaries_state_proof =
-        HistoricalSummariesProofDeneb::from(historical_summaries_proof);
     let historical_summaries = beacon_state.historical_summaries.clone();
     let historical_summaries_epoch = beacon_state.slot / SLOTS_PER_EPOCH;
     let historical_summaries_with_proof = HistoricalSummariesWithProofDeneb {
         epoch: historical_summaries_epoch,
         historical_summaries,
-        proof: historical_summaries_state_proof.clone(),
+        proof: historical_summaries_proof,
     };
 
     (

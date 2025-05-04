@@ -7,19 +7,20 @@ use alloy::primitives::B256;
 use anyhow::{anyhow, bail};
 use constants::DEFAULT_BEACON_STATE_REQUEST_TIMEOUT;
 use ethportal_api::{
-    consensus::beacon_state::BeaconStateDeneb,
+    consensus::beacon_state::BeaconState,
     light_client::{
-        bootstrap::LightClientBootstrapDeneb, finality_update::LightClientFinalityUpdateDeneb,
-        optimistic_update::LightClientOptimisticUpdateDeneb, update::LightClientUpdateDeneb,
+        bootstrap::LightClientBootstrap, finality_update::LightClientFinalityUpdate,
+        optimistic_update::LightClientOptimisticUpdate, update::LightClientUpdate,
     },
 };
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
     Response,
 };
-use rpc_types::{RootResponse, VersionResponse, VersionedDataResponse, VersionedDataResult};
+use rpc_types::{
+    RootResponse, VersionResponse, VersionedDataResponse, VersionedDataResult, VersionedDecode,
+};
 use serde::de::DeserializeOwned;
-use ssz::Decode;
 use tracing::{debug, warn};
 use url::Url;
 
@@ -72,7 +73,7 @@ impl ConsensusApi {
     pub async fn get_light_client_bootstrap(
         &self,
         block_root: B256,
-    ) -> anyhow::Result<LightClientBootstrapDeneb> {
+    ) -> anyhow::Result<LightClientBootstrap> {
         let endpoint = format!("/eth/v1/beacon/light_client/bootstrap/{block_root}");
         Ok(self.request(endpoint, None).await?.data)
     }
@@ -95,7 +96,7 @@ impl ConsensusApi {
         &self,
         start_period: u64,
         count: u64,
-    ) -> anyhow::Result<Vec<LightClientUpdateDeneb>> {
+    ) -> anyhow::Result<Vec<LightClientUpdate>> {
         let endpoint = format!(
             "/eth/v1/beacon/light_client/updates?start_period={start_period}&count={count}"
         );
@@ -110,7 +111,7 @@ impl ConsensusApi {
     /// Requests the latest `LightClientOptimisticUpdate` known by the server.
     pub async fn get_light_client_optimistic_update(
         &self,
-    ) -> anyhow::Result<LightClientOptimisticUpdateDeneb> {
+    ) -> anyhow::Result<LightClientOptimisticUpdate> {
         let endpoint = "/eth/v1/beacon/light_client/optimistic_update".to_string();
         Ok(self.request(endpoint, None).await?.data)
     }
@@ -118,7 +119,7 @@ impl ConsensusApi {
     /// Requests the latest `LightClientFinalityUpdate` known by the server.
     pub async fn get_light_client_finality_update(
         &self,
-    ) -> anyhow::Result<LightClientFinalityUpdateDeneb> {
+    ) -> anyhow::Result<LightClientFinalityUpdate> {
         let endpoint = "/eth/v1/beacon/light_client/finality_update".to_string();
         Ok(self.request(endpoint, None).await?.data)
     }
@@ -130,7 +131,7 @@ impl ConsensusApi {
     }
 
     /// Requests the `BeaconState` structure corresponding to the current head of the beacon chain.
-    pub async fn get_beacon_state(&self) -> anyhow::Result<BeaconStateDeneb> {
+    pub async fn get_beacon_state(&self) -> anyhow::Result<BeaconState> {
         let endpoint = "/eth/v2/debug/beacon/states/finalized".to_string();
         Ok(self
             .request(endpoint, Some(DEFAULT_BEACON_STATE_REQUEST_TIMEOUT))
@@ -146,7 +147,7 @@ impl ConsensusApi {
         custom_timeout: Option<Duration>,
     ) -> anyhow::Result<VersionedDataResponse<T>>
     where
-        T: Decode + DeserializeOwned + Clone,
+        T: VersionedDecode + DeserializeOwned + Clone,
     {
         match Self::request_no_fallback(endpoint.clone(), &self.primary, custom_timeout).await {
             Ok(response) => Ok(response),
@@ -171,7 +172,7 @@ impl ConsensusApi {
         custom_timeout: Option<Duration>,
     ) -> anyhow::Result<Vec<VersionedDataResponse<T>>>
     where
-        T: Decode + DeserializeOwned + Clone,
+        T: DeserializeOwned + Clone,
     {
         match Self::request_list_no_fallback(endpoint.clone(), &self.primary, custom_timeout).await
         {
@@ -230,7 +231,7 @@ impl ConsensusApi {
         custom_timeout: Option<Duration>,
     ) -> anyhow::Result<VersionedDataResponse<T>>
     where
-        T: Decode + DeserializeOwned + Clone,
+        T: VersionedDecode + DeserializeOwned + Clone,
     {
         let (response, content_type) =
             Self::base_request(endpoint.clone(), client, custom_timeout, false).await?;
@@ -246,8 +247,7 @@ impl ConsensusApi {
                     })
                     .transpose()?;
                 VersionedDataResponse::new(
-                    T::from_ssz_bytes(&response.bytes().await?)
-                        .map_err(|err| anyhow!("Failed to decode {err:?}"))?,
+                    T::decode(version.as_deref(), &response.bytes().await?)?,
                     version,
                 )
             }
@@ -264,7 +264,7 @@ impl ConsensusApi {
         custom_timeout: Option<Duration>,
     ) -> anyhow::Result<Vec<VersionedDataResponse<T>>>
     where
-        T: Decode + DeserializeOwned + Clone,
+        T: DeserializeOwned + Clone,
     {
         let (response, content_type) =
             Self::base_request(endpoint.clone(), client, custom_timeout, true).await?;

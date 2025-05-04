@@ -11,6 +11,7 @@ use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
 use crate::{
+    consensus::header::BeaconBlockHeader,
     light_client::header::{LightClientHeaderDeneb, LightClientHeaderElectra},
     types::consensus::{
         body::SyncAggregate,
@@ -106,6 +107,23 @@ impl LightClientUpdate {
             ForkName::Capella => LightClientUpdateCapella::from_ssz_bytes(bytes).map(Self::Capella),
             ForkName::Deneb => LightClientUpdateDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
             ForkName::Electra => LightClientUpdateElectra::from_ssz_bytes(bytes).map(Self::Electra),
+        }
+    }
+
+    pub fn finalized_beacon_block_header(&self) -> &BeaconBlockHeader {
+        match self {
+            LightClientUpdate::Bellatrix(light_client_update) => {
+                &light_client_update.finalized_header.beacon
+            }
+            LightClientUpdate::Capella(light_client_update) => {
+                &light_client_update.finalized_header.beacon
+            }
+            LightClientUpdate::Deneb(light_client_update) => {
+                &light_client_update.finalized_header.beacon
+            }
+            LightClientUpdate::Electra(light_client_update) => {
+                &light_client_update.finalized_header.beacon
+            }
         }
     }
 }

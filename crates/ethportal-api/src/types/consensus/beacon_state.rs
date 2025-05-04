@@ -23,7 +23,9 @@ use crate::consensus::{
     },
     fork::ForkName,
     header::BeaconBlockHeader,
-    historical_summaries::HistoricalSummaries,
+    historical_summaries::{
+        HistoricalSummaries, HistoricalSummariesProofDeneb, HistoricalSummariesProofElectra,
+    },
     participation_flags::ParticipationFlags,
     pending_balance_deposit::PendingDeposit,
     pending_consolidation::PendingConsolidation,
@@ -204,7 +206,7 @@ impl BeaconState {
 }
 
 impl BeaconStateDeneb {
-    pub fn build_historical_summaries_proof(&self) -> Vec<B256> {
+    pub fn build_historical_summaries_proof(&self) -> HistoricalSummariesProofDeneb {
         let leaves = [
             self.genesis_time.tree_hash_root(),
             self.genesis_validators_root.tree_hash_root(),
@@ -236,12 +238,13 @@ impl BeaconStateDeneb {
             self.historical_summaries.tree_hash_root(),
         ];
 
-        build_merkle_proof_for_index(leaves, 27)
+        HistoricalSummariesProofDeneb::new(build_merkle_proof_for_index(leaves, 27))
+            .expect("Created historical summaries proof for Deneb should have correct length")
     }
 }
 
 impl BeaconStateElectra {
-    pub fn build_historical_summaries_proof(&self) -> Vec<B256> {
+    pub fn build_historical_summaries_proof(&self) -> HistoricalSummariesProofElectra {
         let leaves = [
             self.genesis_time.tree_hash_root(),
             self.genesis_validators_root.tree_hash_root(),
@@ -282,7 +285,8 @@ impl BeaconStateElectra {
             self.pending_consolidations.tree_hash_root(),
         ];
 
-        build_merkle_proof_for_index(leaves, 27)
+        HistoricalSummariesProofElectra::new(build_merkle_proof_for_index(leaves, 27))
+            .expect("Created historical summaries proof for Electra should have correct length")
     }
 }
 

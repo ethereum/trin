@@ -8,6 +8,7 @@ use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
 use crate::{
+    consensus::header::BeaconBlockHeader,
     light_client::header::{LightClientHeaderDeneb, LightClientHeaderElectra},
     types::consensus::{
         body::SyncAggregate,
@@ -90,6 +91,15 @@ impl LightClientFinalityUpdate {
             ForkName::Electra => {
                 LightClientFinalityUpdateElectra::from_ssz_bytes(bytes).map(Self::Electra)
             }
+        }
+    }
+
+    pub fn finalized_beacon_block_header(&self) -> &BeaconBlockHeader {
+        match self {
+            Self::Bellatrix(light_client_update) => &light_client_update.finalized_header.beacon,
+            Self::Capella(light_client_update) => &light_client_update.finalized_header.beacon,
+            Self::Deneb(light_client_update) => &light_client_update.finalized_header.beacon,
+            Self::Electra(light_client_update) => &light_client_update.finalized_header.beacon,
         }
     }
 }

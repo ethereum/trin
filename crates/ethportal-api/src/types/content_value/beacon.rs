@@ -48,29 +48,17 @@ pub struct ForkVersionedLightClientBootstrap {
     pub bootstrap: LightClientBootstrap,
 }
 
-impl From<LightClientBootstrapCapella> for ForkVersionedLightClientBootstrap {
-    fn from(bootstrap: LightClientBootstrapCapella) -> Self {
+impl From<LightClientBootstrap> for ForkVersionedLightClientBootstrap {
+    fn from(bootstrap: LightClientBootstrap) -> Self {
+        let fork_name = match &bootstrap {
+            LightClientBootstrap::Bellatrix(_) => ForkName::Bellatrix,
+            LightClientBootstrap::Capella(_) => ForkName::Capella,
+            LightClientBootstrap::Deneb(_) => ForkName::Deneb,
+            LightClientBootstrap::Electra(_) => ForkName::Electra,
+        };
         Self {
-            fork_name: ForkName::Capella,
-            bootstrap: LightClientBootstrap::Capella(bootstrap),
-        }
-    }
-}
-
-impl From<LightClientBootstrapDeneb> for ForkVersionedLightClientBootstrap {
-    fn from(bootstrap: LightClientBootstrapDeneb) -> Self {
-        Self {
-            fork_name: ForkName::Deneb,
-            bootstrap: LightClientBootstrap::Deneb(bootstrap),
-        }
-    }
-}
-
-impl From<LightClientBootstrapElectra> for ForkVersionedLightClientBootstrap {
-    fn from(bootstrap: LightClientBootstrapElectra) -> Self {
-        Self {
-            fork_name: ForkName::Electra,
-            bootstrap: LightClientBootstrap::Electra(bootstrap),
+            fork_name,
+            bootstrap,
         }
     }
 }
@@ -153,6 +141,18 @@ impl Encode for ForkVersionedLightClientBootstrap {
 pub struct ForkVersionedLightClientUpdate {
     pub fork_name: ForkName,
     pub update: LightClientUpdate,
+}
+
+impl From<LightClientUpdate> for ForkVersionedLightClientUpdate {
+    fn from(update: LightClientUpdate) -> Self {
+        let fork_name = match &update {
+            LightClientUpdate::Bellatrix(_) => ForkName::Bellatrix,
+            LightClientUpdate::Capella(_) => ForkName::Capella,
+            LightClientUpdate::Deneb(_) => ForkName::Deneb,
+            LightClientUpdate::Electra(_) => ForkName::Electra,
+        };
+        Self { fork_name, update }
+    }
 }
 
 impl ForkVersionedLightClientUpdate {
@@ -279,30 +279,15 @@ pub struct ForkVersionedLightClientOptimisticUpdate {
     pub update: LightClientOptimisticUpdate,
 }
 
-impl From<LightClientOptimisticUpdateCapella> for ForkVersionedLightClientOptimisticUpdate {
-    fn from(update: LightClientOptimisticUpdateCapella) -> Self {
-        Self {
-            fork_name: ForkName::Capella,
-            update: LightClientOptimisticUpdate::Capella(update),
-        }
-    }
-}
-
-impl From<LightClientOptimisticUpdateDeneb> for ForkVersionedLightClientOptimisticUpdate {
-    fn from(update: LightClientOptimisticUpdateDeneb) -> Self {
-        Self {
-            fork_name: ForkName::Deneb,
-            update: LightClientOptimisticUpdate::Deneb(update),
-        }
-    }
-}
-
-impl From<LightClientOptimisticUpdateElectra> for ForkVersionedLightClientOptimisticUpdate {
-    fn from(update: LightClientOptimisticUpdateElectra) -> Self {
-        Self {
-            fork_name: ForkName::Electra,
-            update: LightClientOptimisticUpdate::Electra(update),
-        }
+impl From<LightClientOptimisticUpdate> for ForkVersionedLightClientOptimisticUpdate {
+    fn from(update: LightClientOptimisticUpdate) -> Self {
+        let fork_name = match &update {
+            LightClientOptimisticUpdate::Bellatrix(_) => ForkName::Bellatrix,
+            LightClientOptimisticUpdate::Capella(_) => ForkName::Capella,
+            LightClientOptimisticUpdate::Deneb(_) => ForkName::Deneb,
+            LightClientOptimisticUpdate::Electra(_) => ForkName::Electra,
+        };
+        Self { fork_name, update }
     }
 }
 
@@ -377,30 +362,15 @@ pub struct ForkVersionedLightClientFinalityUpdate {
     pub update: LightClientFinalityUpdate,
 }
 
-impl From<LightClientFinalityUpdateCapella> for ForkVersionedLightClientFinalityUpdate {
-    fn from(update: LightClientFinalityUpdateCapella) -> Self {
-        Self {
-            fork_name: ForkName::Capella,
-            update: LightClientFinalityUpdate::Capella(update),
-        }
-    }
-}
-
-impl From<LightClientFinalityUpdateDeneb> for ForkVersionedLightClientFinalityUpdate {
-    fn from(update: LightClientFinalityUpdateDeneb) -> Self {
-        Self {
-            fork_name: ForkName::Deneb,
-            update: LightClientFinalityUpdate::Deneb(update),
-        }
-    }
-}
-
-impl From<LightClientFinalityUpdateElectra> for ForkVersionedLightClientFinalityUpdate {
-    fn from(update: LightClientFinalityUpdateElectra) -> Self {
-        Self {
-            fork_name: ForkName::Electra,
-            update: LightClientFinalityUpdate::Electra(update),
-        }
+impl From<LightClientFinalityUpdate> for ForkVersionedLightClientFinalityUpdate {
+    fn from(update: LightClientFinalityUpdate) -> Self {
+        let fork_name = match &update {
+            LightClientFinalityUpdate::Bellatrix(_) => ForkName::Bellatrix,
+            LightClientFinalityUpdate::Capella(_) => ForkName::Capella,
+            LightClientFinalityUpdate::Deneb(_) => ForkName::Deneb,
+            LightClientFinalityUpdate::Electra(_) => ForkName::Electra,
+        };
+        Self { fork_name, update }
     }
 }
 
