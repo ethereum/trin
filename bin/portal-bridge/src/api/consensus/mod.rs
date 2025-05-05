@@ -7,7 +7,7 @@ use alloy::primitives::B256;
 use anyhow::{anyhow, bail};
 use constants::DEFAULT_BEACON_STATE_REQUEST_TIMEOUT;
 use ethportal_api::{
-    consensus::beacon_state::BeaconStateDeneb,
+    consensus::beacon_state::BeaconStateElectra,
     light_client::{
         bootstrap::LightClientBootstrapDeneb, finality_update::LightClientFinalityUpdateDeneb,
         optimistic_update::LightClientOptimisticUpdateDeneb, update::LightClientUpdateDeneb,
@@ -130,7 +130,7 @@ impl ConsensusApi {
     }
 
     /// Requests the `BeaconState` structure corresponding to the current head of the beacon chain.
-    pub async fn get_beacon_state(&self) -> anyhow::Result<BeaconStateDeneb> {
+    pub async fn get_beacon_state(&self) -> anyhow::Result<BeaconStateElectra> {
         let endpoint = "/eth/v2/debug/beacon/states/finalized".to_string();
         Ok(self
             .request(endpoint, Some(DEFAULT_BEACON_STATE_REQUEST_TIMEOUT))

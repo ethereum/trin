@@ -8,10 +8,7 @@ use ethportal_api::consensus::{
     beacon_state::{BeaconStateDeneb, BeaconStateElectra, HistoricalBatch},
     body::BeaconBlockBodyBellatrix,
     execution_payload::ExecutionPayloadBellatrix,
-    historical_summaries::{
-        HistoricalSummariesProofDeneb, HistoricalSummariesProofElectra,
-        HistoricalSummariesWithProofDeneb, HistoricalSummariesWithProofElectra,
-    },
+    historical_summaries::HistoricalSummariesWithProof,
 };
 use ssz::{Decode, Encode};
 
@@ -142,62 +139,24 @@ fn execution_payload_block_hash_proof() {
 }
 
 #[test]
-fn test_historical_summaries_with_proof_deneb() {
-    let value = std::fs::read_to_string(
-        "mainnet/tests/mainnet/deneb/ssz_static/BeaconState/ssz_random/case_0/value.yaml",
-    )
-    .expect("cannot find test asset");
-    let beacon_state: BeaconStateDeneb = serde_yaml::from_str(&value).unwrap();
-    let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
-    let historical_summaries_state_proof =
-        HistoricalSummariesProofDeneb::new(historical_summaries_proof)
-            .expect("Should be able to build HistoricalSummariesProofDeneb from BeaconStateDeneb");
-    let historical_summaries = beacon_state.historical_summaries.clone();
-
-    let historical_summaries_epoch = beacon_state.slot / 32;
-
-    let expected_summaries_with_proof = HistoricalSummariesWithProofDeneb {
-        epoch: historical_summaries_epoch,
-        historical_summaries,
-        proof: historical_summaries_state_proof.clone(),
-    };
-
-    // Test ssz encoding and decoding
-    let ssz_bytes = expected_summaries_with_proof.as_ssz_bytes();
-    let historical_summaries_with_proof =
-        HistoricalSummariesWithProofDeneb::from_ssz_bytes(&ssz_bytes).unwrap();
-    assert_eq!(
-        expected_summaries_with_proof,
-        historical_summaries_with_proof
-    );
-}
-
-#[test]
-fn test_historical_summaries_with_proof_electra() {
-    let value = std::fs::read_to_string(
+fn test_historical_summaries_with_proof() {
+    let test_file_str = std::fs::read_to_string(
         "mainnet/tests/mainnet/electra/ssz_static/BeaconState/ssz_random/case_0/value.yaml",
     )
     .expect("cannot find test asset");
-    let beacon_state: BeaconStateElectra = serde_yaml::from_str(&value).unwrap();
-    let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
-    let historical_summaries_state_proof = HistoricalSummariesProofElectra::new(
-        historical_summaries_proof,
-    )
-    .expect("Should be able to build HistoricalSummariesProofElectra from BeaconStateElectra");
-    let historical_summaries = beacon_state.historical_summaries.clone();
 
-    let historical_summaries_epoch = beacon_state.slot / 32;
+    let beacon_state: BeaconStateElectra = serde_yaml::from_str(&test_file_str).unwrap();
 
-    let expected_summaries_with_proof = HistoricalSummariesWithProofElectra {
-        epoch: historical_summaries_epoch,
-        historical_summaries,
-        proof: historical_summaries_state_proof.clone(),
+    let expected_summaries_with_proof = HistoricalSummariesWithProof {
+        epoch: beacon_state.slot / 32,
+        historical_summaries: beacon_state.historical_summaries.clone(),
+        proof: beacon_state.build_historical_summaries_proof(),
     };
 
     // Test ssz encoding and decoding
     let ssz_bytes = expected_summaries_with_proof.as_ssz_bytes();
     let historical_summaries_with_proof =
-        HistoricalSummariesWithProofElectra::from_ssz_bytes(&ssz_bytes).unwrap();
+        HistoricalSummariesWithProof::from_ssz_bytes(&ssz_bytes).unwrap();
     assert_eq!(
         expected_summaries_with_proof,
         historical_summaries_with_proof

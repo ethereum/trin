@@ -23,7 +23,7 @@ use crate::consensus::{
     },
     fork::ForkName,
     header::BeaconBlockHeader,
-    historical_summaries::HistoricalSummaries,
+    historical_summaries::{HistoricalSummaries, HistoricalSummariesProof},
     participation_flags::ParticipationFlags,
     pending_balance_deposit::PendingDeposit,
     pending_consolidation::PendingConsolidation,
@@ -241,7 +241,7 @@ impl BeaconStateDeneb {
 }
 
 impl BeaconStateElectra {
-    pub fn build_historical_summaries_proof(&self) -> Vec<B256> {
+    pub fn build_historical_summaries_proof(&self) -> HistoricalSummariesProof {
         let leaves = [
             self.genesis_time.tree_hash_root(),
             self.genesis_validators_root.tree_hash_root(),
@@ -282,7 +282,8 @@ impl BeaconStateElectra {
             self.pending_consolidations.tree_hash_root(),
         ];
 
-        build_merkle_proof_for_index(leaves, 27)
+        HistoricalSummariesProof::new(build_merkle_proof_for_index(leaves, 27))
+            .expect("Created historical summaries proof for Electra should have correct length")
     }
 }
 

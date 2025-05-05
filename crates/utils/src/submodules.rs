@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use serde::Deserialize;
+use serde::{de::DeserializeOwned, Deserialize};
 use ssz::Decode;
 
 pub const PORTAL_SPEC_TESTS_SUBMODULE_PATH: [&str; 2] =
@@ -44,10 +44,9 @@ where
 }
 
 /// Reads yaml file from a "portal-spec-tests" submodule
-pub fn read_yaml_portal_spec_tests_file<T>(path: impl AsRef<Path>) -> anyhow::Result<T>
-where
-    T: for<'de> Deserialize<'de>,
-{
+pub fn read_yaml_portal_spec_tests_file<T: DeserializeOwned>(
+    path: impl AsRef<Path>,
+) -> anyhow::Result<T> {
     let reader = BufReader::new(File::open(portal_spec_tests_file_path(path))?);
     Ok(serde_yaml::from_reader(reader)?)
 }

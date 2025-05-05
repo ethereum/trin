@@ -7,10 +7,7 @@ use ethportal_api::{
     consensus::{
         fork::ForkName,
         historical_summaries::{
-            HistoricalSummariesProofDeneb, HistoricalSummariesProofElectra,
-            HistoricalSummariesWithProof, HistoricalSummariesWithProofDeneb,
-            HistoricalSummariesWithProofElectra, HISTORICAL_SUMMARIES_GINDEX_DENEB,
-            HISTORICAL_SUMMARIES_GINDEX_ELECTRA,
+            HistoricalSummariesProof, HistoricalSummariesWithProof, HISTORICAL_SUMMARIES_GINDEX,
         },
     },
     light_client::{
@@ -35,7 +32,7 @@ use light_client::{
 };
 use ssz::Decode;
 use tokio::sync::RwLock;
-use tracing::debug;
+use tracing::warn;
 use tree_hash::TreeHash;
 use trin_validation::{
     merkle::proof::verify_merkle_proof,
@@ -264,7 +261,7 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                 }
             }
             BeaconContentKey::HistoricalSummariesWithProof(key) => {
-                let fork_versioned_historical_summaries =
+                let historical_summaries_with_proof =
                     Self::general_summaries_validation(content, key)?;
 
                 let latest_finalized_root = self
@@ -275,22 +272,12 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                     .await;
 
                 if let Ok(latest_finalized_root) = latest_finalized_root {
-                    match fork_versioned_historical_summaries.historical_summaries_with_proof {
-                        HistoricalSummariesWithProof::Deneb(historical_summaries_with_proof) => {
-                            Self::state_summaries_validation_deneb(
-                                &historical_summaries_with_proof,
-                                latest_finalized_root,
-                            )?
-                        }
-                        HistoricalSummariesWithProof::Electra(historical_summaries_with_proof) => {
-                            Self::state_summaries_validation_electra(
-                                historical_summaries_with_proof,
-                                latest_finalized_root,
-                            )?
-                        }
-                    }
+                    Self::state_summaries_validation(
+                        historical_summaries_with_proof,
+                        latest_finalized_root,
+                    )?
                 } else {
-                    debug!("Failed to get latest finalized state root. Bypassing historical summaries with proof validation");
+                    warn!("Failed to get latest finalized state root. Bypassing historical summaries with proof validation");
                 }
             }
         }
@@ -304,26 +291,29 @@ impl BeaconValidator {
     fn general_summaries_validation(
         content: &[u8],
         key: &HistoricalSummariesWithProofKey,
-    ) -> anyhow::Result<ForkVersionedHistoricalSummariesWithProof> {
+    ) -> anyhow::Result<HistoricalSummariesWithProof> {
         let fork_versioned_historical_summaries =
             ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(content).map_err(|err| {
                 anyhow!("Historical summaries with proof has invalid SSZ bytes: {err:?}")
             })?;
 
+        let historical_summaries_with_proof =
+            fork_versioned_historical_summaries.historical_summaries_with_proof;
+
         // Check if the historical summaries with proof epoch matches the content key epoch
-        if fork_versioned_historical_summaries.epoch() != key.epoch {
+        if historical_summaries_with_proof.epoch != key.epoch {
             return Err(anyhow!(
                         "Historical summaries with proof epoch does not match the content key epoch: {} != {}",
-                        fork_versioned_historical_summaries.epoch(),
+                        historical_summaries_with_proof.epoch,
                         key.epoch
                     ));
         }
-        Ok(fork_versioned_historical_summaries)
+        Ok(historical_summaries_with_proof)
     }
 
     /// Validate historical summaries against the latest finalized state root
-    fn state_summaries_validation_deneb(
-        historical_summaries_with_proof: &HistoricalSummariesWithProofDeneb,
+    fn state_summaries_validation(
+        historical_summaries_with_proof: HistoricalSummariesWithProof,
         latest_finalized_root: B256,
     ) -> anyhow::Result<()> {
         if verify_merkle_proof(
@@ -331,36 +321,14 @@ impl BeaconValidator {
                 .historical_summaries
                 .tree_hash_root(),
             &historical_summaries_with_proof.proof,
-            HistoricalSummariesProofDeneb::capacity(),
-            HISTORICAL_SUMMARIES_GINDEX_DENEB,
+            HistoricalSummariesProof::capacity(),
+            HISTORICAL_SUMMARIES_GINDEX,
             latest_finalized_root,
         ) {
             Ok(())
         } else {
             Err(anyhow!(
-                "Merkle proof validation failed for HistoricalSummariesProofDeneb"
-            ))
-        }
-    }
-
-    /// Validate historical summaries against the latest finalized state root
-    fn state_summaries_validation_electra(
-        historical_summaries_with_proof: HistoricalSummariesWithProofElectra,
-        latest_finalized_root: B256,
-    ) -> anyhow::Result<()> {
-        if verify_merkle_proof(
-            historical_summaries_with_proof
-                .historical_summaries
-                .tree_hash_root(),
-            &historical_summaries_with_proof.proof,
-            HistoricalSummariesProofElectra::capacity(),
-            HISTORICAL_SUMMARIES_GINDEX_ELECTRA,
-            latest_finalized_root,
-        ) {
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "Merkle proof validation failed for HistoricalSummariesProofElectra"
+                "Merkle proof validation failed for HistoricalSummariesProof"
             ))
         }
     }
@@ -369,25 +337,28 @@ impl BeaconValidator {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use ethportal_api::{
-        consensus::historical_summaries::HistoricalSummariesWithProof,
         types::{
-            content_key::beacon::{
-                HistoricalSummariesWithProofKey, LightClientFinalityUpdateKey,
-                LightClientOptimisticUpdateKey,
-            },
+            content_key::beacon::{LightClientFinalityUpdateKey, LightClientOptimisticUpdateKey},
             content_value::beacon::LightClientUpdatesByRange,
+            jsonrpc::{
+                endpoints::BeaconEndpoint, json_rpc_mock::MockJsonRpcBuilder,
+                request::JsonRpcRequest,
+            },
         },
         BeaconContentValue, ContentValue, LightClientBootstrapKey, LightClientUpdatesByRangeKey,
     };
+    use serde::Deserialize;
     use ssz::Encode;
     use ssz_types::VariableList;
+    use tokio::sync::mpsc::UnboundedSender;
+    use trin_utils::{submodules::read_yaml_portal_spec_tests_file, testing::ContentItem};
 
     use super::*;
     use crate::test_utils;
 
     #[tokio::test]
     async fn test_validate_light_client_bootstrap() {
-        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::new())));
+        let validator = create_validator();
         let mut bootstrap = test_utils::get_light_client_bootstrap(0);
         let content = bootstrap.as_ssz_bytes();
         let content_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
@@ -416,7 +387,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_light_client_updates_by_range() {
-        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::new())));
+        let validator = create_validator();
         let lc_update_0 = test_utils::get_light_client_update(0);
         let updates = LightClientUpdatesByRange(VariableList::from(vec![lc_update_0.clone()]));
         let content = updates.as_ssz_bytes();
@@ -449,7 +420,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_light_client_finality_update() {
-        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::new())));
+        let validator = create_validator();
         let finality_update = test_utils::get_light_client_finality_update(0);
         let content = finality_update.as_ssz_bytes();
         let content_key =
@@ -483,7 +454,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_light_client_optimistic_update() {
-        let validator = BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::new())));
+        let validator = create_validator();
         let optimistic_update = test_utils::get_light_client_optimistic_update(0);
         let content = optimistic_update.as_ssz_bytes();
         let content_key =
@@ -513,55 +484,99 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_validate_historical_summaries_with_proof() {
-        let (historical_summaries_with_proof_deneb, state_root) =
-            test_utils::get_deneb_historical_summaries_with_proof();
-        let fork_versioned_historical_summaries_with_proof =
-            ForkVersionedHistoricalSummariesWithProof::from(HistoricalSummariesWithProof::Deneb(
-                historical_summaries_with_proof_deneb.clone(),
-            ));
+    mod historical_summaries {
+        use super::*;
 
-        let content_value = BeaconContentValue::HistoricalSummariesWithProof(
-            fork_versioned_historical_summaries_with_proof.clone(),
-        );
-        let content_bytes = content_value.encode();
+        #[tokio::test]
+        async fn validate() {
+            let test_data = read_test_data();
 
-        let content_key = HistoricalSummariesWithProofKey {
-            epoch: 450508969718611630,
-        };
-        assert_eq!(
-            BeaconValidator::general_summaries_validation(&content_bytes, &content_key).unwrap(),
-            fork_versioned_historical_summaries_with_proof,
-        );
+            let validation_result = test_data
+                .create_validator()
+                .validate_content(
+                    &test_data.content.content_key,
+                    &test_data.content.raw_content_value,
+                )
+                .await
+                .expect("Should validate content");
+            assert!(validation_result.valid_for_storing);
+        }
 
-        // Expect error because the epoch does not match the content key epoch
-        let invalid_content_key = HistoricalSummariesWithProofKey { epoch: 0 };
-        let result =
-            BeaconValidator::general_summaries_validation(&content_bytes, &invalid_content_key)
-                .unwrap_err();
-        assert_eq!(
-            result.to_string(),
-            "Historical summaries with proof epoch does not match the content key epoch: 450508969718611630 != 0"
-        );
+        #[tokio::test]
+        #[should_panic = "Historical summaries with proof epoch does not match the content key epoch"]
+        async fn validate_invalid_epoch() {
+            let test_data = read_test_data();
 
-        // Test historical summaries validation against the latest finalized state root
-        let result = BeaconValidator::state_summaries_validation_deneb(
-            &historical_summaries_with_proof_deneb,
-            state_root,
-        );
-        assert!(result.is_ok());
+            // Modify content key
+            let mut content_key = test_data.content.content_key.clone();
+            if let BeaconContentKey::HistoricalSummariesWithProof(key) = &mut content_key {
+                key.epoch += 1;
+            }
 
-        // Test historical summaries validation against invalid finalized state root
-        let invalid_state_root = B256::random();
-        let result = BeaconValidator::state_summaries_validation_deneb(
-            &historical_summaries_with_proof_deneb,
-            invalid_state_root,
-        )
-        .unwrap_err();
-        assert_eq!(
-            result.to_string(),
-            "Merkle proof validation failed for HistoricalSummariesProofDeneb"
-        );
+            test_data
+                .create_validator()
+                .validate_content(&content_key, &test_data.content.raw_content_value)
+                .await
+                .unwrap();
+        }
+
+        #[tokio::test]
+        #[should_panic = "Merkle proof validation failed for HistoricalSummariesProof"]
+        async fn validate_invalid_proof() {
+            let test_data = read_test_data();
+
+            // Modify proof
+            let mut content_value = test_data.content.content_value().unwrap();
+            if let BeaconContentValue::HistoricalSummariesWithProof(
+                fork_versioned_historical_summaries_with_proof,
+            ) = &mut content_value
+            {
+                fork_versioned_historical_summaries_with_proof
+                    .historical_summaries_with_proof
+                    .proof
+                    .swap(0, 1);
+            }
+
+            test_data
+                .create_validator()
+                .validate_content(&test_data.content.content_key, &content_value.encode())
+                .await
+                .unwrap();
+        }
+
+        fn read_test_data() -> TestData {
+            read_yaml_portal_spec_tests_file(
+            "tests/mainnet/beacon_chain/historical_summaries_with_proof/electra/historical_summaries_with_proof.yaml",
+        ).unwrap()
+        }
+
+        #[derive(Deserialize)]
+        struct TestData {
+            #[serde(flatten)]
+            content: ContentItem<BeaconContentKey>,
+            beacon_state_root: B256,
+        }
+
+        impl TestData {
+            fn create_validator(&self) -> BeaconValidator {
+                create_validator_with_beacon_jsonrpc(
+                    MockJsonRpcBuilder::new()
+                        .with_response(BeaconEndpoint::FinalizedStateRoot, self.beacon_state_root)
+                        .or_fail(),
+                )
+            }
+        }
+    }
+
+    fn create_validator() -> BeaconValidator {
+        BeaconValidator::new(Arc::new(RwLock::new(HeaderOracle::new())))
+    }
+
+    fn create_validator_with_beacon_jsonrpc(
+        beacon_jsonrpc_tx: UnboundedSender<JsonRpcRequest<BeaconEndpoint>>,
+    ) -> BeaconValidator {
+        let mut header_oracle = HeaderOracle::new();
+        header_oracle.beacon_jsonrpc_tx = Some(beacon_jsonrpc_tx);
+        BeaconValidator::new(Arc::new(RwLock::new(header_oracle)))
     }
 }
