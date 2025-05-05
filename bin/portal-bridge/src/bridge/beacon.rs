@@ -8,7 +8,6 @@ use alloy::primitives::B256;
 use anyhow::bail;
 use ethportal_api::{
     consensus::historical_summaries::HistoricalSummariesWithProof,
-    light_client::update::LightClientUpdate,
     types::{
         consensus::fork::ForkName,
         content_key::beacon::{
@@ -16,8 +15,7 @@ use ethportal_api::{
             LightClientOptimisticUpdateKey,
         },
         content_value::beacon::{
-            ForkVersionedHistoricalSummariesWithProof, ForkVersionedLightClientUpdate,
-            LightClientUpdatesByRange,
+            ForkVersionedHistoricalSummariesWithProof, LightClientUpdatesByRange,
         },
         network::Subnetwork,
         portal_wire::OfferTrace,
@@ -335,9 +333,10 @@ impl BeaconBridge {
             }
         }
 
-        let update = &consensus_api
+        let update = consensus_api
             .get_light_client_updates(expected_current_period, 1)
-            .await?[0];
+            .await?
+            .remove(0);
         let finalized_header_period = update.finalized_header.beacon.slot / SLOTS_PER_PERIOD;
 
         // We don't serve a `LightClientUpdate` if its finalized header slot is not within the
@@ -351,13 +350,8 @@ impl BeaconBridge {
             return Ok(());
         }
 
-        let fork_versioned_update = ForkVersionedLightClientUpdate {
-            fork_name: ForkName::Deneb,
-            update: LightClientUpdate::Deneb(update.clone()),
-        };
-
         let content_value = BeaconContentValue::LightClientUpdatesByRange(
-            LightClientUpdatesByRange(VariableList::from(vec![fork_versioned_update])),
+            LightClientUpdatesByRange(VariableList::from(vec![update.into()])),
         );
         let content_key =
             BeaconContentKey::LightClientUpdatesByRange(LightClientUpdatesByRangeKey {

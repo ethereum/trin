@@ -46,24 +46,6 @@ pub struct ForkVersionedLightClientBootstrap {
     pub bootstrap: LightClientBootstrap,
 }
 
-impl From<LightClientBootstrapCapella> for ForkVersionedLightClientBootstrap {
-    fn from(bootstrap: LightClientBootstrapCapella) -> Self {
-        Self {
-            fork_name: ForkName::Capella,
-            bootstrap: LightClientBootstrap::Capella(bootstrap),
-        }
-    }
-}
-
-impl From<LightClientBootstrapDeneb> for ForkVersionedLightClientBootstrap {
-    fn from(bootstrap: LightClientBootstrapDeneb) -> Self {
-        Self {
-            fork_name: ForkName::Deneb,
-            bootstrap: LightClientBootstrap::Deneb(bootstrap),
-        }
-    }
-}
-
 impl From<LightClientBootstrapElectra> for ForkVersionedLightClientBootstrap {
     fn from(bootstrap: LightClientBootstrapElectra) -> Self {
         Self {
@@ -192,6 +174,15 @@ impl ForkVersionedLightClientUpdate {
     }
 }
 
+impl From<LightClientUpdateElectra> for ForkVersionedLightClientUpdate {
+    fn from(update: LightClientUpdateElectra) -> Self {
+        Self {
+            fork_name: ForkName::Electra,
+            update: LightClientUpdate::Electra(update),
+        }
+    }
+}
+
 impl Decode for ForkVersionedLightClientUpdate {
     fn is_ssz_fixed_len() -> bool {
         false
@@ -277,24 +268,6 @@ pub struct ForkVersionedLightClientOptimisticUpdate {
     pub update: LightClientOptimisticUpdate,
 }
 
-impl From<LightClientOptimisticUpdateCapella> for ForkVersionedLightClientOptimisticUpdate {
-    fn from(update: LightClientOptimisticUpdateCapella) -> Self {
-        Self {
-            fork_name: ForkName::Capella,
-            update: LightClientOptimisticUpdate::Capella(update),
-        }
-    }
-}
-
-impl From<LightClientOptimisticUpdateDeneb> for ForkVersionedLightClientOptimisticUpdate {
-    fn from(update: LightClientOptimisticUpdateDeneb) -> Self {
-        Self {
-            fork_name: ForkName::Deneb,
-            update: LightClientOptimisticUpdate::Deneb(update),
-        }
-    }
-}
-
 impl From<LightClientOptimisticUpdateElectra> for ForkVersionedLightClientOptimisticUpdate {
     fn from(update: LightClientOptimisticUpdateElectra) -> Self {
         Self {
@@ -373,24 +346,6 @@ impl Encode for ForkVersionedLightClientOptimisticUpdate {
 pub struct ForkVersionedLightClientFinalityUpdate {
     pub fork_name: ForkName,
     pub update: LightClientFinalityUpdate,
-}
-
-impl From<LightClientFinalityUpdateCapella> for ForkVersionedLightClientFinalityUpdate {
-    fn from(update: LightClientFinalityUpdateCapella) -> Self {
-        Self {
-            fork_name: ForkName::Capella,
-            update: LightClientFinalityUpdate::Capella(update),
-        }
-    }
-}
-
-impl From<LightClientFinalityUpdateDeneb> for ForkVersionedLightClientFinalityUpdate {
-    fn from(update: LightClientFinalityUpdateDeneb) -> Self {
-        Self {
-            fork_name: ForkName::Deneb,
-            update: LightClientFinalityUpdate::Deneb(update),
-        }
-    }
 }
 
 impl From<LightClientFinalityUpdateElectra> for ForkVersionedLightClientFinalityUpdate {
