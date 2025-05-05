@@ -1097,7 +1097,7 @@ mod tests {
             let config = TrinConfig::new_from([APP_NAME]).unwrap();
             assert_eq!(config.bootnodes, Bootnodes::Default);
             let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
-            assert_eq!(bootnodes.len(), 11);
+            assert_eq!(bootnodes.len(), 10);
         }
 
         #[test_log::test]
@@ -1105,7 +1105,7 @@ mod tests {
             let config = TrinConfig::new_from([APP_NAME, "--bootnodes", "default"]).unwrap();
             assert_eq!(config.bootnodes, Bootnodes::Default);
             let bootnodes: Vec<Enr> = config.bootnodes.to_enrs(Network::Mainnet);
-            assert_eq!(bootnodes.len(), 11);
+            assert_eq!(bootnodes.len(), 10);
         }
 
         #[test_log::test]
