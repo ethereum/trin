@@ -5,6 +5,7 @@ use ssz::{Decode, DecodeError, Encode};
 use ssz_types::{typenum::U128, VariableList};
 
 use crate::{
+    consensus::fork::FORK_DIGEST_LEN,
     light_client::{
         bootstrap::{LightClientBootstrapDeneb, LightClientBootstrapElectra},
         finality_update::{LightClientFinalityUpdateDeneb, LightClientFinalityUpdateElectra},
@@ -488,7 +489,7 @@ impl Encode for ForkVersionedHistoricalSummariesWithProof {
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
-        self.fork_name.as_fork_digest().ssz_append(buf);
+        buf.extend_from_slice(&self.fork_name.as_fork_digest());
         self.historical_summaries_with_proof.ssz_append(buf);
     }
 
@@ -497,8 +498,7 @@ impl Encode for ForkVersionedHistoricalSummariesWithProof {
     }
 
     fn ssz_bytes_len(&self) -> usize {
-        self.fork_name.as_fork_digest().ssz_bytes_len()
-            + self.historical_summaries_with_proof.ssz_bytes_len()
+        FORK_DIGEST_LEN + self.historical_summaries_with_proof.ssz_bytes_len()
     }
 }
 
@@ -512,17 +512,17 @@ impl Decode for ForkVersionedHistoricalSummariesWithProof {
     }
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        let fork_digest_len = <ForkDigest as Decode>::ssz_fixed_len();
         let Some((fork_digest_bytes, historical_summaries_with_proof_bytes)) =
-            bytes.split_at_checked(fork_digest_len)
+            bytes.split_at_checked(FORK_DIGEST_LEN)
         else {
             return Err(DecodeError::InvalidByteLength {
                 len: bytes.len(),
-                expected: fork_digest_len,
+                expected: FORK_DIGEST_LEN,
             });
         };
 
-        let fork_digest = ForkDigest::from_ssz_bytes(fork_digest_bytes)?;
+        let fork_digest = ForkDigest::try_from(fork_digest_bytes)
+            .map_err(|err| DecodeError::BytesInvalid(err.to_string()))?;
         let fork_name = match ForkName::try_from(fork_digest) {
             Ok(fork_name) => fork_name,
             Err(err) => return Err(DecodeError::BytesInvalid(err.to_string())),
