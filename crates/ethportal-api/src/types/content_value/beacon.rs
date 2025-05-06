@@ -5,6 +5,7 @@ use ssz::{Decode, DecodeError, Encode};
 use ssz_types::{typenum::U128, VariableList};
 
 use crate::{
+    consensus::fork::FORK_DIGEST_LEN,
     light_client::{
         bootstrap::{LightClientBootstrapDeneb, LightClientBootstrapElectra},
         finality_update::{LightClientFinalityUpdateDeneb, LightClientFinalityUpdateElectra},
@@ -482,28 +483,22 @@ pub struct ForkVersionedHistoricalSummariesWithProof {
     pub historical_summaries_with_proof: HistoricalSummariesWithProof,
 }
 
-impl ForkVersionedHistoricalSummariesWithProof {
-    pub fn encode(&self) -> Vec<u8> {
-        let fork_digest = self.fork_name.as_fork_digest();
-
-        let mut data = fork_digest.to_vec();
-        data.extend(self.historical_summaries_with_proof.as_ssz_bytes());
-        data
+impl Encode for ForkVersionedHistoricalSummariesWithProof {
+    fn is_ssz_fixed_len() -> bool {
+        false
     }
 
-    pub fn decode(buf: &[u8]) -> Result<Self, DecodeError> {
-        let fork_digest = ForkDigest::try_from(&buf[0..4]).map_err(|err| {
-            DecodeError::BytesInvalid(format!("Unable to decode fork digest: {err:?}"))
-        })?;
-        let fork_name = ForkName::try_from(fork_digest).map_err(|_| {
-            DecodeError::BytesInvalid(format!("Unable to decode fork name: {fork_digest:?}"))
-        })?;
-        let summaries_with_proof = HistoricalSummariesWithProof::from_ssz_bytes(&buf[4..])?;
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.fork_name.as_fork_digest());
+        self.historical_summaries_with_proof.ssz_append(buf);
+    }
 
-        Ok(Self {
-            fork_name,
-            historical_summaries_with_proof: summaries_with_proof,
-        })
+    fn ssz_fixed_len() -> usize {
+        ssz::BYTES_PER_LENGTH_OFFSET
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        FORK_DIGEST_LEN + self.historical_summaries_with_proof.ssz_bytes_len()
     }
 }
 
@@ -512,22 +507,33 @@ impl Decode for ForkVersionedHistoricalSummariesWithProof {
         false
     }
 
+    fn ssz_fixed_len() -> usize {
+        ssz::BYTES_PER_LENGTH_OFFSET
+    }
+
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        Self::decode(bytes)
-    }
-}
+        let Some((fork_digest_bytes, historical_summaries_with_proof_bytes)) =
+            bytes.split_at_checked(FORK_DIGEST_LEN)
+        else {
+            return Err(DecodeError::InvalidByteLength {
+                len: bytes.len(),
+                expected: FORK_DIGEST_LEN,
+            });
+        };
 
-impl Encode for ForkVersionedHistoricalSummariesWithProof {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
+        let fork_digest = ForkDigest::try_from(fork_digest_bytes).map_err(|err| {
+            DecodeError::BytesInvalid(format!("Unable to decode fork digest: {err:?}"))
+        })?;
+        let fork_name = ForkName::try_from(fork_digest).map_err(|_| {
+            DecodeError::BytesInvalid(format!("Unable to decode fork name: {fork_digest:?}"))
+        })?;
 
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.encode());
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        self.encode().len()
+        let historical_summaries_with_proof =
+            HistoricalSummariesWithProof::from_ssz_bytes(historical_summaries_with_proof_bytes)?;
+        Ok(Self {
+            fork_name,
+            historical_summaries_with_proof,
+        })
     }
 }
 
@@ -592,7 +598,9 @@ impl ContentValue for BeaconContentValue {
 
 #[cfg(test)]
 mod test {
+    use alloy::primitives::B256;
     use serde::Deserialize;
+    use tree_hash::TreeHash;
 
     use super::*;
     use crate::test_utils::{read_yaml_portal_spec_tests_file, types::ContentItem};
@@ -699,29 +707,58 @@ mod test {
     }
 
     #[test]
-    fn deneb_historical_summaries_with_proof_encode_decode() {
-        let value: serde_yaml::Value = read_yaml_portal_spec_tests_file(
-            "tests/mainnet/beacon_chain/historical_summaries_with_proof/deneb/historical_summaries_with_proof.yaml",
-        ).unwrap();
-        let content_key = BeaconContentKey::deserialize(&value["content_key"]).unwrap();
-        let content_bytes = RawContentValue::deserialize(&value["content_value"]).unwrap();
-        let beacon_content = BeaconContentValue::decode(&content_key, &content_bytes).unwrap();
-        let expected_epoch = <u64>::deserialize(&value["epoch"]).unwrap();
-
-        match &beacon_content {
-            BeaconContentValue::HistoricalSummariesWithProof(content) => {
-                assert_eq!(
-                    expected_epoch,
-                    content.historical_summaries_with_proof.epoch
-                );
-                assert_eq!(ForkName::Deneb, content.fork_name);
-            }
-            _ => panic!("Invalid beacon content type!"),
+    fn historical_summaries_with_proof() {
+        #[derive(Deserialize)]
+        struct HistoricalSummariesTestData {
+            #[serde(flatten)]
+            content: ContentItem<BeaconContentKey>,
+            historical_summaries_root: B256,
+            historical_summaries_state_proof: Vec<B256>,
+            epoch: u64,
         }
 
-        assert_eq!(content_bytes, beacon_content.encode());
+        let test_data: HistoricalSummariesTestData = read_yaml_portal_spec_tests_file(
+            "tests/mainnet/beacon_chain/historical_summaries_with_proof/electra/historical_summaries_with_proof.yaml",
+        ).unwrap();
 
-        assert_str_roundtrip(content_key, beacon_content);
+        let content_value = test_data
+            .content
+            .content_value()
+            .expect("The content_value should decode as BeaconContentValue");
+
+        let BeaconContentValue::HistoricalSummariesWithProof(
+            fork_versioned_historical_summaries_with_proof,
+        ) = &content_value
+        else {
+            panic!("BeaconContentValue is not HistoricalSummariesWithProof");
+        };
+
+        assert_eq!(
+            fork_versioned_historical_summaries_with_proof.fork_name,
+            ForkName::Electra,
+        );
+
+        assert_eq!(
+            fork_versioned_historical_summaries_with_proof.as_ssz_bytes(),
+            test_data.content.raw_content_value.to_vec(),
+        );
+
+        let historical_summaries_with_proof =
+            &fork_versioned_historical_summaries_with_proof.historical_summaries_with_proof;
+
+        assert_eq!(historical_summaries_with_proof.epoch, test_data.epoch);
+        assert_eq!(
+            historical_summaries_with_proof
+                .historical_summaries
+                .tree_hash_root(),
+            test_data.historical_summaries_root
+        );
+        assert_eq!(
+            historical_summaries_with_proof.proof.to_vec(),
+            test_data.historical_summaries_state_proof
+        );
+
+        assert_str_roundtrip(test_data.content.content_key, content_value);
     }
 
     fn assert_str_roundtrip(content_key: BeaconContentKey, content_value: BeaconContentValue) {

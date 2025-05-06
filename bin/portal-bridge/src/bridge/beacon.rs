@@ -5,11 +5,9 @@ use std::{
 };
 
 use alloy::primitives::B256;
-use anyhow::{bail, ensure};
+use anyhow::bail;
 use ethportal_api::{
-    consensus::historical_summaries::{
-        HistoricalSummariesStateProof, HistoricalSummariesWithProof,
-    },
+    consensus::historical_summaries::HistoricalSummariesWithProof,
     light_client::update::LightClientUpdate,
     types::{
         consensus::fork::ForkName,
@@ -35,6 +33,7 @@ use tokio::{
 use tracing::{error, info, warn, Instrument};
 use trin_beacon::network::BeaconNetwork;
 use trin_metrics::bridge::BridgeMetricsReporter;
+use trin_validation::constants::SLOTS_PER_EPOCH;
 
 use super::{constants::SERVE_BLOCK_TIMEOUT, offer_report::OfferReport};
 use crate::{
@@ -45,12 +44,8 @@ use crate::{
     utils::{duration_until_next_update, expected_current_slot},
 };
 
-/// The number of slots in an epoch.
-const SLOTS_PER_EPOCH: u64 = 32;
 /// The number of slots in a sync committee period.
 const SLOTS_PER_PERIOD: u64 = SLOTS_PER_EPOCH * 256;
-/// The historical summaries proof always has a length of 5 hashes.
-const HISTORICAL_SUMMARIES_PROOF_LENGTH: usize = 5;
 
 /// A helper struct to hold the finalized beacon state metadata.
 #[derive(Clone, Debug, Default)]
@@ -470,32 +465,28 @@ impl BeaconBridge {
         info!("Downloading beacon state for HistoricalSummariesWithProof generation...");
         finalized_state_root.lock().await.in_progress = true;
         let beacon_state = consensus_api.get_beacon_state().await?;
-        let state_epoch = beacon_state.slot / SLOTS_PER_EPOCH;
+        let beacon_state_epoch = beacon_state.slot / SLOTS_PER_EPOCH;
+
         let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
-        // Ensure the historical summaries proof is of the correct length
-        ensure!(
-            historical_summaries_proof.len() == HISTORICAL_SUMMARIES_PROOF_LENGTH,
-            "Historical summaries proof length is not 5"
-        );
-        let historical_summaries = beacon_state.historical_summaries;
-        let historical_summaries_with_proof = ForkVersionedHistoricalSummariesWithProof {
-            fork_name: ForkName::Deneb,
-            historical_summaries_with_proof: HistoricalSummariesWithProof {
-                epoch: state_epoch,
-                historical_summaries,
-                proof: HistoricalSummariesStateProof::from(historical_summaries_proof),
-            },
+        let historical_summaries_with_proof = HistoricalSummariesWithProof {
+            epoch: beacon_state_epoch,
+            historical_summaries: beacon_state.historical_summaries,
+            proof: historical_summaries_proof,
         };
         info!(
-            epoch = %state_epoch,
+            epoch = %beacon_state_epoch,
             "Generated HistoricalSummariesWithProof",
         );
         let content_key =
             BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
-                epoch: state_epoch,
+                epoch: beacon_state_epoch,
             });
-        let content_value =
-            BeaconContentValue::HistoricalSummariesWithProof(historical_summaries_with_proof);
+        let content_value = BeaconContentValue::HistoricalSummariesWithProof(
+            ForkVersionedHistoricalSummariesWithProof {
+                fork_name: ForkName::Electra,
+                historical_summaries_with_proof,
+            },
+        );
 
         Self::spawn_offer_tasks(beacon_network, content_key, content_value, metrics, census);
         finalized_state_root.lock().await.state_root = latest_finalized_state_root;

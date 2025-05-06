@@ -13,7 +13,8 @@ use crate::utils::bytes::hex_encode;
 #[error("Unknown fork for digest: {0}")]
 pub struct ParseForkNameError(String);
 
-pub type ForkDigest = [u8; 4];
+pub const FORK_DIGEST_LEN: usize = 4;
+pub type ForkDigest = [u8; FORK_DIGEST_LEN];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ForkName {

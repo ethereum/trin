@@ -721,10 +721,11 @@ mod test {
             HistoricalSummariesWithProofKey, LightClientFinalityUpdateKey,
             LightClientOptimisticUpdateKey,
         },
-        LightClientBootstrapKey, LightClientUpdatesByRangeKey,
+        BeaconContentValue, ContentValue, LightClientBootstrapKey, LightClientUpdatesByRangeKey,
     };
     use tree_hash::TreeHash;
     use trin_storage::test_utils::create_test_portal_storage_config_with_capacity;
+    use trin_utils::{submodules::read_yaml_portal_spec_tests_file, testing::ContentItem};
 
     use super::*;
     use crate::test_utils;
@@ -872,14 +873,27 @@ mod test {
     fn test_beacon_storage_get_put_historical_summaries() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
         let mut storage = BeaconStorage::new(config).unwrap();
-        let (value, _) = test_utils::get_history_summaries_with_proof();
-        let epoch = value.historical_summaries_with_proof.epoch;
-        let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
-            epoch,
-        });
-        storage.put(key.clone(), value.as_ssz_bytes()).unwrap();
+
+        let test_data: ContentItem<BeaconContentKey> = read_yaml_portal_spec_tests_file(
+            "tests/mainnet/beacon_chain/historical_summaries_with_proof/electra/historical_summaries_with_proof.yaml",
+        ).unwrap();
+
+        let key = test_data.content_key.clone();
+        let value = test_data.content_value().unwrap();
+
+        let BeaconContentValue::HistoricalSummariesWithProof(
+            fork_versioned_historical_summaries_with_proof,
+        ) = &value
+        else {
+            panic!("Expected HistoricalSummariesWithProof content value");
+        };
+        let epoch = fork_versioned_historical_summaries_with_proof
+            .historical_summaries_with_proof
+            .epoch;
+
+        storage.put(key.clone(), value.encode()).unwrap();
         let result = storage.get(&key).unwrap().unwrap();
-        assert_eq!(result, value.as_ssz_bytes());
+        assert_eq!(result, value.encode());
 
         // Test is_key_within_radius_and_unavailable for the same epoch
         let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
@@ -911,7 +925,7 @@ mod test {
             epoch: 0,
         });
         let result = storage.get(&key).unwrap().unwrap();
-        assert_eq!(result, value.as_ssz_bytes());
+        assert_eq!(result, value.encode());
     }
 
     #[test]

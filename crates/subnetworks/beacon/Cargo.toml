@@ -35,5 +35,8 @@ trin-validation.workspace = true
 utp-rs.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
 snap.workspace = true
+tempfile.workspace = true
+trin-utils.workspace = true

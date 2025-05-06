@@ -143,7 +143,9 @@ impl HeaderOracle {
         let content: BeaconContentValue = BeaconContentValue::decode(&content_key, &content)?;
 
         match content {
-            BeaconContentValue::HistoricalSummariesWithProof(content) => Ok(content.historical_summaries_with_proof.historical_summaries),
+            BeaconContentValue::HistoricalSummariesWithProof(content) => {
+                Ok(content.historical_summaries_with_proof.historical_summaries)
+            }
             _ => Err(anyhow!(
                 "Invalid BeaconContentValue received from HistoricalSummaries local_content, expected HistoricalSummariesWithProof: {content:?}"
             )),
