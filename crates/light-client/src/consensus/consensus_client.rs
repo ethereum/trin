@@ -4,7 +4,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use alloy::primitives::B256;
+use alloy::primitives::{aliases::B32, fixed_bytes, B256};
 use anyhow::{anyhow, ensure, Result};
 use chrono::Duration;
 use ethportal_api::{
@@ -16,7 +16,6 @@ use ethportal_api::{
         store::LightClientStore,
         update::{FinalizedRootProofLenElectra, LightClientUpdateElectra},
     },
-    utils::bytes::hex_encode,
 };
 use milagro_bls::PublicKey;
 use ssz_types::{typenum, BitVector, FixedVector};
@@ -38,15 +37,15 @@ use crate::{
 pub struct ConsensusLightClient<R: ConsensusRpc> {
     rpc: R,
     store: LightClientStore,
-    initial_checkpoint: Vec<u8>,
-    pub last_checkpoint: Option<Vec<u8>>,
+    initial_checkpoint: B256,
+    pub last_checkpoint: Option<B256>,
     pub config: Arc<Config>,
 }
 
 impl<R: ConsensusRpc> ConsensusLightClient<R> {
     pub fn new(
         rpc: &str,
-        checkpoint_block_root: &[u8],
+        checkpoint_block_root: B256,
         config: Arc<Config>,
     ) -> Result<ConsensusLightClient<R>> {
         let rpc = R::new(rpc);
@@ -56,17 +55,17 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             store: LightClientStore::default(),
             last_checkpoint: None,
             config,
-            initial_checkpoint: checkpoint_block_root.to_vec(),
+            initial_checkpoint: checkpoint_block_root,
         })
     }
 
-    pub fn with_custom_rpc(rpc: R, checkpoint_block_root: &[u8], config: Arc<Config>) -> Self {
+    pub fn with_custom_rpc(rpc: R, checkpoint_block_root: B256, config: Arc<Config>) -> Self {
         ConsensusLightClient {
             rpc,
             store: LightClientStore::default(),
             last_checkpoint: None,
             config,
-            initial_checkpoint: checkpoint_block_root.to_vec(),
+            initial_checkpoint: checkpoint_block_root,
         }
     }
 
@@ -155,7 +154,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
         info!(
             "Light client in sync with checkpoint: {}",
-            hex_encode(&self.initial_checkpoint)
+            self.initial_checkpoint
         );
 
         Ok(())
@@ -202,7 +201,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     async fn bootstrap(&mut self) -> Result<()> {
         let bootstrap = self
             .rpc
-            .get_bootstrap(&self.initial_checkpoint)
+            .get_bootstrap(self.initial_checkpoint)
             .await
             .map_err(|err| anyhow!("could not fetch bootstrap: {err}"))?;
 
@@ -222,8 +221,8 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             &bootstrap.current_sync_committee_branch,
         );
 
-        let header_hash = hex_encode(bootstrap.header.beacon.tree_hash_root());
-        let expected_hash = hex_encode(&self.initial_checkpoint);
+        let header_hash = bootstrap.header.beacon.tree_hash_root();
+        let expected_hash = self.initial_checkpoint;
         let header_valid = header_hash == expected_hash;
 
         if !header_valid {
@@ -249,39 +248,36 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     fn verify_update(&self, update: &LightClientUpdateElectra) -> Result<()> {
         let update = GenericUpdate::from(update);
         let expected_current_slot = expected_current_slot();
-        let genesis_root = &self.config.chain.genesis_root;
         verify_generic_update(
             &self.store,
             &update,
             expected_current_slot,
-            genesis_root,
-            &self.config.fork_version(update.signature_slot),
+            self.config.chain.genesis_root,
+            self.config.fork_version(update.signature_slot),
         )
     }
 
     fn verify_finality_update(&self, update: &LightClientFinalityUpdateElectra) -> Result<()> {
         let update = GenericUpdate::from(update);
         let expected_current_slot = expected_current_slot();
-        let genesis_root = &self.config.chain.genesis_root;
         verify_generic_update(
             &self.store,
             &update,
             expected_current_slot,
-            genesis_root,
-            &self.config.fork_version(update.signature_slot),
+            self.config.chain.genesis_root,
+            self.config.fork_version(update.signature_slot),
         )
     }
 
     fn verify_optimistic_update(&self, update: &LightClientOptimisticUpdateElectra) -> Result<()> {
         let update = GenericUpdate::from(update);
         let expected_current_slot = expected_current_slot();
-        let genesis_root = &self.config.chain.genesis_root;
         verify_generic_update(
             &self.store,
             &update,
             expected_current_slot,
-            genesis_root,
-            &self.config.fork_version(update.signature_slot),
+            self.config.chain.genesis_root,
+            self.config.fork_version(update.signature_slot),
         )
     }
 
@@ -359,7 +355,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
                 if self.store.finalized_header.slot % 32 == 0 {
                     let checkpoint = self.store.finalized_header.tree_hash_root();
-                    self.last_checkpoint = Some(checkpoint.as_slice().to_vec());
+                    self.last_checkpoint = Some(checkpoint);
                 }
 
                 if self.store.finalized_header.slot > self.store.optimistic_header.slot {
@@ -493,8 +489,8 @@ pub fn verify_generic_update(
     store: &LightClientStore,
     update: &GenericUpdate,
     expected_slot: u64,
-    genesis_root: &[u8],
-    fork_version: &[u8],
+    genesis_root: B256,
+    fork_version: B32,
 ) -> Result<()> {
     let bits = get_bits(&update.sync_aggregate.sync_committee_bits);
     ensure!(bits > 0, ConsensusError::InsufficientParticipation);
@@ -577,13 +573,11 @@ pub fn verify_generic_update(
 }
 
 fn compute_committee_sign_root(
-    genesis_root: &[u8],
+    genesis_root: B256,
     header: B256,
-    fork_version: &[u8],
+    fork_version: B32,
 ) -> Result<B256> {
-    let genesis_root = B256::from_slice(genesis_root);
-    let domain_type = &hex::decode("07000000")?[..];
-    let fork_version = FixedVector::from(fork_version.to_vec());
+    let domain_type = fixed_bytes!("07000000");
     let domain = compute_domain(domain_type, fork_version, genesis_root)?;
     Ok(compute_signing_root(header, domain))
 }
@@ -619,8 +613,8 @@ fn verify_sync_committee_signature(
     pks: &[PublicKey],
     attested_header: &BeaconBlockHeader,
     signature: &BlsSignature,
-    genesis_root: &[u8],
-    fork_version: &[u8],
+    genesis_root: B256,
+    fork_version: B32,
 ) -> bool {
     let res: Result<bool> = (move || {
         let public_keys: Vec<&PublicKey> = pks.iter().collect();
@@ -677,6 +671,7 @@ fn is_current_committee_proof_valid(
 mod tests {
     use std::sync::Arc;
 
+    use alloy::{hex::FromHex, primitives::B256};
     use ethportal_api::consensus::{
         header::BeaconBlockHeader, pubkey::PubKey, signature::BlsSignature,
     };
@@ -703,11 +698,11 @@ mod tests {
         };
 
         let checkpoint =
-            hex::decode("787b52add77e871f1cdffbc7f36e84a923f95f8a75c61dc410af24030d74d45c")
+            B256::from_hex("787b52add77e871f1cdffbc7f36e84a923f95f8a75c61dc410af24030d74d45c")
                 .unwrap();
 
         let mut client =
-            ConsensusLightClient::new("testdata/", &checkpoint, Arc::new(config)).unwrap();
+            ConsensusLightClient::new("testdata/", checkpoint, Arc::new(config)).unwrap();
         client.bootstrap().await.unwrap();
         client
     }

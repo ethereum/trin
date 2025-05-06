@@ -1,5 +1,6 @@
 use std::cmp;
 
+use alloy::primitives::B256;
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -28,24 +29,23 @@ impl ConsensusRpc for NimbusRpc {
         }
     }
 
-    async fn get_bootstrap(&self, block_root: &'_ [u8]) -> Result<LightClientBootstrapElectra> {
-        let root_hex = hex::encode(block_root);
+    async fn get_bootstrap(&self, block_root: B256) -> Result<LightClientBootstrapElectra> {
         let req = format!(
-            "{}/eth/v1/beacon/light_client/bootstrap/0x{}",
-            self.rpc, root_hex
+            "{}/eth/v1/beacon/light_client/bootstrap/{}",
+            self.rpc, block_root
         );
 
         let client = reqwest::Client::new();
-        let res = client
+        let result = client
             .get(req)
             .send()
             .await
-            .map_err(|e| RpcError::new("bootstrap", e))?
+            .map_err(|err| RpcError::new("bootstrap", err))?
             .json::<BootstrapResponse>()
             .await
-            .map_err(|e| RpcError::new("bootstrap", e))?;
+            .map_err(|err| RpcError::new("bootstrap", err))?;
 
-        Ok(res.data)
+        Ok(result.data)
     }
 
     async fn get_updates(&self, period: u64, count: u8) -> Result<Vec<LightClientUpdateElectra>> {
@@ -72,10 +72,10 @@ impl ConsensusRpc for NimbusRpc {
         let req = format!("{}/eth/v1/beacon/light_client/finality_update", self.rpc);
         let res = reqwest::get(req)
             .await
-            .map_err(|e| RpcError::new("finality_update", e))?
+            .map_err(|err| RpcError::new("finality_update", err))?
             .json::<FinalityUpdateResponse>()
             .await
-            .map_err(|e| RpcError::new("finality_update", e))?;
+            .map_err(|err| RpcError::new("finality_update", err))?;
 
         Ok(res.data)
     }
@@ -84,10 +84,10 @@ impl ConsensusRpc for NimbusRpc {
         let req = format!("{}/eth/v1/beacon/light_client/optimistic_update", self.rpc);
         let res = reqwest::get(req)
             .await
-            .map_err(|e| RpcError::new("optimistic_update", e))?
+            .map_err(|err| RpcError::new("optimistic_update", err))?
             .json::<OptimisticUpdateResponse>()
             .await
-            .map_err(|e| RpcError::new("optimistic_update", e))?;
+            .map_err(|err| RpcError::new("optimistic_update", err))?;
 
         Ok(res.data)
     }
@@ -96,10 +96,10 @@ impl ConsensusRpc for NimbusRpc {
         let req = format!("{}/eth/v1/config/spec", self.rpc);
         let res = reqwest::get(req)
             .await
-            .map_err(|e| RpcError::new("spec", e))?
+            .map_err(|err| RpcError::new("spec", err))?
             .json::<SpecResponse>()
             .await
-            .map_err(|e| RpcError::new("spec", e))?;
+            .map_err(|err| RpcError::new("spec", err))?;
 
         Ok(res.data.chain_id)
     }

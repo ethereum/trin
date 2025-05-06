@@ -1,5 +1,6 @@
 use std::{fs::read_to_string, path::PathBuf};
 
+use alloy::primitives::B256;
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -22,7 +23,7 @@ impl ConsensusRpc for MockRpc {
         }
     }
 
-    async fn get_bootstrap(&self, _block_root: &'_ [u8]) -> Result<LightClientBootstrapElectra> {
+    async fn get_bootstrap(&self, _block_root: B256) -> Result<LightClientBootstrapElectra> {
         let bootstrap = read_to_string(self.testdata.join("bootstrap.json"))?;
         Ok(serde_json::from_str(&bootstrap)?)
     }

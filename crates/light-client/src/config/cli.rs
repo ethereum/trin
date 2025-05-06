@@ -1,5 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
+use alloy::primitives::B256;
 use figment::{providers::Serialized, value::Value};
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CliConfig {
     pub consensus_rpc: Option<String>,
-    pub checkpoint: Option<Vec<u8>>,
+    pub checkpoint: Option<B256>,
     pub rpc_port: Option<u16>,
     pub data_dir: PathBuf,
     pub fallback: Option<String>,

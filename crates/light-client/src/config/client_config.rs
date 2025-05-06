@@ -1,5 +1,6 @@
 use std::{path::PathBuf, process::exit};
 
+use alloy::primitives::{aliases::B32, B256};
 use figment::{
     providers::{Format, Serialized, Toml},
     Figment,
@@ -7,21 +8,15 @@ use figment::{
 use serde::Deserialize;
 use trin_validation::constants::SLOTS_PER_EPOCH;
 
-use crate::config::{
-    networks,
-    utils::{bytes_deserialize, bytes_opt_deserialize},
-    BaseConfig, ChainConfig, CliConfig, Forks,
-};
+use crate::config::{networks, BaseConfig, ChainConfig, CliConfig, Forks};
 
 #[derive(Deserialize, Debug, Default)]
 pub struct Config {
     pub consensus_rpc: String,
     pub rpc_port: Option<u16>,
-    #[serde(deserialize_with = "bytes_deserialize")]
-    pub default_checkpoint: Vec<u8>,
+    pub default_checkpoint: B256,
     #[serde(default)]
-    #[serde(deserialize_with = "bytes_opt_deserialize")]
-    pub checkpoint: Option<Vec<u8>>,
+    pub checkpoint: Option<B256>,
     pub data_dir: Option<PathBuf>,
     pub chain: ChainConfig,
     pub forks: Forks,
@@ -67,21 +62,21 @@ impl Config {
         }
     }
 
-    pub fn fork_version(&self, slot: u64) -> Vec<u8> {
+    pub fn fork_version(&self, slot: u64) -> B32 {
         let epoch = slot / SLOTS_PER_EPOCH;
 
         if epoch >= self.forks.electra.epoch {
-            self.forks.electra.fork_version.clone()
+            self.forks.electra.fork_version
         } else if epoch >= self.forks.deneb.epoch {
-            self.forks.deneb.fork_version.clone()
+            self.forks.deneb.fork_version
         } else if epoch >= self.forks.capella.epoch {
-            self.forks.capella.fork_version.clone()
+            self.forks.capella.fork_version
         } else if epoch >= self.forks.bellatrix.epoch {
-            self.forks.bellatrix.fork_version.clone()
+            self.forks.bellatrix.fork_version
         } else if epoch >= self.forks.altair.epoch {
-            self.forks.altair.fork_version.clone()
+            self.forks.altair.fork_version
         } else {
-            self.forks.genesis.fork_version.clone()
+            self.forks.genesis.fork_version
         }
     }
 
@@ -89,7 +84,7 @@ impl Config {
         BaseConfig {
             rpc_port: self.rpc_port.unwrap_or(8545),
             consensus_rpc: Some(self.consensus_rpc.clone()),
-            default_checkpoint: self.default_checkpoint.clone(),
+            default_checkpoint: self.default_checkpoint,
             chain: self.chain.clone(),
             forks: self.forks.clone(),
             max_checkpoint_age: self.max_checkpoint_age,

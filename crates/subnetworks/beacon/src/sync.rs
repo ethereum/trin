@@ -31,7 +31,7 @@ impl BeaconSync {
         builder = builder.network(networks::Network::Mainnet);
 
         // Set the checkpoint to the last known checkpoint
-        builder = builder.checkpoint(&trusted_block_root.to_string());
+        builder = builder.checkpoint(trusted_block_root);
 
         // Set the data dir
         builder = builder.data_dir(PathBuf::from("/tmp/portal-light-client"));

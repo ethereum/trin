@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use alloy::{hex::FromHex, primitives::B256};
 use light_client::{
     config::{client_config::Config, networks},
     consensus::{rpc::mock_rpc::MockRpc, ConsensusLightClient},
@@ -16,9 +17,9 @@ async fn setup() -> ConsensusLightClient<MockRpc> {
     };
 
     let checkpoint =
-        hex::decode("c62aa0de55e6f21230fa63713715e1a6c13e73005e89f6389da271955d819bde").unwrap();
+        B256::from_hex("c62aa0de55e6f21230fa63713715e1a6c13e73005e89f6389da271955d819bde").unwrap();
 
-    ConsensusLightClient::new("testdata/", &checkpoint, Arc::new(config)).unwrap()
+    ConsensusLightClient::new("testdata/", checkpoint, Arc::new(config)).unwrap()
 }
 
 #[tokio::test]

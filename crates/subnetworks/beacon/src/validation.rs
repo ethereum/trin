@@ -130,8 +130,8 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                                     &light_client_store,
                                     &generic_update,
                                     expected_slot,
-                                    &self.light_client_config.chain.genesis_root,
-                                    &self.light_client_config.forks.electra.fork_version,
+                                    self.light_client_config.chain.genesis_root,
+                                    self.light_client_config.forks.electra.fork_version,
                                 )?;
                             }
                             _ => {
@@ -186,8 +186,8 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                                 &light_client_store,
                                 &generic_update,
                                 expected_current_slot(),
-                                &self.light_client_config.chain.genesis_root,
-                                &self.light_client_config.forks.electra.fork_version,
+                                self.light_client_config.chain.genesis_root,
+                                self.light_client_config.forks.electra.fork_version,
                             )?;
                         }
                     }
@@ -242,8 +242,8 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                                 &light_client_store,
                                 &generic_update,
                                 expected_current_slot(),
-                                &self.light_client_config.chain.genesis_root,
-                                &self.light_client_config.forks.electra.fork_version,
+                                self.light_client_config.chain.genesis_root,
+                                self.light_client_config.forks.electra.fork_version,
                             )?;
                         }
                     }

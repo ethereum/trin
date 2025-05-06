@@ -1,5 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
+use alloy::primitives::B256;
 use anyhow::{Error, Result};
 use ethportal_api::{
     consensus::header::BeaconBlockHeader,
@@ -24,7 +25,7 @@ impl<R: ConsensusRpc> Node<R> {
     pub fn new(config: Arc<Config>) -> Result<Self, NodeError> {
         let consensus_rpc = &config.consensus_rpc;
         let checkpoint_hash =
-            &config
+            *config
                 .checkpoint
                 .as_ref()
                 .ok_or(NodeError::ConsensusClientCreationError(Error::msg(
@@ -39,7 +40,7 @@ impl<R: ConsensusRpc> Node<R> {
 
     pub fn with_portal(config: Arc<Config>, portal_rpc: R) -> Result<Self, NodeError> {
         let checkpoint_hash =
-            &config
+            *config
                 .checkpoint
                 .as_ref()
                 .ok_or(NodeError::ConsensusClientCreationError(Error::msg(
@@ -95,8 +96,8 @@ impl<R: ConsensusRpc> Node<R> {
         Ok(self.consensus.get_header().clone())
     }
 
-    pub fn get_last_checkpoint(&self) -> Option<Vec<u8>> {
-        self.consensus.last_checkpoint.clone()
+    pub fn get_last_checkpoint(&self) -> Option<B256> {
+        self.consensus.last_checkpoint
     }
 
     pub async fn get_optimistic_update(&self) -> Result<LightClientOptimisticUpdate> {

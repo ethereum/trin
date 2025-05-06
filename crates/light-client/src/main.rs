@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use alloy::primitives::{b256, B256};
 use anyhow::Result;
 use light_client::{
     config::networks, consensus::rpc::nimbus_rpc::NimbusRpc, database::FileDB, Client,
@@ -8,8 +9,8 @@ use light_client::{
 use tracing::info;
 
 const CONSENSUS_RPC_URL: &str = "http://testing.mainnet.beacon-api.nimbus.team";
-const TRUSTED_CHECKPOINT: &str =
-    "0x9c30624f15e4df4e8f819f89db8b930f36b561b7f70905688ea208d22fb0b822";
+const TRUSTED_CHECKPOINT: B256 =
+    b256!("0x9c30624f15e4df4e8f819f89db8b930f36b561b7f70905688ea208d22fb0b822");
 const FALLBACK_URL: &str = "https://sync-mainnet.beaconcha.in";
 
 #[tokio::main]
