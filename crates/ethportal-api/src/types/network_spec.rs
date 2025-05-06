@@ -17,6 +17,9 @@ use super::{
 /// Beacon chain mainnet genesis time: Tue Dec 01 2020 12:00:23 GMT+0000
 const MAINNET_BEACON_GENESIS_TIMESTAMP: u64 = 1606824023;
 
+/// Beacon chain sepolia genesis time: Jun-20-2022 02:00:00 PM +UTC
+const SEPOLIA_BEACON_GENESIS_TIMESTAMP: u64 = 1655733600;
+
 static NETWORK_SPEC: LazyLock<RwLock<Arc<NetworkSpec>>> =
     LazyLock::new(|| RwLock::new(MAINNET.clone()));
 
@@ -169,6 +172,26 @@ pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
         MAINNET_BEACON_GENESIS_TIMESTAMP,
     )
     .expect("Failed to create angelfood network spec")
+    .into()
+});
+
+pub static SEPOLIA: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
+    let mut portal_subnetworks = BiHashMap::new();
+    portal_subnetworks.insert(Subnetwork::State, "0x504A".to_string());
+    portal_subnetworks.insert(Subnetwork::History, "0x504B".to_string());
+    portal_subnetworks.insert(Subnetwork::Beacon, "0x504C".to_string());
+    portal_subnetworks.insert(Subnetwork::CanonicalIndices, "0x504D".to_string());
+    portal_subnetworks.insert(Subnetwork::VerkleState, "0x504E".to_string());
+    portal_subnetworks.insert(Subnetwork::TransactionGossip, "0x504F".to_string());
+    portal_subnetworks.insert(Subnetwork::Utp, "0x757470".to_string());
+    NetworkSpec::new(
+        portal_subnetworks,
+        Network::Sepolia,
+        ProtocolVersionList::new(vec![ProtocolVersion::V1]),
+        EthereumChainHardforks::sepolia(),
+        SEPOLIA_BEACON_GENESIS_TIMESTAMP,
+    )
+    .expect("Failed to create sepolia network spec")
     .into()
 });
 

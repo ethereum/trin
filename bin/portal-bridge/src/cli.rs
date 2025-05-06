@@ -56,11 +56,11 @@ pub struct BridgeConfig {
     pub portal_subnetwork: Subnetwork,
 
     #[arg(
-            long = "network",
-                help = "Choose mainnet or angelfood",
-                default_value = DEFAULT_NETWORK,
-                value_parser = network_parser
-            )]
+        long = "network",
+        help = "Choose mainnet, angelfood or sepolia",
+        default_value = DEFAULT_NETWORK,
+        value_parser = network_parser
+    )]
     pub network: Arc<NetworkSpec>,
 
     #[arg(
