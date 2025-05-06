@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
 
     let start = Instant::now();
     let epoch_writer = EpochWriter::new(config.target_dir, config.epoch);
-    epoch_writer.write_epoch(epoch_reader)?;
+    epoch_writer.write_epoch(epoch_reader).await?;
     info!(
         "Time taken to finished writing blocks  {}",
         start.elapsed().human(Truncate::Second)

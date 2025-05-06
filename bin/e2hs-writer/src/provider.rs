@@ -8,7 +8,10 @@ use e2store::{
     utils::{get_era1_files, get_era_files},
 };
 use ethportal_api::{
-    consensus::{beacon_block::SignedBeaconBlock, beacon_state::HistoricalBatch},
+    consensus::{
+        beacon_block::SignedBeaconBlock, beacon_state::HistoricalBatch,
+        historical_summaries::HistoricalSummaries,
+    },
     types::network_spec::network_spec,
 };
 use reqwest::{
@@ -46,6 +49,7 @@ impl EraSource {
 pub struct MinimalEra {
     pub blocks: Vec<CompressedSignedBeaconBlock>,
     pub historical_batch: HistoricalBatch,
+    pub historical_summaries: Option<HistoricalSummaries>,
 }
 
 impl MinimalEra {
@@ -75,6 +79,7 @@ impl From<Era> for MinimalEra {
                 block_roots: era.era_state.state.block_roots().clone(),
                 state_roots: era.era_state.state.state_roots().clone(),
             },
+            historical_summaries: era.era_state.state.historical_summaries().cloned().ok(),
         }
     }
 }
@@ -192,6 +197,20 @@ impl EraProvider {
             }
         }
         bail!("Couldn't find error file not found for block number: {block_number}");
+    }
+
+    /// Tries to find the historical summaries for the last era file, which would contain the latest
+    /// historical summaries to prove against.
+    ///
+    /// Returns `None` if the last era file is not a post-merge era file.
+    pub fn get_historical_summaries(&self) -> Option<HistoricalSummaries> {
+        self.sources.last().and_then(|source| {
+            if let EraSource::PostMerge(era) = source {
+                era.historical_summaries.clone()
+            } else {
+                None
+            }
+        })
     }
 }
 
