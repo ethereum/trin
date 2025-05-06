@@ -9,8 +9,8 @@ use constants::DEFAULT_BEACON_STATE_REQUEST_TIMEOUT;
 use ethportal_api::{
     consensus::beacon_state::BeaconStateElectra,
     light_client::{
-        bootstrap::LightClientBootstrapDeneb, finality_update::LightClientFinalityUpdateDeneb,
-        optimistic_update::LightClientOptimisticUpdateDeneb, update::LightClientUpdateDeneb,
+        bootstrap::LightClientBootstrapElectra, finality_update::LightClientFinalityUpdateElectra,
+        optimistic_update::LightClientOptimisticUpdateElectra, update::LightClientUpdateElectra,
     },
 };
 use reqwest::{
@@ -72,7 +72,7 @@ impl ConsensusApi {
     pub async fn get_light_client_bootstrap(
         &self,
         block_root: B256,
-    ) -> anyhow::Result<LightClientBootstrapDeneb> {
+    ) -> anyhow::Result<LightClientBootstrapElectra> {
         let endpoint = format!("/eth/v1/beacon/light_client/bootstrap/{block_root}");
         Ok(self.request(endpoint, None).await?.data)
     }
@@ -95,7 +95,7 @@ impl ConsensusApi {
         &self,
         start_period: u64,
         count: u64,
-    ) -> anyhow::Result<Vec<LightClientUpdateDeneb>> {
+    ) -> anyhow::Result<Vec<LightClientUpdateElectra>> {
         let endpoint = format!(
             "/eth/v1/beacon/light_client/updates?start_period={start_period}&count={count}"
         );
@@ -110,7 +110,7 @@ impl ConsensusApi {
     /// Requests the latest `LightClientOptimisticUpdate` known by the server.
     pub async fn get_light_client_optimistic_update(
         &self,
-    ) -> anyhow::Result<LightClientOptimisticUpdateDeneb> {
+    ) -> anyhow::Result<LightClientOptimisticUpdateElectra> {
         let endpoint = "/eth/v1/beacon/light_client/optimistic_update".to_string();
         Ok(self.request(endpoint, None).await?.data)
     }
@@ -118,7 +118,7 @@ impl ConsensusApi {
     /// Requests the latest `LightClientFinalityUpdate` known by the server.
     pub async fn get_light_client_finality_update(
         &self,
-    ) -> anyhow::Result<LightClientFinalityUpdateDeneb> {
+    ) -> anyhow::Result<LightClientFinalityUpdateElectra> {
         let endpoint = "/eth/v1/beacon/light_client/finality_update".to_string();
         Ok(self.request(endpoint, None).await?.data)
     }
