@@ -7,6 +7,7 @@ use alloy::{
 };
 use alloy_hardforks::EthereumHardforks;
 use anyhow::{anyhow, bail, ensure};
+use async_stream::stream;
 use ethportal_api::{
     consensus::{
         beacon_block::{
@@ -29,10 +30,14 @@ use ethportal_api::{
     },
     Receipts,
 };
+use futures::Stream;
 use portal_bridge::api::execution::ExecutionApi;
 use tokio::try_join;
 use trin_execution::era::beacon::decode_transactions;
-use trin_validation::{accumulator::PreMergeAccumulator, constants::SLOTS_PER_HISTORICAL_ROOT};
+use trin_validation::{
+    accumulator::PreMergeAccumulator, constants::SLOTS_PER_HISTORICAL_ROOT,
+    header_validator::HeaderValidator,
+};
 use url::Url;
 
 use crate::{
@@ -58,6 +63,7 @@ pub struct EpochReader {
     epoch_accumulator: Option<Arc<EpochAccumulator>>,
     era_provider: EraProvider,
     receipts: HashMap<u64, Receipts>,
+    header_validator: HeaderValidator,
 }
 
 impl EpochReader {
@@ -105,23 +111,48 @@ impl EpochReader {
         let receipts = receipts_result?;
         let era_provider = era_provider_result?;
 
+        // If none is returned, there are no headers which require Historical Summaries to prove, so
+        // we are goood passing in default.
+        let historical_summaries = era_provider.get_historical_summaries().unwrap_or_default();
+        let header_validator = HeaderValidator::new_with_historical_summaries(historical_summaries);
+
         Ok(Self {
             starting_block,
             ending_block,
             epoch_accumulator,
             receipts,
             era_provider,
+            header_validator,
         })
     }
 
-    pub fn iter_blocks(mut self) -> impl Iterator<Item = anyhow::Result<AllBlockData>> {
-        (self.starting_block..self.ending_block).map(move |current_block| {
-            if network_spec().is_paris_active_at_block(current_block) {
-                self.get_post_merge_block_data(current_block)
-            } else {
-                self.get_pre_merge_block_data(current_block)
+    pub fn iter_blocks(mut self) -> impl Stream<Item = anyhow::Result<AllBlockData>> {
+        stream! {
+            for current_block in self.starting_block..self.ending_block {
+                let block = if network_spec().is_paris_active_at_block(current_block) {
+                    self.get_post_merge_block_data(current_block)
+                } else {
+                    self.get_pre_merge_block_data(current_block)
+                }?;
+                self.validate_block(&block).await?;
+                yield Ok(block)
             }
-        })
+        }
+    }
+
+    async fn validate_block(&self, block: &AllBlockData) -> anyhow::Result<()> {
+        let header_with_proof = &block.header_with_proof;
+        self.header_validator
+            .validate_header_with_proof(header_with_proof)
+            .await?;
+        block
+            .body
+            .validate_against_header(&header_with_proof.header)?;
+        ensure!(
+            block.receipts.root() == header_with_proof.header.receipts_root,
+            "Receipts root mismatch"
+        );
+        Ok(())
     }
 
     fn get_pre_merge_block_data(&self, block_number: u64) -> anyhow::Result<AllBlockData> {

@@ -4,6 +4,7 @@ use e2store::{
     e2hs::{BlockTuple, E2HSWriter, HeaderWithProofEntry},
     era1::{BodyEntry, ReceiptsEntry},
 };
+use futures::StreamExt;
 use tracing::info;
 
 use crate::reader::EpochReader;
@@ -22,14 +23,15 @@ impl EpochWriter {
         }
     }
 
-    pub fn write_epoch(&self, reader: EpochReader) -> anyhow::Result<()> {
+    pub async fn write_epoch(&self, reader: EpochReader) -> anyhow::Result<()> {
         info!(
             "Writing epoch {} to {:?}",
             self.epoch_index, self.target_dir
         );
         let mut e2hs_writer = E2HSWriter::create(&self.target_dir, self.epoch_index)?;
+        let mut block_iter = Box::pin(reader.iter_blocks());
 
-        for block_data in reader.iter_blocks() {
+        while let Some(block_data) = block_iter.next().await {
             let block_data = block_data?;
             info!(
                 "Writing block {}",
