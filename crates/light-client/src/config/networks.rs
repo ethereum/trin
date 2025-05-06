@@ -19,12 +19,14 @@ use crate::config::{utils::hex_str_to_bytes, BaseConfig, ChainConfig, Fork, Fork
 )]
 pub enum Network {
     Mainnet,
+    Sepolia,
 }
 
 impl Network {
     pub fn to_base_config(self) -> BaseConfig {
         match self {
             Self::Mainnet => mainnet(),
+            Self::Sepolia => sepolia(),
         }
     }
 }
@@ -69,6 +71,52 @@ pub fn mainnet() -> BaseConfig {
             electra: Fork {
                 epoch: 364032,
                 fork_version: hex_str_to_bytes("0x05000000").expect("should be a valid hex str"),
+            },
+        },
+        max_checkpoint_age: 1_209_600, // 14 days
+    }
+}
+
+pub fn sepolia() -> BaseConfig {
+    BaseConfig {
+        default_checkpoint: hex_str_to_bytes(
+            "0x234931a3fe5d791f06092477357e2d65dcf6fa6cad048680eb93ad3ea494bbcd",
+        )
+        .expect("should be a valid hex str"),
+        rpc_port: 8545,
+        consensus_rpc: None,
+        chain: ChainConfig {
+            chain_id: 11155111,
+            genesis_time: 1655733600,
+            genesis_root: hex_str_to_bytes(
+                "0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078",
+            )
+            .expect("should be a valid hex str"),
+        },
+        forks: Forks {
+            genesis: Fork {
+                epoch: 0,
+                fork_version: hex_str_to_bytes("0x90000069").expect("should be a valid hex str"),
+            },
+            altair: Fork {
+                epoch: 50,
+                fork_version: hex_str_to_bytes("0x90000070").expect("should be a valid hex str"),
+            },
+            bellatrix: Fork {
+                epoch: 100,
+                fork_version: hex_str_to_bytes("0x90000071").expect("should be a valid hex str"),
+            },
+            capella: Fork {
+                epoch: 56832,
+                fork_version: hex_str_to_bytes("0x90000072").expect("should be a valid hex str"),
+            },
+            deneb: Fork {
+                epoch: 132608,
+                fork_version: hex_str_to_bytes("0x90000073").expect("should be a valid hex str"),
+            },
+            electra: Fork {
+                epoch: 222464,
+                fork_version: hex_str_to_bytes("0x90000074").expect("should be a valid hex str"),
             },
         },
         max_checkpoint_age: 1_209_600, // 14 days
