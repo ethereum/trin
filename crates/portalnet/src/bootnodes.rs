@@ -79,6 +79,9 @@ lazy_static! {
             alias: "angelfood-trin-1".to_string()
         },
     ];
+
+    // Sepolia bootstrap nodes
+    pub static ref SEPOLIA_BOOTNODES: Vec<Bootnode> = vec![];
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -94,17 +97,23 @@ pub enum Bootnodes {
 impl Bootnodes {
     pub fn to_enrs(&self, network: Network) -> Vec<Enr> {
         match (self, network) {
-            (Bootnodes::Default, Network::Mainnet) => {
-                DEFAULT_BOOTNODES.iter().map(|bn| bn.enr.clone()).collect()
-            }
+            (Bootnodes::Default, Network::Mainnet) => DEFAULT_BOOTNODES
+                .iter()
+                .map(|bootnode| bootnode.enr.clone())
+                .collect(),
             (Bootnodes::Default, Network::Angelfood) => ANGELFOOD_BOOTNODES
                 .iter()
-                .map(|bn| bn.enr.clone())
+                .map(|bootnode| bootnode.enr.clone())
+                .collect(),
+            (Bootnodes::Default, Network::Sepolia) => SEPOLIA_BOOTNODES
+                .iter()
+                .map(|bootnode| bootnode.enr.clone())
                 .collect(),
             (Bootnodes::None, _) => vec![],
-            (Bootnodes::Custom(bootnodes), _) => {
-                bootnodes.iter().map(|bn| bn.enr.clone()).collect()
-            }
+            (Bootnodes::Custom(bootnodes), _) => bootnodes
+                .iter()
+                .map(|bootnode| bootnode.enr.clone())
+                .collect(),
         }
     }
 }

@@ -5,7 +5,7 @@ use alloy::primitives::{B256, U256};
 use ethportal_api::types::{
     distance::Distance,
     network::Subnetwork,
-    network_spec::{NetworkSpec, ANGELFOOD, MAINNET},
+    network_spec::{NetworkSpec, ANGELFOOD, MAINNET, SEPOLIA},
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -49,8 +49,9 @@ pub fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> 
     match network_string {
         "mainnet" => Ok(MAINNET.clone()),
         "angelfood" => Ok(ANGELFOOD.clone()),
+        "sepolia" => Ok(SEPOLIA.clone()),
         _ => Err(format!(
-            "Not a valid network: {network_string}, must be 'angelfood' or 'mainnet'"
+            "Not a valid network: {network_string}, must be 'mainnet', 'sepolia', or 'angelfood'"
         )),
     }
 }

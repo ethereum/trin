@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub enum Network {
     Mainnet,
     Angelfood, // aka testnet
+    Sepolia,
 }
 
 impl From<Network> for Chain {
@@ -15,6 +16,7 @@ impl From<Network> for Chain {
         match network {
             Network::Mainnet => Chain::mainnet(),
             Network::Angelfood => Chain::mainnet(),
+            Network::Sepolia => Chain::sepolia(),
         }
     }
 }
@@ -24,6 +26,7 @@ impl fmt::Display for Network {
         match self {
             Network::Mainnet => write!(f, "mainnet"),
             Network::Angelfood => write!(f, "angelfood"),
+            Network::Sepolia => write!(f, "sepolia"),
         }
     }
 }
@@ -35,6 +38,7 @@ impl std::str::FromStr for Network {
         match s {
             "mainnet" => Ok(Network::Mainnet),
             "angelfood" => Ok(Network::Angelfood),
+            "sepolia" => Ok(Network::Sepolia),
             _ => Err(format!("Unknown network: {s}")),
         }
     }
