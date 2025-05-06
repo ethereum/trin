@@ -521,12 +521,12 @@ impl Decode for ForkVersionedHistoricalSummariesWithProof {
             });
         };
 
-        let fork_digest = ForkDigest::try_from(fork_digest_bytes)
-            .map_err(|err| DecodeError::BytesInvalid(err.to_string()))?;
-        let fork_name = match ForkName::try_from(fork_digest) {
-            Ok(fork_name) => fork_name,
-            Err(err) => return Err(DecodeError::BytesInvalid(err.to_string())),
-        };
+        let fork_digest = ForkDigest::try_from(fork_digest_bytes).map_err(|err| {
+            DecodeError::BytesInvalid(format!("Unable to decode fork digest: {err:?}"))
+        })?;
+        let fork_name = ForkName::try_from(fork_digest).map_err(|_| {
+            DecodeError::BytesInvalid(format!("Unable to decode fork name: {fork_digest:?}"))
+        })?;
 
         let historical_summaries_with_proof =
             HistoricalSummariesWithProof::from_ssz_bytes(historical_summaries_with_proof_bytes)?;
