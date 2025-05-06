@@ -1,12 +1,12 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use async_trait::async_trait;
 use ethportal_api::{
     consensus::light_client::bootstrap::LightClientBootstrap,
     light_client::{
-        bootstrap::LightClientBootstrapDeneb, finality_update::LightClientFinalityUpdateDeneb,
-        optimistic_update::LightClientOptimisticUpdateDeneb, update::LightClientUpdateDeneb,
+        bootstrap::LightClientBootstrapElectra, finality_update::LightClientFinalityUpdateElectra,
+        optimistic_update::LightClientOptimisticUpdateElectra, update::LightClientUpdateElectra,
     },
     types::{
         consensus::light_client::{
@@ -36,6 +36,48 @@ impl PortalRpc {
     pub fn with_portal(overlay_tx: UnboundedSender<OverlayCommand<BeaconContentKey>>) -> Self {
         Self { overlay_tx }
     }
+
+    async fn send_find_content(
+        &self,
+        content_key: &BeaconContentKey,
+        content_type: &str,
+    ) -> anyhow::Result<BeaconContentValue> {
+        let (tx, rx) = oneshot::channel();
+
+        let overlay_command = OverlayCommand::FindContentQuery {
+            target: content_key.clone(),
+            callback: tx,
+            config: Default::default(),
+        };
+
+        if let Err(err) = self.overlay_tx.send(overlay_command) {
+            warn!(
+                protocol = "beacon",
+                content_type,
+                error = %err,
+                "Error submitting FindContent"
+            );
+            bail!("Error submitting FindContent for {content_type}: {err}");
+        }
+
+        let content_value_bytes = match rx.await {
+            Ok(Ok((content_value_bytes, _, _))) => content_value_bytes,
+            Ok(Err(err)) => bail!("{content_key:?} not found on the network: {err}"),
+            Err(err) => {
+                warn!(
+                    protocol = "beacon",
+                    content_type,
+                    error = %err,
+                    "Error receiving FindContent"
+                );
+                bail!("Error receiving FindContent for {content_type}: {err}");
+            }
+        };
+        Ok(BeaconContentValue::decode(
+            content_key,
+            &content_value_bytes,
+        )?)
+    }
 }
 
 #[async_trait]
@@ -47,131 +89,55 @@ impl ConsensusRpc for PortalRpc {
     async fn get_bootstrap(
         &self,
         block_root: &'_ [u8],
-    ) -> anyhow::Result<LightClientBootstrapDeneb> {
+    ) -> anyhow::Result<LightClientBootstrapElectra> {
         let bootstrap_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
             block_hash: <[u8; 32]>::try_from(block_root)?,
         });
 
-        let (tx, rx) = oneshot::channel();
+        let content_value = self
+            .send_find_content(&bootstrap_key, "LightClientBootstrap")
+            .await?;
 
-        let overlay_command = OverlayCommand::FindContentQuery {
-            target: bootstrap_key.clone(),
-            callback: tx,
-            config: Default::default(),
+        let BeaconContentValue::LightClientBootstrap(bootstrap) = content_value else {
+            bail!("Error converting BeaconContentValue to LightClientBootstrap");
         };
-
-        if let Err(err) = self.overlay_tx.send(overlay_command) {
-            warn!(
-                protocol = "beacon",
-                error = %err,
-                "Error submitting FindContent query to service"
-            );
-            return Err(err.into());
-        }
-
-        match rx.await {
-            Ok(result) => {
-                let bootstrap = match result {
-                    Ok(result) => BeaconContentValue::decode(&bootstrap_key, &result.0)?,
-                    Err(err) => {
-                        bail!("LightClientBootstrap content not found on the network: {err}")
-                    }
-                };
-                if let BeaconContentValue::LightClientBootstrap(bootstrap) = bootstrap {
-                    if let LightClientBootstrap::Deneb(bootstrap_deneb) = bootstrap.bootstrap {
-                        Ok(bootstrap_deneb)
-                    } else {
-                        bail!("Error converting LightClientBootstrap to LightClientBootstrapDeneb")
-                    }
-                } else {
-                    bail!("Error converting BeaconContentValue to LightClientBootstrap");
-                }
-            }
-            Err(err) => {
-                warn!(
-                    protocol = %"beacon",
-                    error = %err,
-                    "Error receiving FindContent query response"
-                );
-                return Err(err.into());
-            }
-        }
+        let LightClientBootstrap::Electra(bootstrap) = bootstrap.bootstrap else {
+            bail!("Error converting LightClientBootstrap to LightClientBootstrapElectra")
+        };
+        Ok(bootstrap)
     }
 
     async fn get_updates(
         &self,
         period: u64,
         count: u8,
-    ) -> anyhow::Result<Vec<LightClientUpdateDeneb>> {
+    ) -> anyhow::Result<Vec<LightClientUpdateElectra>> {
         let updates_key =
             BeaconContentKey::LightClientUpdatesByRange(LightClientUpdatesByRangeKey {
                 start_period: period,
                 count: count as u64,
             });
 
-        let (tx, rx) = oneshot::channel();
+        let content_value = self
+            .send_find_content(&updates_key, "LightClientUpdatesByRange")
+            .await?;
 
-        let overlay_command = OverlayCommand::FindContentQuery {
-            target: updates_key.clone(),
-            callback: tx,
-            config: Default::default(),
+        let BeaconContentValue::LightClientUpdatesByRange(updates) = content_value else {
+            bail!("Error converting BeaconContentValue to LightClientUpdatesByRange");
         };
-
-        if let Err(err) = self.overlay_tx.send(overlay_command) {
-            warn!(
-                protocol = "beacon",
-                error = %err,
-                "Error submitting FindContent query to service"
-            );
-            return Err(err.into());
-        }
-
-        match rx.await {
-            Ok(result) => {
-                let content_value = match result {
-                    Ok(result) => BeaconContentValue::decode(&updates_key, &result.0)?,
-                    Err(err) => {
-                        return Err(anyhow!("LightClientUpdatesByRange period={period}, count={count} not found on the network: {err}"));
-                    }
+        updates
+            .0
+            .into_iter()
+            .map(|update| {
+                let LightClientUpdate::Electra(update) = update.update else {
+                    bail!("Error converting LightClientUpdate to LightClientUpdateElectra");
                 };
-                if let BeaconContentValue::LightClientUpdatesByRange(updates) = content_value {
-                    let deneb_updates: Vec<LightClientUpdate> = updates
-                        .as_ref()
-                        .iter()
-                        .map(|update| update.update.clone())
-                        .collect();
-
-                    let mut result: Vec<LightClientUpdateDeneb> = Vec::new();
-
-                    for update in deneb_updates {
-                        // Check if updates is LightLCientUpdateDeneb
-                        if let LightClientUpdate::Deneb(update_deneb) = update {
-                            result.push(update_deneb);
-                        } else {
-                            return Err(anyhow!(
-                                "Error converting LightClientUpdate to LightClientUpdateDeneb"
-                            ));
-                        }
-                    }
-                    Ok(result)
-                } else {
-                    return Err(anyhow!(
-                        "Error converting BeaconContentValue to LightClientUpdatesByRange"
-                    ));
-                }
-            }
-            Err(err) => {
-                warn!(
-                    protocol = %"beacon",
-                    error = %err,
-                    "Error receiving FindContent query response"
-                );
-                return Err(err.into());
-            }
-        }
+                Ok(update)
+            })
+            .collect()
     }
 
-    async fn get_finality_update(&self) -> anyhow::Result<LightClientFinalityUpdateDeneb> {
+    async fn get_finality_update(&self) -> anyhow::Result<LightClientFinalityUpdateElectra> {
         // Get the finality update for the most recent finalized epoch. We use 0 as the finalized
         // slot because the finalized slot is not known at this point and the protocol is
         // designed to return the most recent which is > 0
@@ -180,119 +146,41 @@ impl ConsensusRpc for PortalRpc {
                 finalized_slot: 0,
             });
 
-        let (tx, rx) = oneshot::channel();
+        let content_value = self
+            .send_find_content(&finality_update_key, "LightClientFinalityUpdate")
+            .await?;
 
-        let overlay_command = OverlayCommand::FindContentQuery {
-            target: finality_update_key.clone(),
-            callback: tx,
-            config: Default::default(),
+        let BeaconContentValue::LightClientFinalityUpdate(finality_update) = content_value else {
+            bail!("Error converting BeaconContentValue to LightClientFinalityUpdate");
         };
-
-        if let Err(err) = self.overlay_tx.send(overlay_command) {
-            warn!(
-                protocol = "beacon",
-                error = %err,
-                "Error submitting FindContent query to service"
-            );
-            return Err(err.into());
-        }
-
-        match rx.await {
-            Ok(result) => {
-                let finality_update = match result {
-                    Ok(result) => BeaconContentValue::decode(&finality_update_key, &result.0)?,
-                    Err(err) => {
-                        return Err(anyhow!("LightClientFinalityUpdate content with finalized slot 0 not found on the network: {err}"));
-                    }
-                };
-                if let BeaconContentValue::LightClientFinalityUpdate(finality_update) =
-                    finality_update
-                {
-                    if let LightClientFinalityUpdate::Deneb(finality_update_deneb) =
-                        finality_update.update
-                    {
-                        Ok(finality_update_deneb)
-                    } else {
-                        return Err(anyhow!(
-                            "Error converting LightClientFinalityUpdate to LightClientFinalityUpdateDeneb"
-                        ));
-                    }
-                } else {
-                    return Err(anyhow!(
-                        "Error converting BeaconContentValue to LightClientFinalityUpdate"
-                    ));
-                }
-            }
-            Err(err) => {
-                warn!(
-                    protocol = %"beacon",
-                    error = %err,
-                    "Error receiving FindContent query response"
-                );
-                return Err(err.into());
-            }
-        }
+        let LightClientFinalityUpdate::Electra(finality_update) = finality_update.update else {
+            bail!("Error converting LightClientFinalityUpdate to LightClientFinalityUpdateElectra");
+        };
+        Ok(finality_update)
     }
 
-    async fn get_optimistic_update(&self) -> anyhow::Result<LightClientOptimisticUpdateDeneb> {
+    async fn get_optimistic_update(&self) -> anyhow::Result<LightClientOptimisticUpdateElectra> {
         let expected_current_slot = expected_current_slot();
         let optimistic_update_key =
             BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
                 signature_slot: expected_current_slot,
             });
 
-        let (tx, rx) = oneshot::channel();
+        let content_value = self
+            .send_find_content(&optimistic_update_key, "LightClientOptimisticUpdate")
+            .await?;
 
-        let overlay_command = OverlayCommand::FindContentQuery {
-            target: optimistic_update_key.clone(),
-            callback: tx,
-            config: Default::default(),
+        let BeaconContentValue::LightClientOptimisticUpdate(optimistic_update) = content_value
+        else {
+            bail!("Error converting BeaconContentValue to LightClientOptimisticUpdate");
         };
-
-        if let Err(err) = self.overlay_tx.send(overlay_command) {
-            warn!(
-                protocol = "beacon",
-                error = %err,
-                "Error submitting FindContent query to service"
+        let LightClientOptimisticUpdate::Electra(optimistic_update) = optimistic_update.update
+        else {
+            bail!(
+                "Error converting LightClientOptimisticUpdate to LightClientOptimisticUpdateElectra"
             );
-            return Err(err.into());
-        }
-
-        match rx.await {
-            Ok(result) => {
-                let optimistic_update = match result {
-                    Ok(result) => BeaconContentValue::decode(&optimistic_update_key, &result.0)?,
-                    Err(err) => {
-                        return Err(anyhow!("LightClientOptimisticUpdate content with signature slot {expected_current_slot} not found on the network: {err}"));
-                    }
-                };
-                if let BeaconContentValue::LightClientOptimisticUpdate(optimistic_update) =
-                    optimistic_update
-                {
-                    if let LightClientOptimisticUpdate::Deneb(optimistic_update_deneb) =
-                        optimistic_update.update
-                    {
-                        Ok(optimistic_update_deneb)
-                    } else {
-                        return Err(anyhow!(
-                            "Error converting LightClientOptimisticUpdate to LightClientOptimisticUpdateDeneb"
-                        ));
-                    }
-                } else {
-                    return Err(anyhow!(
-                        "Error converting BeaconContentValue to LightClientOptimisticUpdate"
-                    ));
-                }
-            }
-            Err(err) => {
-                warn!(
-                    protocol = %"beacon",
-                    error = %err,
-                    "Error receiving FindContent query response"
-                );
-                return Err(err.into());
-            }
-        }
+        };
+        Ok(optimistic_update)
     }
 
     async fn chain_id(&self) -> anyhow::Result<u64> {

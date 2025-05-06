@@ -5,8 +5,8 @@ use async_trait::async_trait;
 
 use super::ConsensusRpc;
 use crate::consensus::types::{
-    LightClientBootstrapDeneb, LightClientFinalityUpdateDeneb, LightClientOptimisticUpdateDeneb,
-    LightClientUpdateDeneb,
+    LightClientBootstrapElectra, LightClientFinalityUpdateElectra,
+    LightClientOptimisticUpdateElectra, LightClientUpdateElectra,
 };
 
 #[derive(Clone, Debug)]
@@ -22,22 +22,22 @@ impl ConsensusRpc for MockRpc {
         }
     }
 
-    async fn get_bootstrap(&self, _block_root: &'_ [u8]) -> Result<LightClientBootstrapDeneb> {
+    async fn get_bootstrap(&self, _block_root: &'_ [u8]) -> Result<LightClientBootstrapElectra> {
         let bootstrap = read_to_string(self.testdata.join("bootstrap.json"))?;
         Ok(serde_json::from_str(&bootstrap)?)
     }
 
-    async fn get_updates(&self, _period: u64, _count: u8) -> Result<Vec<LightClientUpdateDeneb>> {
+    async fn get_updates(&self, _period: u64, _count: u8) -> Result<Vec<LightClientUpdateElectra>> {
         let updates = read_to_string(self.testdata.join("updates.json"))?;
         Ok(serde_json::from_str(&updates)?)
     }
 
-    async fn get_finality_update(&self) -> Result<LightClientFinalityUpdateDeneb> {
+    async fn get_finality_update(&self) -> Result<LightClientFinalityUpdateElectra> {
         let finality = read_to_string(self.testdata.join("finality.json"))?;
         Ok(serde_json::from_str(&finality)?)
     }
 
-    async fn get_optimistic_update(&self) -> Result<LightClientOptimisticUpdateDeneb> {
+    async fn get_optimistic_update(&self) -> Result<LightClientOptimisticUpdateElectra> {
         let optimistic = read_to_string(self.testdata.join("optimistic.json"))?;
         Ok(serde_json::from_str(&optimistic)?)
     }

@@ -8,8 +8,8 @@ use crate::{
     consensus::{
         constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES,
         types::{
-            u64_deserialize, LightClientBootstrapDeneb, LightClientFinalityUpdateDeneb,
-            LightClientOptimisticUpdateDeneb, LightClientUpdateDeneb,
+            u64_deserialize, LightClientBootstrapElectra, LightClientFinalityUpdateElectra,
+            LightClientOptimisticUpdateElectra, LightClientUpdateElectra,
         },
     },
     errors::RpcError,
@@ -28,7 +28,7 @@ impl ConsensusRpc for NimbusRpc {
         }
     }
 
-    async fn get_bootstrap(&self, block_root: &'_ [u8]) -> Result<LightClientBootstrapDeneb> {
+    async fn get_bootstrap(&self, block_root: &'_ [u8]) -> Result<LightClientBootstrapElectra> {
         let root_hex = hex::encode(block_root);
         let req = format!(
             "{}/eth/v1/beacon/light_client/bootstrap/0x{}",
@@ -48,7 +48,7 @@ impl ConsensusRpc for NimbusRpc {
         Ok(res.data)
     }
 
-    async fn get_updates(&self, period: u64, count: u8) -> Result<Vec<LightClientUpdateDeneb>> {
+    async fn get_updates(&self, period: u64, count: u8) -> Result<Vec<LightClientUpdateElectra>> {
         let count = cmp::min(count, MAX_REQUEST_LIGHT_CLIENT_UPDATES);
         let req = format!(
             "{}/eth/v1/beacon/light_client/updates?start_period={}&count={}",
@@ -68,7 +68,7 @@ impl ConsensusRpc for NimbusRpc {
         Ok(res.iter().map(|d| d.data.clone()).collect())
     }
 
-    async fn get_finality_update(&self) -> Result<LightClientFinalityUpdateDeneb> {
+    async fn get_finality_update(&self) -> Result<LightClientFinalityUpdateElectra> {
         let req = format!("{}/eth/v1/beacon/light_client/finality_update", self.rpc);
         let res = reqwest::get(req)
             .await
@@ -80,7 +80,7 @@ impl ConsensusRpc for NimbusRpc {
         Ok(res.data)
     }
 
-    async fn get_optimistic_update(&self) -> Result<LightClientOptimisticUpdateDeneb> {
+    async fn get_optimistic_update(&self) -> Result<LightClientOptimisticUpdateElectra> {
         let req = format!("{}/eth/v1/beacon/light_client/optimistic_update", self.rpc);
         let res = reqwest::get(req)
             .await
@@ -113,22 +113,22 @@ type UpdateResponse = Vec<UpdateData>;
 
 #[derive(serde::Deserialize, Debug)]
 struct UpdateData {
-    data: LightClientUpdateDeneb,
+    data: LightClientUpdateElectra,
 }
 
 #[derive(serde::Deserialize, Debug)]
 struct FinalityUpdateResponse {
-    data: LightClientFinalityUpdateDeneb,
+    data: LightClientFinalityUpdateElectra,
 }
 
 #[derive(serde::Deserialize, Debug)]
 struct OptimisticUpdateResponse {
-    data: LightClientOptimisticUpdateDeneb,
+    data: LightClientOptimisticUpdateElectra,
 }
 
 #[derive(serde::Deserialize, Debug)]
 struct BootstrapResponse {
-    data: LightClientBootstrapDeneb,
+    data: LightClientBootstrapElectra,
 }
 
 #[derive(serde::Deserialize, Debug)]
