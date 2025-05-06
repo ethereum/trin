@@ -2,14 +2,16 @@ use alloy::primitives::B256;
 use anyhow::Result;
 use ethportal_api::{
     consensus::header::BeaconBlockHeader,
-    light_client::{bootstrap::CurrentSyncCommitteeProofLen, update::FinalizedRootProofLen},
+    light_client::{
+        bootstrap::CurrentSyncCommitteeProofLenElectra, update::FinalizedRootProofLenElectra,
+    },
 };
 pub use ethportal_api::{
     consensus::{body::SyncAggregate, sync_committee::SyncCommittee},
     light_client::{
-        bootstrap::LightClientBootstrapDeneb, finality_update::LightClientFinalityUpdateDeneb,
-        header::LightClientHeaderDeneb, optimistic_update::LightClientOptimisticUpdateDeneb,
-        update::LightClientUpdateDeneb,
+        bootstrap::LightClientBootstrapElectra, finality_update::LightClientFinalityUpdateElectra,
+        header::LightClientHeaderElectra, optimistic_update::LightClientOptimisticUpdateElectra,
+        update::LightClientUpdateElectra,
     },
 };
 use ssz_types::FixedVector;
@@ -20,13 +22,13 @@ pub struct GenericUpdate {
     pub sync_aggregate: SyncAggregate,
     pub signature_slot: u64,
     pub next_sync_committee: Option<SyncCommittee>,
-    pub next_sync_committee_branch: Option<FixedVector<B256, CurrentSyncCommitteeProofLen>>,
+    pub next_sync_committee_branch: Option<FixedVector<B256, CurrentSyncCommitteeProofLenElectra>>,
     pub finalized_header: Option<BeaconBlockHeader>,
-    pub finality_branch: Option<FixedVector<B256, FinalizedRootProofLen>>,
+    pub finality_branch: Option<FixedVector<B256, FinalizedRootProofLenElectra>>,
 }
 
-impl From<&LightClientUpdateDeneb> for GenericUpdate {
-    fn from(update: &LightClientUpdateDeneb) -> Self {
+impl From<&LightClientUpdateElectra> for GenericUpdate {
+    fn from(update: &LightClientUpdateElectra) -> Self {
         Self {
             attested_header: update.attested_header.beacon.clone(),
             sync_aggregate: update.sync_aggregate.clone(),
@@ -39,8 +41,8 @@ impl From<&LightClientUpdateDeneb> for GenericUpdate {
     }
 }
 
-impl From<&LightClientFinalityUpdateDeneb> for GenericUpdate {
-    fn from(update: &LightClientFinalityUpdateDeneb) -> Self {
+impl From<&LightClientFinalityUpdateElectra> for GenericUpdate {
+    fn from(update: &LightClientFinalityUpdateElectra) -> Self {
         Self {
             attested_header: update.attested_header.beacon.clone(),
             sync_aggregate: update.sync_aggregate.clone(),
@@ -53,8 +55,8 @@ impl From<&LightClientFinalityUpdateDeneb> for GenericUpdate {
     }
 }
 
-impl From<&LightClientOptimisticUpdateDeneb> for GenericUpdate {
-    fn from(update: &LightClientOptimisticUpdateDeneb) -> Self {
+impl From<&LightClientOptimisticUpdateElectra> for GenericUpdate {
+    fn from(update: &LightClientOptimisticUpdateElectra) -> Self {
         Self {
             attested_header: update.attested_header.beacon.clone(),
             sync_aggregate: update.sync_aggregate.clone(),

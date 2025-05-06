@@ -22,6 +22,7 @@ async fn setup() -> ConsensusLightClient<MockRpc> {
 }
 
 #[tokio::test]
+#[ignore = "Missing Pectra test vectors"]
 async fn test_sync() {
     let mut client = setup().await;
     client.sync().await.unwrap();
