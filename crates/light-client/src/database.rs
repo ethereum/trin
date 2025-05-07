@@ -1,9 +1,6 @@
-use std::{
-    fs,
-    io::{Read, Write},
-    path::PathBuf,
-};
+use std::{fs, path::PathBuf};
 
+use alloy::primitives::B256;
 use anyhow::Result;
 
 use crate::config::client_config::Config;
@@ -12,14 +9,14 @@ pub trait Database {
     fn new(config: &Config) -> Result<Self>
     where
         Self: Sized;
-    fn save_checkpoint(&self, checkpoint: Vec<u8>) -> Result<()>;
-    fn load_checkpoint(&self) -> Result<Vec<u8>>;
+    fn save_checkpoint(&self, checkpoint: B256) -> Result<()>;
+    fn load_checkpoint(&self) -> Result<B256>;
 }
 
 #[derive(Clone)]
 pub struct FileDB {
     data_dir: PathBuf,
-    default_checkpoint: Vec<u8>,
+    default_checkpoint: B256,
 }
 
 impl Database for FileDB {
@@ -27,62 +24,43 @@ impl Database for FileDB {
         if let Some(data_dir) = &config.data_dir {
             return Ok(FileDB {
                 data_dir: data_dir.to_path_buf(),
-                default_checkpoint: config.default_checkpoint.clone(),
+                default_checkpoint: config.default_checkpoint,
             });
         }
 
         anyhow::bail!("data dir not in config")
     }
 
-    fn save_checkpoint(&self, checkpoint: Vec<u8>) -> Result<()> {
+    fn save_checkpoint(&self, checkpoint: B256) -> Result<()> {
         fs::create_dir_all(&self.data_dir)?;
-
-        let mut f = fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(self.data_dir.join("checkpoint"))?;
-
-        f.write_all(checkpoint.as_slice())?;
-
+        fs::write(self.data_dir.join("checkpoint"), checkpoint.as_slice())?;
         Ok(())
     }
 
-    fn load_checkpoint(&self) -> Result<Vec<u8>> {
-        let mut buf = Vec::new();
-
-        let res = fs::OpenOptions::new()
-            .read(true)
-            .open(self.data_dir.join("checkpoint"))
-            .map(|mut f| f.read_to_end(&mut buf));
-
-        if buf.len() == 32 && res.is_ok() {
-            Ok(buf)
-        } else {
-            Ok(self.default_checkpoint.clone())
-        }
+    fn load_checkpoint(&self) -> Result<B256> {
+        let Ok(bytes) = fs::read(self.data_dir.join("checkpoint")) else {
+            return Ok(self.default_checkpoint);
+        };
+        Ok(B256::try_from(bytes.as_slice()).unwrap_or(self.default_checkpoint))
     }
 }
 
 pub struct ConfigDB {
-    checkpoint: Vec<u8>,
+    checkpoint: B256,
 }
 
 impl Database for ConfigDB {
     fn new(config: &Config) -> Result<Self> {
         Ok(Self {
-            checkpoint: config
-                .checkpoint
-                .clone()
-                .unwrap_or_else(|| config.default_checkpoint.clone()),
+            checkpoint: config.checkpoint.unwrap_or(config.default_checkpoint),
         })
     }
 
-    fn load_checkpoint(&self) -> Result<Vec<u8>> {
-        Ok(self.checkpoint.clone())
+    fn load_checkpoint(&self) -> Result<B256> {
+        Ok(self.checkpoint)
     }
 
-    fn save_checkpoint(&self, _checkpoint: Vec<u8>) -> Result<()> {
+    fn save_checkpoint(&self, _checkpoint: B256) -> Result<()> {
         Ok(())
     }
 }

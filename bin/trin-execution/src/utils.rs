@@ -32,9 +32,8 @@ pub fn address_to_nibble_path(address: Address) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use alloy::hex::FromHex;
     use eth_trie::nibbles::Nibbles as EthNibbles;
-    use revm_primitives::{keccak256, Address, B256};
+    use revm_primitives::{b256, keccak256, Address};
 
     use crate::utils::{
         address_to_nibble_path, full_nibble_path_to_address_hash, nibbles_to_right_padded_b256,
@@ -66,8 +65,7 @@ mod tests {
         let partial_path = nibbles_to_right_padded_b256(&partial_nibble_path);
         assert_eq!(
             partial_path,
-            B256::from_hex("0xff01020300000000000000000000000000000000000000000000000000000000")
-                .unwrap()
+            b256!("0xff01020300000000000000000000000000000000000000000000000000000000")
         );
     }
 }

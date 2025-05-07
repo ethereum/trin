@@ -742,7 +742,7 @@ mod test {
             .beacon
             .tree_hash_root();
         let key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
-            block_hash: *block_root,
+            block_hash: block_root.0,
         });
         storage.put(key.clone(), value.as_ssz_bytes()).unwrap();
         let result = storage.get(&key).unwrap().unwrap();
@@ -945,7 +945,7 @@ mod test {
             .beacon
             .tree_hash_root();
         let key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
-            block_hash: *block_root,
+            block_hash: block_root.0,
         });
         // Ensure the bootstrap is saved into db
         storage.put(key.clone(), value.as_ssz_bytes()).unwrap();

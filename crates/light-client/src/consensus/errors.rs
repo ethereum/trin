@@ -1,3 +1,4 @@
+use alloy::primitives::B256;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -19,7 +20,7 @@ pub enum ConsensusError {
     #[error("invalid sync committee signature")]
     InvalidSignature,
     #[error("invalid header hash found: {0}, expected: {1}")]
-    InvalidHeaderHash(String, String),
+    InvalidHeaderHash(B256, B256),
     #[error("checkpoint is too old")]
     CheckpointTooOld,
     #[error("consensus rpc is for the incorrect network")]

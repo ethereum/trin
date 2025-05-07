@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
+use alloy::primitives::B256;
 use anyhow::{anyhow, Result};
 use ethportal_api::{
     consensus::header::BeaconBlockHeader,
@@ -24,7 +25,7 @@ use crate::{
 pub struct ClientBuilder {
     network: Option<Network>,
     consensus_rpc: Option<String>,
-    checkpoint: Option<Vec<u8>>,
+    checkpoint: Option<B256>,
     rpc_port: Option<u16>,
     data_dir: Option<PathBuf>,
     config: Option<Config>,
@@ -48,9 +49,7 @@ impl ClientBuilder {
         self
     }
 
-    pub fn checkpoint(mut self, checkpoint: &str) -> Self {
-        let checkpoint = hex::decode(checkpoint.strip_prefix("0x").unwrap_or(checkpoint))
-            .expect("cannot parse checkpoint");
+    pub fn checkpoint(mut self, checkpoint: B256) -> Self {
         self.checkpoint = Some(checkpoint);
         self
     }
@@ -107,15 +106,15 @@ impl ClientBuilder {
         let checkpoint = if let Some(checkpoint) = self.checkpoint {
             Some(checkpoint)
         } else if let Some(config) = &self.config {
-            config.checkpoint.clone()
+            config.checkpoint
         } else {
             None
         };
 
         let default_checkpoint = if let Some(config) = &self.config {
-            config.default_checkpoint.clone()
+            config.default_checkpoint
         } else {
-            base_config.default_checkpoint.clone()
+            base_config.default_checkpoint
         };
 
         let rpc_port = if self.rpc_port.is_some() {
@@ -188,15 +187,15 @@ impl ClientBuilder {
         let checkpoint = if let Some(checkpoint) = self.checkpoint {
             Some(checkpoint)
         } else if let Some(config) = &self.config {
-            config.checkpoint.clone()
+            config.checkpoint
         } else {
             None
         };
 
         let default_checkpoint = if let Some(config) = &self.config {
-            config.default_checkpoint.clone()
+            config.default_checkpoint
         } else {
-            base_config.default_checkpoint.clone()
+            base_config.default_checkpoint
         };
 
         let rpc_port = if self.rpc_port.is_some() {
@@ -323,16 +322,8 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
                 {
                     ConsensusError::CheckpointTooOld => {
                         warn!(
-                            "failed to sync consensus node with checkpoint: 0x{}",
-                            hex::encode(
-                                self.node
-                                    .read()
-                                    .await
-                                    .config
-                                    .checkpoint
-                                    .clone()
-                                    .unwrap_or_default()
-                            ),
+                            "failed to sync consensus node with checkpoint: {}",
+                            self.node.read().await.config.checkpoint.unwrap_or_default()
                         );
 
                         let fallback = self.boot_from_fallback().await;
@@ -385,11 +376,8 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
             // Try to sync again with the new checkpoint by reconstructing the consensus client
             // We fail fast here since the node is unrecoverable at this point
             let config = self.node.read().await.config.clone();
-            let consensus = ConsensusLightClient::new(
-                &config.consensus_rpc,
-                checkpoint.as_slice(),
-                config.clone(),
-            )?;
+            let consensus =
+                ConsensusLightClient::new(&config.consensus_rpc, checkpoint, config.clone())?;
             self.node.write().await.consensus = consensus;
             self.node.write().await.sync().await?;
 
@@ -419,11 +407,8 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
         // Try to sync again with the new checkpoint by reconstructing the consensus client
         // We fail fast here since the node is unrecoverable at this point
         let config = self.node.read().await.config.clone();
-        let consensus = ConsensusLightClient::new(
-            &config.consensus_rpc,
-            checkpoint.as_slice(),
-            config.clone(),
-        )?;
+        let consensus =
+            ConsensusLightClient::new(&config.consensus_rpc, checkpoint, config.clone())?;
         self.node.write().await.consensus = consensus;
         self.node.write().await.sync().await?;
         Ok(())

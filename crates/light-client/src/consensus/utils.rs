@@ -1,8 +1,7 @@
-use alloy::primitives::B256;
+use alloy::primitives::{FixedBytes, B256};
 use anyhow::Result;
 use ethportal_api::consensus::{header::BeaconBlockHeader, signature::BlsSignature};
 use milagro_bls::{AggregateSignature, PublicKey};
-use ssz_types::{typenum::U4, FixedVector};
 use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 use trin_validation::merkle::proof::merkle_root_from_branch;
@@ -52,13 +51,12 @@ pub fn compute_signing_root(object_root: B256, domain: B256) -> B256 {
 }
 
 pub fn compute_domain(
-    domain_type: &[u8],
-    fork_version: FixedVector<u8, U4>,
+    domain_type: FixedBytes<4>,
+    fork_version: FixedBytes<4>,
     genesis_root: B256,
 ) -> Result<B256> {
     let fork_data_root = compute_fork_data_root(fork_version, genesis_root);
-    let start = domain_type;
     let end = &fork_data_root.as_slice()[..28];
-    let d = [start, end].concat();
-    Ok(B256::from_slice(&d))
+    let domain = [&*domain_type, end].concat();
+    Ok(B256::from_slice(&domain))
 }

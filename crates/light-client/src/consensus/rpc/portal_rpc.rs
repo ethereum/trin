@@ -1,5 +1,6 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use alloy::primitives::B256;
 use anyhow::bail;
 use async_trait::async_trait;
 use ethportal_api::{
@@ -86,12 +87,9 @@ impl ConsensusRpc for PortalRpc {
         unreachable!("PortalRpc does not use path.")
     }
 
-    async fn get_bootstrap(
-        &self,
-        block_root: &'_ [u8],
-    ) -> anyhow::Result<LightClientBootstrapElectra> {
+    async fn get_bootstrap(&self, block_root: B256) -> anyhow::Result<LightClientBootstrapElectra> {
         let bootstrap_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
-            block_hash: <[u8; 32]>::try_from(block_root)?,
+            block_hash: block_root.0,
         });
 
         let content_value = self
