@@ -1,6 +1,6 @@
 use std::{path::PathBuf, process::exit};
 
-use alloy::primitives::{aliases::B32, B256};
+use alloy::primitives::{FixedBytes, B256};
 use figment::{
     providers::{Format, Serialized, Toml},
     Figment,
@@ -62,7 +62,7 @@ impl Config {
         }
     }
 
-    pub fn fork_version(&self, slot: u64) -> B32 {
+    pub fn fork_version(&self, slot: u64) -> FixedBytes<4> {
         let epoch = slot / SLOTS_PER_EPOCH;
 
         if epoch >= self.forks.electra.epoch {

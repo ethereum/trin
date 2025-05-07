@@ -1,4 +1,4 @@
-use alloy::primitives::{aliases::B32, B256};
+use alloy::primitives::{FixedBytes, B256};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
@@ -21,5 +21,5 @@ pub struct Forks {
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Fork {
     pub epoch: u64,
-    pub fork_version: B32,
+    pub fork_version: FixedBytes<4>,
 }

@@ -89,7 +89,7 @@ impl ConsensusRpc for PortalRpc {
 
     async fn get_bootstrap(&self, block_root: B256) -> anyhow::Result<LightClientBootstrapElectra> {
         let bootstrap_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
-            block_hash: *block_root,
+            block_hash: block_root.0,
         });
 
         let content_value = self

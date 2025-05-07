@@ -1,8 +1,4 @@
-use std::{
-    fs,
-    io::{Read, Write},
-    path::PathBuf,
-};
+use std::{fs, path::PathBuf};
 
 use alloy::primitives::B256;
 use anyhow::Result;
@@ -37,31 +33,15 @@ impl Database for FileDB {
 
     fn save_checkpoint(&self, checkpoint: B256) -> Result<()> {
         fs::create_dir_all(&self.data_dir)?;
-
-        let mut f = fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(self.data_dir.join("checkpoint"))?;
-
-        f.write_all(checkpoint.as_slice())?;
-
+        fs::write(self.data_dir.join("checkpoint"), checkpoint.as_slice())?;
         Ok(())
     }
 
     fn load_checkpoint(&self) -> Result<B256> {
-        let mut buf = Vec::new();
-
-        let result = fs::OpenOptions::new()
-            .read(true)
-            .open(self.data_dir.join("checkpoint"))
-            .map(|mut f| f.read_to_end(&mut buf));
-
-        if buf.len() == 32 && result.is_ok() {
-            Ok(B256::from_slice(&buf))
-        } else {
-            Ok(self.default_checkpoint)
-        }
+        let Ok(bytes) = fs::read(self.data_dir.join("checkpoint")) else {
+            return Ok(self.default_checkpoint);
+        };
+        Ok(B256::try_from(bytes.as_slice()).unwrap_or(self.default_checkpoint))
     }
 }
 

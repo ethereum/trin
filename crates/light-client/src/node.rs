@@ -24,13 +24,11 @@ pub struct Node<R: ConsensusRpc> {
 impl<R: ConsensusRpc> Node<R> {
     pub fn new(config: Arc<Config>) -> Result<Self, NodeError> {
         let consensus_rpc = &config.consensus_rpc;
-        let checkpoint_hash =
-            *config
-                .checkpoint
-                .as_ref()
-                .ok_or(NodeError::ConsensusClientCreationError(Error::msg(
-                    "`config.checkpoint` is None",
-                )))?;
+        let checkpoint_hash = config
+            .checkpoint
+            .ok_or(NodeError::ConsensusClientCreationError(Error::msg(
+                "`config.checkpoint` is None",
+            )))?;
 
         let consensus = ConsensusLightClient::new(consensus_rpc, checkpoint_hash, config.clone())
             .map_err(NodeError::ConsensusClientCreationError)?;

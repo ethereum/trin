@@ -4,7 +4,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use alloy::primitives::{aliases::B32, fixed_bytes, B256};
+use alloy::primitives::{fixed_bytes, FixedBytes, B256};
 use anyhow::{anyhow, ensure, Result};
 use chrono::Duration;
 use ethportal_api::{
@@ -490,7 +490,7 @@ pub fn verify_generic_update(
     update: &GenericUpdate,
     expected_slot: u64,
     genesis_root: B256,
-    fork_version: B32,
+    fork_version: FixedBytes<4>,
 ) -> Result<()> {
     let bits = get_bits(&update.sync_aggregate.sync_committee_bits);
     ensure!(bits > 0, ConsensusError::InsufficientParticipation);
@@ -575,7 +575,7 @@ pub fn verify_generic_update(
 fn compute_committee_sign_root(
     genesis_root: B256,
     header: B256,
-    fork_version: B32,
+    fork_version: FixedBytes<4>,
 ) -> Result<B256> {
     let domain_type = fixed_bytes!("07000000");
     let domain = compute_domain(domain_type, fork_version, genesis_root)?;
@@ -614,7 +614,7 @@ fn verify_sync_committee_signature(
     attested_header: &BeaconBlockHeader,
     signature: &BlsSignature,
     genesis_root: B256,
-    fork_version: B32,
+    fork_version: FixedBytes<4>,
 ) -> bool {
     let res: Result<bool> = (move || {
         let public_keys: Vec<&PublicKey> = pks.iter().collect();
@@ -671,7 +671,7 @@ fn is_current_committee_proof_valid(
 mod tests {
     use std::sync::Arc;
 
-    use alloy::{hex::FromHex, primitives::B256};
+    use alloy::primitives::b256;
     use ethportal_api::consensus::{
         header::BeaconBlockHeader, pubkey::PubKey, signature::BlsSignature,
     };
@@ -697,9 +697,7 @@ mod tests {
             ..Default::default()
         };
 
-        let checkpoint =
-            B256::from_hex("787b52add77e871f1cdffbc7f36e84a923f95f8a75c61dc410af24030d74d45c")
-                .unwrap();
+        let checkpoint = b256!("787b52add77e871f1cdffbc7f36e84a923f95f8a75c61dc410af24030d74d45c");
 
         let mut client =
             ConsensusLightClient::new("testdata/", checkpoint, Arc::new(config)).unwrap();

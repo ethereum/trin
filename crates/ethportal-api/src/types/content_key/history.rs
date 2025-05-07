@@ -299,7 +299,7 @@ impl OverlayContentKey for HistoryContentKey {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use alloy::{hex::FromHex, primitives::B256};
+    use alloy::primitives::b256;
 
     use super::*;
     use crate::{types::content_key::overlay::OverlayContentKey, utils::bytes::hex_decode};
@@ -497,9 +497,7 @@ mod test {
     fn serde_ephemeral_headers_find_content() {
         let content_key_json =
             "\"0x04d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f27618301\"";
-        let block_hash =
-            B256::from_hex("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
-                .unwrap();
+        let block_hash = b256!("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183");
         let ancestor_count = 1;
         let expected_content_key =
             HistoryContentKey::new_ephemeral_headers_find_content(block_hash, ancestor_count);
@@ -515,9 +513,7 @@ mod test {
 
     #[test]
     fn ephemeral_headers_find_content_content_id_derivations() {
-        let block_hash =
-            B256::from_hex("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
-                .unwrap();
+        let block_hash = b256!("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183");
         let ancestor_count = 1;
         let content_key =
             HistoryContentKey::new_ephemeral_headers_find_content(block_hash, ancestor_count);
@@ -528,8 +524,7 @@ mod test {
         );
         assert_eq!(
             content_key.content_id(),
-            B256::from_hex("0xbf9f37c72f6635bbe8dbb4d9377a56d8d579a434399f4c5ba4aad5a213ca04d8")
-                .unwrap()
+            b256!("0xbf9f37c72f6635bbe8dbb4d9377a56d8d579a434399f4c5ba4aad5a213ca04d8")
         );
     }
 
@@ -537,9 +532,7 @@ mod test {
     fn serde_ephemeral_header_offer() {
         let content_key_json =
             "\"0x05d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183\"";
-        let block_hash =
-            B256::from_hex("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
-                .unwrap();
+        let block_hash = b256!("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183");
         let expected_content_key = HistoryContentKey::new_ephemeral_header_offer(block_hash);
 
         let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
@@ -553,9 +546,7 @@ mod test {
 
     #[test]
     fn ephemeral_header_offer_content_id_derivations() {
-        let block_hash =
-            B256::from_hex("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")
-                .unwrap();
+        let block_hash = b256!("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183");
         let content_key = HistoryContentKey::new_ephemeral_header_offer(block_hash);
         assert_eq!(
             **content_key.to_bytes(),
@@ -564,8 +555,7 @@ mod test {
         );
         assert_eq!(
             content_key.content_id(),
-            B256::from_hex("0x76744a5338183a04ea39bbb94906e539b9a839b4aa508f8493b2afbba2491567")
-                .unwrap()
+            b256!("0x76744a5338183a04ea39bbb94906e539b9a839b4aa508f8493b2afbba2491567")
         );
     }
 }
