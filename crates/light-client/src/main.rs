@@ -9,7 +9,7 @@ use tracing::info;
 
 const CONSENSUS_RPC_URL: &str = "http://testing.mainnet.beacon-api.nimbus.team";
 const TRUSTED_CHECKPOINT: &str =
-    "0xbb134afe0f0b830e9ca8d7198f00028435d6b4c73c7a0d220d43d16dc7a226af";
+    "0x9c30624f15e4df4e8f819f89db8b930f36b561b7f70905688ea208d22fb0b822";
 const FALLBACK_URL: &str = "https://sync-mainnet.beaconcha.in";
 
 #[tokio::main]
