@@ -44,8 +44,8 @@ use crate::{
     era1::{BlockIndex, BodyEntry, ReceiptsEntry},
 };
 
-pub const BLOCK_TUPLE_COUNT: usize = 8192;
-const E2HS_ENTRY_COUNT: usize = BLOCK_TUPLE_COUNT * 3 + 2;
+pub const BLOCKS_PER_E2HS: usize = 8192;
+const E2HS_ENTRY_COUNT: usize = BLOCKS_PER_E2HS * 3 + 2;
 
 /// The `E2HS` streaming writer.
 pub struct E2HSWriter {
@@ -100,7 +100,7 @@ impl E2HSWriter {
             self.block_index_offset += entry.length() as u64;
         }
 
-        if self.block_index_indices.len() == BLOCK_TUPLE_COUNT {
+        if self.block_index_indices.len() == BLOCKS_PER_E2HS {
             self.last_block_hash = Some(
                 block_tuple
                     .header_with_proof
@@ -114,11 +114,11 @@ impl E2HSWriter {
     }
 
     pub fn finish(mut self) -> anyhow::Result<PathBuf> {
-        ensure!(self.block_index_indices.len() == BLOCK_TUPLE_COUNT);
+        ensure!(self.block_index_indices.len() == BLOCKS_PER_E2HS);
         let block_index = BlockIndex {
-            starting_number: self.epoch_index * BLOCK_TUPLE_COUNT as u64,
+            starting_number: self.epoch_index * BLOCKS_PER_E2HS as u64,
             indices: self.block_index_indices,
-            count: BLOCK_TUPLE_COUNT as u64,
+            count: BLOCKS_PER_E2HS as u64,
         };
         self.writer
             .append_entry(&Entry::from(&E2HSBlockIndexEntry::new(block_index)))?;
@@ -150,7 +150,7 @@ pub struct E2HSMemory {
 }
 
 impl E2HSMemory {
-    pub fn read_from_file(path: String) -> anyhow::Result<Self> {
+    pub fn read_from_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let buf = fs::read(path)?;
         Self::deserialize(&buf)
     }
@@ -224,7 +224,7 @@ impl E2HSMemory {
     }
 
     pub fn epoch_number_from_block_number(block_number: u64) -> u64 {
-        block_number / (BLOCK_TUPLE_COUNT as u64)
+        block_number / (BLOCKS_PER_E2HS as u64)
     }
 
     pub fn epoch_number(&self) -> u64 {

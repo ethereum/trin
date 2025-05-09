@@ -16,6 +16,8 @@ alloy.workspace = true
 alloy-hardforks.workspace = true
 anyhow.workspace = true
 async-stream = "0.3.6"
+aws-config = { version = "1.6", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1.83.0"
 clap.workspace = true
 e2store.workspace = true
 ethereum_ssz.workspace = true
@@ -27,6 +29,7 @@ reqwest.workspace = true
 rstest.workspace = true
 serde_yaml.workspace = true
 ssz_types.workspace = true
+tempfile.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tree_hash.workspace = true

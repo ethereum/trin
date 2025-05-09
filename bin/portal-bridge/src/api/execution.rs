@@ -125,12 +125,6 @@ impl ExecutionApi {
             .chunks(BATCH_LIMIT)
             .zip(block_numbers.chunks(BATCH_LIMIT))
         {
-            info!(
-                "Sending batch requests {}/{} ({:.2}%)",
-                batch_requests_sent,
-                batch_request_len,
-                (batch_requests_sent as f64 / batch_request_len as f64) * 100.0
-            );
             let responses = self
                 .try_batch_request(chunk.to_vec())
                 .await
@@ -142,6 +136,12 @@ impl ExecutionApi {
                 receipts.insert(*block_number, receipt);
             }
             batch_requests_sent += chunk.len();
+            info!(
+                "Fetched receipts {}/{} ({:.2}%)",
+                batch_requests_sent,
+                batch_request_len,
+                (batch_requests_sent as f64 / batch_request_len as f64) * 100.0
+            );
         }
 
         Ok(receipts)
