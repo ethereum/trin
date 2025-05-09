@@ -1,21 +1,19 @@
-pub mod provider;
-pub mod reader;
-pub mod writer;
+mod e2hs_builder;
+mod provider;
 
 use std::time::Instant;
 
+use e2hs_builder::E2HSBuilder;
 use humanize_duration::{prelude::DurationExt, Truncate};
-use reader::PeriodReader;
 use tracing::info;
-use writer::PeriodWriter;
 
 use crate::cli::SingleGeneratorConfig;
 
 pub async fn single_generator(config: SingleGeneratorConfig) -> anyhow::Result<()> {
     info!("Running E2HS single writer");
     let start = Instant::now();
-    let period_reader = PeriodReader::new(
-        config.period,
+    let e2hs_builder = E2HSBuilder::new(
+        config.index,
         config.portal_accumulator_path,
         config.el_provider,
     )
@@ -26,8 +24,9 @@ pub async fn single_generator(config: SingleGeneratorConfig) -> anyhow::Result<(
     );
 
     let start = Instant::now();
-    let period_writer = PeriodWriter::new(config.target_dir, config.period);
-    period_writer.write_period(period_reader).await?;
+    e2hs_builder
+        .build_e2hs_file(config.target_dir, config.index)
+        .await?;
     info!(
         "Time taken to finished writing blocks  {}",
         start.elapsed().human(Truncate::Second)

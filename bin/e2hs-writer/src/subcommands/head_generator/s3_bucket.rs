@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, ensure};
 use aws_config::retry::RetryConfig;
 use aws_sdk_s3::{
     primitives::ByteStream,
@@ -54,6 +54,8 @@ impl S3Bucket {
         let mut full_data = vec![0u8; file_size];
         file.read_exact(&mut full_data).await?;
 
+        // S3 doesn't like it when chunks are too small, so we will just split the uploads into
+        // roughly 100MB chunks
         let part_count = file_size.div_ceil(TARGET_CHUNK_SIZE);
         let chunk_size = file_size.div_ceil(part_count);
 
@@ -149,6 +151,10 @@ impl S3Bucket {
                 continuation_token = response
                     .next_continuation_token()
                     .map(|str| str.to_string());
+                ensure!(
+                    continuation_token.is_some(),
+                    "Continuation token is expected to be Some"
+                );
             } else {
                 break;
             }

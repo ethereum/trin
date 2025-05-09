@@ -5,7 +5,7 @@ A WIP CLI program to generate [E2HS](https://github.com/eth-clients/e2store-form
 
 
 ## Mode: `single-generator`
-Generates a single E2HS file for a given period.
+Generates a single E2HS file for a given index.
 
 #### Data Sources
 - Pre-Merge: The program will use era1 files to source data.
@@ -14,7 +14,7 @@ Generates a single E2HS file for a given period.
 #### How to run Single Generator?
 
 ```sh
-$ cargo run -p e2hs-writer --release -- single-generator --target-dir <target-dir> --period <period> --el-provider <provider-url>
+$ cargo run -p e2hs-writer --release -- single-generator --target-dir <target-dir> --index <index> --el-provider <provider-url>
 ```
 
 ## Mode: `head-generator`
@@ -25,12 +25,13 @@ Head Generator maintains a s3 bucket of E2HS files at the head of the chain, Hea
 - Consensus Layer Beacon API: used to get Beacon Blocks and the Beacon State, which can be used to derive `HeaderWithProof` and bodies.
 
 
-#### Data Sources
-- Pre-Merge: The program will use era1 files to source data.
-- Post-Merge: The program will use a combination of era files (headers / bodies) and a live provider (receipts) which can be configured via cli flags (defaults to pandaops). 
-
-
 #### How to run Head Generator?
+
+S3 Environment Variables Required to be set:
+- AWS_ACCESS_KEY_ID
+- AWS_SECRET_ACCESS_KEY
+- AWS_REGION=auto
+- AWS_ENDPOINT_URL
 
 ```sh
 $ cargo run -p e2hs-writer --release -- head-generator --el-provider <el-provider-url> --cl-provider <cl-provider-url> --s3-bucket <bucket-name>

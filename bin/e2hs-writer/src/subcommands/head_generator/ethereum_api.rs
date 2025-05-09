@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use anyhow::{anyhow, bail, ensure};
 use ethportal_api::{
     consensus::{beacon_block::SignedBeaconBlockElectra, beacon_state::BeaconStateElectra},
@@ -7,10 +5,8 @@ use ethportal_api::{
 };
 use portal_bridge::api::{consensus::ConsensusApi, execution::ExecutionApi};
 use tracing::warn;
-use trin_validation::constants::{SLOTS_PER_EPOCH, SLOTS_PER_HISTORICAL_ROOT};
+use trin_validation::constants::SLOTS_PER_HISTORICAL_ROOT;
 use url::Url;
-
-use super::constants::MAX_ALLOWED_BLOCK_BACKFILL_SIZE;
 
 pub struct EthereumApi {
     pub consensus_api: ConsensusApi,
@@ -39,38 +35,15 @@ impl EthereumApi {
         &self,
         execution_block_number: u64,
     ) -> anyhow::Result<u64> {
-        let mut high = self
+        let block = self.execution_api.get_block(execution_block_number).await?;
+        let Some(block_root) = block.header.parent_beacon_block_root else {
+            bail!("We should only be able to backfill blocks which contain block root's {execution_block_number}")
+        };
+        let beacon_block = self
             .consensus_api
-            .get_beacon_block("finalized")
-            .await?
-            .message
-            .slot;
-        let mut low = high - MAX_ALLOWED_BLOCK_BACKFILL_SIZE;
-
-        while low <= high {
-            let mid = (low + high) / 2;
-
-            // Slots can be skipped, so the block we get might not be for the original slot we
-            // requested
-            let block = self
-                .fetch_beacon_block_directional_retry(mid, Direction::Forward)
-                .await?;
-            let mid = block.message.slot;
-
-            match block
-                .message
-                .body
-                .execution_payload
-                .block_number
-                .cmp(&execution_block_number)
-            {
-                Ordering::Equal => return Ok(block.message.slot),
-                Ordering::Less => low = mid + 1,
-                Ordering::Greater => high = mid - 1,
-            }
-        }
-
-        bail!("Execution block number {execution_block_number} not found in beacon chain")
+            .get_beacon_block(block_root.to_string())
+            .await?;
+        Ok(beacon_block.message.slot)
     }
 
     pub async fn get_state_for_start_of_next_period(
@@ -79,10 +52,37 @@ impl EthereumApi {
     ) -> anyhow::Result<BeaconStateElectra> {
         // To calculate the historical summaries index, we need to add the
         // SLOTS_PER_HISTORICAL_ROOT, as this slot will be included in the next index
-        let slot = slot + SLOTS_PER_HISTORICAL_ROOT;
-        self.consensus_api
-            .get_beacon_state(first_slot_in_a_period(slot).to_string())
-            .await
+        let mut slot = first_slot_in_a_period(slot + SLOTS_PER_HISTORICAL_ROOT);
+        let mut tries = 0;
+
+        // The slot at the start of the period can be skipped, so we need to walk forward until we
+        // find the first slot not missed
+        let state = loop {
+            match self.consensus_api.get_beacon_state(slot.to_string()).await {
+                Ok(state) => {
+                    // For some reason certain implementations will give us a State before the slot
+                    // we requested
+                    if state.slot < slot {
+                        slot += 1;
+                        continue;
+                    }
+                    ensure!(
+                        state.slot == slot,
+                        "The slot {slot} is not equal to the state slot {}",
+                        state.slot
+                    );
+                    break state;
+                }
+                Err(err) => {
+                    warn!("Failed to get beacon block for slot {slot}, the slot was probably skipped: {err}");
+                    tries += 1;
+                    ensure!(tries <= 5, "Failed to find a valid block for slot {slot}");
+                    slot += 1;
+                }
+            }
+        };
+
+        Ok(state)
     }
 
     pub async fn get_receipts(&self, execution_block_number: u64) -> anyhow::Result<Receipts> {
@@ -156,6 +156,5 @@ pub enum Direction {
 
 /// Calculates the first slot in a period for the given slot.
 pub fn first_slot_in_a_period(slot: u64) -> u64 {
-    let epoch = slot / SLOTS_PER_EPOCH;
-    (epoch - (epoch % (SLOTS_PER_HISTORICAL_ROOT / SLOTS_PER_EPOCH))) * SLOTS_PER_EPOCH
+    (slot / SLOTS_PER_HISTORICAL_ROOT) * SLOTS_PER_HISTORICAL_ROOT
 }
