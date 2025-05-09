@@ -27,8 +27,8 @@ pub struct SingleGeneratorConfig {
     #[arg(long, help = "Target directory where E2HS files will be written")]
     pub target_dir: PathBuf,
 
-    #[arg(long, help = "Period used to generate E2HS file")]
-    pub period: u64,
+    #[arg(long, help = "Index of the E2HS file to generate")]
+    pub index: u64,
 
     #[arg(
         long = "portal-accumulator-path",

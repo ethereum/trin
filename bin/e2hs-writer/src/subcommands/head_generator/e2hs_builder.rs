@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::ensure;
-use e2store::e2hs::E2HSWriter;
+use e2store::e2hs::{E2HSWriter, BLOCKS_PER_E2HS};
 use ethportal_api::consensus::beacon_state::HistoricalBatch;
 use tempfile::TempDir;
 use tracing::info;
@@ -13,10 +13,7 @@ use trin_validation::{
 use super::ethereum_api::{Direction, EthereumApi};
 use crate::{
     cli::HeadGeneratorConfig,
-    subcommands::{
-        handle_beacon_block::get_post_electra_header_and_body,
-        single_generator::reader::AllBlockData,
-    },
+    subcommands::{execution_block_builder::ExecutionBlockBuilder, full_block::FullBlock},
 };
 
 pub struct E2HSBuilder {
@@ -31,7 +28,7 @@ pub struct E2HSBuilder {
 impl E2HSBuilder {
     pub async fn new(
         config: HeadGeneratorConfig,
-        last_processed_period: u64,
+        last_processed_index: u64,
     ) -> anyhow::Result<Self> {
         let ethereum_api = EthereumApi::new(
             config.cl_provider,
@@ -40,7 +37,7 @@ impl E2HSBuilder {
         )
         .await?;
 
-        let next_execution_block_number = (last_processed_period + 1) * SLOTS_PER_HISTORICAL_ROOT;
+        let next_execution_block_number = (last_processed_index + 1) * BLOCKS_PER_E2HS as u64;
         let slot_for_next_execution_number = ethereum_api
             .find_slot_for_execution_block_number(next_execution_block_number)
             .await?;
@@ -68,17 +65,17 @@ impl E2HSBuilder {
         })
     }
 
-    pub async fn build_e2hs_file(&mut self, period: u64) -> anyhow::Result<PathBuf> {
-        info!("Building E2HS file for period {period}");
-        let mut e2hs_writer = E2HSWriter::create(self.temp_dir.path(), period)?;
+    pub async fn build_e2hs_file(&mut self, index: u64) -> anyhow::Result<PathBuf> {
+        info!("Building E2HS file for index {index}");
+        let mut e2hs_writer = E2HSWriter::create(self.temp_dir.path(), index)?;
 
-        let starting_block = period * SLOTS_PER_HISTORICAL_ROOT;
-        let ending_block = starting_block + SLOTS_PER_HISTORICAL_ROOT;
+        let starting_block = index * BLOCKS_PER_E2HS as u64;
+        let ending_block = starting_block + BLOCKS_PER_E2HS as u64;
 
         for block_number in starting_block..ending_block {
             let block = self.get_block(block_number).await?;
             self.update_proving_anchors().await?;
-            self.validate_block(&block).await?;
+            block.validate_block(&self.header_validator).await?;
             e2hs_writer.append_block_tuple(&block.into())?;
 
             info!(
@@ -92,7 +89,7 @@ impl E2HSBuilder {
         }
 
         let e2hs_path = e2hs_writer.finish()?;
-        info!("Built E2HS file for period {period}: {e2hs_path:?}");
+        info!("Built E2HS file for index {index}: {e2hs_path:?}");
 
         Ok(e2hs_path)
     }
@@ -122,35 +119,24 @@ impl E2HSBuilder {
         Ok(())
     }
 
-    async fn validate_block(&self, block: &AllBlockData) -> anyhow::Result<()> {
-        let header_with_proof = &block.header_with_proof;
-        self.header_validator
-            .validate_header_with_proof(header_with_proof)
-            .await?;
-        block
-            .body
-            .validate_against_header(&header_with_proof.header)?;
-        ensure!(
-            block.receipts.root() == header_with_proof.header.receipts_root,
-            "Receipts root mismatch"
-        );
-        Ok(())
-    }
-
-    async fn get_block(&mut self, block_number: u64) -> anyhow::Result<AllBlockData> {
+    async fn get_block(&mut self, block_number: u64) -> anyhow::Result<FullBlock> {
         let block = self
             .ethereum_api
-            .fetch_beacon_block_directional_retry(block_number, Direction::Forward)
+            .fetch_beacon_block_directional_retry(
+                self.slot_for_next_execution_number,
+                Direction::Forward,
+            )
             .await?;
         ensure!(
             block.message.body.execution_payload.block_number == block_number,
             "Block number mismatch"
         );
+        self.slot_for_next_execution_number = block.message.slot + 1;
         let (header_with_proof, body) =
-            get_post_electra_header_and_body(&block.message, &self.current_historical_batch)?;
+            ExecutionBlockBuilder::electra(&block.message, &self.current_historical_batch)?;
         let receipts = self.ethereum_api.get_receipts(block_number).await?;
 
-        Ok(AllBlockData {
+        Ok(FullBlock {
             block_number,
             header_with_proof,
             body,
