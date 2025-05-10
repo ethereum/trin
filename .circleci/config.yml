@@ -65,8 +65,8 @@ jobs:
       - run:
           name: Extract Short Commit SHA
           command: |
-            SHORT_SHA=$(git rev-parse --short HEAD)
-            echo "SHORT_COMMIT=$SHORT_SHA" >> $BASH_ENV
+            SHORT_COMMIT=$(git rev-parse --short HEAD)
+            echo "SHORT_COMMIT=$SHORT_COMMIT" >> $BASH_ENV
   docker-build:
     parameters:
       target:
@@ -363,7 +363,7 @@ workflows:
           requires:
             - export_short_commit
           target: trin
-          tag: << pipeline.git.tag >>-<< jobs.export_short_commit.SHORT_COMMIT >>
+          tag: << pipeline.git.tag >>-
           prod_tag: true
           # filters:
           #   tags:
@@ -385,7 +385,7 @@ workflows:
           requires:
             - export_short_commit
           target: bridge
-          tag: << pipeline.git.tag >>-<< jobs.export_short_commit.SHORT_COMMIT >>
+          tag: << pipeline.git.tag >>-
           prod_tag: true
           # filters:
           #   tags:
