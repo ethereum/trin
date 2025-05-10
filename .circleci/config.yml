@@ -63,7 +63,7 @@ jobs:
         description: Sets the target for building the docker image. Must be one of "trin", "bridge".
         type: enum
         enum: ["trin", "bridge"]
-        default: ""
+        default: "trin"
       tag:
         description: The tag to be used for image.
         type: string
@@ -110,7 +110,7 @@ jobs:
         description: Used to load the image from the workspace. Must be one of "trin", "bridge".
         type: enum
         enum: ["trin", "bridge"]
-        default: ""
+        default: "trin"
     executor: docker-publisher
     steps:
       - attach_workspace:
