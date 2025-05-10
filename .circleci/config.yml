@@ -57,16 +57,6 @@ executors:
     docker:
       - image: rustlang/rust:nightly
 jobs:
-  export_short_commit:
-    docker:
-      - image: cimg/base:stable
-    steps:
-      - checkout
-      - run:
-          name: Extract Short Commit SHA
-          command: |
-            SHORT_COMMIT=$(git rev-parse --short HEAD)
-            echo "export SHORT_COMMIT=$SHORT_COMMIT" >> $BASH_ENV
   docker-build:
     parameters:
       target:
@@ -78,8 +68,12 @@ jobs:
         description: The tag to be used for image.
         type: string
         default: "latest"
-      prod_tag:
-        description: Whether to apply prod tag as well.
+      add_commit_hash:
+        description: Whether to append short commit hash to the tag
+        type: boolean
+        default: false
+      prod:
+        description: Whether to add prod tag as well.
         type: boolean
         default: false
     resource_class: xlarge
@@ -91,12 +85,14 @@ jobs:
           name: Set docker env flags
           command: |
             DOCKER_REPOSITORY=$DOCKER_NAMESPACE/<< parameters.target >>
-            echo "DOCKER_REPOSITORY: $DOCKER_REPOSITORY"
             echo "export DOCKER_REPOSITORY=$DOCKER_REPOSITORY" >> $BASH_ENV
+
             DOCKER_IMAGE=$DOCKER_REPOSITORY:<< parameters.tag >>
-            echo "DOCKER_IMAGE: $DOCKER_IMAGE"
+            if << parameters.add_commit_hash >>; then DOCKER_IMAGE=$DOCKER_IMAGE-$(git rev-parse --short HEAD); fi
             echo "export DOCKER_IMAGE=$DOCKER_IMAGE" >> $BASH_ENV
-            echo "SHORT_COMMIT: $SHORT_COMMIT"
+
+            echo "DOCKER_IMAGE: $DOCKER_IMAGE"
+            echo "DOCKER_REPOSITORY: $DOCKER_REPOSITORY"
       - run:
           name: Build Docker image
           no_output_timeout: 30m
@@ -107,7 +103,7 @@ jobs:
           name: Check that Docker container has no defects
           command: docker run $DOCKER_IMAGE -h
       - when:
-          condition: << parameters.prod_tag >>
+          condition: << parameters.prod >>
           steps:
             - run:
                 name: Apply "prod" tag
@@ -135,8 +131,9 @@ jobs:
           name: Set docker env flags
           command: |
             DOCKER_REPOSITORY=$DOCKER_NAMESPACE/<< parameters.target >>
-            echo "DOCKER_REPOSITORY: $DOCKER_REPOSITORY"
             echo "export DOCKER_REPOSITORY=$DOCKER_REPOSITORY" >> $BASH_ENV
+
+            echo "DOCKER_REPOSITORY: $DOCKER_REPOSITORY"
       - run:
           name: "Load archived Docker image"
           command: docker load -i /tmp/workspace/image-<< parameters.target >>.tar
@@ -364,14 +361,12 @@ workflows:
     # when:
     #   and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
     jobs:
-      - export_short_commit
       - docker-build:
           name: docker_build_trin
-          requires:
-            - export_short_commit
           target: trin
-          tag: gittag<< pipeline.git.tag >>-<< pipeline.git.revision >>
-          prod_tag: true
+          tag: gittag<< pipeline.git.tag >>
+          add_commit_hash: true
+          prod: true
           # filters:
           #   tags:
           #     only: /^v.*$/
@@ -389,11 +384,10 @@ workflows:
           #     ignore: /.*/
       - docker-build:
           name: docker_build_bridge
-          requires:
-            - export_short_commit
           target: bridge
-          tag: gittag<< pipeline.git.tag >>-<< pipeline.git.revision >>
-          prod_tag: true
+          tag: gittag<< pipeline.git.tag >>r
+          add_commit_hash: true
+          prod: true
           # filters:
           #   tags:
           #     only: /^v.*$/
