@@ -143,6 +143,7 @@ jobs:
       - run:
           name: NOT REALLY Publish docker image to Docker Hub
           command: |
+            docker images
             echo "DEBUG: Would push --all-tags $DOCKER_REPOSITORY"
   cargo-fmt:
     description: |
