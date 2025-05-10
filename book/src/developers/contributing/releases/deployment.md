@@ -103,7 +103,7 @@ Another successful release! 🎉
 ## FAQ
 ### What do the Docker tags mean?
 
-- `latest`: [This image](https://github.com/ethereum/trin/blob/master/docker/Dockerfile) with `trin` is built on every push to master
+- `latest`: [This image](https://github.com/ethereum/trin/blob/master/docker/Dockerfile.trin) with `trin` is built on every push to master
 - `latest-bridge`: [This image](https://github.com/ethereum/trin/blob/master/docker/Dockerfile.bridge) with `portal-bridge` is built on every push to master
 - `angelfood`: This tag is used by Ansible to load `trin` onto the nodes we host
 - `bridge`: This tag is used by Ansible to load `portal-bridge` onto the nodes we host
