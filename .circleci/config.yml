@@ -369,7 +369,7 @@ workflows:
           requires:
             - export_short_commit
           target: trin
-          tag: << pipeline.git.tag >>-
+          tag: gittag<< pipeline.git.tag >>-<< pipeline.git.revision >>
           prod_tag: true
           # filters:
           #   tags:
@@ -391,7 +391,7 @@ workflows:
           requires:
             - export_short_commit
           target: bridge
-          tag: << pipeline.git.tag >>-
+          tag: gittag<< pipeline.git.tag >>-<< pipeline.git.revision >>
           prod_tag: true
           # filters:
           #   tags:
