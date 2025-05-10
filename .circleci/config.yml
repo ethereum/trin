@@ -50,7 +50,7 @@ orbs:
 executors:
   docker-publisher:
     environment:
-      IMAGE_NAME: portalnetwork/trin
+      DOCKER_NAMESPACE: portalnetwork
     docker:
       - image: cimg/rust:1.85.0
   docker-nightly:
@@ -58,70 +58,86 @@ executors:
       - image: rustlang/rust:nightly
 jobs:
   docker-build:
+    parameters:
+      target:
+        description: Sets the target for building the docker image. Must be one of "trin", "bridge".
+        type: enum
+        enum: ["trin", "bridge"]
+        default: "trin"
+      tag:
+        description: The tag to be used for image.
+        type: string
+        default: "latest"
+      add_commit_hash:
+        description: Whether to append short commit hash to the tag
+        type: boolean
+        default: false
+      prod:
+        description: Whether to add prod tag as well.
+        type: boolean
+        default: false
     resource_class: xlarge
     executor: docker-publisher
     steps:
       - checkout
       - setup_remote_docker
+      - run:
+          name: Set docker env flags
+          command: |
+            DOCKER_REPOSITORY=$DOCKER_NAMESPACE/<< parameters.target >>
+            echo "export DOCKER_REPOSITORY=$DOCKER_REPOSITORY" >> $BASH_ENV
+            echo "DOCKER_REPOSITORY: $DOCKER_REPOSITORY"
+
+            DOCKER_IMAGE=$DOCKER_REPOSITORY:<< parameters.tag >>
+            if << parameters.add_commit_hash >>; then DOCKER_IMAGE=$DOCKER_IMAGE-$(git rev-parse --short HEAD); fi
+            echo "export DOCKER_IMAGE=$DOCKER_IMAGE" >> $BASH_ENV
+            echo "DOCKER_IMAGE: $DOCKER_IMAGE"
       - run:
           name: Build Docker image
           no_output_timeout: 30m
-          command: docker build -f ./docker/Dockerfile -t $IMAGE_NAME:latest .
+          command: docker build -f ./docker/Dockerfile.<< parameters.target >> -t $DOCKER_IMAGE .
       - run:
           name: Check that Docker container has no defects
-          command: docker run $IMAGE_NAME:latest -h
+          command: docker run $DOCKER_IMAGE -h
+      - when:
+          condition: << parameters.prod >>
+          steps:
+            - run:
+                name: Apply "prod" tag
+                command: docker image tag $DOCKER_IMAGE $DOCKER_REPOSITORY:prod
       - run:
           name: Archive Docker image
-          command: docker save -o image.tar $IMAGE_NAME
+          command: docker save -o image-<< parameters.target >>.tar $DOCKER_REPOSITORY
       - persist_to_workspace:
           root: .
           paths:
-            - ./image.tar
+            - ./image-<< parameters.target >>.tar
   docker-publish:
+    parameters:
+      target:
+        description: Used to load the image from the workspace. Must be one of "trin", "bridge".
+        type: enum
+        enum: ["trin", "bridge"]
+        default: "trin"
     executor: docker-publisher
     steps:
       - attach_workspace:
           at: /tmp/workspace
       - setup_remote_docker
       - run:
-          name: Load archived Docker image
-          command: docker load -i /tmp/workspace/image.tar
+          name: Set docker env flags
+          command: |
+            DOCKER_REPOSITORY=$DOCKER_NAMESPACE/<< parameters.target >>
+            echo "export DOCKER_REPOSITORY=$DOCKER_REPOSITORY" >> $BASH_ENV
+            echo "DOCKER_REPOSITORY: $DOCKER_REPOSITORY"
+      - run:
+          name: "Load archived Docker image"
+          command: docker load -i /tmp/workspace/image-<< parameters.target >>.tar
       - run:
           name: Publish docker image to Docker Hub
           command: |
             echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-            docker push $IMAGE_NAME:latest
-  docker-build-bridge:
-    resource_class: xlarge
-    executor: docker-publisher
-    steps:
-      - checkout
-      - setup_remote_docker
-      - run:
-          name: Build Docker bridge image
-          no_output_timeout: 30m
-          command: docker build -f ./docker/Dockerfile.bridge -t $IMAGE_NAME:latest-bridge .
-      - run:
-          name: Archive Docker image
-          command: docker save -o bridge-image.tar $IMAGE_NAME
-      - persist_to_workspace:
-          root: .
-          paths:
-            - ./bridge-image.tar
-  docker-publish-bridge:
-    executor: docker-publisher
-    steps:
-      - attach_workspace:
-          at: /tmp/workspace
-      - setup_remote_docker
-      - run:
-          name: Load archived Docker image
-          command: docker load -i /tmp/workspace/bridge-image.tar
-      - run:
-          name: Publish docker image to Docker Hub
-          command: |
-            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-            docker push $IMAGE_NAME:latest-bridge
+            docker push --all-tags $DOCKER_REPOSITORY
   cargo-fmt:
     description: |
       Check linting with rustfmt.
@@ -302,26 +318,76 @@ jobs:
           name: Stop containers
           command: docker-compose -f testing/utp/docker/docker-compose.yml down
 workflows:
-  merge-test:
+  check-build-test:
     jobs:
-      - docker-build
-      - docker-publish:
-          requires:
-            - docker-build
-          filters:
-            branches:
-              only: master
-      - docker-build-bridge
-      - docker-publish-bridge:
-          requires:
-            - docker-build-bridge
-          filters:
-            branches:
-              only: master
+      - check-workspace-crates
       - cargo-fmt
       - cargo-clippy
       - build
-      - test
       - build-windows
+      - test
       - utp-test
-      - check-workspace-crates
+  docker:
+    jobs:
+      - docker-build:
+          name: docker_build_trin
+          target: trin
+          tag: latest
+      - docker-publish:
+          name: docker_publish_trin
+          target: trin
+          requires:
+            - docker_build_trin
+          filters:
+            branches:
+              only: master
+      - docker-build:
+          name: docker_build_bridge
+          target: bridge
+          tag: latest
+      - docker-publish:
+          name: docker_publish_bridge
+          target: bridge
+          requires:
+            - docker_build_bridge
+          filters:
+            branches:
+              only: master
+  docker-tag:
+    when:
+      and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
+    jobs:
+      - docker-build:
+          name: docker_build_trin
+          target: trin
+          tag: << pipeline.git.tag >>
+          add_commit_hash: true
+          prod: true
+          filters:
+            tags:
+              only: /^v.*$/
+      - docker-publish:
+          name: docker_publish_trin
+          requires:
+            - docker_build_trin
+          target: trin
+          filters:
+            tags:
+              only: /^v.*$/
+      - docker-build:
+          name: docker_build_bridge
+          target: bridge
+          tag: << pipeline.git.tag >>
+          add_commit_hash: true
+          prod: true
+          filters:
+            tags:
+              only: /^v.*$/
+      - docker-publish:
+          name: docker_publish_bridge
+          requires:
+            - docker_build_bridge
+          target: bridge
+          filters:
+            tags:
+              only: /^v.*$/
