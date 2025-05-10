@@ -125,10 +125,9 @@ jobs:
           name: "Load archived Docker image"
           command: docker load -i /tmp/workspace/image-<< parameters.target >>.tar
       - run:
-          name: Publish docker image to Docker Hub
+          name: NOT REALLY Publish docker image to Docker Hub
           command: |
-            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-            docker push --all-tags $DOCKER_NAMESPACE
+            echo "DEBUG: Would push --all-tags $DOCKER_NAMESPACE"
   cargo-fmt:
     description: |
       Check linting with rustfmt.
@@ -346,45 +345,45 @@ workflows:
               only: master
   docker-tag:
     when:
-      and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
+      # and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
     jobs:
       - docker-build:
           name: docker_build_trin
           target: trin
           tag: << pipeline.git.tag >>-<< pipeline.git.revision.substring(0, 7) >>
           prod_tag: true
-          filters:
-            tags:
-              only: /^v.*$/
-            branches:
-              ignore: /.*/
+          # filters:
+          #   tags:
+          #     only: /^v.*$/
+          #   branches:
+          #     ignore: /.*/
       - docker-publish:
           name: docker_publish_trin
           target: trin
           requires:
             - docker_build_trin
-          filters:
-            tags:
-              only: /^v.*$/
-            branches:
-              ignore: /.*/
+          # filters:
+          #   tags:
+          #     only: /^v.*$/
+          #   branches:
+          #     ignore: /.*/
       - docker-build:
           name: docker_build_bridge
           target: bridge
           tag: << pipeline.git.tag >>-<< pipeline.git.revision.substring(0, 7) >>
           prod_tag: true
-          filters:
-            tags:
-              only: /^v.*$/
-            branches:
-              ignore: /.*/
+          # filters:
+          #   tags:
+          #     only: /^v.*$/
+          #   branches:
+          #     ignore: /.*/
       - docker-publish:
           name: docker_publish_bridge
           target: bridge
           requires:
             - docker_build_bridge
-          filters:
-            tags:
-              only: /^v.*$/
-            branches:
-              ignore: /.*/
+          # filters:
+          #   tags:
+          #     only: /^v.*$/
+          #   branches:
+          #     ignore: /.*/
