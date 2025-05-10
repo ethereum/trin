@@ -57,6 +57,16 @@ executors:
     docker:
       - image: rustlang/rust:nightly
 jobs:
+  export_short_commit:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - run:
+          name: Extract Short Commit SHA
+          command: |
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            echo "SHORT_COMMIT=$SHORT_SHA" >> $BASH_ENV
   docker-build:
     parameters:
       target:
@@ -347,10 +357,13 @@ workflows:
     when:
       # and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
     jobs:
+      - export_short_commit
       - docker-build:
           name: docker_build_trin
+          requires:
+            - export_short_commit
           target: trin
-          tag: << pipeline.git.tag >>-<< pipeline.git.revision.substring(0, 7) >>
+          tag: << pipeline.git.tag >>-<< jobs.export_short_commit.SHORT_COMMIT >>
           prod_tag: true
           # filters:
           #   tags:
@@ -359,9 +372,9 @@ workflows:
           #     ignore: /.*/
       - docker-publish:
           name: docker_publish_trin
-          target: trin
           requires:
             - docker_build_trin
+          target: trin
           # filters:
           #   tags:
           #     only: /^v.*$/
@@ -369,8 +382,10 @@ workflows:
           #     ignore: /.*/
       - docker-build:
           name: docker_build_bridge
+          requires:
+            - export_short_commit
           target: bridge
-          tag: << pipeline.git.tag >>-<< pipeline.git.revision.substring(0, 7) >>
+          tag: << pipeline.git.tag >>-<< jobs.export_short_commit.SHORT_COMMIT >>
           prod_tag: true
           # filters:
           #   tags:
@@ -379,9 +394,9 @@ workflows:
           #     ignore: /.*/
       - docker-publish:
           name: docker_publish_bridge
-          target: bridge
           requires:
             - docker_build_bridge
+          target: bridge
           # filters:
           #   tags:
           #     only: /^v.*$/
