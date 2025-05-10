@@ -66,7 +66,7 @@ jobs:
           name: Extract Short Commit SHA
           command: |
             SHORT_COMMIT=$(git rev-parse --short HEAD)
-            echo "SHORT_COMMIT=$SHORT_COMMIT" >> $BASH_ENV
+            echo "export SHORT_COMMIT=$SHORT_COMMIT" >> $BASH_ENV
   docker-build:
     parameters:
       target:
@@ -92,8 +92,11 @@ jobs:
           command: |
             DOCKER_REPOSITORY=$DOCKER_NAMESPACE/<< parameters.target >>
             echo "DOCKER_REPOSITORY: $DOCKER_REPOSITORY"
+            echo "export DOCKER_REPOSITORY=$DOCKER_REPOSITORY" >> $BASH_ENV
             DOCKER_IMAGE=$DOCKER_REPOSITORY:<< parameters.tag >>
             echo "DOCKER_IMAGE: $DOCKER_IMAGE"
+            echo "export DOCKER_IMAGE=$DOCKER_IMAGE" >> $BASH_ENV
+            echo "SHORT_COMMIT: $SHORT_COMMIT"
       - run:
           name: Build Docker image
           no_output_timeout: 30m
@@ -133,6 +136,7 @@ jobs:
           command: |
             DOCKER_REPOSITORY=$DOCKER_NAMESPACE/<< parameters.target >>
             echo "DOCKER_REPOSITORY: $DOCKER_REPOSITORY"
+            echo "export DOCKER_REPOSITORY=$DOCKER_REPOSITORY" >> $BASH_ENV
       - run:
           name: "Load archived Docker image"
           command: docker load -i /tmp/workspace/image-<< parameters.target >>.tar
