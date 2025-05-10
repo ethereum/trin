@@ -97,7 +97,9 @@ jobs:
       - run:
           name: Build Docker image
           no_output_timeout: 30m
-          command: docker build -f ./docker/Dockerfile.<< parameters.target >> -t $DOCKER_IMAGE .
+          command: |
+            echo "image: $DOCKER_IMAGE" 
+            docker build -f ./docker/Dockerfile.<< parameters.target >> -t $DOCKER_IMAGE .
       - run:
           name: Check that Docker container has no defects
           command: docker run $DOCKER_IMAGE -h
