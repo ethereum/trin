@@ -92,17 +92,17 @@ jobs:
           command: |
             DOCKER_REPOSITORY=$DOCKER_NAMESPACE/<< parameters.target >>
             echo "DOCKER_REPOSITORY: $DOCKER_REPOSITORY"
-            DOCKER_IMAGE=$DOCKER_REPOSITORY:<< parameters.tag >> && echo $DOCKER_IMAGE
+            DOCKER_IMAGE=$DOCKER_REPOSITORY:<< parameters.tag >>
             echo "DOCKER_IMAGE: $DOCKER_IMAGE"
       - run:
           name: Build Docker image
           no_output_timeout: 30m
-          command: docker build -f ./docker/Docker.<< parameters.target >> -t $DOCKER_IMAGE >> .
+          command: docker build -f ./docker/Docker.<< parameters.target >> -t $DOCKER_IMAGE .
       - run:
           name: Check that Docker container has no defects
           command: docker run $DOCKER_IMAGE -h
       - when:
-          condition: <<parameters.prod_tag>>
+          condition: << parameters.prod_tag >>
           steps:
             - run:
                 name: Apply "prod" tag
@@ -137,7 +137,7 @@ jobs:
       - run:
           name: NOT REALLY Publish docker image to Docker Hub
           command: |
-            echo "DEBUG: Would push --all-tags $DOCKER_NAMESPACE"
+            echo "DEBUG: Would push --all-tags $DOCKER_REPOSITORY"
   cargo-fmt:
     description: |
       Check linting with rustfmt.
@@ -354,8 +354,8 @@ workflows:
             branches:
               only: master
   docker-tag:
-    when:
-      # and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
+    # when:
+    #   and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
     jobs:
       - export_short_commit
       - docker-build:
