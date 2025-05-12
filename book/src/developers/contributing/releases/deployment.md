@@ -44,7 +44,7 @@
 
 ### Update Docker images
 
-Docker images are how Ansible moves the binaries to the nodes. Dockerhub repositories is located here: [hub.docker.com/u/portalnetwork](https://hub.docker.com/u/portalnetwork).
+Docker images are how Ansible moves the binaries to the nodes. Dockerhub repositories are located here: [hub.docker.com/u/portalnetwork](https://hub.docker.com/u/portalnetwork).
 
 Docker images should be tagged correctly after the release is finished. Double-check that they are correct:
 
@@ -144,8 +144,11 @@ All repositories use following tags:
 
 - `latest` - built on every push to master
 - `vX.Y.Z-<commit-hash>` - built when version git tag is pushed to master
-- `prod` - used to indicate which version is deployed
+- `stable` - indicates the version that is recommended for community to use
     - updated automatically to the latest `vX.Y.Z-<commit-hash>` image
+- `prod` - indicates deployed version
+    - usually the same as `stable`
+    - also updated automatically to the latest `vX.Y.Z-<commit-hash>` image
 
 Note that building the Docker image on git's master takes some time. If you merge to master and immediately pull the `latest` Docker image, you won't be getting the build of that latest commit. You have to wait for the Docker build to complete. You should be able to see on github when the Docker build is published.
 

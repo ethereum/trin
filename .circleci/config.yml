@@ -350,7 +350,7 @@ workflows:
           tags: << pipeline.git.tag >>-$(git rev-parse --short HEAD) stable prod
           filters:
             tags:
-              only: /^v.*$/
+              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
       - docker-publish:
           name: docker_publish_trin
           requires:
@@ -358,14 +358,14 @@ workflows:
           target: trin
           filters:
             tags:
-              only: /^v.*$/
+              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
       - docker-build:
           name: docker_build_bridge
           target: bridge
           tags: << pipeline.git.tag >>-$(git rev-parse --short HEAD) stable prod
           filters:
             tags:
-              only: /^v.*$/
+              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
       - docker-publish:
           name: docker_publish_bridge
           requires:
@@ -373,4 +373,4 @@ workflows:
           target: bridge
           filters:
             tags:
-              only: /^v.*$/
+              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
