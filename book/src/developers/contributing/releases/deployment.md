@@ -11,7 +11,7 @@
     . venv/bin/activate
     pip install ansible
     pip install docker
-    sudo apt install ansible-core
+    apt install ansible-core
     ```
     On mac you can do `brew install ansible` instead of `apt`.
 
@@ -26,7 +26,7 @@
     ```bash
     sops portal-network/trin/ansible/inventories/dev/group_vars/secrets.sops.yml
     ```
-- Log in to Docker with: `sudo docker login`
+- Log in to Docker with: `docker login`
 - Ask Nick to be added as collaborator on Docker repo
 
 - Needed for [rebooting nodes](#what-do-i-do-if-ansible-says-a-node-is-unreachable)
@@ -199,16 +199,30 @@ If you observe things breaking or (significantly) degraded network performance a
     3. There should be only one such tag, but it can't hurt to confirm that commit hash matches the expected value
 3. Pull this specific image locally
     ```bash
-    sudo docker pull portalnetwork/trin:v0.1.2-a1b2c3d4
+    docker pull portalnetwork/trin:v0.1.2-a1b2c3d4
     ```
 4. Retag the image with the `prod` tag
     ```bash
-    sudo docker image tag portalnetwork/trin:v0.1.2-a1b2c3d4 portalnetwork/trin:prod
+    docker image tag portalnetwork/trin:v0.1.2-a1b2c3d4 portalnetwork/trin:prod
     ```
 5. Push the newly tagged `prod` image to Docker Hub
     ```bash
-    sudo docker push portalnetwork/trin:prod
+    docker push portalnetwork/trin:prod
     ```
 6. Re-run the ansible script, which will use the newly updated image
     - Use the `--limit` cli flag if you only want to redeploy a subset of nodes. eg: `ansible-playbook playbook.yml --tags trin --limit backfill_nodes`.
 7. Verify that the network is back to regular operation.
+
+### Permission denied while using docker on local machine
+
+You might be getting following error while using `docker`:
+
+> `permission denied while trying to connect to the Docker daemon socket ...`
+
+By default, Docker daemon runs as the `root` user. See https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user to understand details and possible solutions.
+
+In short, most common ways to handle this:
+
+- preface `docker` command with `sudo`
+- add user to `docker` group
+- run Docker daemon as a non-root user (Rootless mode)
