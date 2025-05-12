@@ -64,18 +64,10 @@ jobs:
         type: enum
         enum: ["trin", "bridge"]
         default: "trin"
-      tag:
-        description: The tag to be used for image.
+      tags:
+        description: Space separated list of tags to be added to the built image.
         type: string
         default: "latest"
-      add_commit_hash:
-        description: Whether to append short commit hash to the tag
-        type: boolean
-        default: false
-      prod:
-        description: Whether to add prod tag as well.
-        type: boolean
-        default: false
     resource_class: xlarge
     executor: docker-publisher
     steps:
@@ -87,24 +79,19 @@ jobs:
             DOCKER_REPOSITORY=$DOCKER_NAMESPACE/<< parameters.target >>
             echo "export DOCKER_REPOSITORY=$DOCKER_REPOSITORY" >> $BASH_ENV
             echo "DOCKER_REPOSITORY: $DOCKER_REPOSITORY"
-
-            DOCKER_IMAGE=$DOCKER_REPOSITORY:<< parameters.tag >>
-            if << parameters.add_commit_hash >>; then DOCKER_IMAGE=$DOCKER_IMAGE-$(git rev-parse --short HEAD); fi
-            echo "export DOCKER_IMAGE=$DOCKER_IMAGE" >> $BASH_ENV
-            echo "DOCKER_IMAGE: $DOCKER_IMAGE"
       - run:
           name: Build Docker image
           no_output_timeout: 30m
-          command: docker build -f ./docker/Dockerfile.<< parameters.target >> -t $DOCKER_IMAGE .
+          command: |
+            IMAGE_TAGS=$(printf " -t $DOCKER_REPOSITORY:%s" << parameters.tags >>)
+            docker build -f ./docker/Dockerfile.<< parameters.target >> $IMAGE_TAGS .
       - run:
           name: Check that Docker container has no defects
-          command: docker run $DOCKER_IMAGE -h
-      - when:
-          condition: << parameters.prod >>
-          steps:
-            - run:
-                name: Apply "prod" tag
-                command: docker image tag $DOCKER_IMAGE $DOCKER_REPOSITORY:prod
+          command: |
+            for tag in << parameters.tags >>; do
+              echo "Checking $tag"
+              docker run $DOCKER_REPOSITORY:$tag -h
+            done
       - run:
           name: Archive Docker image
           command: docker save -o image-<< parameters.target >>.tar $DOCKER_REPOSITORY
@@ -327,12 +314,12 @@ workflows:
       - build-windows
       - test
       - utp-test
-  docker:
+  docker-master-commit:
     jobs:
       - docker-build:
           name: docker_build_trin
           target: trin
-          tag: latest
+          tags: latest
       - docker-publish:
           name: docker_publish_trin
           target: trin
@@ -344,7 +331,7 @@ workflows:
       - docker-build:
           name: docker_build_bridge
           target: bridge
-          tag: latest
+          tags: latest
       - docker-publish:
           name: docker_publish_bridge
           target: bridge
@@ -353,16 +340,14 @@ workflows:
           filters:
             branches:
               only: master
-  docker-tag:
+  docker-master-tag:
     when:
       and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
     jobs:
       - docker-build:
           name: docker_build_trin
           target: trin
-          tag: << pipeline.git.tag >>
-          add_commit_hash: true
-          prod: true
+          tags: << pipeline.git.tag >>-$(git rev-parse --short HEAD) stable prod
           filters:
             tags:
               only: /^v.*$/
@@ -377,9 +362,7 @@ workflows:
       - docker-build:
           name: docker_build_bridge
           target: bridge
-          tag: << pipeline.git.tag >>
-          add_commit_hash: true
-          prod: true
+          tags: << pipeline.git.tag >>-$(git rev-parse --short HEAD) stable prod
           filters:
             tags:
               only: /^v.*$/
