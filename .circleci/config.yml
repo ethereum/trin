@@ -136,8 +136,10 @@ jobs:
       - run:
           name: Publish docker image to Docker Hub
           command: |
-            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-            docker push --all-tags $DOCKER_REPOSITORY
+            echo "repository $DOCKER_REPOSITORY"
+            docker images
+            # echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            # docker push --all-tags $DOCKER_REPOSITORY
   cargo-fmt:
     description: |
       Check linting with rustfmt.
@@ -354,40 +356,40 @@ workflows:
             branches:
               only: master
   docker-tag:
-    when:
-      and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
+    # when:
+    #   and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
     jobs:
       - docker-build:
           name: docker_build_trin
           target: trin
-          tag: << pipeline.git.tag >>
+          tag: gittag<< pipeline.git.tag >>
           add_commit_hash: true
           prod: true
-          filters:
-            tags:
-              only: /^v.*$/
+          # filters:
+          #   tags:
+          #     only: /^v.*$/
       - docker-publish:
           name: docker_publish_trin
           requires:
             - docker_build_trin
           target: trin
-          filters:
-            tags:
-              only: /^v.*$/
+          # filters:
+          #   tags:
+          #     only: /^v.*$/
       - docker-build:
           name: docker_build_bridge
           target: bridge
-          tag: << pipeline.git.tag >>
+          tag: gittag<< pipeline.git.tag >>
           add_commit_hash: true
           prod: true
-          filters:
-            tags:
-              only: /^v.*$/
+          # filters:
+          #   tags:
+          #     only: /^v.*$/
       - docker-publish:
           name: docker_publish_bridge
           requires:
             - docker_build_bridge
           target: bridge
-          filters:
-            tags:
-              only: /^v.*$/
+          # filters:
+          #   tags:
+          #     only: /^v.*$/
