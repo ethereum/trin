@@ -31,29 +31,59 @@ pub struct ExecutionRequests {
 
 impl ExecutionRequests {
     pub fn requests_hash(&self) -> B256 {
-        let mut requests = AlloyRequests::with_capacity(
-            self.deposits.len() + self.withdrawals.len() + self.consolidations.len(),
+        let mut requests = AlloyRequests::with_capacity(3);
+
+        requests.push_request_with_type(DepositRequest::REQUEST_TYPE, self.deposits.as_ssz_bytes());
+        requests.push_request_with_type(
+            WithdrawalRequest::REQUEST_TYPE,
+            self.withdrawals.as_ssz_bytes(),
+        );
+        requests.push_request_with_type(
+            ConsolidationRequest::REQUEST_TYPE,
+            self.consolidations.as_ssz_bytes(),
         );
 
-        for deposit_request in &self.deposits {
-            requests.push_request_with_type(
-                DepositRequest::REQUEST_TYPE,
-                deposit_request.as_ssz_bytes(),
-            );
-        }
-        for withdrawal_request in &self.withdrawals {
-            requests.push_request_with_type(
-                WithdrawalRequest::REQUEST_TYPE,
-                withdrawal_request.as_ssz_bytes(),
-            );
-        }
-        for consolidation_request in &self.consolidations {
-            requests.push_request_with_type(
-                ConsolidationRequest::REQUEST_TYPE,
-                consolidation_request.as_ssz_bytes(),
-            );
-        }
-
         requests.requests_hash()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy::primitives::{b256, Address, B256};
+
+    use super::*;
+    use crate::consensus::{pubkey::PubKey, signature::BlsSignature};
+
+    #[test]
+    fn test_requests_hash() {
+        let deposit_request = DepositRequest {
+            pubkey: PubKey::default(),
+            withdrawal_credentials: B256::default(),
+            amount: 0,
+            signature: BlsSignature::default(),
+            index: 0,
+        };
+
+        let withdrawal_request = WithdrawalRequest {
+            amount: 0,
+            source_address: Address::default(),
+            validator_pubkey: PubKey::default(),
+        };
+
+        let consolidation_request = ConsolidationRequest {
+            source_address: Address::default(),
+            source_pubkey: PubKey::default(),
+            target_pubkey: PubKey::default(),
+        };
+
+        let execution_requests = ExecutionRequests {
+            deposits: vec![deposit_request].into(),
+            withdrawals: vec![withdrawal_request].into(),
+            consolidations: vec![consolidation_request].into(),
+        };
+
+        let expected_hash =
+            b256!("0x4001980e70daeb56b1dc6d921726b87df98f92d04f400e3b21ed96d9a1c28062");
+        assert_eq!(expected_hash, execution_requests.requests_hash());
     }
 }
