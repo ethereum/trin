@@ -3,6 +3,7 @@ use std::sync::Arc;
 use alloy_hardforks::EthereumHardforks;
 use anyhow::{anyhow, bail, ensure};
 use e2store::{
+    e2hs::BLOCKS_PER_E2HS,
     era::{CompressedSignedBeaconBlock, Era},
     era1::{BlockTuple, Era1},
     utils::{get_era1_files, get_era_files},
@@ -84,20 +85,20 @@ impl From<Era> for MinimalEra {
     }
 }
 
-// This struct provides various era files based on the epoch and makes
-// them accessible via a specific block number from that epoch.
-// - pre-merge: all epochs will correspond 1:1 with era1 files
+// This struct provides various era files based on the index and makes
+// them accessible via a specific block number from that index.
+// - pre-merge: all indices will correspond 1:1 with era1 files
 // - merge-boundary: will have an era1 & 2 era files
-// - post-merge: all epochs will likely have 2 era files
+// - post-merge: all indices will likely have 2 era files
 pub struct EraProvider {
     pub sources: Vec<EraSource>,
 }
 
 impl EraProvider {
-    pub async fn new(epoch: u64) -> anyhow::Result<Self> {
-        info!("Fetching e2store files for epoch: {epoch}");
-        let starting_block = epoch * SLOTS_PER_HISTORICAL_ROOT;
-        let ending_block = starting_block + SLOTS_PER_HISTORICAL_ROOT;
+    pub async fn new(index: u64) -> anyhow::Result<Self> {
+        info!("Fetching e2store files for index: {index}");
+        let starting_block = index * BLOCKS_PER_E2HS as u64;
+        let ending_block = starting_block + BLOCKS_PER_E2HS as u64;
         let http_client = Client::builder()
             .default_headers(HeaderMap::from_iter([(
                 CONTENT_TYPE,
@@ -108,23 +109,23 @@ impl EraProvider {
         let mut next_block = starting_block;
         let mut sources = vec![];
 
-        let mut previous_era_epoch_index = None;
+        let mut previous_era_index = None;
         let era_links = get_era_files(&http_client).await?;
         while next_block < ending_block {
             let source = if !network_spec().is_paris_active_at_block(next_block) {
                 let era1_paths = get_era1_files(&http_client).await?;
-                let epoch_index = next_block / SLOTS_PER_HISTORICAL_ROOT;
-                let era1_path = era1_paths.get(&epoch_index).ok_or(anyhow!(
-                    "Era1 file not found for epoch index: {epoch_index}",
-                ))?;
+                let era1_index = next_block / SLOTS_PER_HISTORICAL_ROOT;
+                let era1_path = era1_paths
+                    .get(&era1_index)
+                    .ok_or(anyhow!("Era1 file not found for index: {era1_index}",))?;
                 let raw_era1 = fetch_bytes(http_client.clone(), era1_path).await?;
                 EraSource::PreMerge(Arc::new(Era1::deserialize(&raw_era1)?))
             } else {
-                let era = Arc::new(match previous_era_epoch_index {
-                    Some(previous_epoch_index) => {
+                let era = Arc::new(match previous_era_index {
+                    Some(previous_index) => {
                         let era_path = era_links
-                            .get(&(previous_epoch_index + 1))
-                            .ok_or(anyhow!("Era file not found for block number: {next_block}",))?;
+                            .get(&(previous_index + 1))
+                            .ok_or(anyhow!("Era file not found for block number: {next_block}"))?;
                         info!(
                             "Downloading era file for block number: {next_block}, path: {era_path}"
                         );
@@ -133,7 +134,7 @@ impl EraProvider {
                             "Downloaded era file for block number: {next_block}, path: {era_path}"
                         );
                         let era = Era::deserialize(&raw_era)?;
-                        previous_era_epoch_index = Some(era.epoch_index());
+                        previous_era_index = Some(era.epoch_index());
                         MinimalEra::from(era)
                     }
                     None => {
@@ -143,7 +144,7 @@ impl EraProvider {
                             next_block,
                         )
                         .await?;
-                        previous_era_epoch_index = Some(era.epoch_index());
+                        previous_era_index = Some(era.epoch_index());
                         MinimalEra::from(era)
                     }
                 });
@@ -176,7 +177,7 @@ impl EraProvider {
                 block_tuple
             }
             EraSource::PostMerge(_) => {
-                bail!("Era1 file not found for block number: {block_number}",)
+                bail!("Era1 file not found for block number: {block_number}")
             }
         })
     }

@@ -7,7 +7,7 @@ use alloy::primitives::B256;
 use anyhow::{anyhow, bail};
 use constants::DEFAULT_BEACON_STATE_REQUEST_TIMEOUT;
 use ethportal_api::{
-    consensus::beacon_state::BeaconStateElectra,
+    consensus::{beacon_block::SignedBeaconBlockElectra, beacon_state::BeaconStateElectra},
     light_client::{
         bootstrap::LightClientBootstrapElectra, finality_update::LightClientFinalityUpdateElectra,
         optimistic_update::LightClientOptimisticUpdateElectra, update::LightClientUpdateElectra,
@@ -130,8 +130,24 @@ impl ConsensusApi {
     }
 
     /// Requests the `BeaconState` structure corresponding to the current head of the beacon chain.
-    pub async fn get_beacon_state(&self) -> anyhow::Result<BeaconStateElectra> {
-        let endpoint = "/eth/v2/debug/beacon/states/finalized".to_string();
+    pub async fn get_beacon_state<S: AsRef<str> + Display>(
+        &self,
+        state_id: S,
+    ) -> anyhow::Result<BeaconStateElectra> {
+        let endpoint = format!("/eth/v2/debug/beacon/states/{state_id}");
+        Ok(self
+            .request(endpoint, Some(DEFAULT_BEACON_STATE_REQUEST_TIMEOUT))
+            .await?
+            .data)
+    }
+
+    /// Requests the `SignedBeaconBlock` structure corresponding to the current head of the beacon
+    /// chain.
+    pub async fn get_beacon_block<S: AsRef<str> + Display>(
+        &self,
+        block_id: S,
+    ) -> anyhow::Result<SignedBeaconBlockElectra> {
+        let endpoint = format!("/eth/v2/beacon/blocks/{block_id}");
         Ok(self
             .request(endpoint, Some(DEFAULT_BEACON_STATE_REQUEST_TIMEOUT))
             .await?
