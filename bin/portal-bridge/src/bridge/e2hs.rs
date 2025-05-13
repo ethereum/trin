@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::{Display, Formatter},
     str::FromStr,
     sync::{Arc, Mutex},
     time::Instant,
@@ -8,9 +9,8 @@ use std::{
 use alloy::primitives::B256;
 use anyhow::ensure;
 use bytes::Bytes;
-use clap::Parser;
 use e2store::{
-    e2hs::{BlockTuple, E2HSMemory},
+    e2hs::{BlockTuple, E2HSMemory, BLOCKS_PER_E2HS},
     utils::get_e2hs_files,
 };
 use ethportal_api::{
@@ -111,7 +111,18 @@ impl E2HSBridge {
     pub async fn launch(&self) {
         info!("Launching E2HS bridge");
 
-        let epochs = block_range_to_epochs(self.block_range.start, self.block_range.end);
+        let block_range_end = match self.block_range.end {
+            BlockRangeEnd::Latest => {
+                let max_epoch = self
+                    .e2hs_files
+                    .keys()
+                    .max()
+                    .expect("to be able to get max epoch");
+                max_epoch * BLOCKS_PER_E2HS as u64 + BLOCKS_PER_E2HS as u64
+            }
+            BlockRangeEnd::Block(block_number) => block_number,
+        };
+        let epochs = block_range_to_epochs(self.block_range.start, block_range_end);
         let mut epoch_indexes: Vec<u64> = epochs.keys().cloned().sorted().collect();
         if self.random_fill {
             epoch_indexes.shuffle(&mut rand::thread_rng());
@@ -497,11 +508,28 @@ impl Gossiper {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum BlockRangeEnd {
+    /// End of the chain
+    Latest,
+    /// Specific block number
+    Block(u64),
+}
+
+impl Display for BlockRangeEnd {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BlockRangeEnd::Latest => write!(f, "latest"),
+            BlockRangeEnd::Block(block) => write!(f, "{block}"),
+        }
+    }
+}
+
 /// BlockRange used specifically for the E2HS bridge
-#[derive(Parser, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct BlockRange {
     pub start: u64,
-    pub end: u64,
+    pub end: BlockRangeEnd,
 }
 
 impl FromStr for BlockRange {
@@ -511,7 +539,10 @@ impl FromStr for BlockRange {
         let parts: Vec<&str> = s.split('-').collect();
         ensure!(parts.len() == 2, "Invalid block range format");
         let start = parts[0].parse()?;
-        let end = parts[1].parse()?;
+        let end = match parts[1] {
+            "latest" => BlockRangeEnd::Latest,
+            _ => BlockRangeEnd::Block(parts[1].parse()?),
+        };
         Ok(Self { start, end })
     }
 }
