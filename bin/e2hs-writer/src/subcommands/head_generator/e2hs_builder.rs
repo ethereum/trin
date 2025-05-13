@@ -17,7 +17,7 @@ use crate::{
     subcommands::{execution_block_builder::ExecutionBlockBuilder, full_block::FullBlock},
 };
 
-pub struct ProvingAnchors {
+struct ProvingAnchors {
     current_historical_batch: HistoricalBatch,
     current_historical_summaries_index: u64,
     header_validator: HeaderValidator,
@@ -42,10 +42,10 @@ impl ProvingAnchors {
 
 pub struct E2HSBuilder {
     pub ethereum_api: EthereumApi,
-    temp_dir: TempDir,
-    slot_for_next_execution_number: u64,
     pub index: u64,
+    slot_for_next_execution_number: u64,
     proving_anchors: ProvingAnchors,
+    temp_dir: TempDir,
 }
 
 impl E2HSBuilder {
@@ -64,11 +64,11 @@ impl E2HSBuilder {
 
         Ok(Self {
             ethereum_api,
-            slot_for_next_execution_number,
             index,
+            slot_for_next_execution_number,
+            proving_anchors: ProvingAnchors::new(),
             temp_dir: TempDir::new()
                 .map_err(|err| anyhow::anyhow!("Failed to create temp dir: {err}"))?,
-            proving_anchors: ProvingAnchors::new(),
         })
     }
 
@@ -112,8 +112,8 @@ impl E2HSBuilder {
 
     /// If the historical summaries index has changed, update the proving anchors.
     async fn update_proving_anchors(&mut self, slot: u64) -> anyhow::Result<()> {
-        let index = historical_summaries_index(slot);
-        if index == self.proving_anchors.current_historical_summaries_index {
+        let historical_summaries_index = historical_summaries_index(slot);
+        if historical_summaries_index == self.proving_anchors.current_historical_summaries_index {
             return Ok(());
         }
 
@@ -122,7 +122,7 @@ impl E2HSBuilder {
             .get_state_for_start_of_next_period(slot)
             .await?;
 
-        self.proving_anchors.current_historical_summaries_index = index;
+        self.proving_anchors.current_historical_summaries_index = historical_summaries_index;
         self.proving_anchors.header_validator =
             HeaderValidator::new_with_historical_summaries(state.historical_summaries);
         self.proving_anchors.current_historical_batch = HistoricalBatch {

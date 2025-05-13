@@ -66,8 +66,7 @@ impl HeadGenerator {
                 let sleep_duration = Duration::from_secs(seconds_of_epoch);
 
                 info!(
-                    "Not enough provable blocks to build next E2HS file {}/{}. Waiting for next finalized block. Sleeping for {}",
-                    amount_of_blocks_that_can_be_backfilled, BLOCKS_PER_E2HS,
+                    "Not enough provable blocks to build next E2HS. Trying again after 1 epoch (32 blocks / {})",
                     sleep_duration.human(Truncate::Second),
                 );
                 sleep(sleep_duration).await;
@@ -84,12 +83,12 @@ impl HeadGenerator {
         let e2hs_path = self.e2hs_builder.build_e2hs_file().await?;
         self.s3_bucket.upload_file_from_path(&e2hs_path).await?;
 
-        info!("Deleting local E2HS file for index {index}");
+        info!("Deleting local E2HS file for index {index}, path {e2hs_path:?}");
         fs::remove_file(e2hs_path)?;
         info!("Deleted local E2HS file for index {index}");
 
         info!(
-            "Time taken to finished building and uploading e2hs file {index} {}",
+            "Time taken to finished finish and uploading e2hs file {index}: {}",
             start.elapsed().human(Truncate::Second)
         );
         Ok(())

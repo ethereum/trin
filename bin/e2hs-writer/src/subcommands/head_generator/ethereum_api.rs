@@ -70,6 +70,7 @@ impl EthereumApi {
                     // For some reason certain implementations will give us a State before the slot
                     // we requested if the requested slot is skipped
                     if state.slot < slot {
+                        warn!("The slot {slot} is skipped, and the CL for some reason gave us the state for a previous slot, trying the next slot");
                         slot += 1;
                         tries += 1;
                         continue;
@@ -103,7 +104,7 @@ impl EthereumApi {
             ))
     }
 
-    /// Fetches the historical batch for a given slot.
+    /// Fetches the Beacon Block for a given slot.
     ///
     /// Slots can be skipped, so we walk until we find a non-skipped slot.
     ///
