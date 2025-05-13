@@ -87,9 +87,9 @@ impl From<Era> for MinimalEra {
 
 // This struct provides various era files based on the index and makes
 // them accessible via a specific block number from that index.
-// - pre-merge: all indexs will correspond 1:1 with era1 files
+// - pre-merge: all indices will correspond 1:1 with era1 files
 // - merge-boundary: will have an era1 & 2 era files
-// - post-merge: all indexs will likely have 2 era files
+// - post-merge: all indices will likely have 2 era files
 pub struct EraProvider {
     pub sources: Vec<EraSource>,
 }
@@ -114,10 +114,10 @@ impl EraProvider {
         while next_block < ending_block {
             let source = if !network_spec().is_paris_active_at_block(next_block) {
                 let era1_paths = get_era1_files(&http_client).await?;
-                let index = next_block / SLOTS_PER_HISTORICAL_ROOT;
+                let era1_index = next_block / SLOTS_PER_HISTORICAL_ROOT;
                 let era1_path = era1_paths
-                    .get(&index)
-                    .ok_or(anyhow!("Era1 file not found for index: {index}",))?;
+                    .get(&era1_index)
+                    .ok_or(anyhow!("Era1 file not found for index: {era1_index}",))?;
                 let raw_era1 = fetch_bytes(http_client.clone(), era1_path).await?;
                 EraSource::PreMerge(Arc::new(Era1::deserialize(&raw_era1)?))
             } else {

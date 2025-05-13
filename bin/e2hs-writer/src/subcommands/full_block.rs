@@ -7,7 +7,6 @@ use ethportal_api::{types::execution::header_with_proof::HeaderWithProof, BlockB
 use trin_validation::header_validator::HeaderValidator;
 
 pub struct FullBlock {
-    pub block_number: u64,
     pub header_with_proof: HeaderWithProof,
     pub body: BlockBody,
     pub receipts: Receipts,

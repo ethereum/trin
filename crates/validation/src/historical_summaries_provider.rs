@@ -31,10 +31,6 @@ impl HistoricalSummariesProvider {
         }
     }
 
-    pub fn update_historical_summaries(&mut self, historical_summaries: HistoricalSummaries) {
-        self.source = HistoricalSummariesSource::HistoricalSummaries(historical_summaries);
-    }
-
     pub async fn get_historical_summary(&self, slot: u64) -> anyhow::Result<HistoricalSummary> {
         let epoch = slot / SLOTS_PER_EPOCH;
         let historical_summary_index =

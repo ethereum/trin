@@ -11,10 +11,12 @@ use std::{
 use anyhow::{bail, ensure};
 use e2hs_builder::E2HSBuilder;
 use e2store::e2hs::BLOCKS_PER_E2HS;
+use ethereum_api::first_slot_in_a_period;
 use humanize_duration::{prelude::DurationExt, Truncate};
 use s3_bucket::S3Bucket;
-use tokio::time;
+use tokio::time::sleep;
 use tracing::{error, info};
+use trin_validation::constants::SLOTS_PER_EPOCH;
 
 use crate::cli::HeadGeneratorConfig;
 
@@ -30,7 +32,6 @@ const MAX_ALLOWED_BLOCK_BACKFILL_SIZE: u64 = (3 * 30 * 24 * 60 * 60) / 12;
 pub struct HeadGenerator {
     s3_bucket: S3Bucket,
     e2hs_builder: E2HSBuilder,
-    last_processed_index: u64,
 }
 
 impl HeadGenerator {
@@ -41,8 +42,7 @@ impl HeadGenerator {
 
         Ok(Self {
             s3_bucket,
-            last_processed_index,
-            e2hs_builder: E2HSBuilder::new(config, last_processed_index).await?,
+            e2hs_builder: E2HSBuilder::new(config, last_processed_index + 1).await?,
         })
     }
 
@@ -53,30 +53,35 @@ impl HeadGenerator {
             "Backfill size is too large"
         );
 
-        let mut interval = time::interval(Duration::from_secs(5));
-
         loop {
-            interval.tick().await;
-
-            if self.amount_of_blocks_that_can_be_backfilled().await? >= BLOCKS_PER_E2HS as u64 {
-                let next_index = self.next_execution_index_to_process();
-                if let Err(err) =
-                    run_with_shutdown(self.build_and_upload_e2hs_file(next_index)).await
-                {
+            let amount_of_blocks_that_can_be_backfilled =
+                self.amount_of_blocks_that_can_be_backfilled().await?;
+            if amount_of_blocks_that_can_be_backfilled >= BLOCKS_PER_E2HS as u64 {
+                if let Err(err) = run_with_shutdown(self.build_and_upload_e2hs_file()).await {
                     error!("Failed to process E2HS file: {err:?}");
                     break;
                 }
-                self.last_processed_index = next_index;
+            } else {
+                let seconds_of_epoch = 12 * SLOTS_PER_EPOCH;
+                let sleep_duration = Duration::from_secs(seconds_of_epoch);
+
+                info!(
+                    "Not enough provable blocks to build next E2HS file {}/{}. Waiting for next finalized block. Sleeping for {}",
+                    amount_of_blocks_that_can_be_backfilled, BLOCKS_PER_E2HS,
+                    sleep_duration.human(Truncate::Second),
+                );
+                sleep(sleep_duration).await;
             }
         }
 
         Ok(())
     }
 
-    async fn build_and_upload_e2hs_file(&mut self, index: u64) -> anyhow::Result<()> {
+    async fn build_and_upload_e2hs_file(&mut self) -> anyhow::Result<()> {
         let start = Instant::now();
 
-        let e2hs_path = self.e2hs_builder.build_e2hs_file(index).await?;
+        let index = self.e2hs_builder.index;
+        let e2hs_path = self.e2hs_builder.build_e2hs_file().await?;
         self.s3_bucket.upload_file_from_path(&e2hs_path).await?;
 
         info!("Deleting local E2HS file for index {index}");
@@ -91,16 +96,28 @@ impl HeadGenerator {
     }
 
     async fn amount_of_blocks_that_can_be_backfilled(&self) -> anyhow::Result<u64> {
-        Ok(self
+        let latest_finalized_slot = self
             .e2hs_builder
             .ethereum_api
-            .latest_provable_execution_number()
+            .consensus_api
+            .get_beacon_block("finalized")
             .await?
-            - self.next_execution_index_to_process() * BLOCKS_PER_E2HS as u64)
-    }
+            .message
+            .slot;
 
-    fn next_execution_index_to_process(&self) -> u64 {
-        self.last_processed_index + 1
+        let latest_provable_slot = first_slot_in_a_period(latest_finalized_slot);
+        let first_execution_number_after_latest_finalized_period = self
+            .e2hs_builder
+            .ethereum_api
+            .fetch_beacon_block_retry(latest_provable_slot)
+            .await?
+            .message
+            .body
+            .execution_payload
+            .block_number;
+
+        Ok(first_execution_number_after_latest_finalized_period
+            - self.e2hs_builder.index * BLOCKS_PER_E2HS as u64)
     }
 }
 

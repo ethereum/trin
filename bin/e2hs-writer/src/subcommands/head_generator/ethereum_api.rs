@@ -35,7 +35,14 @@ impl EthereumApi {
         &self,
         execution_block_number: u64,
     ) -> anyhow::Result<u64> {
-        let block = self.execution_api.get_block(execution_block_number).await?;
+        // The `parent_beacon_block_root` refers to the block root of the *previous* beacon block.
+        // To fetch the corresponding beacon block, we must query using the *next* execution block
+        // number (i.e., `execution_block_number + 1`), since that's when the parent beacon
+        // block is referenced.
+        let block = self
+            .execution_api
+            .get_block(execution_block_number + 1)
+            .await?;
         let Some(block_root) = block.header.parent_beacon_block_root else {
             bail!("We should only be able to backfill blocks which contain block root's {execution_block_number}")
         };
@@ -61,9 +68,10 @@ impl EthereumApi {
             match self.consensus_api.get_beacon_state(slot.to_string()).await {
                 Ok(state) => {
                     // For some reason certain implementations will give us a State before the slot
-                    // we requested
+                    // we requested if the requested slot is skipped
                     if state.slot < slot {
                         slot += 1;
+                        tries += 1;
                         continue;
                     }
                     ensure!(
@@ -95,37 +103,15 @@ impl EthereumApi {
             ))
     }
 
-    pub async fn latest_provable_execution_number(&self) -> anyhow::Result<u64> {
-        let latest_finalized_slot = self
-            .consensus_api
-            .get_beacon_block("finalized")
-            .await?
-            .message
-            .slot;
-
-        // The historical summaries generate in the first slot of the period, contains the block
-        // roots for the last 8192 slots So X - 1 is the first provable slot
-        let latest_provable_slot = first_slot_in_a_period(latest_finalized_slot) - 1;
-        Ok(self
-            .fetch_beacon_block_directional_retry(latest_provable_slot, Direction::Backward)
-            .await?
-            .message
-            .body
-            .execution_payload
-            .block_number)
-    }
-
     /// Fetches the historical batch for a given slot.
     ///
-    /// Slots can be skipped, so we need to supply a direction to retry which would depend on the
-    /// context
+    /// Slots can be skipped, so we walk until we find a non-skipped slot.
     ///
     /// The retry limit is 5, because I don't think there is a gap of more than 5 slots in the
     /// beacon chain
-    pub async fn fetch_beacon_block_directional_retry(
+    pub async fn fetch_beacon_block_retry(
         &self,
         slot: u64,
-        direction: Direction,
     ) -> anyhow::Result<SignedBeaconBlockElectra> {
         let mut tries = 0;
         let mut slot = slot;
@@ -137,21 +123,13 @@ impl EthereumApi {
                     warn!("Failed to get beacon block for slot {slot}, the slot was probably skipped: {err}");
                     tries += 1;
                     ensure!(tries <= 5, "Failed to find a valid block for slot {slot}");
-                    match direction {
-                        Direction::Forward => slot += 1,
-                        Direction::Backward => slot -= 1,
-                    }
+                    slot += 1;
                 }
             }
         };
 
         Ok(block)
     }
-}
-
-pub enum Direction {
-    Forward,
-    Backward,
 }
 
 /// Calculates the first slot in a period for the given slot.

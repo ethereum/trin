@@ -74,9 +74,9 @@ impl E2HSBuilder {
         };
 
         let ending_block = starting_block + BLOCKS_PER_E2HS as u64;
-        let is_paris_active = network_spec().is_paris_active_at_block(ending_block);
+        let receipts_required = network_spec().is_paris_active_at_block(ending_block);
         let receipts_handle = tokio::spawn(async move {
-            if is_paris_active {
+            if receipts_required {
                 execution_api
                     .get_receipts(starting_block..ending_block)
                     .await
@@ -134,7 +134,6 @@ impl E2HSBuilder {
             proof: BlockHeaderProof::HistoricalHashes(proof),
         };
         Ok(FullBlock {
-            block_number,
             header_with_proof,
             body: tuple.body.body,
             receipts: tuple.receipts.receipts,
@@ -167,7 +166,6 @@ impl E2HSBuilder {
         let receipts = self.get_receipts(block_number, header_with_proof.header.receipts_root)?;
 
         Ok(FullBlock {
-            block_number,
             header_with_proof,
             body,
             receipts,
