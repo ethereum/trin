@@ -399,7 +399,9 @@ pub fn get_beacon_fork(slot_index: u64) -> ForkName {
         ForkName::Bellatrix
     } else if (6_209_536..8_626_176).contains(&slot_index) {
         ForkName::Capella
-    } else {
+    } else if (8_626_176..11_649_024).contains(&slot_index) {
         ForkName::Deneb
+    } else {
+        ForkName::Electra
     }
 }
