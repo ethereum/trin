@@ -317,114 +317,40 @@ workflows:
   docker-master-commit:
     jobs:
       - docker-build:
-          name: docker_build_trin
-          target: trin
+          name: docker_build__<< matrix.target >>
           tags: latest
+          matrix:
+            parameters:
+              target: ["trin", "bridge", "e2hs-writer", "trin-execution"]
       - docker-publish:
-          name: docker_publish_trin
-          target: trin
+          name: docker_publish__<< matrix.target >>
           requires:
-            - docker_build_trin
+            - docker_build__<< matrix.target >>
           filters:
             branches:
               only: master
-      - docker-build:
-          name: docker_build_bridge
-          target: bridge
-          tags: latest
-      - docker-publish:
-          name: docker_publish_bridge
-          target: bridge
-          requires:
-            - docker_build_bridge
-          filters:
-            branches:
-              only: master
-      - docker-build:
-          name: docker_build_e2hs_writer
-          target: e2hs-writer
-          tags: latest
-      - docker-publish:
-          name: docker_publish_e2hs_writer
-          target: e2hs-writer
-          requires:
-            - docker_build_e2hs_writer
-          filters:
-            branches:
-              only: master
-      - docker-build:
-          name: docker_build_trin_execution
-          target: trin-execution
-          tags: latest
-      - docker-publish:
-          name: docker_publish_trin_execution
-          target: trin-execution
-          requires:
-            - docker_build_trin_execution
-          filters:
-            branches:
-              only: master                         
+          matrix:
+            parameters:
+              target: ["trin", "bridge", "e2hs-writer", "trin-execution"]
   docker-master-tag:
-    when:
-      and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
+    when: << pipeline.git.tag >>
     jobs:
       - docker-build:
-          name: docker_build_trin
-          target: trin
+          name: docker_build__<< matrix.target >>
+          filters:
+            tags:
+              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
           tags: << pipeline.git.tag >>-$(git rev-parse --short HEAD) stable prod
-          filters:
-            tags:
-              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
+          matrix:
+            parameters:
+              target: ["trin", "bridge", "e2hs-writer", "trin-execution"]
       - docker-publish:
-          name: docker_publish_trin
+          name: docker_publish_trin__<< matrix.target >>
           requires:
-            - docker_build_trin
-          target: trin
+            - docker_build__<< matrix.target >>
           filters:
             tags:
               only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
-      - docker-build:
-          name: docker_build_bridge
-          target: bridge
-          tags: << pipeline.git.tag >>-$(git rev-parse --short HEAD) stable prod
-          filters:
-            tags:
-              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
-      - docker-publish:
-          name: docker_publish_bridge
-          requires:
-            - docker_build_bridge
-          target: bridge
-          filters:
-            tags:
-              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
-      - docker-build:
-          name: docker_build_e2hs_writer
-          target: e2hs-writer
-          tags: << pipeline.git.tag >>-$(git rev-parse --short HEAD) stable prod
-          filters:
-            tags:
-              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
-      - docker-publish:
-          name: docker_publish_e2hs_writer
-          requires:
-            - docker_build_e2hs_writer
-          target: e2hs-writer
-          filters:
-            tags:
-              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/  
-      - docker-build:
-          name: docker_build_trin_execution
-          target: trin-execution
-          tags: << pipeline.git.tag >>-$(git rev-parse --short HEAD) stable prod
-          filters:
-            tags:
-              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
-      - docker-publish:
-          name: docker_publish_trin_execution
-          requires:
-            - docker_build_trin_execution
-          target: trin-execution
-          filters:
-            tags:
-              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/                        
+          matrix:
+            parameters:
+              target: ["trin", "bridge", "e2hs-writer", "trin-execution"]
