@@ -37,7 +37,7 @@ pub struct BridgeConfig {
 
     #[arg(
         long = "e2hs-range",
-        help = "The (inclusive) block range for the E2HS bridge: examples `0-100` or `0-latest`"
+        help = "The (inclusive) block range for the E2HS bridge: examples `0-100` or `0-` which means from 0 to the latest block know"
     )]
     pub e2hs_range: Option<BlockRange>,
 
