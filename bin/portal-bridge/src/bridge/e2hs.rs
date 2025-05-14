@@ -8,9 +8,8 @@ use std::{
 use alloy::primitives::B256;
 use anyhow::ensure;
 use bytes::Bytes;
-use clap::Parser;
 use e2store::{
-    e2hs::{BlockTuple, E2HSMemory},
+    e2hs::{BlockTuple, E2HSMemory, BLOCKS_PER_E2HS},
     utils::get_e2hs_files,
 };
 use ethportal_api::{
@@ -78,7 +77,14 @@ impl E2HSBridge {
     ) -> anyhow::Result<Self> {
         let offer_semaphore = Arc::new(Semaphore::new(offer_limit));
         let block_semaphore = Arc::new(Semaphore::new(offer_limit));
-        let mode = format!("{}-{}:{}", block_range.start, block_range.end, random_fill);
+        let mode = format!(
+            "{}-{}:{}",
+            block_range.start,
+            block_range
+                .end
+                .map_or("latest".to_string(), |end| end.to_string()),
+            random_fill
+        );
         let metrics = BridgeMetricsReporter::new("e2hs".to_string(), &mode);
         let http_client = Client::builder()
             .default_headers(HeaderMap::from_iter([(
@@ -111,7 +117,18 @@ impl E2HSBridge {
     pub async fn launch(&self) {
         info!("Launching E2HS bridge");
 
-        let epochs = block_range_to_epochs(self.block_range.start, self.block_range.end);
+        let block_range_end = match self.block_range.end {
+            Some(block_number) => block_number,
+            None => {
+                let max_epoch = self
+                    .e2hs_files
+                    .keys()
+                    .max()
+                    .expect("to be able to get max epoch");
+                (max_epoch + 1) * BLOCKS_PER_E2HS as u64 - 1
+            }
+        };
+        let epochs = block_range_to_epochs(self.block_range.start, block_range_end);
         let mut epoch_indexes: Vec<u64> = epochs.keys().cloned().sorted().collect();
         if self.random_fill {
             epoch_indexes.shuffle(&mut rand::thread_rng());
@@ -498,10 +515,11 @@ impl Gossiper {
 }
 
 /// BlockRange used specifically for the E2HS bridge
-#[derive(Parser, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct BlockRange {
     pub start: u64,
-    pub end: u64,
+    /// If the end is None, it means the range goes to the latest block known
+    pub end: Option<u64>,
 }
 
 impl FromStr for BlockRange {
@@ -511,7 +529,26 @@ impl FromStr for BlockRange {
         let parts: Vec<&str> = s.split('-').collect();
         ensure!(parts.len() == 2, "Invalid block range format");
         let start = parts[0].parse()?;
-        let end = parts[1].parse()?;
+        let end = match parts[1].is_empty() {
+            true => None,
+            false => Some(parts[1].parse()?),
+        };
+
         Ok(Self { start, end })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_block_range() {
+        let block_range = BlockRange::from_str("100-200").unwrap();
+        assert_eq!(block_range.start, 100);
+        assert_eq!(block_range.end, Some(200));
+        let block_range = BlockRange::from_str("100-").unwrap();
+        assert_eq!(block_range.start, 100);
+        assert_eq!(block_range.end, None);
     }
 }
