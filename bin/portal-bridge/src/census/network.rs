@@ -108,7 +108,7 @@ impl Network {
     /// Selects peers to receive content.
     pub fn select_peers(
         &self,
-        content_key: &impl OverlayContentKey,
+        content_key: Option<&impl OverlayContentKey>,
     ) -> Result<Vec<PeerInfo>, CensusError> {
         if self.peers.is_empty() {
             error!(

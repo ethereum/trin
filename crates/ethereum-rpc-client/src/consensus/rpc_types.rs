@@ -1,5 +1,13 @@
-use alloy::primitives::{Bytes, B256};
+use std::{fmt::Display, str::FromStr};
+
+use alloy::{
+    primitives::{Bytes, B256},
+    rpc::types::beacon::events::{
+        ChainReorgEvent, FinalizedCheckpointEvent, HeadEvent, LightClientOptimisticUpdateEvent,
+    },
+};
 use anyhow::bail;
+use eventsource_client::Event;
 use serde::Deserialize;
 use serde_json::Value;
 use ssz::Decode;
@@ -68,5 +76,77 @@ impl Decode for VersionResponse {
             ssz::DecodeError::BytesInvalid(format!("Invalid utf8 string: {version:?}"))
         })?;
         Ok(Self { version })
+    }
+}
+
+/// Represents the topics for events that can be subscribed to. Not all event topics are listed in
+/// this enum. More topics can be found in the documentation https://ethereum.github.io/beacon-APIs/#/Events/eventstream
+pub enum EventTopics {
+    ChainReorg,
+    Head,
+    LightClientOptimisticUpdate,
+    FinalizedCheckpoint,
+}
+
+impl Display for EventTopics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EventTopics::ChainReorg => write!(f, "chain_reorg"),
+            EventTopics::Head => write!(f, "head"),
+            EventTopics::LightClientOptimisticUpdate => {
+                write!(f, "light_client_optimistic_update")
+            }
+            EventTopics::FinalizedCheckpoint => write!(f, "finalized_checkpoint"),
+        }
+    }
+}
+
+impl FromStr for EventTopics {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "chain_reorg" => Ok(EventTopics::ChainReorg),
+            "head" => Ok(EventTopics::Head),
+            "light_client_optimistic_update" => Ok(EventTopics::LightClientOptimisticUpdate),
+            "finalized_checkpoint" => Ok(EventTopics::FinalizedCheckpoint),
+            _ => bail!("Invalid event topic: {s}"),
+        }
+    }
+}
+
+pub enum DecodedEvent {
+    ChainReorg(ChainReorgEvent),
+    Head(HeadEvent),
+    LightClientOptimisticUpdate(LightClientOptimisticUpdateEvent),
+    FinalizedCheckpoint(FinalizedCheckpointEvent),
+}
+
+impl TryFrom<Event> for DecodedEvent {
+    type Error = anyhow::Error;
+
+    fn try_from(event: Event) -> Result<Self, Self::Error> {
+        match EventTopics::from_str(&event.event_type)? {
+            EventTopics::ChainReorg => {
+                let chain_reorg = serde_json::from_str::<ChainReorgEvent>(&event.data)?;
+                Ok(DecodedEvent::ChainReorg(chain_reorg))
+            }
+            EventTopics::Head => {
+                let head = serde_json::from_str::<HeadEvent>(&event.data)?;
+                Ok(DecodedEvent::Head(head))
+            }
+            EventTopics::FinalizedCheckpoint => {
+                let finalized_checkpoint =
+                    serde_json::from_str::<FinalizedCheckpointEvent>(&event.data)?;
+                Ok(DecodedEvent::FinalizedCheckpoint(finalized_checkpoint))
+            }
+            EventTopics::LightClientOptimisticUpdate => {
+                let light_client_optimistic_update =
+                    serde_json::from_str::<LightClientOptimisticUpdateEvent>(&event.data)?;
+                Ok(DecodedEvent::LightClientOptimisticUpdate(
+                    light_client_optimistic_update,
+                ))
+            }
+        }
     }
 }

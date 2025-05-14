@@ -17,18 +17,22 @@ use ethportal_api::{
         optimistic_update::LightClientOptimisticUpdateElectra, update::LightClientUpdateElectra,
     },
 };
+use eventsource_client::{BoxStream, Client, ClientBuilder, Error as EventSourceError, SSE};
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
     Response,
 };
-use rpc_types::{RootResponse, VersionResponse, VersionedDataResponse, VersionedDataResult};
+use rpc_types::{
+    EventTopics, RootResponse, VersionResponse, VersionedDataResponse, VersionedDataResult,
+};
 use serde::de::DeserializeOwned;
 use ssz::Decode;
 use tracing::{debug, warn};
 use url::Url;
 
 use super::http_client::{
-    ClientWithBaseUrl, ContentType, JSON_ACCEPT_PRIORITY, JSON_CONTENT_TYPE, SSZ_CONTENT_TYPE,
+    get_authorization_headers, ClientWithBaseUrl, ContentType, JSON_ACCEPT_PRIORITY,
+    JSON_CONTENT_TYPE, SSZ_CONTENT_TYPE,
 };
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
@@ -156,6 +160,27 @@ impl ConsensusApi {
             .request(endpoint, Some(DEFAULT_BEACON_STATE_REQUEST_TIMEOUT))
             .await?
             .data)
+    }
+
+    pub fn get_events_stream(
+        &self,
+        topics: &[EventTopics],
+    ) -> anyhow::Result<BoxStream<Result<SSE, EventSourceError>>> {
+        let endpoint = self.primary.base_url().join(&format!(
+            "/eth/v1/events?topics={}",
+            topics
+                .iter()
+                .map(|topic| topic.to_string())
+                .collect::<Vec<String>>()
+                .join(",")
+        ))?;
+
+        let mut client_builder = ClientBuilder::for_url(endpoint.as_str())?;
+        for (key, value) in get_authorization_headers(self.primary.base_url().clone())? {
+            client_builder = client_builder.header(key.as_ref(), value.to_str()?)?;
+        }
+
+        Ok(client_builder.build().stream())
     }
 
     pub async fn get_state_for_start_of_next_period(

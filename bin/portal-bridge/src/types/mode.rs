@@ -11,6 +11,7 @@ pub enum BridgeMode {
     #[default]
     Latest,
     E2HS,
+    EphemeralHistory,
     Single(ModeType),
     Snapshot(u64),
 }
@@ -24,6 +25,7 @@ impl FromStr for BridgeMode {
         match s {
             "latest" => Ok(BridgeMode::Latest),
             "e2hs" => Ok(BridgeMode::E2HS),
+            "ephemeral-history" => Ok(BridgeMode::EphemeralHistory),
             val => {
                 let index = val
                     .find(':')

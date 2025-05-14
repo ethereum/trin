@@ -3,7 +3,7 @@ use std::{collections::HashSet, time::Duration};
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{network::Subnetwork, portal_wire::OfferTrace},
-    OverlayContentKey,
+    BeaconContentKey, HistoryContentKey, OverlayContentKey, StateContentKey,
 };
 use network::{Network, NetworkAction, NetworkInitializationConfig, NetworkManager};
 use peer::PeerInfo;
@@ -75,9 +75,22 @@ impl Census {
         content_key: &impl OverlayContentKey,
     ) -> Result<Vec<PeerInfo>, CensusError> {
         match subnetwork {
-            Subnetwork::History => self.history.select_peers(content_key),
-            Subnetwork::State => self.state.select_peers(content_key),
-            Subnetwork::Beacon => self.beacon.select_peers(content_key),
+            Subnetwork::History => self.history.select_peers(Some(content_key)),
+            Subnetwork::State => self.state.select_peers(Some(content_key)),
+            Subnetwork::Beacon => self.beacon.select_peers(Some(content_key)),
+            _ => Err(CensusError::UnsupportedSubnetwork(subnetwork)),
+        }
+    }
+
+    /// Selects random peers to receive content.
+    pub fn select_random_peers(
+        &self,
+        subnetwork: Subnetwork,
+    ) -> Result<Vec<PeerInfo>, CensusError> {
+        match subnetwork {
+            Subnetwork::History => self.history.select_peers(None::<&HistoryContentKey>),
+            Subnetwork::State => self.state.select_peers(None::<&StateContentKey>),
+            Subnetwork::Beacon => self.beacon.select_peers(None::<&BeaconContentKey>),
             _ => Err(CensusError::UnsupportedSubnetwork(subnetwork)),
         }
     }
