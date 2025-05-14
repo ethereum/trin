@@ -2,9 +2,12 @@ use std::path::PathBuf;
 
 use anyhow::ensure;
 use e2store::e2hs::{E2HSWriter, BLOCKS_PER_E2HS};
-use ethportal_api::consensus::{
-    beacon_block::BeaconBlockElectra, beacon_state::HistoricalBatch,
-    historical_summaries::historical_summary_index,
+use ethportal_api::{
+    consensus::{
+        beacon_block::BeaconBlockElectra, beacon_state::HistoricalBatch,
+        historical_summaries::historical_summary_index,
+    },
+    types::execution::builders::block::ExecutionBlockBuilder,
 };
 use ssz_types::FixedVector;
 use tempfile::TempDir;
@@ -12,10 +15,7 @@ use tracing::info;
 use trin_validation::header_validator::HeaderValidator;
 
 use super::ethereum_api::EthereumApi;
-use crate::{
-    cli::HeadGeneratorConfig,
-    subcommands::{execution_block_builder::ExecutionBlockBuilder, full_block::FullBlock},
-};
+use crate::{cli::HeadGeneratorConfig, subcommands::full_block::FullBlock};
 
 struct ProvingAnchors {
     current_historical_batch: HistoricalBatch,

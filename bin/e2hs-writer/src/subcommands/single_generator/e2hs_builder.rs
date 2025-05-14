@@ -15,6 +15,7 @@ use ethportal_api::{
     types::{
         execution::{
             accumulator::EpochAccumulator,
+            builders::execution_block_builder::ExecutionBlockBuilder,
             header_with_proof::{
                 BlockHeaderProof, BlockProofHistoricalHashesAccumulator, HeaderWithProof,
             },
@@ -32,7 +33,7 @@ use trin_validation::{accumulator::PreMergeAccumulator, header_validator::Header
 use url::Url;
 
 use super::provider::EraProvider;
-use crate::subcommands::{execution_block_builder::ExecutionBlockBuilder, full_block::FullBlock};
+use crate::subcommands::full_block::FullBlock;
 
 // This struct reads all blocks in an index and creates the block data
 // along with the corresponding proofs required to create an E2HS file.

@@ -1,26 +1,26 @@
 use alloy::{
-    consensus::BlockBody as AlloyBlockBody,
+    consensus::{BlockBody as AlloyBlockBody, TxEnvelope},
     eips::eip4895::{Withdrawal, Withdrawals},
 };
-use ethportal_api::{
+use alloy_rlp::Decodable;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
+use super::execution_header_builder::ExecutionHeaderBuilder;
+use crate::{
     consensus::{
         beacon_block::{
             BeaconBlockBellatrix, BeaconBlockCapella, BeaconBlockDeneb, BeaconBlockElectra,
         },
         beacon_state::HistoricalBatch,
+        body::Transactions,
     },
-    types::execution::{
-        block_body::BlockBody,
-        header_with_proof::{
-            build_capella_historical_summaries_proof, build_deneb_historical_summaries_proof,
-            build_electra_historical_summaries_proof, build_historical_roots_proof,
-            BlockHeaderProof, HeaderWithProof,
-        },
+    types::execution::header_with_proof::{
+        build_capella_historical_summaries_proof, build_deneb_historical_summaries_proof,
+        build_electra_historical_summaries_proof, build_historical_roots_proof, BlockHeaderProof,
+        HeaderWithProof,
     },
+    BlockBody,
 };
-use trin_execution::era::beacon::decode_transactions;
-
-use super::execution_header_builder::ExecutionHeaderBuilder;
 
 pub struct ExecutionBlockBuilder;
 
@@ -147,4 +147,14 @@ impl ExecutionBlockBuilder {
 
         Ok((header_with_proof, body))
     }
+}
+
+pub fn decode_transactions(transactions: &Transactions) -> anyhow::Result<Vec<TxEnvelope>> {
+    transactions
+        .into_par_iter()
+        .map(|raw_tx| {
+            TxEnvelope::decode(&mut &**raw_tx)
+                .map_err(|err| anyhow::anyhow!("Failed decoding transaction rlp: {err:?}"))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()
 }

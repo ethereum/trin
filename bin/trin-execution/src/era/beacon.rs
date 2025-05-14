@@ -1,26 +1,22 @@
 use alloy::{
     consensus::{
         proofs::{calculate_transaction_root, calculate_withdrawals_root},
-        Header, TxEnvelope,
+        Header, TxEnvelope, EMPTY_OMMER_ROOT_HASH,
     },
     eips::eip4895::Withdrawal,
     primitives::{Bloom, B64},
-    rlp::Decodable,
 };
-use ethportal_api::consensus::{
-    beacon_block::{
+use ethportal_api::{
+    consensus::beacon_block::{
         SignedBeaconBlock, SignedBeaconBlockBellatrix, SignedBeaconBlockCapella,
         SignedBeaconBlockDeneb, SignedBeaconBlockElectra,
     },
-    body::Transactions,
+    types::execution::builders::execution_block_builder::decode_transactions,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use revm_primitives::{b256, B256, U256};
+use revm_primitives::U256;
 
 use super::types::{ProcessedBlock, TransactionsWithSender};
-
-pub const EMPTY_UNCLE_ROOT_HASH: B256 =
-    b256!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347");
 
 pub trait ProcessBeaconBlock {
     fn process_beacon_block(&self) -> anyhow::Result<ProcessedBlock>;
@@ -47,7 +43,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockBellatrix {
 
         let header = Header {
             parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_UNCLE_ROOT_HASH,
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: payload.fee_recipient,
             state_root: payload.state_root,
             transactions_root,
@@ -92,7 +88,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockCapella {
 
         let header = Header {
             parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_UNCLE_ROOT_HASH,
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: payload.fee_recipient,
             state_root: payload.state_root,
             transactions_root,
@@ -137,7 +133,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
 
         let header = Header {
             parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_UNCLE_ROOT_HASH,
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: payload.fee_recipient,
             state_root: payload.state_root,
             transactions_root,
@@ -182,7 +178,7 @@ impl ProcessBeaconBlock for SignedBeaconBlockElectra {
 
         let header = Header {
             parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_UNCLE_ROOT_HASH,
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: payload.fee_recipient,
             state_root: payload.state_root,
             transactions_root,
@@ -211,16 +207,6 @@ impl ProcessBeaconBlock for SignedBeaconBlockElectra {
             transactions,
         })
     }
-}
-
-pub fn decode_transactions(transactions: &Transactions) -> anyhow::Result<Vec<TxEnvelope>> {
-    transactions
-        .into_par_iter()
-        .map(|raw_tx| {
-            TxEnvelope::decode(&mut &**raw_tx)
-                .map_err(|err| anyhow::anyhow!("Failed decoding transaction rlp: {err:?}"))
-        })
-        .collect::<anyhow::Result<Vec<_>>>()
 }
 
 fn process_transactions(
