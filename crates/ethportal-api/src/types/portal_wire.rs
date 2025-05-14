@@ -473,9 +473,9 @@ impl From<PopulatedOffer> for Offer {
 #[derive(Debug, Clone)]
 pub struct PopulatedOfferWithResult {
     /// The offered content key & value
-    pub content_item: (RawContentKey, RawContentValue),
+    pub content_items: Vec<(RawContentKey, RawContentValue)>,
     /// The channel to send the result of the offer to
-    pub result_tx: tokio::sync::mpsc::UnboundedSender<OfferTrace>,
+    pub result_tx: tokio::sync::mpsc::UnboundedSender<OfferTraceMultipleItems>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -486,11 +486,22 @@ pub enum OfferTrace {
     Failed,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OfferTraceMultipleItems {
+    /// Offer was successful sent and received a response
+    Success(AcceptCodeList),
+    /// This offer failed, perhaps locally or from a timeout or transfer failure
+    Failed,
+}
+
 impl From<PopulatedOfferWithResult> for Offer {
-    fn from(val: PopulatedOfferWithResult) -> Self {
-        Self {
-            content_keys: vec![val.content_item.0],
-        }
+    fn from(value: PopulatedOfferWithResult) -> Self {
+        let content_keys = value
+            .content_items
+            .into_iter()
+            .map(|(key, _val)| key)
+            .collect();
+        Self { content_keys }
     }
 }
 

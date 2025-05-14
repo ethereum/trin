@@ -9,7 +9,9 @@ use ethportal_api::{
         distance::Metric,
         enr::Enr,
         network_spec::network_spec,
-        portal_wire::{Accept, Content, FindContent, Offer, OfferTrace, Request, Response},
+        portal_wire::{
+            Accept, Content, FindContent, Offer, OfferTraceMultipleItems, Request, Response,
+        },
         protocol_versions::ProtocolVersion,
     },
     OverlayContentKey, RawContentKey, RawContentValue,
@@ -358,13 +360,9 @@ impl<
         // keys
         if content_keys.all_declined() {
             if let Some(tx) = gossip_result_tx {
-                if content_keys.len() != 1 {
-                    error!(
-                        "OfferTrace only supports one content key at a time, got {}",
-                        content_keys.len()
-                    );
+                if let Err(err) = tx.send(OfferTraceMultipleItems::Success(content_keys)) {
+                    warn!(%err, "Unable to send OfferTrace Success result");
                 }
-                let _ = tx.send(OfferTrace::Success(content_keys[0]));
             }
             return Ok(());
         }
@@ -392,7 +390,7 @@ impl<
                     .collect()),
                 Request::PopulatedOfferWithResult(offer) => Ok(content_keys
                     .iter()
-                    .zip(vec![offer.content_item])
+                    .zip(offer.content_items)
                     .filter(|(is_accepted, _item)| **is_accepted == AcceptCode::Accepted)
                     .map(|(_is_accepted, (_key, val))| val)
                     .collect()),
@@ -411,7 +409,9 @@ impl<
                         "Error decoding previously offered content items"
                     );
                     if let Some(tx) = gossip_result_tx {
-                        let _ = tx.send(OfferTrace::Failed);
+                        if let Err(err) = tx.send(OfferTraceMultipleItems::Failed) {
+                            warn!(%err, "Unable to send OfferTrace Failed result");
+                        }
                     }
                     return;
                 }
@@ -422,7 +422,9 @@ impl<
                 Err(err) => {
                     warn!(%err, "Unable to build content payload");
                     if let Some(tx) = gossip_result_tx {
-                        let _ = tx.send(OfferTrace::Failed);
+                        if let Err(err) = tx.send(OfferTraceMultipleItems::Failed) {
+                            warn!(%err, "Unable to send OfferTrace Failed result");
+                        }
                     }
                     return;
                 }
@@ -432,15 +434,11 @@ impl<
                 .await;
             if let Some(tx) = gossip_result_tx {
                 if result {
-                    if content_keys.len() != 1 {
-                        error!(
-                            "OfferTrace only supports one content key at a time, got {}",
-                            content_keys.len()
-                        );
+                    if let Err(err) = tx.send(OfferTraceMultipleItems::Success(content_keys)) {
+                        warn!(%err, "Unable to send OfferTrace Success result");
                     }
-                    let _ = tx.send(OfferTrace::Success(content_keys[0]));
-                } else {
-                    let _ = tx.send(OfferTrace::Failed);
+                } else if let Err(err) = tx.send(OfferTraceMultipleItems::Failed) {
+                    warn!(%err, "Unable to send OfferTrace Failed result");
                 }
             }
             // explicitly drop permit in the thread so the permit is included in the thread
