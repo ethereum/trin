@@ -60,9 +60,9 @@ jobs:
   docker-build:
     parameters:
       target:
-        description: Sets the target for building the docker image. Must be one of "trin", "bridge", "e2hs-writer".
+        description: Sets the target for building the docker image. Must be one of "trin", "bridge", "e2hs-writer", "trin-execution".
         type: enum
-        enum: ["trin", "bridge", "e2hs-writer"]
+        enum: ["trin", "bridge", "e2hs-writer", "trin-execution"]
         default: "trin"
       tags:
         description: Space separated list of tags to be added to the built image.
@@ -102,9 +102,9 @@ jobs:
   docker-publish:
     parameters:
       target:
-        description: Used to load the image from the workspace. Must be one of "trin", "bridge", "e2hs-writer".
+        description: Used to load the image from the workspace. Must be one of "trin", "bridge", "e2hs-writer", "trin-execution".
         type: enum
-        enum: ["trin", "bridge", "e2hs-writer"]
+        enum: ["trin", "bridge", "e2hs-writer", "trin-execution"]
         default: "trin"
     executor: docker-publisher
     steps:
@@ -351,7 +351,19 @@ workflows:
             - docker_build_e2hs_writer
           filters:
             branches:
-              only: master              
+              only: master
+      - docker-build:
+          name: docker_build_trin_execution
+          target: trin-execution
+          tags: latest
+      - docker-publish:
+          name: docker_publish_trin_execution
+          target: trin-execution
+          requires:
+            - docker_build_trin_execution
+          filters:
+            branches:
+              only: master                         
   docker-master-tag:
     when:
       and: [ << pipeline.git.tag >>, << pipeline.git.branch.is_default >> ]
@@ -400,4 +412,19 @@ workflows:
           target: e2hs-writer
           filters:
             tags:
-              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/              
+              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/  
+      - docker-build:
+          name: docker_build_trin_execution
+          target: trin-execution
+          tags: << pipeline.git.tag >>-$(git rev-parse --short HEAD) stable prod
+          filters:
+            tags:
+              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
+      - docker-publish:
+          name: docker_publish_trin_execution
+          requires:
+            - docker_build_trin_execution
+          target: trin-execution
+          filters:
+            tags:
+              only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/                        
