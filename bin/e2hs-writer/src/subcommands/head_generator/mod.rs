@@ -12,11 +12,11 @@ use anyhow::{bail, ensure};
 use e2hs_builder::E2HSBuilder;
 use e2store::e2hs::BLOCKS_PER_E2HS;
 use ethereum_api::first_slot_in_a_period;
+use ethportal_api::consensus::constants::SLOTS_PER_EPOCH;
 use humanize_duration::{prelude::DurationExt, Truncate};
 use s3_bucket::S3Bucket;
 use tokio::time::sleep;
 use tracing::{error, info};
-use trin_validation::constants::SLOTS_PER_EPOCH;
 
 use crate::cli::HeadGeneratorConfig;
 

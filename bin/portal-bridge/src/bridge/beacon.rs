@@ -7,7 +7,10 @@ use std::{
 use alloy::primitives::B256;
 use anyhow::bail;
 use ethportal_api::{
-    consensus::historical_summaries::HistoricalSummariesWithProof,
+    consensus::{
+        constants::{SLOTS_PER_EPOCH, SLOTS_PER_HISTORICAL_ROOT},
+        historical_summaries::HistoricalSummariesWithProof,
+    },
     types::{
         consensus::fork::ForkName,
         content_key::beacon::{
@@ -31,7 +34,6 @@ use tokio::{
 use tracing::{error, info, warn, Instrument};
 use trin_beacon::network::BeaconNetwork;
 use trin_metrics::bridge::BridgeMetricsReporter;
-use trin_validation::constants::SLOTS_PER_EPOCH;
 
 use super::{constants::SERVE_BLOCK_TIMEOUT, offer_report::OfferReport};
 use crate::{
@@ -41,9 +43,6 @@ use crate::{
     types::mode::BridgeMode,
     utils::{duration_until_next_update, expected_current_slot},
 };
-
-/// The number of slots in a sync committee period.
-const SLOTS_PER_PERIOD: u64 = SLOTS_PER_EPOCH * 256;
 
 /// A helper struct to hold the finalized beacon state metadata.
 #[derive(Clone, Debug, Default)]
@@ -317,7 +316,7 @@ impl BeaconBridge {
     ) -> anyhow::Result<()> {
         let now = SystemTime::now();
         let expected_current_period =
-            expected_current_slot(BEACON_GENESIS_TIME, now) / SLOTS_PER_PERIOD;
+            expected_current_slot(BEACON_GENESIS_TIME, now) / SLOTS_PER_HISTORICAL_ROOT;
         match expected_current_period.cmp(&*current_period.lock().await) {
             Ordering::Equal => {
                 // We already gossiped the latest data from the current period, no need to serve it
@@ -337,7 +336,8 @@ impl BeaconBridge {
             .get_light_client_updates(expected_current_period, 1)
             .await?
             .remove(0);
-        let finalized_header_period = update.finalized_header.beacon.slot / SLOTS_PER_PERIOD;
+        let finalized_header_period =
+            update.finalized_header.beacon.slot / SLOTS_PER_HISTORICAL_ROOT;
 
         // We don't serve a `LightClientUpdate` if its finalized header slot is not within the
         // expected current period.

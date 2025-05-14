@@ -1,12 +1,12 @@
 use std::{path::PathBuf, process::exit};
 
 use alloy::primitives::{FixedBytes, B256};
+use ethportal_api::consensus::constants::SLOTS_PER_EPOCH;
 use figment::{
     providers::{Format, Serialized, Toml},
     Figment,
 };
 use serde::Deserialize;
-use trin_validation::constants::SLOTS_PER_EPOCH;
 
 use crate::config::{networks, BaseConfig, ChainConfig, CliConfig, Forks};
 

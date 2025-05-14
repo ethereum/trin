@@ -5,8 +5,11 @@ use alloy::{
     primitives::{B256, U256},
 };
 use anyhow::anyhow;
-use ethportal_api::types::execution::{
-    accumulator::EpochAccumulator, header_with_proof::BlockProofHistoricalHashesAccumulator,
+use ethportal_api::{
+    consensus::constants::SLOTS_PER_HISTORICAL_ROOT,
+    types::execution::{
+        accumulator::EpochAccumulator, header_with_proof::BlockProofHistoricalHashesAccumulator,
+    },
 };
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
@@ -14,9 +17,7 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 use tree_hash_derive::TreeHash;
 
-use crate::{
-    constants::SLOTS_PER_HISTORICAL_ROOT, merkle::proof::MerkleTree, TrinValidationAssets,
-};
+use crate::{merkle::proof::MerkleTree, TrinValidationAssets};
 
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.

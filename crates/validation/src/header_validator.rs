@@ -4,7 +4,7 @@ use alloy::{consensus::Header, primitives::B256};
 use alloy_hardforks::EthereumHardforks;
 use anyhow::bail;
 use ethportal_api::{
-    consensus::historical_summaries::HistoricalSummaries,
+    consensus::{constants::SLOTS_PER_HISTORICAL_ROOT, historical_summaries::HistoricalSummaries},
     types::{
         execution::header_with_proof::{
             BeaconBlockProofHistoricalRoots, BeaconBlockProofHistoricalSummaries, BlockHeaderProof,
@@ -21,7 +21,6 @@ use tree_hash::TreeHash;
 
 use crate::{
     accumulator::PreMergeAccumulator,
-    constants::SLOTS_PER_HISTORICAL_ROOT,
     historical_roots_acc::HistoricalRootsAccumulator,
     historical_summaries_provider::{HistoricalSummariesProvider, HistoricalSummariesSource},
     merkle::proof::verify_merkle_proof,

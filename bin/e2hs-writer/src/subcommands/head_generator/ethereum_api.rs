@@ -1,11 +1,13 @@
 use anyhow::{anyhow, bail, ensure};
 use ethportal_api::{
-    consensus::{beacon_block::SignedBeaconBlockElectra, beacon_state::BeaconStateElectra},
+    consensus::{
+        beacon_block::SignedBeaconBlockElectra, beacon_state::BeaconStateElectra,
+        constants::SLOTS_PER_HISTORICAL_ROOT,
+    },
     Receipts,
 };
 use portal_bridge::api::{consensus::ConsensusApi, execution::ExecutionApi};
 use tracing::warn;
-use trin_validation::constants::SLOTS_PER_HISTORICAL_ROOT;
 use url::Url;
 
 pub struct EthereumApi {
