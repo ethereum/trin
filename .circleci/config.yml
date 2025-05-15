@@ -314,29 +314,29 @@ workflows:
       - build-windows
       - test
       - utp-test
-  docker-master-commit:
+  docker:
     jobs:
       - docker-build:
-          name: docker_build__<< matrix.target >>
+          name: docker-build-<< matrix.target >>
           tags: latest
           matrix:
             parameters:
               target: ["trin", "bridge", "e2hs-writer", "trin-execution"]
       - docker-publish:
-          name: docker_publish__<< matrix.target >>
+          name: docker-publish-<< matrix.target >>
           requires:
-            - docker_build__<< matrix.target >>
+            - docker-build-<< matrix.target >>
           filters:
             branches:
               only: master
           matrix:
             parameters:
               target: ["trin", "bridge", "e2hs-writer", "trin-execution"]
-  docker-master-tag:
+  docker-tag:
     when: << pipeline.git.tag >>
     jobs:
       - docker-build:
-          name: docker_build__<< matrix.target >>
+          name: docker-tag-build-<< matrix.target >>
           filters:
             tags:
               only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
@@ -345,9 +345,9 @@ workflows:
             parameters:
               target: ["trin", "bridge", "e2hs-writer", "trin-execution"]
       - docker-publish:
-          name: docker_publish_trin__<< matrix.target >>
+          name: docker-tag-publish-<< matrix.target >>
           requires:
-            - docker_build__<< matrix.target >>
+            - docker-tag-build-<< matrix.target >>
           filters:
             tags:
               only: /^v\d+(\.\d+){0,2}(-\w*\.\d+)?$/
