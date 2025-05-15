@@ -6,7 +6,7 @@ use ethportal_api::{
     },
     Receipts,
 };
-use portal_bridge::api::{consensus::ConsensusApi, execution::ExecutionApi};
+use ethereum_rpc_client::{consensus::ConsensusApi, execution::ExecutionApi};
 use tracing::warn;
 use url::Url;
 

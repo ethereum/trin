@@ -14,9 +14,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
 tokio = { version = "1.0", features = ["full"] }
-ssz = "0.4"
-ssz-derive = "0.4"
-alloy = { version = "0.3", features = ["consensus", "rpc", "primitives"] }
-alloy-hardforks = "0.1"
-ethportal-api = { path = "../../ethportal-api" }
-trin-validation = { path = "../../validation" }
+ethereum_ssz = { workspace = true }
+ethereum_ssz_derive = { workspace = true }
+alloy = { workspace = true }
+alloy-hardforks = { workspace = true }
+ethportal-api = { path = "../ethportal-api" }
+trin-validation = { path = "../validation" }

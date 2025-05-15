@@ -17,6 +17,7 @@ members = [
     "crates/subnetworks/state",
     "crates/utils",
     "crates/validation",    
+    "crates/ethereum-rpc-client",
     "testing/ef-tests",
     "testing/ethportal-peertest",
     "testing/utp",

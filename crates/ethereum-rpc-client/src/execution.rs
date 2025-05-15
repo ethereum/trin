@@ -25,7 +25,9 @@ use trin_validation::accumulator::PreMergeAccumulator;
 use url::Url;
 
 use super::http_client::{ClientWithBaseUrl, ContentType};
-use crate::constants::FALLBACK_RETRY_AFTER;
+// TODO: Move FALLBACK_RETRY_AFTER to this crate or pass as parameter if needed.
+// use crate::constants::FALLBACK_RETRY_AFTER;
+const FALLBACK_RETRY_AFTER: std::time::Duration = std::time::Duration::from_secs(5);
 
 const BATCH_LIMIT: usize = 10;
 

@@ -24,7 +24,7 @@ use ethportal_api::{
     Receipts,
 };
 use futures::{Stream, StreamExt};
-use portal_bridge::api::execution::ExecutionApi;
+use ethereum_rpc_client::execution::ExecutionApi;
 use ssz::Decode;
 use tokio::try_join;
 use tracing::info;
