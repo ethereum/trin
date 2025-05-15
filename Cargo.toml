@@ -120,6 +120,7 @@ trin-state = { path = "crates/subnetworks/state" }
 trin-storage = { path = "crates/storage" }
 trin-utils = { path = "crates/utils" }
 trin-validation = { path = "crates/validation" }
+ethereum-rpc-client = { path = "crates/ethereum-rpc-client" }
 
 crunchy = "=0.2.2"
 

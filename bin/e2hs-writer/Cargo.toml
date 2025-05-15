@@ -25,7 +25,6 @@ ethportal-api.workspace = true
 futures.workspace = true
 humanize-duration.workspace = true
 portal-bridge.workspace = true
-ethereum-rpc-client = { path = "../../crates/ethereum-rpc-client" }
 reqwest.workspace = true
 rstest.workspace = true
 serde_yaml.workspace = true
@@ -38,3 +37,4 @@ trin-execution.workspace = true
 trin-utils.workspace = true
 trin-validation.workspace = true
 url.workspace = true
+ethereum-rpc-client.workspace = true
