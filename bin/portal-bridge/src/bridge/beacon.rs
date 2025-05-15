@@ -6,6 +6,7 @@ use std::{
 
 use alloy::primitives::B256;
 use anyhow::bail;
+use ethereum_rpc_client::consensus::ConsensusApi;
 use ethportal_api::{
     consensus::{
         constants::{SLOTS_PER_EPOCH, SLOTS_PER_HISTORICAL_ROOT},
@@ -37,7 +38,6 @@ use trin_metrics::bridge::BridgeMetricsReporter;
 
 use super::{constants::SERVE_BLOCK_TIMEOUT, offer_report::OfferReport};
 use crate::{
-    api::consensus::ConsensusApi,
     census::Census,
     constants::BEACON_GENESIS_TIME,
     types::mode::BridgeMode,

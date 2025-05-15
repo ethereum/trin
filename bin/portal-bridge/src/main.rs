@@ -1,9 +1,9 @@
 use std::future::Future;
 
 use clap::Parser;
+use ethereum_rpc_client::consensus::ConsensusApi;
 use ethportal_api::types::network::Subnetwork;
 use portal_bridge::{
-    api::consensus::ConsensusApi,
     bridge::{beacon::BeaconBridge, e2hs::E2HSBridge, state::StateBridge},
     census::Census,
     cli::BridgeConfig,
