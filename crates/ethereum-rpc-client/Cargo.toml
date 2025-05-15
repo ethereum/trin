@@ -1,0 +1,22 @@
+[package]
+name = "ethereum-rpc-client"
+version = "0.1.0"
+edition = "2021"
+description = "Ethereum RPC client for consensus and execution APIs. Extracted from portal-bridge."
+
+[dependencies]
+reqwest = { version = "0.11", features = ["json", "stream"] }
+reqwest-middleware = "0.2"
+reqwest-retry = "0.2"
+tracing = "0.1"
+url = "2.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+ssz = "0.4"
+ssz-derive = "0.4"
+alloy = { version = "0.3", features = ["consensus", "rpc", "primitives"] }
+alloy-hardforks = "0.1"
+ethportal-api = { path = "../../ethportal-api" }
+trin-validation = { path = "../../validation" }
