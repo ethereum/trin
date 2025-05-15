@@ -10,6 +10,7 @@ use alloy_hardforks::EthereumHardforks;
 use anyhow::{anyhow, bail, ensure};
 use async_stream::stream;
 use e2store::e2hs::{E2HSWriter, BLOCKS_PER_E2HS};
+use ethereum_rpc_client::execution::ExecutionApi;
 use ethportal_api::{
     types::{
         execution::{
@@ -24,7 +25,6 @@ use ethportal_api::{
     Receipts,
 };
 use futures::{Stream, StreamExt};
-use ethereum_rpc_client::execution::ExecutionApi;
 use ssz::Decode;
 use tokio::try_join;
 use tracing::info;

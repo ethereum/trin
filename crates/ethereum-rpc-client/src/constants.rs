@@ -8,4 +8,3 @@ pub const DEFAULT_TOTAL_REQUEST_TIMEOUT: u64 = 20;
 pub const FALLBACK_RETRY_AFTER: Duration = Duration::from_secs(5);
 
 pub const DEFAULT_BASE_EL_ENDPOINT: &str = "https://geth-lighthouse.mainnet.eu1.ethpandaops.io/";
-
