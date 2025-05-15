@@ -31,8 +31,8 @@ use ethportal_api::{
         },
         portal::PutContentInfo,
         portal_wire::{
-            Content, FindContent, FindNodes, Message, Nodes, OfferTrace, Ping, Pong,
-            PopulatedOffer, PopulatedOfferWithResult, Request, Response,
+            Content, FindContent, FindNodes, Message, Nodes, OfferTrace, OfferTraceMultipleItems,
+            Ping, Pong, PopulatedOffer, PopulatedOfferWithResult, Request, Response,
         },
     },
     utils::bytes::hex_encode,
@@ -609,10 +609,34 @@ impl<
         content_key: RawContentKey,
         content_value: RawContentValue,
     ) -> Result<OfferTrace, OverlayRequestError> {
+        match self
+            .send_offer_trace_with_multiple_items(enr, vec![(content_key, content_value)])
+            .await?
+        {
+            OfferTraceMultipleItems::Success(accept_code_list) => {
+                if accept_code_list.len() != 1 {
+                    return Err(OverlayRequestError::Failure(format!(
+                        "Expected exactly one AcceptCode in the response. Got {}",
+                        accept_code_list.len()
+                    )));
+                }
+
+                Ok(OfferTrace::Success(accept_code_list[0]))
+            }
+            OfferTraceMultipleItems::Failed => Ok(OfferTrace::Failed),
+        }
+    }
+
+    /// Send Offer request with trace, without storing the content into db, with multiple items
+    pub async fn send_offer_trace_with_multiple_items(
+        &self,
+        enr: Enr,
+        content_items: Vec<(RawContentKey, RawContentValue)>,
+    ) -> Result<OfferTraceMultipleItems, OverlayRequestError> {
         // Construct the request.
         let (result_tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let request = Request::PopulatedOfferWithResult(PopulatedOfferWithResult {
-            content_item: (content_key, content_value),
+            content_items,
             result_tx,
         });
 
