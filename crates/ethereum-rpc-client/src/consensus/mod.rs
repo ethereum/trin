@@ -27,6 +27,7 @@ use super::http_client::{
     ClientWithBaseUrl, ContentType, JSON_ACCEPT_PRIORITY, JSON_CONTENT_TYPE, SSZ_CONTENT_TYPE,
 };
 
+/// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug)]
 pub struct ConsensusApi {
     primary: ClientWithBaseUrl,
@@ -60,11 +61,14 @@ impl ConsensusApi {
         Ok(Self { primary, fallback })
     }
 
+    /// Request the finalized root of the beacon state.
     pub async fn get_beacon_state_finalized_root(&self) -> anyhow::Result<RootResponse> {
         let endpoint = "/eth/v1/beacon/states/finalized/root".to_string();
         Ok(self.request(endpoint, None).await?.data)
     }
 
+    /// Requests the `LightClientBootstrap` structure corresponding to a given post-Altair beacon
+    /// block root.
     pub async fn get_light_client_bootstrap(
         &self,
         block_root: B256,
@@ -73,6 +77,9 @@ impl ConsensusApi {
         Ok(self.request(endpoint, None).await?.data)
     }
 
+    /// Retrieves hashTreeRoot of `BeaconBlock/BeaconBlockHeader`
+    /// Block identifier can be one of: "head" (canonical head in node's view),
+    /// "genesis", "finalized", <slot>, <hex encoded blockRoot with 0x prefix>.
     pub async fn get_beacon_block_root<S: AsRef<str> + Display>(
         &self,
         block_id: S,
@@ -81,6 +88,9 @@ impl ConsensusApi {
         Ok(self.request(endpoint, None).await?.data)
     }
 
+    /// Requests the LightClientUpdate instances in the sync committee period range
+    /// [start_period, start_period + count), leading up to the current head sync committee period
+    /// as selected by fork choice.
     pub async fn get_light_client_updates(
         &self,
         start_period: u64,
@@ -97,6 +107,7 @@ impl ConsensusApi {
             .collect())
     }
 
+    /// Requests the latest `LightClientOptimisticUpdate` known by the server.
     pub async fn get_light_client_optimistic_update(
         &self,
     ) -> anyhow::Result<LightClientOptimisticUpdateElectra> {
@@ -104,6 +115,7 @@ impl ConsensusApi {
         Ok(self.request(endpoint, None).await?.data)
     }
 
+    /// Requests the latest `LightClientFinalityUpdate` known by the server.
     pub async fn get_light_client_finality_update(
         &self,
     ) -> anyhow::Result<LightClientFinalityUpdateElectra> {
@@ -111,11 +123,13 @@ impl ConsensusApi {
         Ok(self.request(endpoint, None).await?.data)
     }
 
+    /// Requests the Node's `Version` string.
     pub async fn get_node_version(&self) -> anyhow::Result<VersionResponse> {
         let endpoint = "/eth/v1/node/version".to_string();
         Ok(self.request(endpoint, None).await?.data)
     }
 
+    /// Requests the `BeaconState` structure corresponding to the current head of the beacon chain.
     pub async fn get_beacon_state<S: AsRef<str> + Display>(
         &self,
         state_id: S,
@@ -127,6 +141,8 @@ impl ConsensusApi {
             .data)
     }
 
+    /// Requests the `SignedBeaconBlock` structure corresponding to the current head of the beacon
+    /// chain.
     pub async fn get_beacon_block<S: AsRef<str> + Display>(
         &self,
         block_id: S,
@@ -138,6 +154,8 @@ impl ConsensusApi {
             .data)
     }
 
+    /// Make a request to the cl provider. If the primary provider fails, it will retry with the
+    /// fallback.
     async fn request<T>(
         &self,
         endpoint: String,
@@ -159,6 +177,10 @@ impl ConsensusApi {
         }
     }
 
+    /// Make a request to the cl provider. If the primary provider fails, it will retry with the
+    /// fallback.
+    ///
+    /// This is used for lists of data, where the response is a list of T.
     async fn request_list<T>(
         &self,
         endpoint: String,
@@ -181,6 +203,7 @@ impl ConsensusApi {
         }
     }
 
+    /// Makes a request and returns the response and the content type.
     async fn base_request(
         endpoint: String,
         client: &ClientWithBaseUrl,
@@ -262,6 +285,7 @@ impl ConsensusApi {
         let (response, content_type) =
             Self::base_request(endpoint.clone(), client, custom_timeout, true).await?;
 
+        // todo: add support for ssz lists
         Ok(match content_type {
             ContentType::Json => response
                 .json::<Vec<VersionedDataResult<T>>>()
@@ -273,6 +297,8 @@ impl ConsensusApi {
         })
     }
 
+    /// Check if the provider is up and running by requesting the version.
+    /// The request will error if the provider is not reachable or if the version is not returned.
     pub async fn check_provider(client: &ClientWithBaseUrl) -> anyhow::Result<VersionResponse> {
         let endpoint = "/eth/v1/node/version".to_string();
         Ok(Self::request_no_fallback(endpoint.clone(), client, None)

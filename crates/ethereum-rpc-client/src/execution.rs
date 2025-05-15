@@ -25,12 +25,16 @@ use trin_validation::accumulator::PreMergeAccumulator;
 use url::Url;
 
 use super::http_client::{ClientWithBaseUrl, ContentType};
-// TODO: Move FALLBACK_RETRY_AFTER to this crate or pass as parameter if needed.
-// use crate::constants::FALLBACK_RETRY_AFTER;
+
+/// The fallback retry after duration in seconds.
 const FALLBACK_RETRY_AFTER: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// Limit the number of requests in a single batch to avoid exceeding the
+/// provider's batch size limit configuration of 10.
 const BATCH_LIMIT: usize = 10;
 
+/// Implements endpoints from the Execution API to access data from the execution layer.
+/// Performs validation of the data returned from the provider.
 #[derive(Clone, Debug)]
 pub struct ExecutionApi {
     pub primary: Url,
@@ -44,6 +48,7 @@ impl ExecutionApi {
         fallback: Url,
         request_timeout: u64,
     ) -> Result<Self, reqwest_middleware::Error> {
+        // Only check that provider is connected & available if not using a test provider.
         debug!(
             "Starting ExecutionApi with primary provider: {primary} and fallback provider: {fallback}",
         );
@@ -61,7 +66,9 @@ impl ExecutionApi {
         })
     }
 
+    /// Return a full block
     pub async fn get_block(&self, height: u64) -> anyhow::Result<Block<TxEnvelope>> {
+        // Geth requires block numbers to be formatted using the following padding.
         let block_param = format!("0x{height:01X}");
         let params = Params::Array(vec![json!(block_param), json!(true)]);
         let request = JsonRequest::new("eth_getBlockByNumber".to_string(), params, height as u32);
@@ -86,6 +93,7 @@ impl ExecutionApi {
         .into_block(block.header.into_consensus()))
     }
 
+    /// Return a validated BlockBody content key / value for the given Block.
     pub async fn get_block_body(
         &self,
         block: &Block<TxEnvelope>,
@@ -259,6 +267,7 @@ impl ExecutionApi {
     }
 }
 
+/// Create a proof for the given header / epoch acc
 pub async fn construct_proof(
     header: Header,
     epoch_acc: &EpochAccumulator,
@@ -268,6 +277,7 @@ pub async fn construct_proof(
     Ok(HeaderWithProof { header, proof })
 }
 
+/// Check that provider is valid and accessible.
 async fn check_provider(client: &ClientWithBaseUrl) -> anyhow::Result<()> {
     let request = client
         .post("")?

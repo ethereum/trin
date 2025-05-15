@@ -1,5 +1,3 @@
-// Copied from bin/portal-bridge/src/api/http_client.rs
-
 use std::{env, time::Duration};
 
 use reqwest::{

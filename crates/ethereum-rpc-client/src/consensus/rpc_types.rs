@@ -1,5 +1,3 @@
-// Copied from bin/portal-bridge/src/api/consensus/rpc_types.rs
-
 use alloy::primitives::{Bytes, B256};
 use anyhow::bail;
 use serde::Deserialize;
