@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use anyhow::bail;
-use ethportal_api::consensus::historical_summaries::{HistoricalSummaries, HistoricalSummary};
+use anyhow::{anyhow, bail};
+use ethportal_api::consensus::{
+    constants::SLOTS_PER_EPOCH,
+    historical_summaries::{historical_summary_index, HistoricalSummaries, HistoricalSummary},
+};
 use tokio::sync::RwLock;
 
-use crate::{
-    constants::{CAPELLA_FORK_EPOCH, SLOTS_PER_EPOCH, SLOTS_PER_HISTORICAL_ROOT},
-    oracle::HeaderOracle,
-};
+use crate::oracle::HeaderOracle;
 
 #[derive(Debug, Clone)]
 pub enum HistoricalSummariesSource {
@@ -33,8 +33,9 @@ impl HistoricalSummariesProvider {
 
     pub async fn get_historical_summary(&self, slot: u64) -> anyhow::Result<HistoricalSummary> {
         let epoch = slot / SLOTS_PER_EPOCH;
-        let historical_summary_index =
-            ((slot - CAPELLA_FORK_EPOCH * SLOTS_PER_EPOCH) / SLOTS_PER_HISTORICAL_ROOT) as usize;
+        let historical_summary_index = historical_summary_index(slot).ok_or(anyhow!(
+            "Can't provide Historical Summary for slot before Capella"
+        ))?;
 
         // Check to see if we have the historical summaries in cache
         if let Some(historical_summary) = self.cache.read().await.get(historical_summary_index) {

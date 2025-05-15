@@ -148,7 +148,7 @@ impl Era {
     }
 
     pub fn epoch_index(&self) -> u64 {
-        self.slot_index_state.slot_index.starting_slot / SLOTS_PER_HISTORICAL_ROOT as u64
+        self.slot_index_state.slot_index.starting_slot / SLOTS_PER_HISTORICAL_ROOT
     }
 }
 
@@ -284,12 +284,12 @@ impl From<&SlotIndexBlockEntry> for Entry {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SlotIndexBlock {
     pub starting_slot: u64,
-    pub indices: [i64; SLOTS_PER_HISTORICAL_ROOT],
+    pub indices: [i64; SLOTS_PER_HISTORICAL_ROOT as usize],
     pub count: u64,
 }
 
 impl SlotIndexBlock {
-    pub const SERIALIZED_SIZE: usize = 8 * (1 + SLOTS_PER_HISTORICAL_ROOT + 1);
+    pub const SERIALIZED_SIZE: usize = 8 * (1 + SLOTS_PER_HISTORICAL_ROOT as usize + 1);
 }
 
 impl TryFrom<Entry> for SlotIndexBlock {
@@ -297,12 +297,13 @@ impl TryFrom<Entry> for SlotIndexBlock {
 
     fn try_from(entry: Entry) -> Result<Self, Self::Error> {
         let starting_slot = u64::from_le_bytes(entry.value[0..8].try_into()?);
-        let mut indices = [0i64; SLOTS_PER_HISTORICAL_ROOT];
+        let mut indices = [0i64; SLOTS_PER_HISTORICAL_ROOT as usize];
         for (i, index) in indices.iter_mut().enumerate() {
             *index = i64::from_le_bytes(entry.value[(i * 8 + 8)..(i * 8 + 16)].try_into()?);
         }
         let count = u64::from_le_bytes(
-            entry.value[(SLOTS_PER_HISTORICAL_ROOT * 8 + 8)..(SLOTS_PER_HISTORICAL_ROOT * 8 + 16)]
+            entry.value[(SLOTS_PER_HISTORICAL_ROOT * 8 + 8) as usize
+                ..(SLOTS_PER_HISTORICAL_ROOT * 8 + 16) as usize]
                 .try_into()?,
         );
         Ok(Self {

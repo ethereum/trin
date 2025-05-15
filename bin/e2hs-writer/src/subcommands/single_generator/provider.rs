@@ -11,7 +11,7 @@ use e2store::{
 use ethportal_api::{
     consensus::{
         beacon_block::SignedBeaconBlock, beacon_state::HistoricalBatch,
-        historical_summaries::HistoricalSummaries,
+        constants::SLOTS_PER_HISTORICAL_ROOT, historical_summaries::HistoricalSummaries,
     },
     types::network_spec::network_spec,
 };
@@ -21,7 +21,6 @@ use reqwest::{
 };
 use tracing::info;
 use trin_execution::era::binary_search::EraBinarySearch;
-use trin_validation::constants::SLOTS_PER_HISTORICAL_ROOT;
 
 pub enum EraSource {
     // processed era1 file

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use trin_validation::constants::SLOTS_PER_HISTORICAL_ROOT;
+use ethportal_api::consensus::constants::SLOTS_PER_HISTORICAL_ROOT;
 
 /// Converts a block range into a mapping of epoch indexes to block ranges.
 ///

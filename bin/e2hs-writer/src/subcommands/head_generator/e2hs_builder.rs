@@ -2,14 +2,14 @@ use std::path::PathBuf;
 
 use anyhow::ensure;
 use e2store::e2hs::{E2HSWriter, BLOCKS_PER_E2HS};
-use ethportal_api::consensus::{beacon_block::BeaconBlockElectra, beacon_state::HistoricalBatch};
+use ethportal_api::consensus::{
+    beacon_block::BeaconBlockElectra, beacon_state::HistoricalBatch,
+    historical_summaries::historical_summary_index,
+};
 use ssz_types::FixedVector;
 use tempfile::TempDir;
 use tracing::info;
-use trin_validation::{
-    constants::{CAPELLA_FORK_EPOCH, SLOTS_PER_EPOCH, SLOTS_PER_HISTORICAL_ROOT},
-    header_validator::HeaderValidator,
-};
+use trin_validation::header_validator::HeaderValidator;
 
 use super::ethereum_api::EthereumApi;
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
 
 struct ProvingAnchors {
     current_historical_batch: HistoricalBatch,
-    current_historical_summaries_index: u64,
+    current_historical_summary_index: usize,
     header_validator: HeaderValidator,
 }
 
@@ -34,7 +34,7 @@ impl ProvingAnchors {
                 block_roots: FixedVector::default(),
                 state_roots: FixedVector::default(),
             },
-            current_historical_summaries_index: 0,
+            current_historical_summary_index: 0,
             header_validator: HeaderValidator::new_with_historical_summaries(Default::default()),
         }
     }
@@ -112,8 +112,9 @@ impl E2HSBuilder {
 
     /// If the historical summaries index has changed, update the proving anchors.
     async fn update_proving_anchors(&mut self, slot: u64) -> anyhow::Result<()> {
-        let historical_summaries_index = historical_summaries_index(slot);
-        if historical_summaries_index == self.proving_anchors.current_historical_summaries_index {
+        let historical_summary_index = historical_summary_index(slot)
+            .expect("Relevant slot must have historical_summary_index");
+        if historical_summary_index == self.proving_anchors.current_historical_summary_index {
             return Ok(());
         }
 
@@ -122,7 +123,7 @@ impl E2HSBuilder {
             .get_state_for_start_of_next_period(slot)
             .await?;
 
-        self.proving_anchors.current_historical_summaries_index = historical_summaries_index;
+        self.proving_anchors.current_historical_summary_index = historical_summary_index;
         self.proving_anchors.header_validator =
             HeaderValidator::new_with_historical_summaries(state.historical_summaries);
         self.proving_anchors.current_historical_batch = HistoricalBatch {
@@ -154,9 +155,4 @@ impl E2HSBuilder {
             receipts,
         })
     }
-}
-
-/// Calculate the historical summaries index for a given slot.
-pub fn historical_summaries_index(slot: u64) -> u64 {
-    (slot - CAPELLA_FORK_EPOCH * SLOTS_PER_EPOCH) / SLOTS_PER_HISTORICAL_ROOT
 }

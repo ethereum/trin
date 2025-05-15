@@ -128,6 +128,6 @@ impl EraBinarySearch {
     }
 
     fn start_slot_index(era_index: u64) -> u64 {
-        (era_index - 1) * SLOTS_PER_HISTORICAL_ROOT as u64
+        (era_index - 1) * SLOTS_PER_HISTORICAL_ROOT
     }
 }
