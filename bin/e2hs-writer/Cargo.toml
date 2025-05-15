@@ -24,7 +24,6 @@ ethereum_ssz.workspace = true
 ethportal-api.workspace = true
 futures.workspace = true
 humanize-duration.workspace = true
-portal-bridge.workspace = true
 reqwest.workspace = true
 rstest.workspace = true
 serde_yaml.workspace = true

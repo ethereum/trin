@@ -2846,7 +2846,6 @@ dependencies = [
  "ethportal-api",
  "futures",
  "humanize-duration",
- "portal-bridge",
  "reqwest 0.12.15",
  "rstest",
  "serde_yaml",

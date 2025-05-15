@@ -25,9 +25,7 @@ use trin_validation::accumulator::PreMergeAccumulator;
 use url::Url;
 
 use super::http_client::{ClientWithBaseUrl, ContentType};
-
-/// The fallback retry after duration in seconds.
-const FALLBACK_RETRY_AFTER: std::time::Duration = std::time::Duration::from_secs(5);
+use crate::constants::FALLBACK_RETRY_AFTER;
 
 /// Limit the number of requests in a single batch to avoid exceeding the
 /// provider's batch size limit configuration of 10.
