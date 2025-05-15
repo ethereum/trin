@@ -609,48 +609,21 @@ impl<
         content_key: RawContentKey,
         content_value: RawContentValue,
     ) -> Result<OfferTrace, OverlayRequestError> {
-        // Construct the request.
-        let (result_tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let request = Request::PopulatedOfferWithResult(PopulatedOfferWithResult {
-            content_items: vec![(content_key, content_value)],
-            result_tx,
-        });
+        match self
+            .send_offer_trace_with_multiple_items(enr, vec![(content_key, content_value)])
+            .await?
+        {
+            OfferTraceMultipleItems::Success(accept_code_list) => {
+                if accept_code_list.len() != 1 {
+                    return Err(OverlayRequestError::Failure(format!(
+                        "Expected exactly one AcceptCode in the response. Got {}",
+                        accept_code_list.len()
+                    )));
+                }
 
-        let direction = RequestDirection::Outgoing {
-            destination: enr.clone(),
-        };
-
-        // Send the offer request and wait on the response.
-        // Ignore the accept message, since we only care about the trace.
-        self.send_overlay_request(request, direction).await?;
-
-        // Wait for the trace response.
-        match rx.recv().await {
-            Some(accept) => {
-                let offer_trace = match accept {
-                    OfferTraceMultipleItems::Success(accept_code_list) => {
-                        if accept_code_list.len() != 1 {
-                            return Err(OverlayRequestError::Failure(format!(
-                                "Expected exactly one AcceptCode in the response. Got {}",
-                                accept_code_list.len()
-                            )));
-                        }
-
-                        OfferTrace::Success(accept_code_list[0])
-                    }
-                    OfferTraceMultipleItems::Failed => OfferTrace::Failed,
-                };
-                Ok(offer_trace)
+                Ok(OfferTrace::Success(accept_code_list[0]))
             }
-            None => {
-                warn!(
-                    protocol = %self.protocol,
-                    "Error receiving TraceOffer query response"
-                );
-                Err(OverlayRequestError::ChannelFailure(
-                    "Error receiving TraceOffer query response".to_string(),
-                ))
-            }
+            OfferTraceMultipleItems::Failed => Ok(OfferTrace::Failed),
         }
     }
 

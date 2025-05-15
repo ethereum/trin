@@ -361,7 +361,7 @@ impl<
         if content_keys.all_declined() {
             if let Some(tx) = gossip_result_tx {
                 if let Err(err) = tx.send(OfferTraceMultipleItems::Success(content_keys)) {
-                    warn!(%err, "Unable to send OfferTrace Success result");
+                    warn!(%err, "Unable to send OfferTrace result all keys declined");
                 }
             }
             return Ok(());
@@ -410,7 +410,7 @@ impl<
                     );
                     if let Some(tx) = gossip_result_tx {
                         if let Err(err) = tx.send(OfferTraceMultipleItems::Failed) {
-                            warn!(%err, "Unable to send OfferTrace Failed result");
+                            warn!(%err, "Unable to send OfferTrace Failed result for decoding offered content items");
                         }
                     }
                     return;
@@ -423,7 +423,7 @@ impl<
                     warn!(%err, "Unable to build content payload");
                     if let Some(tx) = gossip_result_tx {
                         if let Err(err) = tx.send(OfferTraceMultipleItems::Failed) {
-                            warn!(%err, "Unable to send OfferTrace Failed result");
+                            warn!(%err, "Unable to send OfferTrace Failed result failed to build content payload");
                         }
                     }
                     return;
@@ -433,12 +433,13 @@ impl<
                 .connect_outbound_stream(cid, peer, &content_payload)
                 .await;
             if let Some(tx) = gossip_result_tx {
-                if result {
-                    if let Err(err) = tx.send(OfferTraceMultipleItems::Success(content_keys)) {
-                        warn!(%err, "Unable to send OfferTrace Success result");
-                    }
-                } else if let Err(err) = tx.send(OfferTraceMultipleItems::Failed) {
-                    warn!(%err, "Unable to send OfferTrace Failed result");
+                let result = if result {
+                    OfferTraceMultipleItems::Success(content_keys)
+                } else {
+                    OfferTraceMultipleItems::Failed
+                };
+                if let Err(err) = tx.send(result) {
+                    warn!(%err, "Unable to send OfferTrace result");
                 }
             }
             // explicitly drop permit in the thread so the permit is included in the thread
