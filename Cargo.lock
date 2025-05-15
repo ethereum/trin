@@ -3237,6 +3237,7 @@ dependencies = [
  "parking_lot 0.11.2",
  "quickcheck",
  "rand 0.8.5",
+ "rayon",
  "rs_merkle",
  "rstest",
  "secp256k1 0.29.1",

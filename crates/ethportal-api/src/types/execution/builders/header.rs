@@ -1,20 +1,20 @@
 use alloy::{
     consensus::{
         proofs::{calculate_transaction_root, calculate_withdrawals_root},
-        Header, TxEnvelope,
+        Header, TxEnvelope, EMPTY_OMMER_ROOT_HASH,
     },
     eips::eip4895::Withdrawal,
     primitives::{Bloom, B256, B64, U256},
 };
 use anyhow::ensure;
-use ethportal_api::consensus::{
+
+use crate::consensus::{
     execution_payload::{
         ExecutionPayloadBellatrix, ExecutionPayloadCapella, ExecutionPayloadDeneb,
         ExecutionPayloadElectra,
     },
     execution_requests::ExecutionRequests,
 };
-use trin_execution::era::beacon::EMPTY_UNCLE_ROOT_HASH;
 
 pub struct ExecutionHeaderBuilder;
 
@@ -26,7 +26,7 @@ impl ExecutionHeaderBuilder {
         let transactions_root = calculate_transaction_root(transactions);
         let header = Header {
             parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_UNCLE_ROOT_HASH,
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: payload.fee_recipient,
             state_root: payload.state_root,
             transactions_root,
@@ -64,7 +64,7 @@ impl ExecutionHeaderBuilder {
         let withdrawals_root = calculate_withdrawals_root(withdrawals);
         let header = Header {
             parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_UNCLE_ROOT_HASH,
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: payload.fee_recipient,
             state_root: payload.state_root,
             transactions_root,
@@ -103,7 +103,7 @@ impl ExecutionHeaderBuilder {
         let withdrawals_root = calculate_withdrawals_root(withdrawals);
         let header = Header {
             parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_UNCLE_ROOT_HASH,
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: payload.fee_recipient,
             state_root: payload.state_root,
             transactions_root,
@@ -143,7 +143,7 @@ impl ExecutionHeaderBuilder {
         let withdrawals_root = calculate_withdrawals_root(withdrawals);
         let header = Header {
             parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_UNCLE_ROOT_HASH,
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: payload.fee_recipient,
             state_root: payload.state_root,
             transactions_root,

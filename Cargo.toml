@@ -69,6 +69,7 @@ quickcheck = "1.0.3"
 r2d2 = "0.8.9"
 r2d2_sqlite = "0.24.0"
 rand = "0.8.5"
+rayon = "1.10.0"
 reqwest = { version = "0.12.7", features = ["native-tls-vendored", "json"] }
 reth-ipc = { tag = "v1.0.8", git = "https://github.com/paradigmxyz/reth.git"}
 revm = { version = "22.0", default-features = false, features = ["std", "secp256k1", "serde-json", "c-kzg"] }

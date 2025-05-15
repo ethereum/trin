@@ -11,10 +11,10 @@ use anyhow::{anyhow, bail, ensure};
 use async_stream::stream;
 use e2store::e2hs::{E2HSWriter, BLOCKS_PER_E2HS};
 use ethportal_api::{
-    consensus::beacon_block::SignedBeaconBlock,
     types::{
         execution::{
             accumulator::EpochAccumulator,
+            builders::block::ExecutionBlockBuilder,
             header_with_proof::{
                 BlockHeaderProof, BlockProofHistoricalHashesAccumulator, HeaderWithProof,
             },
@@ -32,7 +32,7 @@ use trin_validation::{accumulator::PreMergeAccumulator, header_validator::Header
 use url::Url;
 
 use super::provider::EraProvider;
-use crate::subcommands::{execution_block_builder::ExecutionBlockBuilder, full_block::FullBlock};
+use crate::subcommands::full_block::FullBlock;
 
 // This struct reads all blocks in an index and creates the block data
 // along with the corresponding proofs required to create an E2HS file.
@@ -148,20 +148,7 @@ impl E2HSBuilder {
             block.execution_block_number()
         );
 
-        let (header_with_proof, body) = match &block {
-            SignedBeaconBlock::Bellatrix(beacon_block) => {
-                ExecutionBlockBuilder::bellatrix(&beacon_block.message, historical_batch)?
-            }
-            SignedBeaconBlock::Capella(beacon_block) => {
-                ExecutionBlockBuilder::capella(&beacon_block.message, historical_batch)?
-            }
-            SignedBeaconBlock::Deneb(beacon_block) => {
-                ExecutionBlockBuilder::deneb(&beacon_block.message, historical_batch)?
-            }
-            SignedBeaconBlock::Electra(beacon_block) => {
-                ExecutionBlockBuilder::electra(&beacon_block.message, historical_batch)?
-            }
-        };
+        let (header_with_proof, body) = ExecutionBlockBuilder::build(block, historical_batch)?;
 
         let receipts = self.get_receipts(block_number, header_with_proof.header.receipts_root)?;
 
