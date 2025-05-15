@@ -5,11 +5,12 @@ use alloy::{
 use alloy_rlp::Decodable;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use super::execution_header_builder::ExecutionHeaderBuilder;
+use super::header::ExecutionHeaderBuilder;
 use crate::{
     consensus::{
         beacon_block::{
             BeaconBlockBellatrix, BeaconBlockCapella, BeaconBlockDeneb, BeaconBlockElectra,
+            SignedBeaconBlock,
         },
         beacon_state::HistoricalBatch,
         body::Transactions,
@@ -25,6 +26,20 @@ use crate::{
 pub struct ExecutionBlockBuilder;
 
 impl ExecutionBlockBuilder {
+    pub fn build(
+        block: &SignedBeaconBlock,
+        historical_batch: &HistoricalBatch,
+    ) -> anyhow::Result<(HeaderWithProof, BlockBody)> {
+        match block {
+            SignedBeaconBlock::Bellatrix(block) => {
+                Self::bellatrix(&block.message, historical_batch)
+            }
+            SignedBeaconBlock::Capella(block) => Self::capella(&block.message, historical_batch),
+            SignedBeaconBlock::Deneb(block) => Self::deneb(&block.message, historical_batch),
+            SignedBeaconBlock::Electra(block) => Self::electra(&block.message, historical_batch),
+        }
+    }
+
     pub fn bellatrix(
         block: &BeaconBlockBellatrix,
         historical_batch: &HistoricalBatch,

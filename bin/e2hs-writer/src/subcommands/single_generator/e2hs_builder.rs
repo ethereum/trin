@@ -11,11 +11,10 @@ use anyhow::{anyhow, bail, ensure};
 use async_stream::stream;
 use e2store::e2hs::{E2HSWriter, BLOCKS_PER_E2HS};
 use ethportal_api::{
-    consensus::beacon_block::SignedBeaconBlock,
     types::{
         execution::{
             accumulator::EpochAccumulator,
-            builders::execution_block_builder::ExecutionBlockBuilder,
+            builders::block::ExecutionBlockBuilder,
             header_with_proof::{
                 BlockHeaderProof, BlockProofHistoricalHashesAccumulator, HeaderWithProof,
             },
@@ -149,20 +148,7 @@ impl E2HSBuilder {
             block.execution_block_number()
         );
 
-        let (header_with_proof, body) = match &block {
-            SignedBeaconBlock::Bellatrix(beacon_block) => {
-                ExecutionBlockBuilder::bellatrix(&beacon_block.message, historical_batch)?
-            }
-            SignedBeaconBlock::Capella(beacon_block) => {
-                ExecutionBlockBuilder::capella(&beacon_block.message, historical_batch)?
-            }
-            SignedBeaconBlock::Deneb(beacon_block) => {
-                ExecutionBlockBuilder::deneb(&beacon_block.message, historical_batch)?
-            }
-            SignedBeaconBlock::Electra(beacon_block) => {
-                ExecutionBlockBuilder::electra(&beacon_block.message, historical_batch)?
-            }
-        };
+        let (header_with_proof, body) = ExecutionBlockBuilder::build(block, historical_batch)?;
 
         let receipts = self.get_receipts(block_number, header_with_proof.header.receipts_root)?;
 

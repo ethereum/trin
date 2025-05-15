@@ -1,20 +1,12 @@
-use alloy::{
-    consensus::{
-        proofs::{calculate_transaction_root, calculate_withdrawals_root},
-        Header, TxEnvelope, EMPTY_OMMER_ROOT_HASH,
-    },
-    eips::eip4895::Withdrawal,
-    primitives::{Bloom, B64},
-};
+use alloy::{consensus::TxEnvelope, eips::eip4895::Withdrawal};
 use ethportal_api::{
     consensus::beacon_block::{
         SignedBeaconBlock, SignedBeaconBlockBellatrix, SignedBeaconBlockCapella,
         SignedBeaconBlockDeneb, SignedBeaconBlockElectra,
     },
-    types::execution::builders::execution_block_builder::decode_transactions,
+    types::execution::builders::{block::decode_transactions, header::ExecutionHeaderBuilder},
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use revm_primitives::U256;
 
 use super::types::{ProcessedBlock, TransactionsWithSender};
 
@@ -38,35 +30,11 @@ impl ProcessBeaconBlock for SignedBeaconBlockBellatrix {
         let payload = &self.message.body.execution_payload;
 
         let transactions = decode_transactions(&payload.transactions)?;
-        let transactions_root = calculate_transaction_root(&transactions);
+        let header = ExecutionHeaderBuilder::bellatrix(payload, &transactions)?;
         let transactions = process_transactions(transactions)?;
 
-        let header = Header {
-            parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_OMMER_ROOT_HASH,
-            beneficiary: payload.fee_recipient,
-            state_root: payload.state_root,
-            transactions_root,
-            receipts_root: payload.receipts_root,
-            logs_bloom: Bloom::from_slice(payload.logs_bloom.to_vec().as_slice()),
-            difficulty: U256::ZERO,
-            number: payload.block_number,
-            gas_limit: payload.gas_limit,
-            gas_used: payload.gas_used,
-            timestamp: payload.timestamp,
-            extra_data: payload.extra_data.to_vec().into(),
-            mix_hash: payload.prev_randao,
-            nonce: B64::ZERO,
-            base_fee_per_gas: Some(payload.base_fee_per_gas.to()),
-            withdrawals_root: None,
-            blob_gas_used: None,
-            excess_blob_gas: None,
-            parent_beacon_block_root: None,
-            requests_hash: None,
-        };
-
         Ok(ProcessedBlock {
-            header: header.clone(),
+            header,
             uncles: None,
             withdrawals: None,
             transactions,
@@ -79,39 +47,13 @@ impl ProcessBeaconBlock for SignedBeaconBlockCapella {
         let payload = &self.message.body.execution_payload;
 
         let transactions = decode_transactions(&payload.transactions)?;
-        let transactions_root = calculate_transaction_root(&transactions);
-        let transactions = process_transactions(transactions)?;
-
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
-        let withdrawals_root = calculate_withdrawals_root(&withdrawals);
-
-        let header = Header {
-            parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_OMMER_ROOT_HASH,
-            beneficiary: payload.fee_recipient,
-            state_root: payload.state_root,
-            transactions_root,
-            receipts_root: payload.receipts_root,
-            logs_bloom: Bloom::from_slice(payload.logs_bloom.to_vec().as_slice()),
-            difficulty: U256::ZERO,
-            number: payload.block_number,
-            gas_limit: payload.gas_limit,
-            gas_used: payload.gas_used,
-            timestamp: payload.timestamp,
-            extra_data: payload.extra_data.to_vec().into(),
-            mix_hash: payload.prev_randao,
-            nonce: B64::ZERO,
-            base_fee_per_gas: Some(payload.base_fee_per_gas.to()),
-            withdrawals_root: Some(withdrawals_root),
-            blob_gas_used: None,
-            excess_blob_gas: None,
-            parent_beacon_block_root: None,
-            requests_hash: None,
-        };
+        let header = ExecutionHeaderBuilder::capella(payload, &transactions, &withdrawals)?;
+        let transactions = process_transactions(transactions)?;
 
         Ok(ProcessedBlock {
-            header: header.clone(),
+            header,
             uncles: None,
             withdrawals: Some(withdrawals),
             transactions,
@@ -124,39 +66,18 @@ impl ProcessBeaconBlock for SignedBeaconBlockDeneb {
         let payload = &self.message.body.execution_payload;
 
         let transactions = decode_transactions(&payload.transactions)?;
-        let transactions_root = calculate_transaction_root(&transactions);
-        let transactions = process_transactions(transactions)?;
-
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
-        let withdrawals_root = calculate_withdrawals_root(&withdrawals);
-
-        let header = Header {
-            parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_OMMER_ROOT_HASH,
-            beneficiary: payload.fee_recipient,
-            state_root: payload.state_root,
-            transactions_root,
-            receipts_root: payload.receipts_root,
-            logs_bloom: Bloom::from_slice(payload.logs_bloom.to_vec().as_slice()),
-            difficulty: U256::ZERO,
-            number: payload.block_number,
-            gas_limit: payload.gas_limit,
-            gas_used: payload.gas_used,
-            timestamp: payload.timestamp,
-            extra_data: payload.extra_data.to_vec().into(),
-            mix_hash: payload.prev_randao,
-            nonce: B64::ZERO,
-            base_fee_per_gas: Some(payload.base_fee_per_gas.to()),
-            withdrawals_root: Some(withdrawals_root),
-            blob_gas_used: Some(payload.blob_gas_used),
-            excess_blob_gas: Some(payload.excess_blob_gas),
-            parent_beacon_block_root: Some(self.message.parent_root),
-            requests_hash: None,
-        };
+        let header = ExecutionHeaderBuilder::deneb(
+            payload,
+            self.message.parent_root,
+            &transactions,
+            &withdrawals,
+        )?;
+        let transactions = process_transactions(transactions)?;
 
         Ok(ProcessedBlock {
-            header: header.clone(),
+            header,
             uncles: None,
             withdrawals: Some(withdrawals),
             transactions,
@@ -169,36 +90,16 @@ impl ProcessBeaconBlock for SignedBeaconBlockElectra {
         let payload = &self.message.body.execution_payload;
 
         let transactions = decode_transactions(&payload.transactions)?;
-        let transactions_root = calculate_transaction_root(&transactions);
-        let transactions = process_transactions(transactions)?;
-
         let withdrawals: Vec<Withdrawal> =
             payload.withdrawals.iter().map(Withdrawal::from).collect();
-        let withdrawals_root = calculate_withdrawals_root(&withdrawals);
-
-        let header = Header {
-            parent_hash: payload.parent_hash,
-            ommers_hash: EMPTY_OMMER_ROOT_HASH,
-            beneficiary: payload.fee_recipient,
-            state_root: payload.state_root,
-            transactions_root,
-            receipts_root: payload.receipts_root,
-            logs_bloom: Bloom::from_slice(payload.logs_bloom.to_vec().as_slice()),
-            difficulty: U256::ZERO,
-            number: payload.block_number,
-            gas_limit: payload.gas_limit,
-            gas_used: payload.gas_used,
-            timestamp: payload.timestamp,
-            extra_data: payload.extra_data.to_vec().into(),
-            mix_hash: payload.prev_randao,
-            nonce: B64::ZERO,
-            base_fee_per_gas: Some(payload.base_fee_per_gas.to()),
-            withdrawals_root: Some(withdrawals_root),
-            blob_gas_used: Some(payload.blob_gas_used),
-            excess_blob_gas: Some(payload.excess_blob_gas),
-            parent_beacon_block_root: Some(self.message.parent_root),
-            requests_hash: Some(self.message.body.execution_requests.requests_hash()),
-        };
+        let header = ExecutionHeaderBuilder::electra(
+            payload,
+            self.message.parent_root,
+            &transactions,
+            &withdrawals,
+            &self.message.body.execution_requests,
+        )?;
+        let transactions = process_transactions(transactions)?;
 
         Ok(ProcessedBlock {
             header: header.clone(),
