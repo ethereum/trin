@@ -3292,7 +3292,6 @@ dependencies = [
  "anyhow",
  "discv5",
  "e2store",
- "ethereum-rpc-client",
  "ethereum_ssz",
  "ethportal-api",
  "futures",

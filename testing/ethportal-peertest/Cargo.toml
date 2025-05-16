@@ -17,7 +17,6 @@ alloy-hardforks.workspace = true
 anyhow.workspace = true
 discv5.workspace = true
 e2store.workspace = true
-ethereum-rpc-client.workspace = true
 ethereum_ssz.workspace = true
 ethportal-api.workspace = true
 futures.workspace = true
