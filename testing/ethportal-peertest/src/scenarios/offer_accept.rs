@@ -361,14 +361,12 @@ pub async fn test_offer_concurrent_utp_transfer_limit(peertest: &Peertest, targe
         let header_key =
             HistoryContentKey::new_block_header_by_hash(tuple.header.header.hash_slow());
 
-        let proof =
-            PreMergeAccumulator::construct_proof(&tuple.header.header.clone(), &epoch_acc).unwrap();
+        let header = tuple.header.header.clone();
+        let proof = PreMergeAccumulator::construct_proof(&header, &epoch_acc).unwrap();
         let proof = BlockHeaderProof::HistoricalHashes(proof);
 
-        let header_value = HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
-            header: tuple.header.header.clone(),
-            proof,
-        });
+        let header_value =
+            HistoryContentValue::BlockHeaderWithProof(HeaderWithProof { header, proof });
 
         let store_result = peertest
             .bootnode

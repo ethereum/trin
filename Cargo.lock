@@ -3173,7 +3173,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "trin-validation",
  "url",
 ]
 
