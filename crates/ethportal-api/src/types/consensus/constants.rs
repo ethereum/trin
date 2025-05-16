@@ -19,3 +19,15 @@ pub const SLOTS_PER_HISTORICAL_ROOT: u64 = 8192;
 /// April 12, 2023, 10:27:35pm UTC
 /// Source: https://github.com/ethereum/consensus-specs/blob/d8cfdf2626c1219a40048f8fa3dd103ae8c0b040/configs/mainnet.yaml
 pub const CAPELLA_FORK_EPOCH: u64 = 194_048;
+
+/// The Epoch of the mainnet Deneb fork.
+///
+/// March 13, 2024, 01:55:35pm UTC
+/// Source: https://github.com/ethereum/consensus-specs/blob/d8cfdf2626c1219a40048f8fa3dd103ae8c0b040/configs/mainnet.yaml
+pub const DENEB_FORK_EPOCH: u64 = 269_568;
+
+/// The Epoch of the mainnet Electra fork.
+///
+/// May 7, 2025, 10:05:11am UTC
+/// Source: https://github.com/ethereum/consensus-specs/blob/d8cfdf2626c1219a40048f8fa3dd103ae8c0b040/configs/mainnet.yaml
+pub const ELECTRA_FORK_EPOCH: u64 = 364_032;

@@ -8557,6 +8557,7 @@ dependencies = [
  "ethereum_ssz_derive",
  "ethportal-api",
  "lazy_static",
+ "parking_lot 0.11.2",
  "quickcheck",
  "quickcheck_macros",
  "rstest",
