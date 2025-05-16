@@ -7,6 +7,7 @@ use ssz_types::{typenum::U7, FixedVector};
 use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
+use super::header::LightClientHeader;
 use crate::{
     light_client::header::{LightClientHeaderDeneb, LightClientHeaderElectra},
     types::consensus::{
@@ -18,8 +19,6 @@ use crate::{
         },
     },
 };
-
-use super::header::LightClientHeader;
 
 type FinalizedRootProofLenElectra = U7;
 

@@ -5,6 +5,7 @@ use ssz_derive::{Decode, Encode};
 use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
+use super::header::LightClientHeader;
 use crate::{
     light_client::header::{LightClientHeaderDeneb, LightClientHeaderElectra},
     types::consensus::{
@@ -13,8 +14,6 @@ use crate::{
         light_client::header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
     },
 };
-
-use super::header::LightClientHeader;
 
 /// A LightClientOptimisticUpdate is the update we receive on each slot,
 /// it is based off the current unfinalized epoch and it is verified only against BLS signature.
