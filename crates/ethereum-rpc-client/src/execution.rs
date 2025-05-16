@@ -8,9 +8,7 @@ use alloy_hardforks::EthereumHardforks;
 use anyhow::{anyhow, bail, ensure};
 use ethportal_api::{
     types::{
-        execution::{
-            block_body::BlockBody,
-        },
+        execution::block_body::BlockBody,
         jsonrpc::{params::Params, request::JsonRequest},
         network_spec::network_spec,
     },
