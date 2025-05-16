@@ -1,8 +1,15 @@
 [package]
 name = "ethereum-rpc-client"
-version = "0.1.0"
-edition = "2021"
-description = "Ethereum RPC client for consensus and execution APIs. Extracted from portal-bridge."
+description = "Ethereum RPC client for consensus and execution APIs."
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
 reqwest = { version = "0.11", features = ["json", "stream"] }
