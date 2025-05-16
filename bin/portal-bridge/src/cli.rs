@@ -2,6 +2,10 @@ use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy::primitives::B256;
 use clap::Parser;
+use ethereum_rpc_client::constants::{
+    DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, DEFAULT_TOTAL_REQUEST_TIMEOUT,
+    FALLBACK_BASE_CL_ENDPOINT, FALLBACK_BASE_EL_ENDPOINT,
+};
 use ethportal_api::types::{distance::Distance, network::Subnetwork, network_spec::NetworkSpec};
 use portalnet::constants::{DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK, DEFAULT_WEB3_HTTP_PORT};
 use trin::NodeRuntimeConfig;
@@ -10,12 +14,8 @@ use trin_utils::cli::{check_private_key_length, network_parser};
 use url::Url;
 
 use crate::{
-    bridge::e2hs::BlockRange,
-    constants::{DEFAULT_OFFER_LIMIT, DEFAULT_TOTAL_REQUEST_TIMEOUT},
-    handle::subnetworks_flag,
+    bridge::e2hs::BlockRange, constants::DEFAULT_OFFER_LIMIT, handle::subnetworks_flag,
     types::mode::BridgeMode,
-    DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
-    FALLBACK_BASE_EL_ENDPOINT,
 };
 
 pub const DEFAULT_SUBNETWORK: &str = "history";
