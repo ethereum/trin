@@ -2841,11 +2841,11 @@ dependencies = [
  "aws-sdk-s3",
  "clap",
  "e2store",
+ "ethereum-rpc-client",
  "ethereum_ssz",
  "ethportal-api",
  "futures",
  "humanize-duration",
- "portal-bridge",
  "reqwest",
  "rstest",
  "serde_yaml",
@@ -3157,6 +3157,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethereum-rpc-client"
+version = "0.3.1"
+dependencies = [
+ "alloy",
+ "alloy-hardforks",
+ "anyhow",
+ "ethereum_ssz",
+ "ethereum_ssz_derive",
+ "ethportal-api",
+ "reqwest",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "ethereum_hashing"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3277,7 +3297,6 @@ dependencies = [
  "hex",
  "itertools 0.13.0",
  "jsonrpsee",
- "portal-bridge",
  "portalnet",
  "rand 0.8.5",
  "reth-ipc",
@@ -5617,7 +5636,6 @@ name = "portal-bridge"
 version = "0.3.1"
 dependencies = [
  "alloy",
- "alloy-hardforks",
  "anyhow",
  "bytes",
  "chrono",
@@ -5627,35 +5645,24 @@ dependencies = [
  "e2store",
  "env_logger 0.9.3",
  "eth_trie",
- "ethereum_ssz",
- "ethereum_ssz_derive",
+ "ethereum-rpc-client",
  "ethportal-api",
  "futures",
  "humanize-duration",
  "itertools 0.13.0",
- "jsonrpsee",
  "portalnet",
  "prometheus_exporter",
  "rand 0.8.5",
- "regex",
  "reqwest",
- "reqwest-middleware",
- "reqwest-retry",
- "reth-ipc",
  "revm",
  "revm-primitives",
  "rstest",
- "scraper",
- "serde",
- "serde_json",
  "ssz_types",
  "test-log",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.19",
  "tracing-test",
- "tree_hash",
  "trin",
  "trin-beacon",
  "trin-evm",
@@ -5667,7 +5674,6 @@ dependencies = [
  "trin-utils",
  "trin-validation",
  "url",
- "utp-rs",
 ]
 
 [[package]]

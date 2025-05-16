@@ -1,5 +1,3 @@
-use tokio::time::Duration;
-
 /// History * content key & value
 pub const HEADER_WITH_PROOF_CONTENT_KEY: &str =
     "0x006251d65b8a8668efabe2f89c96a5b6332d83b3bbe585089ea6b2ab9b6754f5e9";
@@ -9,13 +7,6 @@ pub const HEADER_WITH_PROOF_CONTENT_VALUE: &str =
 // Beacon chain mainnet genesis time: Tue Dec 01 2020 12:00:23 GMT+0000
 pub const BEACON_GENESIS_TIME: u64 = 1606824023;
 
-/// The timeout in seconds is applied from when the request starts connecting until the response
-/// body has finished. Also considered a total deadline.
-pub const DEFAULT_TOTAL_REQUEST_TIMEOUT: u64 = 20;
-
 // The maximum number of concurrent offer jsonrpc requests that can be made simultaneously.
 // Currently, this is only used in the state bridge.
 pub const DEFAULT_OFFER_LIMIT: usize = 64;
-
-// Number of seconds to wait before retrying a provider request
-pub const FALLBACK_RETRY_AFTER: Duration = Duration::from_secs(5);

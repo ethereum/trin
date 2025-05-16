@@ -4,8 +4,9 @@ members = [
     "bin/portal-bridge",
     "bin/trin", 
     "bin/trin-execution",
-    "crates/ethportal-api",
     "crates/e2store",
+    "crates/ethereum-rpc-client",
+    "crates/ethportal-api",
     "crates/evm",
     "crates/light-client",
     "crates/metrics",
@@ -13,7 +14,7 @@ members = [
     "crates/rpc",
     "crates/storage",
     "crates/subnetworks/beacon",
-    "crates/subnetworks/history",
+    "crates/subnetworks/history", 
     "crates/subnetworks/state",
     "crates/utils",
     "crates/validation",    
@@ -104,6 +105,7 @@ utp-rs = "0.1.0-alpha.17"
 
 # Trin workspace crates
 e2store = { path = "crates/e2store" }
+ethereum-rpc-client = { path = "crates/ethereum-rpc-client" }
 ethportal-api = { path = "crates/ethportal-api" }
 light-client = { path = "crates/light-client" }
 portal-bridge = { path = "bin/portal-bridge" }

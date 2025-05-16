@@ -7,15 +7,18 @@ use ethportal_api::{
     types::{
         accept_code::{AcceptCode, AcceptCodeList},
         enr::Enr,
-        execution::accumulator::EpochAccumulator,
+        execution::{
+            accumulator::EpochAccumulator,
+            header_with_proof::{BlockHeaderProof, HeaderWithProof},
+        },
         portal_wire::OfferTrace,
     },
     ContentValue, Discv5ApiClient, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
 };
-use portal_bridge::api::execution::construct_proof;
 use portalnet::constants::DEFAULT_UTP_TRANSFER_LIMIT;
 use ssz::Decode;
 use tracing::info;
+use trin_validation::accumulator::PreMergeAccumulator;
 
 use crate::{
     utils::{
@@ -357,11 +360,14 @@ pub async fn test_offer_concurrent_utp_transfer_limit(peertest: &Peertest, targe
     for tuple in tuples.clone() {
         let header_key =
             HistoryContentKey::new_block_header_by_hash(tuple.header.header.hash_slow());
-        let header_value = HistoryContentValue::BlockHeaderWithProof(
-            construct_proof(tuple.header.header.clone(), &epoch_acc)
-                .await
-                .unwrap(),
-        );
+
+        let header = tuple.header.header.clone();
+        let proof = PreMergeAccumulator::construct_proof(&header, &epoch_acc).unwrap();
+        let proof = BlockHeaderProof::HistoricalHashes(proof);
+
+        let header_value =
+            HistoryContentValue::BlockHeaderWithProof(HeaderWithProof { header, proof });
+
         let store_result = peertest
             .bootnode
             .ipc_client

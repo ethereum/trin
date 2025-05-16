@@ -8,11 +8,7 @@ use alloy_hardforks::EthereumHardforks;
 use anyhow::{anyhow, bail, ensure};
 use ethportal_api::{
     types::{
-        execution::{
-            accumulator::EpochAccumulator,
-            block_body::BlockBody,
-            header_with_proof::{BlockHeaderProof, HeaderWithProof},
-        },
+        execution::block_body::BlockBody,
         jsonrpc::{params::Params, request::JsonRequest},
         network_spec::network_spec,
     },
@@ -21,7 +17,6 @@ use ethportal_api::{
 use serde_json::{json, Value};
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
-use trin_validation::accumulator::PreMergeAccumulator;
 use url::Url;
 
 use super::http_client::{ClientWithBaseUrl, ContentType};
@@ -263,16 +258,6 @@ impl ExecutionApi {
         )
         })
     }
-}
-
-/// Create a proof for the given header / epoch acc
-pub async fn construct_proof(
-    header: Header,
-    epoch_acc: &EpochAccumulator,
-) -> anyhow::Result<HeaderWithProof> {
-    let proof = PreMergeAccumulator::construct_proof(&header, epoch_acc)?;
-    let proof = BlockHeaderProof::HistoricalHashes(proof);
-    Ok(HeaderWithProof { header, proof })
 }
 
 /// Check that provider is valid and accessible.

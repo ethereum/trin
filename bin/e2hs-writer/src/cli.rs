@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
-use portal_bridge::{constants::DEFAULT_TOTAL_REQUEST_TIMEOUT, DEFAULT_BASE_EL_ENDPOINT};
+use ethereum_rpc_client::constants::{DEFAULT_BASE_EL_ENDPOINT, DEFAULT_TOTAL_REQUEST_TIMEOUT};
 use url::Url;
 
 pub const DEFAULT_PORTAL_ACCUMULATOR_PATH: &str = "./portal-accumulators";

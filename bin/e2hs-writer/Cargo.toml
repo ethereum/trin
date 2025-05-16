@@ -20,11 +20,11 @@ aws-config = { version = "1.6", features = ["behavior-version-latest"] }
 aws-sdk-s3 = "1.83.0"
 clap.workspace = true
 e2store.workspace = true
+ethereum-rpc-client.workspace = true
 ethereum_ssz.workspace = true
 ethportal-api.workspace = true
 futures.workspace = true
 humanize-duration.workspace = true
-portal-bridge.workspace = true
 reqwest.workspace = true
 rstest.workspace = true
 serde_yaml.workspace = true

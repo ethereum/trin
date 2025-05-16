@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, ensure};
+use ethereum_rpc_client::{consensus::ConsensusApi, execution::ExecutionApi};
 use ethportal_api::{
     consensus::{
         beacon_block::SignedBeaconBlockElectra, beacon_state::BeaconStateElectra,
@@ -6,7 +7,6 @@ use ethportal_api::{
     },
     Receipts,
 };
-use portal_bridge::api::{consensus::ConsensusApi, execution::ExecutionApi};
 use tracing::warn;
 use url::Url;
 
