@@ -3297,7 +3297,6 @@ dependencies = [
  "hex",
  "itertools 0.13.0",
  "jsonrpsee",
- "portal-bridge",
  "portalnet",
  "rand 0.8.5",
  "reth-ipc",

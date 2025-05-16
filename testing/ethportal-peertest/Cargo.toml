@@ -24,7 +24,6 @@ hex.workspace = true
 itertools.workspace = true
 jsonrpsee = { workspace = true, features = ["async-client", "client", "macros", "server"] }
 portalnet.workspace = true
-portal-bridge.workspace = true
 rand.workspace = true
 reth-ipc.workspace = true
 rpc.workspace = true
