@@ -122,7 +122,6 @@ trin-storage = { path = "crates/storage" }
 trin-utils = { path = "crates/utils" }
 trin-validation = { path = "crates/validation" }
 
-
 crunchy = "=0.2.2"
 
 [patch.crates-io]
