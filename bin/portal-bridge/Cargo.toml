@@ -13,7 +13,6 @@ version.workspace = true
 
 [dependencies]
 alloy.workspace = true
-alloy-hardforks.workspace = true
 anyhow.workspace = true
 bytes.workspace = true
 chrono.workspace = true
@@ -23,37 +22,20 @@ discv5.workspace = true
 e2store.workspace = true
 eth_trie.workspace = true
 ethereum-rpc-client.workspace = true
-ethereum_ssz.workspace = true
-ethereum_ssz_derive.workspace = true
 ethportal-api.workspace = true
 futures.workspace = true
 humanize-duration.workspace = true
 itertools.workspace = true
-jsonrpsee = { workspace = true, features = [
-  "async-client",
-  "client",
-  "macros",
-  "server",
-] }
 portalnet.workspace = true
 prometheus_exporter.workspace = true
 rand.workspace = true
-regex = "1.10.2"
 reqwest.workspace = true
-reqwest-middleware = { version = "0.3.3", features = ["json"] }
-reqwest-retry = "0.6.1"
-reth-ipc.workspace = true
 revm.workspace = true
 revm-primitives.workspace = true
-scraper.workspace = true
-serde = { workspace = true, features = ["rc"] }
-serde_json.workspace = true
 ssz_types.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
-tree_hash.workspace = true
 trin.workspace = true
 trin-beacon.workspace = true
 trin-history.workspace = true
@@ -65,7 +47,6 @@ trin-metrics.workspace = true
 trin-utils.workspace = true
 trin-validation.workspace = true
 url.workspace = true
-utp-rs.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true
