@@ -12,18 +12,18 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+alloy.workspace = true
+alloy-hardforks.workspace = true
+anyhow.workspace = true
+ethereum_ssz.workspace = true
+ethereum_ssz_derive.workspace = true
+ethportal-api.workspace = true
 reqwest = { version = "0.11", features = ["json", "stream"] }
 reqwest-middleware = "0.2"
 reqwest-retry = "0.2"
-tracing = "0.1"
-url = "2.2"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-anyhow = "1.0"
-tokio = { version = "1.0", features = ["full"] }
-ethereum_ssz = { workspace = true }
-ethereum_ssz_derive = { workspace = true }
-alloy = { workspace = true }
-alloy-hardforks = { workspace = true }
-ethportal-api = { path = "../ethportal-api" }
-trin-validation = { path = "../validation" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+trin-validation.workspace = true
+url.workspace = true
