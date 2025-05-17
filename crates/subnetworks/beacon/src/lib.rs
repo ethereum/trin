@@ -26,7 +26,7 @@ use tokio::{
 };
 use tracing::info;
 use trin_storage::PortalStorageConfig;
-use trin_validation::oracle::HeaderOracle;
+use trin_validation::{chain_head::ChainHead, oracle::HeaderOracle};
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler, network::BeaconNetwork};
@@ -46,6 +46,7 @@ pub async fn initialize_beacon_network(
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
+    chain_head: ChainHead,
 ) -> anyhow::Result<(
     BeaconHandler,
     BeaconNetworkTask,
@@ -62,6 +63,7 @@ pub async fn initialize_beacon_network(
         storage_config,
         portalnet_config.clone(),
         header_oracle,
+        chain_head,
     )
     .await?;
     let beacon_event_stream = beacon_network.overlay.event_stream().await?;
