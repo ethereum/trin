@@ -7,6 +7,7 @@ use ssz_types::{typenum::U7, FixedVector};
 use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
+use super::header::LightClientHeader;
 use crate::{
     light_client::header::{LightClientHeaderDeneb, LightClientHeaderElectra},
     types::consensus::{
@@ -90,6 +91,26 @@ impl LightClientFinalityUpdate {
             ForkName::Electra => {
                 LightClientFinalityUpdateElectra::from_ssz_bytes(bytes).map(Self::Electra)
             }
+        }
+    }
+
+    pub fn attested_header(&self) -> LightClientHeader {
+        match self {
+            Self::Bellatrix(update) => LightClientHeader::Bellatrix(update.attested_header.clone()),
+            Self::Capella(update) => LightClientHeader::Capella(update.attested_header.clone()),
+            Self::Deneb(update) => LightClientHeader::Deneb(update.attested_header.clone()),
+            Self::Electra(update) => LightClientHeader::Electra(update.attested_header.clone()),
+        }
+    }
+
+    pub fn finalized_header(&self) -> LightClientHeader {
+        match self {
+            Self::Bellatrix(update) => {
+                LightClientHeader::Bellatrix(update.finalized_header.clone())
+            }
+            Self::Capella(update) => LightClientHeader::Capella(update.finalized_header.clone()),
+            Self::Deneb(update) => LightClientHeader::Deneb(update.finalized_header.clone()),
+            Self::Electra(update) => LightClientHeader::Electra(update.finalized_header.clone()),
         }
     }
 }

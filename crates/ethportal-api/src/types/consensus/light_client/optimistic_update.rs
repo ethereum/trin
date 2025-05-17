@@ -5,6 +5,7 @@ use ssz_derive::{Decode, Encode};
 use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
+use super::header::LightClientHeader;
 use crate::{
     light_client::header::{LightClientHeaderDeneb, LightClientHeaderElectra},
     types::consensus::{
@@ -66,6 +67,15 @@ impl LightClientOptimisticUpdate {
             ForkName::Electra => {
                 LightClientOptimisticUpdateElectra::from_ssz_bytes(bytes).map(Self::Electra)
             }
+        }
+    }
+
+    pub fn attested_header(&self) -> LightClientHeader {
+        match self {
+            Self::Bellatrix(update) => LightClientHeader::Bellatrix(update.attested_header.clone()),
+            Self::Capella(update) => LightClientHeader::Capella(update.attested_header.clone()),
+            Self::Deneb(update) => LightClientHeader::Deneb(update.attested_header.clone()),
+            Self::Electra(update) => LightClientHeader::Electra(update.attested_header.clone()),
         }
     }
 }

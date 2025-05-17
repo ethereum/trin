@@ -2,6 +2,7 @@
 #![warn(clippy::uninlined_format_args)]
 
 pub mod accumulator;
+pub mod chain_head;
 pub mod constants;
 pub mod header_validator;
 pub mod historical_roots_acc;
