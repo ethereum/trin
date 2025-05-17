@@ -28,7 +28,7 @@ use ethportal_api::{
 };
 use futures::prelude::*;
 use parking_lot::{Mutex, RwLock};
-use rand::Rng;
+use rand::{rng, Rng};
 use ssz::Encode;
 use tokio::sync::{
     broadcast,
@@ -326,8 +326,8 @@ impl<
             // This should be 256
             let buckets_count = self.kbuckets.buckets_count();
             // Randomly pick one of the buckets.
-            let bucket = rand::thread_rng()
-                .gen_range(buckets_count - EXPECTED_NON_EMPTY_BUCKETS..buckets_count);
+            let bucket =
+                rng().random_range(buckets_count - EXPECTED_NON_EMPTY_BUCKETS..buckets_count);
 
             trace!(protocol = %self.protocol, bucket = %bucket, "Refreshing routing table bucket");
             match u8::try_from(bucket) {

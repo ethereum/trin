@@ -496,7 +496,7 @@ mod tests {
 
     use discv5::enr::NodeId;
     use quickcheck::*;
-    use rand::{thread_rng, Rng};
+    use rand::{rng, Rng};
     use test_log::test;
     use tracing::trace;
 
@@ -509,15 +509,15 @@ mod tests {
     }
 
     fn random_query() -> TestQuery {
-        let mut rng = thread_rng();
+        let mut rng = rng();
 
-        let known_closest_peers = random_nodes(rng.gen_range(1..60)).map(Key::from);
+        let known_closest_peers = random_nodes(rng.random_range(1..60)).map(Key::from);
         let target = NodeId::random();
         let config = QueryConfig {
-            parallelism: rng.gen_range(1..10),
-            num_results: rng.gen_range(1..25),
-            peer_timeout: Duration::from_secs(rng.gen_range(10..30)),
-            overall_timeout: Duration::from_secs(rng.gen_range(30..120)),
+            parallelism: rng.random_range(1..10),
+            num_results: rng.random_range(1..25),
+            peer_timeout: Duration::from_secs(rng.random_range(10..30)),
+            overall_timeout: Duration::from_secs(rng.random_range(30..120)),
         };
         FindContentQuery::with_config(config, target.into(), known_closest_peers)
     }
@@ -570,7 +570,7 @@ mod tests {
     fn termination_and_parallelism() {
         fn prop(mut query: TestQuery) {
             let now = Instant::now();
-            let mut rng = thread_rng();
+            let mut rng = rng();
 
             let mut remaining = query
                 .closest_peers
@@ -657,10 +657,10 @@ mod tests {
                     match state {
                         QueryState::Waiting(Some(p)) => {
                             let k = Key::from(*p);
-                            if rng.gen_bool(0.75) {
+                            if rng.random_bool(0.75) {
                                 // With a small probability, return the desired content. Otherwise,
                                 // return a list of random "closer" peers.
-                                if rng.gen_bool(0.05) {
+                                if rng.random_bool(0.05) {
                                     trace!("peer {k:?} returned content");
                                     let peer_node_id = k.preimage();
                                     query.on_success(
@@ -670,7 +670,8 @@ mod tests {
                                     // The peer that returned content is now validating.
                                     new_validations.push_back(k);
                                 } else {
-                                    let num_closer = rng.gen_range(0..query.config.num_results + 1);
+                                    let num_closer =
+                                        rng.random_range(0..query.config.num_results + 1);
                                     let closer_peers = random_nodes(num_closer).collect::<Vec<_>>();
                                     remaining.extend(closer_peers.iter().map(|x| Key::from(*x)));
                                     query.on_success(
@@ -694,7 +695,7 @@ mod tests {
                 }
 
                 validating.retain(|k| {
-                    if rng.gen_bool(0.3) {
+                    if rng.random_bool(0.3) {
                         // Mark pending content as valid or not
                         let node_id = k.preimage();
                         match query.pending_validation_result(*node_id) {
@@ -709,7 +710,7 @@ mod tests {
                                     was_utp_transfer: false,
                                     sending_peer: peer,
                                 };
-                                if rng.gen_bool(0.7) {
+                                if rng.random_bool(0.7) {
                                     trace!("peer {k:?} content is valid");
                                     // Track which peer is first to return valid content.
                                     // That should be the final reported peer.

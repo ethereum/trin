@@ -1,15 +1,25 @@
 use std::{env, error::Error};
 
-use vergen::EmitBuilder;
+use vergen::{BuildBuilder, CargoBuilder, Emitter, RustcBuilder};
+use vergen_git2::Git2Builder;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    EmitBuilder::builder()
-        .git_sha(true)
-        .git_describe(false, true, None)
-        .build_timestamp()
-        .rustc_semver()
-        .cargo_features()
-        .cargo_target_triple()
+    let build = BuildBuilder::default().build_timestamp(true).build()?;
+    let cargo = CargoBuilder::default()
+        .features(true)
+        .target_triple(true)
+        .build()?;
+    let git2 = Git2Builder::default()
+        .describe(false, true, None)
+        .dirty(true)
+        .sha(false)
+        .build()?;
+    let rustc = RustcBuilder::default().semver(true).build()?;
+    Emitter::default()
+        .add_instructions(&build)?
+        .add_instructions(&cargo)?
+        .add_instructions(&git2)?
+        .add_instructions(&rustc)?
         .emit_and_set()?;
 
     // Set short SHA

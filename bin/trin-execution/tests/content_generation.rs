@@ -10,7 +10,6 @@ use ethportal_api::{
 };
 use revm_primitives::keccak256;
 use tracing::info;
-use tracing_test::traced_test;
 use trin_execution::{
     config::StateConfig,
     content::{
@@ -86,7 +85,6 @@ impl Stats {
 /// BLOCKS=1000000 cargo test --release -p trin-execution --test content_generation -- --include-ignored --nocapture
 /// ```
 #[tokio::test]
-#[traced_test]
 #[ignore = "takes too long"]
 async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
     let blocks = std::env::var("BLOCKS")?.parse::<u64>()?;

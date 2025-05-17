@@ -25,8 +25,8 @@ serde_json.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-tower = { version = "0.4.13", features = ["full"] }
-tower-http = { version = "0.5.0", features = ["full"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.6", features = ["full"] }
 tracing.workspace = true
 trin-evm.workspace = true
 trin-utils.workspace = true

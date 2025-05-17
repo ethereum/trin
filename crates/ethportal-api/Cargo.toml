@@ -16,9 +16,9 @@ alloy = { workspace = true, features = ["consensus", "eips", "k256", "rlp", "rpc
 alloy-chains.workspace = true
 alloy-hardforks.workspace = true
 alloy-rlp.workspace = true
-alloy-rpc-types-eth = { version = "0.15", default-features = false, features = ["serde"] }
+alloy-rpc-types-eth = { version = "1.0", default-features = false, features = ["serde"] }
 anyhow.workspace = true
-base64 = "0.13.0"
+base64 = "0.22"
 bimap = "0.6.3"
 bytes.workspace = true
 c-kzg = "2.1.0"
@@ -39,20 +39,19 @@ quickcheck.workspace = true
 rand.workspace = true
 rayon.workspace = true
 rs_merkle = "1.4.2"
-secp256k1 = { version = "0.29.0", features = ["global-context", "recovery", "rand"] }
+secp256k1 = { version = "0.31", features = ["global-context", "recovery", "rand"] }
 serde = { workspace = true, features = ["rc"] }
 serde-this-or-that.workspace = true
 serde_json.workspace = true
 sha2 = "0.10.1"
 sha3.workspace = true
 ssz_types.workspace = true
-superstruct = "0.7.0"
+superstruct = "0.7"
 thiserror.workspace = true
 tokio.workspace = true
 tree_hash.workspace = true
 tree_hash_derive.workspace = true
-ureq.workspace = true
-validator = { version = "0.19.0", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 
 [dev-dependencies]
 env_logger.workspace = true
@@ -65,4 +64,5 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [build-dependencies]
-vergen = { version = "8.0.0", features = ["build", "cargo", "git", "gitcl", "rustc"] }
+vergen = { version = "9.0", features = ["build", "cargo", "emit_and_set", "rustc"] }
+vergen-git2 = "1.0"

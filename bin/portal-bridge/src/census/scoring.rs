@@ -2,7 +2,7 @@ use std::{collections::HashMap, time::Duration};
 
 use ethportal_api::types::{accept_code::AcceptCode, portal_wire::OfferTrace};
 use itertools::Itertools;
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{rng, seq::IndexedRandom};
 
 use super::peer::{Peer, PeerInfo};
 
@@ -141,7 +141,7 @@ impl<W: Weight> PeerSelector<W> {
             .collect_vec();
 
         weighted_peers
-            .choose_multiple_weighted(&mut thread_rng(), self.limit, |(_peer, weight)| *weight)
+            .choose_multiple_weighted(&mut rng(), self.limit, |(_peer, weight)| *weight)
             .expect("choosing random sample shouldn't fail")
             .map(|(peer, _weight)| peer.peer_info())
             .collect()

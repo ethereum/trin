@@ -42,4 +42,3 @@ test-log.workspace = true
 tokio-test.workspace = true
 tracing-subscriber.workspace = true
 trin-utils.workspace = true
-ureq.workspace = true

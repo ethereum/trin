@@ -573,7 +573,7 @@ mod tests {
     use anyhow::Result;
     use discv5::enr::NodeId;
     use ethportal_api::{types::network::Subnetwork, IdentityContentKey};
-    use rand::Rng;
+    use rand::{rng, Rng};
     use tempfile::TempDir;
 
     use super::*;
@@ -988,7 +988,7 @@ mod tests {
         let mut store =
             IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rng();
 
         // Insert 10 keys that shouldn't be pruned (close distance)
         // Each has a size in range 1-4%
@@ -997,7 +997,7 @@ mod tests {
             let (key, value) = generate_key_value_with_content_size(
                 &config,
                 0,
-                rng.gen_range((CONTENT_DEFAULT_SIZE_BYTES)..(4 * CONTENT_DEFAULT_SIZE_BYTES)),
+                rng.random_range((CONTENT_DEFAULT_SIZE_BYTES)..(4 * CONTENT_DEFAULT_SIZE_BYTES)),
             );
             store.insert(&key, value)?;
             important_keys.push(key);
@@ -1013,7 +1013,7 @@ mod tests {
             let (key, value) = generate_key_value_with_content_size(
                 &config,
                 0xFF - i,
-                rng.gen_range((CONTENT_DEFAULT_SIZE_BYTES)..(3 * CONTENT_DEFAULT_SIZE_BYTES)),
+                rng.random_range((CONTENT_DEFAULT_SIZE_BYTES)..(3 * CONTENT_DEFAULT_SIZE_BYTES)),
             );
             store.insert(&key, value)?;
             assert!(

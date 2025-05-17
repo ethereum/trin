@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use ethportal_api::utils::bytes::hex_encode;
 use jsonrpsee::{core::client::ClientT, http_client::HttpClientBuilder, rpc_params};
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 use trin_utils::log::init_tracing_logger;
 
 const SERVER_ADDR: &str = "193.167.100.100:9041";
@@ -34,7 +34,7 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
         .await
         .unwrap();
 
-    let client_cid_recv: u16 = thread_rng().gen();
+    let client_cid_recv: u16 = rng().random();
     let client_cid_send = client_cid_recv.wrapping_add(1);
 
     // The server connection ID is the flipped client connection ID.
@@ -47,7 +47,7 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
     assert_eq!(response, "true");
 
     // Send uTP payload from client to server
-    let payload: Vec<u8> = vec![thread_rng().gen(); 10_000];
+    let payload: Vec<u8> = vec![rng().random(); 10_000];
 
     let params = rpc_params!(
         server_enr,

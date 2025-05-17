@@ -62,7 +62,7 @@ impl E2StoreStreamWriter<File> {
 
 #[cfg(test)]
 mod tests {
-    use rand::Rng;
+    use rand::{rng, Rng};
     use trin_utils::dir::create_temp_test_dir;
 
     use super::*;
@@ -71,9 +71,9 @@ mod tests {
     #[test]
     fn test_e2store_stream_write_and_read() -> anyhow::Result<()> {
         // setup
-        let mut rng = rand::thread_rng();
+        let mut rng = rng();
         let tmp_dir = create_temp_test_dir()?;
-        let random_number: u16 = rng.gen();
+        let random_number: u16 = rng.random();
         let tmp_path = tmp_dir
             .path()
             .join(format!("{}.e2store_stream_test", random_number));
@@ -84,7 +84,7 @@ mod tests {
         let version = VersionEntry::default();
         e2store_stream_writer.append_entry(&Entry::from(&version))?;
 
-        let value: Vec<u8> = (0..100).map(|_| rng.gen_range(0..20)).collect();
+        let value: Vec<u8> = (0..100).map(|_| rng.random_range(0..20)).collect();
         let entry = Entry::new(0, value);
         e2store_stream_writer.append_entry(&entry)?;
         e2store_stream_writer.flush()?;

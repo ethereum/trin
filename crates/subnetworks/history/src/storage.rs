@@ -84,7 +84,7 @@ impl HistoryStorage {
 pub mod test {
     use ethportal_api::{types::content_key::history::BlockHeaderByHashKey, HistoryContentKey};
     use quickcheck::{QuickCheck, TestResult};
-    use rand::RngCore;
+    use rand::{rng, RngCore};
     use serial_test::serial;
     use trin_storage::test_utils::create_test_portal_storage_config_with_capacity;
 
@@ -101,7 +101,7 @@ pub mod test {
             let mut storage = HistoryStorage::new(storage_config).unwrap();
             let content_key = HistoryContentKey::random().unwrap();
             let mut value = [0u8; 32];
-            rand::thread_rng().fill_bytes(&mut value);
+            rng().fill_bytes(&mut value);
             storage.put(content_key, value).unwrap();
 
             std::mem::drop(storage);

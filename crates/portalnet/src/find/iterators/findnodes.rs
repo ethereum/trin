@@ -339,7 +339,7 @@ mod tests {
 
     use discv5::enr::NodeId;
     use quickcheck::*;
-    use rand::{thread_rng, Rng};
+    use rand::{rng, Rng};
     use test_log::test;
 
     use super::*;
@@ -351,15 +351,15 @@ mod tests {
     }
 
     fn random_query() -> TestQuery {
-        let mut rng = thread_rng();
+        let mut rng = rng();
 
-        let known_closest_peers = random_nodes(rng.gen_range(1..60)).map(Key::from);
+        let known_closest_peers = random_nodes(rng.random_range(1..60)).map(Key::from);
         let target = NodeId::random();
         let config = QueryConfig {
-            parallelism: rng.gen_range(1..10),
-            num_results: rng.gen_range(1..25),
-            peer_timeout: Duration::from_secs(rng.gen_range(10..30)),
-            overall_timeout: Duration::from_secs(rng.gen_range(30..120)),
+            parallelism: rng.random_range(1..10),
+            num_results: rng.random_range(1..25),
+            peer_timeout: Duration::from_secs(rng.random_range(10..30)),
+            overall_timeout: Duration::from_secs(rng.random_range(30..120)),
         };
         FindNodeQuery::with_config(config, target.into(), known_closest_peers)
     }
@@ -410,7 +410,7 @@ mod tests {
     fn termination_and_parallelism() {
         fn prop(mut query: TestQuery) {
             let now = Instant::now();
-            let mut rng = thread_rng();
+            let mut rng = rng();
 
             let mut expected = query
                 .closest_peers
@@ -456,8 +456,8 @@ mod tests {
                 // Report results back to the query with a random number of "closer"
                 // peers or an error, thus finishing the "in-flight requests".
                 for (i, k) in expected.iter().enumerate() {
-                    if rng.gen_bool(0.75) {
-                        let num_closer = rng.gen_range(0..query.config.num_results + 1);
+                    if rng.random_bool(0.75) {
+                        let num_closer = rng.random_range(0..query.config.num_results + 1);
                         let closer_peers = random_nodes(num_closer).collect::<Vec<_>>();
                         remaining.extend(closer_peers.iter().map(|x| Key::from(*x)));
                         query.on_success(k.preimage(), closer_peers);

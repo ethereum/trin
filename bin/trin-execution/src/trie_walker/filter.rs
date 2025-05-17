@@ -1,5 +1,5 @@
 use alloy::primitives::U256;
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 
 use crate::utils::nibbles_to_right_padded_b256;
 
@@ -47,7 +47,7 @@ impl Filter {
             };
         }
 
-        Self::new(thread_rng().gen_range(0..slice_count), slice_count)
+        Self::new(rng().random_range(0..slice_count), slice_count)
     }
 
     /// Check if a path is included in the filter
