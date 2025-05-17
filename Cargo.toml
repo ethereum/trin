@@ -95,11 +95,9 @@ tokio = { version = "1.14.0", features = ["full"] }
 tokio-test = "0.4.2"
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
-tracing-test = "0.2"
 tree_hash = "0.10"
 tree_hash_derive = "0.10"
 uds_windows = "1.0.1"
-ureq = { version = "3.0", features = ["json"] }
 url = "2.3.1"
 utp-rs = "0.1.0-alpha.17"
 

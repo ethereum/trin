@@ -44,4 +44,3 @@ trin-utils.workspace = true
 
 [dev-dependencies]
 test-log.workspace = true
-tracing-test.workspace = true

@@ -1,5 +1,4 @@
 use tracing::info;
-use tracing_test::traced_test;
 use trin_execution::{
     cli::{ExportStateConfig, ImportStateConfig},
     config::StateConfig,
@@ -22,7 +21,6 @@ use trin_utils::dir::create_temp_test_dir;
 /// BLOCKS=10000 cargo test -p trin-execution --test export_import -- --nocapture
 /// ```
 #[tokio::test]
-#[traced_test]
 #[ignore = "This test downloads data from a remote server"]
 async fn execute_export_import_execute() -> anyhow::Result<()> {
     let blocks = std::env::var("BLOCKS")

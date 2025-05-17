@@ -51,7 +51,6 @@ thiserror.workspace = true
 tokio.workspace = true
 tree_hash.workspace = true
 tree_hash_derive.workspace = true
-ureq.workspace = true
 validator = { version = "0.20", features = ["derive"] }
 
 [dev-dependencies]

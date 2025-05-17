@@ -40,7 +40,6 @@ trin-history.workspace = true
 trin-state.workspace = true
 trin-utils.workspace = true
 trin-validation.workspace = true
-ureq.workspace = true
 url.workspace = true
 
 [target.'cfg(windows)'.dependencies]

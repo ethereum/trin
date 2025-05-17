@@ -4,7 +4,7 @@ pub mod filter;
 use std::sync::Arc;
 
 use alloy::primitives::{Bytes, B256};
-use anyhow::{anyhow, Ok};
+use anyhow::anyhow;
 use db::TrieWalkerDb;
 use eth_trie::{decode_node, node::Node};
 use filter::Filter;
@@ -172,11 +172,10 @@ impl<DB: TrieWalkerDb> Iterator for TrieWalker<DB> {
 
 #[cfg(test)]
 mod tests {
-    use std::{result::Result::Ok, str::FromStr, sync::Arc};
+    use std::{str::FromStr, sync::Arc};
 
     use alloy::primitives::{keccak256, Address, B256, U256};
     use eth_trie::{EthTrie, RootWithTrieDiff, Trie};
-    use tracing_test::traced_test;
     use trin_utils::dir::create_temp_test_dir;
 
     use super::*;
@@ -188,7 +187,6 @@ mod tests {
     };
 
     #[tokio::test]
-    #[traced_test]
     async fn test_state_walker() {
         let temp_directory = create_temp_test_dir().unwrap();
         let db = Arc::new(setup_rocksdb(temp_directory.path()).unwrap());

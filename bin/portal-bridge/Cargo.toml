@@ -52,4 +52,3 @@ url.workspace = true
 env_logger.workspace = true
 rstest.workspace = true
 test-log.workspace = true
-tracing-test.workspace = true
