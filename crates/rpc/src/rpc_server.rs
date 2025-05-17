@@ -571,7 +571,7 @@ pub enum WsHttpServerKind {
     /// Http server
     Plain(Server),
     /// Http server with cors
-    WithCors(Server<Stack<CorsLayer, Identity>>),
+    WithCors(Box<Server<Stack<CorsLayer, Identity>>>),
 }
 
 impl WsHttpServerKind {
@@ -597,7 +597,7 @@ impl WsHttpServerKind {
                 .build(socket_addr)
                 .await
                 .map_err(|err| RpcError::IoError(err, server_kind))?;
-            Ok(WsHttpServerKind::WithCors(server))
+            Ok(WsHttpServerKind::WithCors(Box::new(server)))
         } else {
             let server = builder
                 .build(socket_addr)
