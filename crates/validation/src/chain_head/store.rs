@@ -46,4 +46,13 @@ impl ChainHeadStore {
             .get(historical_summary_index)
             .cloned()
     }
+
+    pub fn update_historical_summaries_if_newer(
+        &mut self,
+        historical_summaries: HistoricalSummaries,
+    ) {
+        if self.historical_summaries.len() < historical_summaries.len() {
+            self.historical_summaries = historical_summaries
+        }
+    }
 }

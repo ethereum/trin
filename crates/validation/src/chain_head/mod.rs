@@ -9,6 +9,7 @@ use ethportal_api::{
         finality_update::LightClientFinalityUpdate,
         header::{LightClientHeader, LightClientHeaderElectra},
         optimistic_update::LightClientOptimisticUpdate,
+        update::LightClientUpdate,
     },
 };
 use parking_lot::RwLock;
@@ -62,19 +63,37 @@ impl ChainHead {
     /// Updates the latest beacon block headers, if newer.
     ///
     /// This functions assumes that update is valid.
+    pub fn process_update(&self, update: LightClientUpdate) {
+        let mut store = self.store.write();
+        store.update_latest_if_newer(update.attested_header());
+        store.update_finalized_if_newer(update.finalized_header());
+    }
+
+    /// Updates the latest beacon block headers, if newer.
+    ///
+    /// This functions assumes that update is valid.
     pub fn process_optimistic_update(&self, update: LightClientOptimisticUpdate) {
         self.store
             .write()
             .update_latest_if_newer(update.attested_header());
     }
 
-    /// Updates the latest finalized beacon block headers, if newer.
+    /// Updates the latest and finalized beacon block headers, if newer.
     ///
     /// This functions assumes that update is valid.
-    pub fn process_finalized_update(&self, update: LightClientFinalityUpdate) {
+    pub fn process_finality_update(&self, update: LightClientFinalityUpdate) {
         let mut store = self.store.write();
         store.update_latest_if_newer(update.attested_header());
         store.update_finalized_if_newer(update.finalized_header());
+    }
+
+    /// Updates the [HistoricalSummaries], if newer.
+    ///
+    /// This functions assumes that historical summaries are valid.
+    pub fn update_historical_summaries(&self, historical_summaries: HistoricalSummaries) {
+        self.store
+            .write()
+            .update_historical_summaries_if_newer(historical_summaries);
     }
 }
 
