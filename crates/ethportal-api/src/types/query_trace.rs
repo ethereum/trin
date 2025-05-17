@@ -218,8 +218,7 @@ pub struct NodeInfo {
 #[cfg(test)]
 mod tests {
     use alloy::primitives::U256;
-    use serde_json::Value;
-    use ureq::json;
+    use serde_json::{json, Value};
 
     use super::*;
     use crate::types::enr::generate_random_remote_enr;

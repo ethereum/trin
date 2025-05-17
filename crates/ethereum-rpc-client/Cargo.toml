@@ -19,8 +19,8 @@ ethereum_ssz.workspace = true
 ethereum_ssz_derive.workspace = true
 ethportal-api.workspace = true
 reqwest.workspace = true
-reqwest-middleware = { version = "0.3.3", features = ["json"] }
-reqwest-retry = "0.6.1"
+reqwest-middleware = { version = "0.4", features = ["json"] }
+reqwest-retry = "0.7"
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

@@ -27,7 +27,7 @@ use futures::{
     FutureExt,
 };
 use itertools::Itertools;
-use rand::seq::SliceRandom;
+use rand::{rng, seq::SliceRandom};
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client,
@@ -131,7 +131,7 @@ impl E2HSBridge {
         let epochs = block_range_to_epochs(self.block_range.start, block_range_end);
         let mut epoch_indexes: Vec<u64> = epochs.keys().cloned().sorted().collect();
         if self.random_fill {
-            epoch_indexes.shuffle(&mut rand::thread_rng());
+            epoch_indexes.shuffle(&mut rng());
         }
 
         let mut latest_task = None;

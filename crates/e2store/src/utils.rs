@@ -1,7 +1,7 @@
 use std::{collections::HashMap, io};
 
 use anyhow::{ensure, Error};
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{rng, seq::SliceRandom};
 use reqwest::Client;
 use scraper::{Html, Selector};
 use url::Url;
@@ -105,6 +105,6 @@ fn assert_nonempty_and_consecutive_epochs(
 pub async fn get_shuffled_era1_files(http_client: &Client) -> anyhow::Result<Vec<String>> {
     let era1_files = get_era1_files(http_client).await?;
     let mut era1_files: Vec<String> = era1_files.into_values().collect();
-    era1_files.shuffle(&mut thread_rng());
+    era1_files.shuffle(&mut rng());
     Ok(era1_files)
 }

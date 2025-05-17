@@ -1,7 +1,7 @@
 use std::{fmt, hash::Hash};
 
 use bytes::{BufMut, BytesMut};
-use rand::{seq::SliceRandom, RngCore};
+use rand::{rng, seq::IndexedRandom, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
@@ -53,7 +53,7 @@ impl HistoryContentKey {
             HISTORY_BLOCK_RECEIPTS_KEY_PREFIX,
             HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX,
         ]
-        .choose(&mut rand::thread_rng())
+        .choose(&mut rng())
         .ok_or_else(|| anyhow::Error::msg("Failed to choose random prefix"))?;
         let mut random_bytes: Vec<u8> =
             if *random_prefix == HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX {
@@ -61,7 +61,7 @@ impl HistoryContentKey {
             } else {
                 vec![0u8; 32]
             };
-        rand::thread_rng().fill_bytes(&mut random_bytes[..]);
+        rng().fill_bytes(&mut random_bytes[..]);
         random_bytes.insert(0, *random_prefix);
         Self::try_from_bytes(&random_bytes).map_err(anyhow::Error::msg)
     }

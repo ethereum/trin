@@ -1,7 +1,7 @@
 use delay_map::HashMapDelay;
 use ethportal_api::{types::enr::Enr, OverlayContentKey};
 use futures::prelude::*;
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{rng, seq::SliceRandom};
 use tokio::time::Duration;
 use tracing::{debug, warn};
 
@@ -95,7 +95,7 @@ where
                 return None;
             }
             // randomly choose a seen peer as the fallback peer
-            seen_peers.fallback.shuffle(&mut thread_rng());
+            seen_peers.fallback.shuffle(&mut rng());
             Some(seen_peers.fallback.remove(0))
         } else {
             warn!(

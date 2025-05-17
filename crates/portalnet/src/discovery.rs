@@ -1,6 +1,7 @@
 use std::{
     fmt, io,
     net::{Ipv4Addr, SocketAddr},
+    num::NonZeroUsize,
     ops::Deref,
     str::FromStr,
     sync::Arc,
@@ -180,7 +181,10 @@ impl Discovery {
 
         // Set local NodeAddress cache to twice the size of discv5 session cache to compensate for
         // inconsistency between them
-        let node_addr_cache = LruCache::new(portal_config.discv5_session_cache_capacity * 2);
+        let node_addr_cache = LruCache::new(
+            NonZeroUsize::new(portal_config.discv5_session_cache_capacity * 2)
+                .expect("Cache size should be non-zero"),
+        );
         let node_addr_cache = Arc::new(RwLock::new(node_addr_cache));
 
         Ok(Self {

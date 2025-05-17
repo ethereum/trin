@@ -16,12 +16,11 @@ use ethportal_api::{
     StateContentKey, StateContentValue, StateNetworkApiClient,
 };
 use futures::{Future, TryFutureExt};
-use serde::Deserializer;
+use serde::{Deserialize, Deserializer};
 use serde_yaml::Value;
 use ssz::Decode;
 use tracing::error;
 use trin_utils::submodules::portal_spec_tests_file_path;
-use ureq::serde::Deserialize;
 
 pub async fn wait_for_successful_result<Fut, O>(f: impl Fn() -> Fut) -> O
 where

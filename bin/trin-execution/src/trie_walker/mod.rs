@@ -172,7 +172,7 @@ impl<DB: TrieWalkerDb> Iterator for TrieWalker<DB> {
 
 #[cfg(test)]
 mod tests {
-    use std::{str::FromStr, sync::Arc};
+    use std::{result::Result::Ok, str::FromStr, sync::Arc};
 
     use alloy::primitives::{keccak256, Address, B256, U256};
     use eth_trie::{EthTrie, RootWithTrieDiff, Trie};

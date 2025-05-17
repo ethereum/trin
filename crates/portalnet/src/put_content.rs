@@ -10,7 +10,7 @@ use ethportal_api::{
     utils::bytes::{hex_encode, hex_encode_compact},
     OverlayContentKey, RawContentValue,
 };
-use rand::Rng;
+use rand::{rng, Rng};
 use tokio::sync::mpsc;
 use tracing::{debug, error, trace, warn};
 
@@ -153,9 +153,9 @@ fn select_put_content_recipients<TMetric: Metric>(
     let mut farther_enrs = enrs.split_off(NUM_CLOSEST_NODES);
 
     // Select random NUM_FARTHER_NODES
-    let mut rng = rand::thread_rng();
+    let mut rng = rng();
     for _ in 0..NUM_FARTHER_NODES {
-        let enr = farther_enrs.swap_remove(rng.gen_range(0..farther_enrs.len()));
+        let enr = farther_enrs.swap_remove(rng.random_range(0..farther_enrs.len()));
         enrs.push(enr);
     }
 

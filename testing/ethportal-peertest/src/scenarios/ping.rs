@@ -15,8 +15,8 @@ use ethportal_api::{
     BeaconNetworkApiClient, HistoryNetworkApiClient, StateNetworkApiClient,
 };
 use jsonrpsee::async_client::Client;
+use serde_json::json;
 use tracing::info;
-use ureq::json;
 
 use crate::Peertest;
 
