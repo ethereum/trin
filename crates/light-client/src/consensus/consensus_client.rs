@@ -14,7 +14,7 @@ use ethportal_api::{
         finality_update::{LightClientFinalityUpdate, LightClientFinalityUpdateElectra},
         optimistic_update::{LightClientOptimisticUpdate, LightClientOptimisticUpdateElectra},
         store::LightClientStore,
-        update::{FinalizedRootProofLenElectra, LightClientUpdateElectra},
+        update::{FinalizedRootProofLenElectra, LightClientUpdate, LightClientUpdateElectra},
     },
 };
 use milagro_bls::PublicKey;
@@ -28,6 +28,7 @@ use crate::{
     consensus::{
         constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES, rpc::portal_rpc::expected_current_slot,
     },
+    watch::{light_client_watch_channels, LightClientWatchReceivers, LightClientWatchSenders},
 };
 
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md
@@ -40,6 +41,7 @@ pub struct ConsensusLightClient<R: ConsensusRpc> {
     initial_checkpoint: B256,
     pub last_checkpoint: Option<B256>,
     pub config: Arc<Config>,
+    watch_senders: LightClientWatchSenders,
 }
 
 impl<R: ConsensusRpc> ConsensusLightClient<R> {
@@ -49,6 +51,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         config: Arc<Config>,
     ) -> Result<ConsensusLightClient<R>> {
         let rpc = R::new(rpc);
+        let (watch_senders, _watch_receivers) = light_client_watch_channels();
 
         Ok(ConsensusLightClient {
             rpc,
@@ -56,16 +59,19 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             last_checkpoint: None,
             config,
             initial_checkpoint: checkpoint_block_root,
+            watch_senders,
         })
     }
 
     pub fn with_custom_rpc(rpc: R, checkpoint_block_root: B256, config: Arc<Config>) -> Self {
+        let (watch_senders, _watch_receivers) = light_client_watch_channels();
         ConsensusLightClient {
             rpc,
             store: LightClientStore::default(),
             last_checkpoint: None,
             config,
             initial_checkpoint: checkpoint_block_root,
+            watch_senders,
         }
     }
 
@@ -103,6 +109,10 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
     pub fn get_light_client_store(&self) -> &LightClientStore {
         &self.store
+    }
+
+    pub fn get_watch_receivers(&self) -> LightClientWatchReceivers {
+        self.watch_senders.subscribe()
     }
 
     pub async fn sync(&mut self) -> Result<()> {
@@ -366,13 +376,27 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     }
 
     fn apply_update(&mut self, update: &LightClientUpdateElectra) {
-        let update = GenericUpdate::from(update);
-        self.apply_generic_update(&update);
+        let generic_update = GenericUpdate::from(update);
+        self.apply_generic_update(&generic_update);
+        if self.store.optimistic_header.slot == update.attested_header.beacon.slot
+            || self.store.finalized_header.slot == update.finalized_header.beacon.slot
+        {
+            self.watch_senders
+                .update
+                .send_replace(Some(LightClientUpdate::Electra(update.clone())));
+        }
     }
 
     fn apply_finality_update(&mut self, update: &LightClientFinalityUpdateElectra) {
-        let update = GenericUpdate::from(update);
-        self.apply_generic_update(&update);
+        let generic_update = GenericUpdate::from(update);
+        self.apply_generic_update(&generic_update);
+        if self.store.optimistic_header.slot == update.attested_header.beacon.slot
+            || self.store.finalized_header.slot == update.finalized_header.beacon.slot
+        {
+            self.watch_senders
+                .finality_update
+                .send_replace(Some(LightClientFinalityUpdate::Electra(update.clone())));
+        }
     }
 
     fn log_finality_update(&self, update: &GenericUpdate) {
@@ -393,8 +417,13 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     }
 
     fn apply_optimistic_update(&mut self, update: &LightClientOptimisticUpdateElectra) {
-        let update = GenericUpdate::from(update);
-        self.apply_generic_update(&update);
+        let generic_update = GenericUpdate::from(update);
+        self.apply_generic_update(&generic_update);
+        if self.store.optimistic_header.slot == update.attested_header.beacon.slot {
+            self.watch_senders
+                .optimistic_update
+                .send_replace(Some(LightClientOptimisticUpdate::Electra(update.clone())));
+        }
     }
 
     fn log_optimistic_update(&self, update: &GenericUpdate) {
