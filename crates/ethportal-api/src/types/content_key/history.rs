@@ -216,6 +216,17 @@ impl fmt::Display for HistoryContentKey {
 }
 
 impl OverlayContentKey for HistoryContentKey {
+    fn affected_by_radius(&self) -> bool {
+        match self {
+            Self::BlockHeaderByHash(_) => true,
+            Self::BlockHeaderByNumber(_) => true,
+            Self::BlockBody(_) => true,
+            Self::BlockReceipts(_) => true,
+            Self::EphemeralHeadersFindContent(_) => false,
+            Self::EphemeralHeaderOffer(_) => false,
+        }
+    }
+
     fn to_bytes(&self) -> RawContentKey {
         let mut bytes;
 

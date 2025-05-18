@@ -113,6 +113,10 @@ impl fmt::Display for BeaconContentKey {
 }
 
 impl OverlayContentKey for BeaconContentKey {
+    fn affected_by_radius(&self) -> bool {
+        false
+    }
+
     fn to_bytes(&self) -> RawContentKey {
         let mut bytes;
 

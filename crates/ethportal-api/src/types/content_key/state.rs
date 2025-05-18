@@ -65,6 +65,10 @@ pub struct ContractBytecodeKey {
 }
 
 impl OverlayContentKey for StateContentKey {
+    fn affected_by_radius(&self) -> bool {
+        true
+    }
+
     fn to_bytes(&self) -> RawContentKey {
         let mut bytes;
 
