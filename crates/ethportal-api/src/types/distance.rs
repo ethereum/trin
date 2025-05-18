@@ -82,6 +82,7 @@ pub trait Metric {
 }
 
 /// The XOR metric defined in the Kademlia paper.
+#[derive(Debug)]
 pub struct XorMetric;
 
 impl Metric for XorMetric {

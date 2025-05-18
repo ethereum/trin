@@ -203,7 +203,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::{versioned::ContentType, DistanceFunction};
+    use crate::versioned::ContentType;
 
     const DEFAULT_STORAGE_CAPACITY_BYTES: u64 = 1_000_000;
     const EXTRA_DISK_USAGE_PER_ENTRY: u64 = 100;
@@ -220,7 +220,6 @@ mod tests {
             node_data_dir: PathBuf::default(),
             storage_capacity_bytes,
             sql_connection_pool: Pool::new(SqliteConnectionManager::memory()).unwrap(),
-            distance_fn: DistanceFunction::Xor,
             pruning_config: PruningConfig::default(),
             max_radius: Distance::MAX,
         };

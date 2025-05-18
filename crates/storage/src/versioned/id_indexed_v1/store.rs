@@ -1,6 +1,9 @@
 use std::{cmp::min, marker::PhantomData};
 
-use ethportal_api::{types::distance::Distance, OverlayContentKey, RawContentValue};
+use ethportal_api::{
+    types::distance::{Distance, Metric},
+    OverlayContentKey, RawContentValue,
+};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{named_params, types::Type, OptionalExtension};
@@ -36,7 +39,7 @@ pub struct PaginateResult<TContentKey> {
 /// It has a configurable capacity and it will prune data that is farthest from the `NodeId` once
 /// it uses more than storage capacity.
 #[derive(Debug)]
-pub struct IdIndexedV1Store<TContentKey: OverlayContentKey> {
+pub struct IdIndexedV1Store<TContentKey: OverlayContentKey, TMetric: Metric> {
     /// The configuration.
     config: IdIndexedV1StoreConfig,
     /// The maximum distance between `NodeId` and content id that store should keep. Updated
@@ -50,9 +53,13 @@ pub struct IdIndexedV1Store<TContentKey: OverlayContentKey> {
     metrics: StorageMetricsReporter,
     /// Phantom Content Key
     _phantom_content_key: PhantomData<TContentKey>,
+    /// Phantom metric
+    _phantom_metric: PhantomData<TMetric>,
 }
 
-impl<TContentKey: OverlayContentKey> VersionedContentStore for IdIndexedV1Store<TContentKey> {
+impl<TContentKey: OverlayContentKey, TMetric: Metric> VersionedContentStore
+    for IdIndexedV1Store<TContentKey, TMetric>
+{
     type Config = IdIndexedV1StoreConfig;
 
     fn version() -> StoreVersion {
@@ -87,6 +94,7 @@ impl<TContentKey: OverlayContentKey> VersionedContentStore for IdIndexedV1Store<
             ),
             metrics: StorageMetricsReporter::new(subnetwork),
             _phantom_content_key: PhantomData,
+            _phantom_metric: PhantomData,
             config,
         };
         store.init()?;
@@ -94,7 +102,7 @@ impl<TContentKey: OverlayContentKey> VersionedContentStore for IdIndexedV1Store<
     }
 }
 
-impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
+impl<TContentKey: OverlayContentKey, TMetric: Metric> IdIndexedV1Store<TContentKey, TMetric> {
     /// Initializes variables and metrics, and runs necessary checks.
     fn init(&mut self) -> Result<(), ContentStoreError> {
         self.metrics
@@ -165,9 +173,7 @@ impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
 
     /// Returns distance to the content id.
     pub fn distance_to_content_id(&self, content_id: &ContentId) -> Distance {
-        self.config
-            .distance_fn
-            .distance(&self.config.node_id, &content_id.0)
+        TMetric::distance(&self.config.node_id.raw(), &content_id.0)
     }
 
     /// Returns whether data associated with the content id is already stored.
@@ -572,14 +578,17 @@ fn maybe_create_table_and_indexes(
 mod tests {
     use anyhow::Result;
     use discv5::enr::NodeId;
-    use ethportal_api::{types::network::Subnetwork, IdentityContentKey};
+    use ethportal_api::{
+        types::{distance::XorMetric, network::Subnetwork},
+        IdentityContentKey,
+    };
     use rand::{rng, Rng};
     use tempfile::TempDir;
 
     use super::*;
     use crate::{
         test_utils::generate_random_bytes, utils::setup_sql,
-        versioned::id_indexed_v1::pruning_strategy::PruningConfig, DistanceFunction,
+        versioned::id_indexed_v1::pruning_strategy::PruningConfig,
     };
 
     const CONTENT_DEFAULT_SIZE_BYTES: u64 = 100;
@@ -602,7 +611,6 @@ mod tests {
             subnetwork: Subnetwork::State,
             node_id: NodeId::random(),
             node_data_dir: temp_dir.path().to_path_buf(),
-            distance_fn: DistanceFunction::Xor,
             sql_connection_pool: setup_sql(temp_dir.path()).unwrap(),
             storage_capacity_bytes,
             pruning_config: PruningConfig::default(),
@@ -640,11 +648,12 @@ mod tests {
         for _ in 0..count {
             let (key, value) = generate_key_value(config, 0x80);
             let id = key.content_id();
-            let content_size = IdIndexedV1Store::<IdentityContentKey>::calculate_content_size(
-                &id,
-                &key.to_bytes(),
-                &value,
-            );
+            let content_size =
+                IdIndexedV1Store::<IdentityContentKey, XorMetric>::calculate_content_size(
+                    &id,
+                    &key.to_bytes(),
+                    &value,
+                );
             config
                 .sql_connection_pool
                 .get()?
@@ -652,7 +661,7 @@ mod tests {
                     ":content_id": id.as_slice(),
                     ":content_key": key.to_bytes().to_vec(),
                     ":content_value": value.to_vec(),
-                    ":distance_short": config.distance_fn.distance(&config.node_id, &id).big_endian_u32(),
+                    ":distance_short": XorMetric::distance(&config.node_id.raw(), &id).big_endian_u32(),
                     ":content_size": content_size,
                 })?;
         }
@@ -663,8 +672,10 @@ mod tests {
     fn create_empty() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
-        let store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
         assert_eq!(store.usage_stats.entry_count(), 0);
         assert_eq!(store.usage_stats.estimated_disk_usage_bytes(), 0);
         assert_eq!(store.radius(), Distance::MAX);
@@ -679,8 +690,10 @@ mod tests {
         let item_count = 20; // 20%
         create_and_populate_table(&config, item_count)?;
 
-        let store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         assert_eq!(store.usage_stats.entry_count(), item_count);
         assert_eq!(
@@ -699,8 +712,10 @@ mod tests {
         let item_count = 50; // 50%
         create_and_populate_table(&config, item_count)?;
 
-        let store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         assert_eq!(store.usage_stats.entry_count(), item_count);
         assert_eq!(
@@ -720,8 +735,10 @@ mod tests {
         let target_capacity_count = target_capacity_bytes / DISK_USAGE_PER_CONTENT_BYTES;
         create_and_populate_table(&config, target_capacity_count)?;
 
-        let store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
         assert_eq!(store.usage_stats.entry_count(), target_capacity_count);
         assert_eq!(
             store.usage_stats.estimated_disk_usage_bytes(),
@@ -741,8 +758,10 @@ mod tests {
 
         create_and_populate_table(&config, above_target_capacity_count)?;
 
-        let store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         // Should not prune
         assert_eq!(store.usage_stats.entry_count(), above_target_capacity_count);
@@ -765,8 +784,10 @@ mod tests {
 
         create_and_populate_table(&config, full_capacity_count)?;
 
-        let store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         // Should not prune
         assert_eq!(store.usage_stats.entry_count(), full_capacity_count);
@@ -790,8 +811,10 @@ mod tests {
 
         create_and_populate_table(&config, above_full_capacity_count)?;
 
-        let store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         // should prune until target capacity
         assert_eq!(
@@ -811,7 +834,8 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, /* storage_capacity_bytes= */ 0);
 
-        let store = IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config)?;
+        let store =
+            IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(ContentType::State, config)?;
 
         // Check that db is empty and radius is ZERO.
         assert_eq!(store.usage_stats.entry_count(), 0);
@@ -827,7 +851,8 @@ mod tests {
 
         // Add 1K entries, more than we would normally prune.
         create_and_populate_table(&config, 1_000)?;
-        let store = IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config)?;
+        let store =
+            IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(ContentType::State, config)?;
 
         // Check that db is empty and radius is ZERO.
         assert_eq!(store.usage_stats.entry_count(), 0);
@@ -843,8 +868,10 @@ mod tests {
 
         // fill 50% of storage with 50 items, 1% each
         create_and_populate_table(&config, 50)?;
-        let mut store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let mut store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         let (key, value) = generate_key_value(&config, 0);
         let id = ContentId::from(key.content_id());
@@ -883,8 +910,10 @@ mod tests {
 
         // fill 50% of storage with 50 items, 1% each
         create_and_populate_table(&config, 50)?;
-        let mut store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let mut store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         let (key, value) = generate_key_value(&config, 0);
         let id = ContentId::from(key.content_id());
@@ -917,8 +946,10 @@ mod tests {
     fn prune_simple() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
-        let mut store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let mut store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         assert_eq!(store.radius(), Distance::MAX);
 
@@ -985,8 +1016,10 @@ mod tests {
 
         // fill 50% of storage with 50 items, 1% each
         create_and_populate_table(&config, 50)?;
-        let mut store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let mut store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         let mut rng = rng();
 
@@ -1040,8 +1073,10 @@ mod tests {
 
         // fill 50% of storage with 50 items, 1% each
         create_and_populate_table(&config, 50)?;
-        let mut store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let mut store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
         assert_eq!(store.usage_stats.entry_count(), 50);
 
         // Insert key/value such that:
@@ -1087,8 +1122,10 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_10000_ITEMS);
 
-        let mut store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let mut store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         // insert 10_000 entries, each 0x01% of storage size -> storage fully used
         for _ in 0..10_000 {
@@ -1130,8 +1167,10 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_10000_ITEMS);
 
-        let mut store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let mut store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         // insert 10_000 entries, each 0x01% of storage size -> storage fully used
         for _ in 0..10_000 {
@@ -1177,7 +1216,8 @@ mod tests {
     fn pagination_empty() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
-        let store = IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config)?;
+        let store =
+            IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(ContentType::State, config)?;
 
         assert_eq!(
             store.paginate(/* offset= */ 0, /* limit= */ 10)?,
@@ -1193,8 +1233,10 @@ mod tests {
     fn pagination() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
-        let mut store =
-            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
+        let mut store = IdIndexedV1Store::<IdentityContentKey, XorMetric>::create(
+            ContentType::State,
+            config.clone(),
+        )?;
 
         let entry_count = 12;
 

@@ -977,7 +977,7 @@ mod tests {
     use tokio::{sync::mpsc::unbounded_channel, time::timeout};
     use tokio_test::{assert_pending, assert_ready, task};
     use trin_metrics::portalnet::PORTALNET_METRICS;
-    use trin_storage::{DistanceFunction, MemoryContentStore};
+    use trin_storage::MemoryContentStore;
     use trin_validation::validator::MockValidator;
 
     use super::*;
@@ -1028,7 +1028,7 @@ mod tests {
         let utp_controller = Arc::new(utp_controller);
 
         let node_id = discovery.local_enr().node_id();
-        let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+        let store = MemoryContentStore::new(node_id);
         let store = Arc::new(Mutex::new(store));
 
         let overlay_config = OverlayConfig::default();

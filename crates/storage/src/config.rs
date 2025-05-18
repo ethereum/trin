@@ -5,7 +5,7 @@ use ethportal_api::types::{distance::Distance, network::Subnetwork};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 
-use crate::{error::ContentStoreError, utils::setup_sql, DistanceFunction};
+use crate::{error::ContentStoreError, utils::setup_sql};
 
 const BYTES_IN_MB_U64: u64 = 1000 * 1000;
 
@@ -103,7 +103,6 @@ impl PortalStorageConfigFactory {
             storage_capacity_bytes: capacity_bytes,
             node_id: self.node_id,
             node_data_dir: self.node_data_dir.clone(),
-            distance_fn: DistanceFunction::Xor,
             sql_connection_pool: self.sql_connection_pool.clone(),
             max_radius,
         })
@@ -124,7 +123,6 @@ pub struct PortalStorageConfig {
     pub storage_capacity_bytes: u64,
     pub node_id: NodeId,
     pub node_data_dir: PathBuf,
-    pub distance_fn: DistanceFunction,
     pub sql_connection_pool: Pool<SqliteConnectionManager>,
     pub max_radius: Distance,
 }
