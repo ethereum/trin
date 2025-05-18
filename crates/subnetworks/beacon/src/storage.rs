@@ -18,7 +18,7 @@ use ethportal_api::{
 use light_client::consensus::rpc::portal_rpc::expected_current_slot;
 use r2d2::Pool;
 use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use ssz::{Decode, Encode};
 use ssz_types::{typenum::U128, VariableList};
 use tracing::{debug, error, info};
@@ -181,16 +181,7 @@ impl ContentStore for BeaconStorage {
             }
             BeaconContentKey::HistoricalSummariesWithProof(content_key) => {
                 let epoch = content_key.epoch;
-                match self
-                    .lookup_historical_summaries_value(epoch)
-                    .map_err(|err| {
-                        ContentStoreError::Database(format!(
-                            "Error looking up HistoricalSummariesWithProof content value: {err:?}"
-                        ))
-                    })? {
-                    Some(result) => Ok(Some(result.into())),
-                    None => Ok(None),
-                }
+                self.lookup_historical_summaries_value(epoch)
             }
         }
     }
@@ -314,6 +305,24 @@ impl BeaconStorage {
         storage
             .metrics
             .report_content_data_storage_bytes(network_content_storage_usage as f64);
+
+        // Update historical summaries to the latest stored version
+        if let Some(historical_summaries_bytes) = storage.lookup_historical_summaries_value(0)? {
+            let fork_versioned_historical_summaries =
+                ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(
+                    &historical_summaries_bytes,
+                )
+                .map_err(|err| ContentStoreError::InvalidData {
+                    message: format!(
+                        "Error decoding ForkVersionedHistoricalSummariesWithProof: {err:?}"
+                    ),
+                })?;
+            storage.chain_head.update_historical_summaries(
+                fork_versioned_historical_summaries
+                    .historical_summaries_with_proof
+                    .historical_summaries,
+            );
+        }
 
         Ok(storage)
     }
@@ -692,21 +701,19 @@ impl BeaconStorage {
     }
 
     /// Public method for looking up a historical summaries with proof value by epoch number
-    pub fn lookup_historical_summaries_value(&self, epoch: u64) -> anyhow::Result<Option<Vec<u8>>> {
+    pub fn lookup_historical_summaries_value(
+        &self,
+        epoch: u64,
+    ) -> Result<Option<RawContentValue>, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(HISTORICAL_SUMMARIES_LOOKUP_QUERY)?;
 
-        let rows: Result<Vec<Vec<u8>>, rusqlite::Error> = query
-            .query_map([epoch], |row| {
+        Ok(query
+            .query_row([epoch], |row| {
                 let row: Vec<u8> = row.get(0)?;
-                Ok(row)
-            })?
-            .collect();
-
-        match rows?.first() {
-            Some(val) => Ok(Some(val.to_vec())),
-            None => Ok(None),
-        }
+                Ok(RawContentValue::from(row))
+            })
+            .optional()?)
     }
     /// Get a summary of the current state of storage
     pub fn get_summary_info(&self) -> String {
