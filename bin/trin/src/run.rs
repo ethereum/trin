@@ -19,7 +19,7 @@ use trin_state::initialize_state_network;
 use trin_storage::{config::StorageCapacityConfig, PortalStorageConfigFactory};
 #[cfg(windows)]
 use trin_utils::cli::Web3TransportType;
-use trin_validation::oracle::HeaderOracle;
+use trin_validation::{chain_head::ChainHead, oracle::HeaderOracle};
 use utp_rs::socket::UtpSocket;
 
 use crate::{
@@ -121,6 +121,9 @@ async fn run_trin_internal(
     // Initialize validation oracle
     let header_oracle = Arc::new(RwLock::new(HeaderOracle::default()));
 
+    // Initialize head of the chain management.
+    let chain_head = ChainHead::new_pectra_defaults();
+
     // Initialize and spawn uTP socket
     let (utp_talk_reqs_tx, utp_talk_reqs_rx) = mpsc::unbounded_channel();
 
@@ -170,6 +173,7 @@ async fn run_trin_internal(
             portalnet_config.clone(),
             storage_config_factory.create(&Subnetwork::Beacon, Distance::MAX)?,
             header_oracle.clone(),
+            chain_head,
         )
         .await?
     } else {

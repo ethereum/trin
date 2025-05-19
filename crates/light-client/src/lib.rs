@@ -10,3 +10,4 @@ pub mod errors;
 pub mod node;
 pub mod rpc;
 pub mod utils;
+pub mod watch;

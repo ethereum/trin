@@ -19,6 +19,7 @@ use crate::{
     errors::NodeError,
     node::Node,
     rpc::Rpc,
+    watch::LightClientWatchReceivers,
 };
 
 #[derive(Default)]
@@ -451,5 +452,9 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
 
     pub async fn get_light_client_store(&self) -> Result<LightClientStore> {
         self.node.read().await.get_light_client_store()
+    }
+
+    pub async fn get_light_client_watch_receivers(&self) -> LightClientWatchReceivers {
+        self.node.read().await.consensus.get_watch_receivers()
     }
 }

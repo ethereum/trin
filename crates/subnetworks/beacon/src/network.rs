@@ -16,7 +16,7 @@ use portalnet::{
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info};
 use trin_storage::PortalStorageConfig;
-use trin_validation::oracle::HeaderOracle;
+use trin_validation::{chain_head::ChainHead, oracle::HeaderOracle};
 use utp_rs::socket::UtpSocket;
 
 use crate::{
@@ -51,6 +51,7 @@ impl BeaconNetwork {
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
+        chain_head: ChainHead,
     ) -> anyhow::Result<Self> {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnodes.clone(),
@@ -58,7 +59,10 @@ impl BeaconNetwork {
             gossip_dropped: GOSSIP_DROPPED,
             ..Default::default()
         };
-        let storage = Arc::new(PLMutex::new(BeaconStorage::new(storage_config)?));
+        let storage = Arc::new(PLMutex::new(BeaconStorage::new(
+            storage_config,
+            chain_head.clone(),
+        )?));
         storage.lock().spawn_pruning_task(); // Spawn pruning task to clean up expired content.
         let storage_clone = Arc::clone(&storage);
         let validator = Arc::new(BeaconValidator::new(header_oracle));
@@ -81,17 +85,49 @@ impl BeaconNetwork {
         // Get the trusted block root to start syncing from.
         let trusted_block_root = get_trusted_block_root(&portal_config, storage_clone)?;
 
-        // Spawn the beacon sync task.
+        // Spawn light client sync and update watch task
         tokio::spawn(async move {
-            let beacon_sync = BeaconSync::new(overlay_tx);
-            let beacon_sync = beacon_sync.start(trusted_block_root).await;
-            match beacon_sync {
-                Ok(client) => {
-                    let mut beacon_client = beacon_client_clone.lock().await;
-                    *beacon_client = Some(client);
-                }
+            // Sync LightClient
+            let client = match BeaconSync::new(overlay_tx).start(trusted_block_root).await {
+                Ok(client) => client,
                 Err(err) => {
                     error!(error = %err, "Failed to start beacon sync.");
+                    return;
+                }
+            };
+            let mut watch_receivers = client.get_light_client_watch_receivers().await;
+            *beacon_client_clone.lock().await = Some(client);
+
+            // Watch for light clients updates and update ChainHead
+            loop {
+                tokio::select! {
+                    Ok(()) = watch_receivers.update.changed() => {
+                        let update = watch_receivers
+                            .update
+                            .borrow_and_update()
+                            .as_ref()
+                            .expect("Updated LightClientUpdate must be present")
+                            .clone();
+                        chain_head.process_update(update);
+                    }
+                    Ok(()) = watch_receivers.optimistic_update.changed() => {
+                        let update = watch_receivers
+                            .optimistic_update
+                            .borrow_and_update()
+                            .as_ref()
+                            .expect("Updated LightClientOptimisticUpdate must be present")
+                            .clone();
+                        chain_head.process_optimistic_update(update);
+                    }
+                    Ok(()) = watch_receivers.finality_update.changed() => {
+                        let update = watch_receivers
+                            .finality_update
+                            .borrow_and_update()
+                            .as_ref()
+                            .expect("Updated LightClientFinalityUpdate must be present")
+                            .clone();
+                        chain_head.process_finality_update(update);
+                    }
                 }
             }
         });
@@ -176,12 +212,14 @@ mod tests {
             temp_dir.path().to_path_buf(),
         )
         .unwrap();
-
         let storage_config = storage_cfg_factory
             .create(&Subnetwork::Beacon, Distance::MAX)
             .unwrap();
+
         // A mock storage that always returns None
-        let storage_clone = Arc::new(PLMutex::new(BeaconStorage::new(storage_config).unwrap()));
+        let storage_clone = Arc::new(PLMutex::new(
+            BeaconStorage::new(storage_config, ChainHead::new_pectra_defaults()).unwrap(),
+        ));
 
         let result = get_trusted_block_root(&portal_config, storage_clone)
             .expect("Function should not fail with an Err");

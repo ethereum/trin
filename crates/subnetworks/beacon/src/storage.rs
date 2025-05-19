@@ -5,9 +5,9 @@ use ethportal_api::{
     consensus::fork::ForkName,
     types::{
         content_value::beacon::{
-            ForkVersionedLightClientBootstrap, ForkVersionedLightClientFinalityUpdate,
-            ForkVersionedLightClientOptimisticUpdate, ForkVersionedLightClientUpdate,
-            LightClientUpdatesByRange,
+            ForkVersionedHistoricalSummariesWithProof, ForkVersionedLightClientBootstrap,
+            ForkVersionedLightClientFinalityUpdate, ForkVersionedLightClientOptimisticUpdate,
+            ForkVersionedLightClientUpdate, LightClientUpdatesByRange,
         },
         distance::Distance,
         network::Subnetwork,
@@ -18,7 +18,7 @@ use ethportal_api::{
 use light_client::consensus::rpc::portal_rpc::expected_current_slot;
 use r2d2::Pool;
 use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use ssz::{Decode, Encode};
 use ssz_types::{typenum::U128, VariableList};
 use tracing::{debug, error, info};
@@ -36,6 +36,7 @@ use trin_storage::{
     utils::get_total_size_of_directory_in_bytes,
     ContentStore, DataSize, PortalStorageConfig, ShouldWeStoreContent,
 };
+use trin_validation::chain_head::ChainHead;
 
 /// Store ephemeral light client data in memory
 #[derive(Debug)]
@@ -110,12 +111,12 @@ impl BeaconStorageCache {
 }
 
 /// Storage layer for the state network. Encapsulates beacon network specific data and logic.
-#[derive(Debug)]
 pub struct BeaconStorage {
     node_data_dir: PathBuf,
     sql_connection_pool: Pool<SqliteConnectionManager>,
     metrics: StorageMetricsReporter,
     cache: BeaconStorageCache,
+    chain_head: ChainHead,
 }
 
 impl ContentStore for BeaconStorage {
@@ -180,16 +181,7 @@ impl ContentStore for BeaconStorage {
             }
             BeaconContentKey::HistoricalSummariesWithProof(content_key) => {
                 let epoch = content_key.epoch;
-                match self
-                    .lookup_historical_summaries_value(epoch)
-                    .map_err(|err| {
-                        ContentStoreError::Database(format!(
-                            "Error looking up HistoricalSummariesWithProof content value: {err:?}"
-                        ))
-                    })? {
-                    Some(result) => Ok(Some(result.into())),
-                    None => Ok(None),
-                }
+                self.lookup_historical_summaries_value(epoch)
             }
         }
     }
@@ -289,12 +281,16 @@ impl ContentStore for BeaconStorage {
 }
 
 impl BeaconStorage {
-    pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
+    pub fn new(
+        config: PortalStorageConfig,
+        chain_head: ChainHead,
+    ) -> Result<Self, ContentStoreError> {
         let storage = Self {
             node_data_dir: config.node_data_dir,
             sql_connection_pool: config.sql_connection_pool,
             metrics: StorageMetricsReporter::new(Subnetwork::Beacon),
             cache: BeaconStorageCache::new(),
+            chain_head,
         };
 
         // Report current total storage usage.
@@ -309,6 +305,24 @@ impl BeaconStorage {
         storage
             .metrics
             .report_content_data_storage_bytes(network_content_storage_usage as f64);
+
+        // Update historical summaries to the latest stored version
+        if let Some(historical_summaries_bytes) = storage.lookup_historical_summaries_value(0)? {
+            let fork_versioned_historical_summaries =
+                ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(
+                    &historical_summaries_bytes,
+                )
+                .map_err(|err| ContentStoreError::InvalidData {
+                    message: format!(
+                        "Error decoding ForkVersionedHistoricalSummariesWithProof: {err:?}"
+                    ),
+                })?;
+            storage.chain_head.update_historical_summaries(
+                fork_versioned_historical_summaries
+                    .historical_summaries_with_proof
+                    .historical_summaries,
+            );
+        }
 
         Ok(storage)
     }
@@ -381,11 +395,13 @@ impl BeaconStorage {
 
         match key {
             BeaconContentKey::LightClientBootstrap(_) => {
-                let bootstrap = ForkVersionedLightClientBootstrap::from_ssz_bytes(value.as_slice())
-                    .map_err(|err| ContentStoreError::InvalidData {
-                        message: format!(
-                            "Error deserializing ForkVersionedLightClientBootstrap value: {err:?}"
-                        ),
+                let bootstrap =
+                    ForkVersionedLightClientBootstrap::from_ssz_bytes(value).map_err(|err| {
+                        ContentStoreError::InvalidData {
+                            message: format!(
+                                "Error decoding ForkVersionedLightClientBootstrap value: {err:?}"
+                            ),
+                        }
                     })?;
 
                 let (slot, block_root) = match bootstrap.fork_name {
@@ -458,11 +474,13 @@ impl BeaconStorage {
                 // Build a range of values starting with update.start_period and len
                 // update.count
                 let periods = update.start_period..(update.start_period + update.count);
-                let update_values = LightClientUpdatesByRange::from_ssz_bytes(value.as_slice())
-                    .map_err(|err| ContentStoreError::InvalidData {
-                        message: format!(
-                            "Error deserializing LightClientUpdatesByRange value: {err:?}"
-                        ),
+                let update_values =
+                    LightClientUpdatesByRange::from_ssz_bytes(value).map_err(|err| {
+                        ContentStoreError::InvalidData {
+                            message: format!(
+                                "Error decoding LightClientUpdatesByRange value: {err:?}"
+                            ),
+                        }
                     })?;
 
                 for (period, value) in periods.zip(update_values.as_ref()) {
@@ -474,27 +492,41 @@ impl BeaconStorage {
                 }
             }
             BeaconContentKey::LightClientFinalityUpdate(_) => {
-                self.cache.set_finality_update(
-                        ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(value.as_slice())
-                            .map_err(|err| ContentStoreError::InvalidData {
-                                message: format!(
-                                    "Error deserializing ForkVersionedLightClientFinalityUpdate value: {err:?}"
-                                ),
-                            })?,
-                    );
+                let fork_versioned_update = ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(
+                    value,
+                )
+                .map_err(|err| ContentStoreError::InvalidData {
+                    message: format!(
+                        "Error decoding ForkVersionedLightClientFinalityUpdate value: {err:?}"
+                    ),
+                })?;
+                self.chain_head
+                    .process_finality_update(fork_versioned_update.update.clone());
+                self.cache.set_finality_update(fork_versioned_update);
             }
             BeaconContentKey::LightClientOptimisticUpdate(_) => {
-                self.cache.set_optimistic_update(
-                        ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(value.as_slice()).map_err(
-                            |err| ContentStoreError::InvalidData {
-                                message: format!(
-                                    "Error deserializing ForkVersionedLightClientOptimisticUpdate value: {err:?}"
-                                ),
-                            },
-                        )?,
-                    );
+                let fork_versioned_update =
+                    ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(value).map_err(
+                        |err| ContentStoreError::InvalidData {
+                            message: format!("Error decoding ForkVersionedLightClientOptimistipdate value: {err:?}"),
+                        },
+                    )?;
+                self.chain_head
+                    .process_optimistic_update(fork_versioned_update.update.clone());
+                self.cache.set_optimistic_update(fork_versioned_update);
             }
             BeaconContentKey::HistoricalSummariesWithProof(historical_summaries_key) => {
+                let fork_versioned_historical_summaries =
+                    ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(value).map_err(
+                        |err| ContentStoreError::InvalidData {
+                            message:  format!("Error decoding ForkVersionedHistoricalSummariesWithProof value: {err:?}"),
+                        },
+                    )?;
+                self.chain_head.update_historical_summaries(
+                    fork_versioned_historical_summaries
+                        .historical_summaries_with_proof
+                        .historical_summaries,
+                );
                 if let Err(err) = self.db_insert_or_replace_historical_summaries_with_proof(
                     &historical_summaries_key.epoch,
                     value,
@@ -669,21 +701,19 @@ impl BeaconStorage {
     }
 
     /// Public method for looking up a historical summaries with proof value by epoch number
-    pub fn lookup_historical_summaries_value(&self, epoch: u64) -> anyhow::Result<Option<Vec<u8>>> {
+    pub fn lookup_historical_summaries_value(
+        &self,
+        epoch: u64,
+    ) -> Result<Option<RawContentValue>, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(HISTORICAL_SUMMARIES_LOOKUP_QUERY)?;
 
-        let rows: Result<Vec<Vec<u8>>, rusqlite::Error> = query
-            .query_map([epoch], |row| {
+        Ok(query
+            .query_row([epoch], |row| {
                 let row: Vec<u8> = row.get(0)?;
-                Ok(row)
-            })?
-            .collect();
-
-        match rows?.first() {
-            Some(val) => Ok(Some(val.to_vec())),
-            None => Ok(None),
-        }
+                Ok(RawContentValue::from(row))
+            })
+            .optional()?)
     }
     /// Get a summary of the current state of storage
     pub fn get_summary_info(&self) -> String {
@@ -733,7 +763,7 @@ mod test {
     #[test]
     fn test_beacon_storage_get_put_bootstrap() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
-        let mut storage = BeaconStorage::new(config).unwrap();
+        let mut storage = BeaconStorage::new(config, ChainHead::new_pectra_defaults()).unwrap();
         let value = test_utils::get_light_client_bootstrap(0);
         let block_root = value
             .bootstrap
@@ -752,7 +782,7 @@ mod test {
     #[test]
     fn test_beacon_storage_get_put_updates_by_range() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
-        let mut storage = BeaconStorage::new(config).unwrap();
+        let mut storage = BeaconStorage::new(config, ChainHead::new_pectra_defaults()).unwrap();
         let key = BeaconContentKey::LightClientUpdatesByRange(LightClientUpdatesByRangeKey {
             start_period: 1,
             count: 2,
@@ -795,7 +825,7 @@ mod test {
     #[ignore = "Missing Pectra test vectors"]
     fn test_beacon_storage_get_put_finality_update() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
-        let mut storage = BeaconStorage::new(config).unwrap();
+        let mut storage = BeaconStorage::new(config, ChainHead::new_pectra_defaults()).unwrap();
         let value = test_utils::get_light_client_finality_update(0);
         let finalized_slot = value.update.finalized_header_deneb().unwrap().beacon.slot;
         let key = BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
@@ -834,7 +864,7 @@ mod test {
     #[test]
     fn test_beacon_storage_get_put_optimistic_update() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
-        let mut storage = BeaconStorage::new(config).unwrap();
+        let mut storage = BeaconStorage::new(config, ChainHead::new_pectra_defaults()).unwrap();
         let value = test_utils::get_light_client_optimistic_update(0);
         let signature_slot = *value.update.signature_slot();
         let key = BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
@@ -873,7 +903,7 @@ mod test {
     #[test]
     fn test_beacon_storage_get_put_historical_summaries() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
-        let mut storage = BeaconStorage::new(config).unwrap();
+        let mut storage = BeaconStorage::new(config, ChainHead::new_pectra_defaults()).unwrap();
 
         let test_data: ContentItem<BeaconContentKey> = read_yaml_portal_spec_tests_file(
             "tests/mainnet/beacon_chain/historical_summaries_with_proof/electra/historical_summaries_with_proof.yaml",
@@ -932,7 +962,7 @@ mod test {
     #[test]
     fn test_beacon_storage_prune_old_bootstrap_data() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
-        let mut storage = BeaconStorage::new(config).unwrap();
+        let mut storage = BeaconStorage::new(config, ChainHead::new_pectra_defaults()).unwrap();
         let mut value = test_utils::get_light_client_bootstrap(0);
         // Set the bootstrap slot to outdated value
         let current_slot = expected_current_slot();
