@@ -376,10 +376,14 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     }
 
     fn apply_update(&mut self, update: &LightClientUpdateElectra) {
+        let optimistic_header_slot = self.store.optimistic_header.slot;
+        let finalized_header_slot = self.store.finalized_header.slot;
+
         let generic_update = GenericUpdate::from(update);
         self.apply_generic_update(&generic_update);
-        if self.store.optimistic_header.slot == update.attested_header.beacon.slot
-            || self.store.finalized_header.slot == update.finalized_header.beacon.slot
+
+        if optimistic_header_slot < self.store.optimistic_header.slot
+            || finalized_header_slot < self.store.finalized_header.slot
         {
             self.watch_senders
                 .update
@@ -388,10 +392,14 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     }
 
     fn apply_finality_update(&mut self, update: &LightClientFinalityUpdateElectra) {
+        let optimistic_header_slot = self.store.optimistic_header.slot;
+        let finalized_header_slot = self.store.finalized_header.slot;
+
         let generic_update = GenericUpdate::from(update);
         self.apply_generic_update(&generic_update);
-        if self.store.optimistic_header.slot == update.attested_header.beacon.slot
-            || self.store.finalized_header.slot == update.finalized_header.beacon.slot
+
+        if optimistic_header_slot < self.store.optimistic_header.slot
+            || finalized_header_slot < self.store.finalized_header.slot
         {
             self.watch_senders
                 .finality_update
@@ -417,9 +425,12 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     }
 
     fn apply_optimistic_update(&mut self, update: &LightClientOptimisticUpdateElectra) {
+        let optimistic_header_slot = self.store.optimistic_header.slot;
+
         let generic_update = GenericUpdate::from(update);
         self.apply_generic_update(&generic_update);
-        if self.store.optimistic_header.slot == update.attested_header.beacon.slot {
+
+        if optimistic_header_slot < self.store.optimistic_header.slot {
             self.watch_senders
                 .optimistic_update
                 .send_replace(Some(LightClientOptimisticUpdate::Electra(update.clone())));
