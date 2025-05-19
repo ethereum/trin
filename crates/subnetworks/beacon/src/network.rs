@@ -96,8 +96,7 @@ impl BeaconNetwork {
                 }
             };
             let mut watch_receivers = client.get_light_client_watch_receivers().await;
-            let mut beacon_client = beacon_client_clone.lock().await;
-            *beacon_client = Some(client);
+            *beacon_client_clone.lock().await = Some(client);
 
             // Watch for light clients updates and update ChainHead
             loop {

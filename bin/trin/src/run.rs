@@ -173,7 +173,7 @@ async fn run_trin_internal(
             portalnet_config.clone(),
             storage_config_factory.create(&Subnetwork::Beacon, Distance::MAX)?,
             header_oracle.clone(),
-            chain_head.clone(),
+            chain_head,
         )
         .await?
     } else {
