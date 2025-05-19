@@ -1,5 +1,9 @@
 use ethportal_api::{
-    types::{distance::Distance, network::Subnetwork, portal::PaginateLocalContentInfo},
+    types::{
+        distance::{Distance, XorMetric},
+        network::Subnetwork,
+        portal::PaginateLocalContentInfo,
+    },
     HistoryContentKey, OverlayContentKey, RawContentValue,
 };
 use trin_storage::{
@@ -11,7 +15,7 @@ use trin_storage::{
 /// Storage layer for the history network. Encapsulates history network specific data and logic.
 #[derive(Debug)]
 pub struct HistoryStorage {
-    store: IdIndexedV1Store<HistoryContentKey>,
+    store: IdIndexedV1Store<HistoryContentKey, XorMetric>,
 }
 
 impl ContentStore for HistoryStorage {

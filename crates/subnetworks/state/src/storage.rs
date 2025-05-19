@@ -3,7 +3,7 @@ use ethportal_api::{
     types::{
         content_key::state::{AccountTrieNodeKey, ContractBytecodeKey, ContractStorageTrieNodeKey},
         content_value::state::{ContractBytecode, TrieNode},
-        distance::Distance,
+        distance::{Distance, XorMetric},
         network::Subnetwork,
         portal::PaginateLocalContentInfo,
     },
@@ -18,7 +18,7 @@ use trin_storage::{
 /// Storage layer for the state network. Encapsulates state network specific data and logic.
 #[derive(Debug)]
 pub struct StateStorage {
-    store: IdIndexedV1Store<StateContentKey>,
+    store: IdIndexedV1Store<StateContentKey, XorMetric>,
 }
 
 impl ContentStore for StateStorage {

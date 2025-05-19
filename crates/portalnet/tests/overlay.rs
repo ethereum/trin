@@ -30,7 +30,7 @@ use tokio::{
     sync::{mpsc, mpsc::unbounded_channel},
     time::{self, Duration},
 };
-use trin_storage::{ContentStore, DistanceFunction, MemoryContentStore};
+use trin_storage::{ContentStore, MemoryContentStore};
 use trin_validation::validator::MockValidator;
 use utp_rs::socket::UtpSocket;
 
@@ -47,7 +47,7 @@ async fn init_overlay(
     let overlay_config = OverlayConfig::default();
 
     let node_id = discovery.local_enr().node_id();
-    let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+    let store = MemoryContentStore::new(node_id);
     let store = Arc::new(Mutex::new(store));
 
     let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();

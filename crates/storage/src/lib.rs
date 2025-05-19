@@ -5,7 +5,7 @@ pub mod test_utils;
 pub mod utils;
 pub mod versioned;
 
-use std::{ops::Deref, str::FromStr};
+use std::{marker::PhantomData, ops::Deref, str::FromStr};
 
 use alloy::primitives::{Bytes, B256};
 pub use config::{PortalStorageConfig, PortalStorageConfigFactory};
@@ -21,21 +21,6 @@ use ethportal_api::{
 use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 
 pub const DATABASE_NAME: &str = "trin.sqlite";
-
-// TODO: Replace enum with generic type parameter. This will require that we have a way to
-// associate a "find farthest" query with the generic Metric.
-#[derive(Copy, Clone, Debug)]
-pub enum DistanceFunction {
-    Xor,
-}
-
-impl DistanceFunction {
-    pub fn distance(&self, node_id: &NodeId, other: &[u8; 32]) -> Distance {
-        match self {
-            DistanceFunction::Xor => XorMetric::distance(&node_id.raw(), other),
-        }
-    }
-}
 
 /// An enum which tells us if we should store or not store content, and if not why for better
 /// errors.
@@ -76,25 +61,25 @@ pub trait ContentStore {
 }
 
 /// An in-memory `ContentStore`.
-pub struct MemoryContentStore {
+pub struct MemoryContentStore<TMetric: Metric = XorMetric> {
     /// The content store.
     store: std::collections::HashMap<Vec<u8>, RawContentValue>,
     /// The `NodeId` of the local node.
     node_id: NodeId,
-    /// The distance function used by the store to compute distances.
-    distance_fn: DistanceFunction,
     /// The radius of the store.
     radius: Distance,
+    /// Phantom metric
+    _metric: PhantomData<TMetric>,
 }
 
-impl MemoryContentStore {
+impl<TMetric: Metric> MemoryContentStore<TMetric> {
     /// Constructs a new `MemoryPortalContentStore`.
-    pub fn new(node_id: NodeId, distance_fn: DistanceFunction) -> Self {
+    pub fn new(node_id: NodeId) -> Self {
         Self {
             store: std::collections::HashMap::new(),
             node_id,
-            distance_fn,
             radius: Distance::MAX,
+            _metric: PhantomData,
         }
     }
 
@@ -105,7 +90,7 @@ impl MemoryContentStore {
 
     /// Returns the distance to `key` from the local `NodeId` according to the distance function.
     fn distance_to_key<K: OverlayContentKey>(&self, key: &K) -> Distance {
-        self.distance_fn.distance(&self.node_id, &key.content_id())
+        TMetric::distance(&self.node_id.raw(), &key.content_id())
     }
 
     /// Returns `true` if the content store contains data for `key`.
@@ -115,7 +100,7 @@ impl MemoryContentStore {
     }
 }
 
-impl ContentStore for MemoryContentStore {
+impl<TMetric: Metric> ContentStore for MemoryContentStore<TMetric> {
     type Key = IdentityContentKey;
 
     fn get(&self, key: &Self::Key) -> Result<Option<RawContentValue>, ContentStoreError> {
@@ -208,14 +193,14 @@ pub struct DataSize {
 #[allow(clippy::unwrap_used)]
 pub mod test {
     use alloy::primitives::{bytes, B512};
-    use ethportal_api::IdentityContentKey;
+    use ethportal_api::{types::distance::XorMetric, IdentityContentKey};
 
     use super::*;
 
     #[test]
     fn memory_store_contains_key() {
         let node_id = NodeId::random();
-        let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+        let mut store = MemoryContentStore::<XorMetric>::new(node_id);
 
         let val = vec![0xef];
 
@@ -231,7 +216,7 @@ pub mod test {
     #[test]
     fn memory_store_get() {
         let node_id = NodeId::random();
-        let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+        let mut store = MemoryContentStore::<XorMetric>::new(node_id);
 
         let val = bytes!("ef");
 
@@ -247,7 +232,7 @@ pub mod test {
     #[test]
     fn memory_store_put() {
         let node_id = NodeId::random();
-        let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+        let mut store = MemoryContentStore::<XorMetric>::new(node_id);
 
         let val = bytes!("ef");
 
@@ -260,7 +245,7 @@ pub mod test {
     #[test]
     fn memory_store_is_within_radius_and_unavailable() {
         let node_id = NodeId::random();
-        let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+        let mut store = MemoryContentStore::<XorMetric>::new(node_id);
 
         let val = bytes!("ef");
 
