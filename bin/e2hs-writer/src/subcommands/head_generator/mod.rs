@@ -1,5 +1,4 @@
 mod e2hs_builder;
-mod ethereum_api;
 mod s3_bucket;
 
 use std::{
@@ -11,7 +10,6 @@ use std::{
 use anyhow::{bail, ensure};
 use e2hs_builder::E2HSBuilder;
 use e2store::e2hs::BLOCKS_PER_E2HS;
-use ethereum_api::first_slot_in_a_period;
 use ethportal_api::consensus::constants::SLOTS_PER_EPOCH;
 use humanize_duration::{prelude::DurationExt, Truncate};
 use s3_bucket::S3Bucket;
@@ -95,22 +93,11 @@ impl HeadGenerator {
     }
 
     async fn amount_of_blocks_that_can_be_backfilled(&self) -> anyhow::Result<u64> {
-        let latest_finalized_slot = self
-            .e2hs_builder
-            .ethereum_api
-            .consensus_api
-            .get_beacon_block("finalized")
-            .await?
-            .message
-            .slot;
-
-        let latest_provable_slot = first_slot_in_a_period(latest_finalized_slot);
         let first_execution_number_after_latest_finalized_period = self
             .e2hs_builder
-            .ethereum_api
-            .fetch_beacon_block_retry(latest_provable_slot)
+            .consensus_api
+            .first_block_in_latest_finalized_period()
             .await?
-            .message
             .body
             .execution_payload
             .block_number;

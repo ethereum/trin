@@ -98,7 +98,19 @@ impl ExecutionApi {
         Ok((content_key, content_value))
     }
 
-    pub async fn get_receipts<I>(&self, block_range: I) -> anyhow::Result<HashMap<u64, Receipts>>
+    pub async fn get_receipts(&self, block_number: u64) -> anyhow::Result<Receipts> {
+        self.get_receipts_range(block_number..=block_number)
+            .await?
+            .remove(&block_number)
+            .ok_or_else(|| {
+                anyhow!("Unable to fetch receipts for block {block_number} from provider")
+            })
+    }
+
+    pub async fn get_receipts_range<I>(
+        &self,
+        block_range: I,
+    ) -> anyhow::Result<HashMap<u64, Receipts>>
     where
         I: IntoIterator<Item = u64>,
     {

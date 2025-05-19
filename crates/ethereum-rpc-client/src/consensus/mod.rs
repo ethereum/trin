@@ -4,10 +4,14 @@ pub mod rpc_types;
 use std::{fmt::Display, time::Duration};
 
 use alloy::primitives::B256;
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, ensure};
 use constants::DEFAULT_BEACON_STATE_REQUEST_TIMEOUT;
 use ethportal_api::{
-    consensus::{beacon_block::SignedBeaconBlockElectra, beacon_state::BeaconStateElectra},
+    consensus::{
+        beacon_block::{BeaconBlockElectra, SignedBeaconBlockElectra},
+        beacon_state::BeaconStateElectra,
+        constants::SLOTS_PER_HISTORICAL_ROOT,
+    },
     light_client::{
         bootstrap::LightClientBootstrapElectra, finality_update::LightClientFinalityUpdateElectra,
         optimistic_update::LightClientOptimisticUpdateElectra, update::LightClientUpdateElectra,
@@ -152,6 +156,87 @@ impl ConsensusApi {
             .request(endpoint, Some(DEFAULT_BEACON_STATE_REQUEST_TIMEOUT))
             .await?
             .data)
+    }
+
+    pub async fn get_state_for_start_of_next_period(
+        &self,
+        slot: u64,
+    ) -> anyhow::Result<BeaconStateElectra> {
+        // To calculate the historical summaries index, we need to add the
+        // SLOTS_PER_HISTORICAL_ROOT, as this slot will be included in the next index
+        let mut slot = first_slot_in_a_period(slot + SLOTS_PER_HISTORICAL_ROOT);
+        let mut tries = 0;
+
+        // The slot at the start of the period can be skipped, so we need to walk forward until we
+        // find the first slot not missed
+        let state = loop {
+            match self.get_beacon_state(slot.to_string()).await {
+                Ok(state) => {
+                    // For some reason certain implementations will give us a State before the slot
+                    // we requested if the requested slot is skipped
+                    if state.slot < slot {
+                        warn!("The slot {slot} is skipped, and the CL for some reason gave us the state for a previous slot, trying the next slot");
+                        slot += 1;
+                        tries += 1;
+                        continue;
+                    }
+                    ensure!(
+                        state.slot == slot,
+                        "The slot {slot} is not equal to the state slot {}",
+                        state.slot
+                    );
+                    break state;
+                }
+                Err(err) => {
+                    warn!("Failed to get beacon block for slot {slot}, the slot was probably skipped: {err}");
+                    tries += 1;
+                    ensure!(tries <= 5, "Failed to find a valid block for slot {slot}");
+                    slot += 1;
+                }
+            }
+        };
+
+        Ok(state)
+    }
+
+    /// Fetches the Beacon Block for a given slot.
+    ///
+    /// Slots can be skipped, so we walk until we find a non-skipped slot.
+    ///
+    /// The retry limit is 5, because I don't think there is a gap of more than 5 slots in the
+    /// beacon chain
+    pub async fn fetch_beacon_block_retry(
+        &self,
+        slot: u64,
+    ) -> anyhow::Result<SignedBeaconBlockElectra> {
+        let mut tries = 0;
+        let mut slot = slot;
+
+        let block = loop {
+            match self.get_beacon_block(slot.to_string()).await {
+                Ok(block) => break block,
+                Err(err) => {
+                    warn!("Failed to get beacon block for slot {slot}, the slot was probably skipped: {err}");
+                    tries += 1;
+                    ensure!(tries <= 5, "Failed to find a valid block for slot {slot}");
+                    slot += 1;
+                }
+            }
+        };
+
+        Ok(block)
+    }
+
+    /// Fetches the first block in the latest finalized period.
+    pub async fn first_block_in_latest_finalized_period(
+        &self,
+    ) -> anyhow::Result<BeaconBlockElectra> {
+        let latest_finalized_slot = self.get_beacon_block("finalized").await?.message.slot;
+        let latest_provable_slot = first_slot_in_a_period(latest_finalized_slot);
+        Ok(self
+            .fetch_beacon_block_retry(latest_provable_slot)
+            .await?
+            .message)
     }
 
     /// Make a request to the cl provider. If the primary provider fails, it will retry with the
@@ -305,4 +390,9 @@ impl ConsensusApi {
             .await?
             .data)
     }
+}
+
+/// Calculates the first slot in a period for the given slot.
+pub fn first_slot_in_a_period(slot: u64) -> u64 {
+    (slot / SLOTS_PER_HISTORICAL_ROOT) * SLOTS_PER_HISTORICAL_ROOT
 }
