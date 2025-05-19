@@ -9,7 +9,7 @@ use ethportal_api::{
         ping_extensions::decode::PingExtension,
         portal_wire::{OfferTrace, Pong},
     },
-    Enr,
+    Enr, OverlayContentKey,
 };
 use futures::{future::JoinAll, StreamExt};
 use itertools::Itertools;
@@ -106,7 +106,10 @@ impl Network {
     }
 
     /// Selects peers to receive content.
-    pub fn select_peers(&self, content_id: &[u8; 32]) -> Result<Vec<PeerInfo>, CensusError> {
+    pub fn select_peers<TContentKey: OverlayContentKey>(
+        &self,
+        content_key: &TContentKey,
+    ) -> Result<Vec<PeerInfo>, CensusError> {
         if self.peers.is_empty() {
             error!(
                 subnetwork = %self.subnetwork,
@@ -114,7 +117,7 @@ impl Network {
             );
             return Err(CensusError::NoPeers);
         }
-        Ok(self.peers.select_peers(content_id))
+        Ok(self.peers.select_peers(content_key))
     }
 
     /// Records the status of the most recent `Offer` request to one of the peers.

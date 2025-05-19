@@ -4,10 +4,13 @@ use std::{
 };
 
 use discv5::Enr;
-use ethportal_api::types::{
-    client_type::ClientType,
-    distance::{Distance, Metric, XorMetric},
-    portal_wire::OfferTrace,
+use ethportal_api::{
+    types::{
+        client_type::ClientType,
+        distance::{Distance, Metric, XorMetric},
+        portal_wire::OfferTrace,
+    },
+    OverlayContentKey,
 };
 use tracing::error;
 
@@ -72,9 +75,17 @@ impl Peer {
     }
 
     /// Returns true if content is within radius.
-    pub fn is_interested_in_content(&self, content_id: &[u8; 32]) -> bool {
-        let distance = XorMetric::distance(&self.enr.node_id().raw(), content_id);
-        distance <= self.radius
+    pub fn is_interested_in_content<TContentKey: OverlayContentKey>(
+        &self,
+        content_key: &TContentKey,
+        content_id: &[u8; 32],
+    ) -> bool {
+        if content_key.affected_by_radius() {
+            let distance = XorMetric::distance(&self.enr.node_id().raw(), content_id);
+            distance <= self.radius
+        } else {
+            true
+        }
     }
 
     /// Returns true if all latest [Self::MAX_LIVENESS_CHECKS] liveness checks failed.

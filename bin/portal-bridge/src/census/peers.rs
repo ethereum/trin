@@ -10,7 +10,7 @@ use delay_map::HashSetDelay;
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{client_type::ClientType, distance::Distance, portal_wire::OfferTrace},
-    Enr,
+    Enr, OverlayContentKey,
 };
 use futures::Stream;
 use tokio::time::Instant;
@@ -123,9 +123,12 @@ impl<W: Weight> Peers<W> {
     }
 
     /// Selects peers to receive content.
-    pub fn select_peers(&self, content_id: &[u8; 32]) -> Vec<PeerInfo> {
+    pub fn select_peers<TContentKey: OverlayContentKey>(
+        &self,
+        content_key: &TContentKey,
+    ) -> Vec<PeerInfo> {
         self.selector
-            .select_peers(content_id, self.read().peers.values())
+            .select_peers(content_key, self.read().peers.values())
     }
 
     fn read(&self) -> RwLockReadGuard<'_, PeersWithLivenessChecks> {
