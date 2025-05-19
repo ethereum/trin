@@ -21,6 +21,12 @@ pub trait OverlayContentKey:
         Sha256::digest(self.to_bytes()).into()
     }
 
+    /// Returns whether this content key is affected by radius.
+    ///
+    /// Most of the content is supposted to be stored if it falls within node's radius, but some
+    /// content is not dependant on the radius and uses different logic instead.
+    fn affected_by_radius(&self) -> bool;
+
     /// Returns the bytes of the content key.
     ///
     /// The [RawContentKey] is better suited than `Vec<u8>` for representing content key bytes.
@@ -96,6 +102,10 @@ impl Deref for IdentityContentKey {
 }
 
 impl OverlayContentKey for IdentityContentKey {
+    fn affected_by_radius(&self) -> bool {
+        true
+    }
+
     fn content_id(&self) -> [u8; 32] {
         self.value
     }
