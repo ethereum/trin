@@ -39,7 +39,9 @@ impl ContentStore for HistoryStorage {
         key: &HistoryContentKey,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_id = ContentId::from(key.content_id());
-        if self.store.distance_to_content_id(&content_id) > self.store.radius() {
+        if key.affected_by_radius()
+            && self.store.distance_to_content_id(&content_id) > self.store.radius()
+        {
             Ok(ShouldWeStoreContent::NotWithinRadius)
         } else if self.store.has_content(&content_id)? {
             Ok(ShouldWeStoreContent::AlreadyStored)

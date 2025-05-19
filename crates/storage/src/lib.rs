@@ -126,8 +126,7 @@ impl<TMetric: Metric> ContentStore for MemoryContentStore<TMetric> {
         &self,
         key: &Self::Key,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
-        let distance = self.distance_to_key(key);
-        if distance > self.radius {
+        if key.affected_by_radius() && self.distance_to_key(key) > self.radius {
             return Ok(ShouldWeStoreContent::NotWithinRadius);
         }
         if self.contains_key(key) {
