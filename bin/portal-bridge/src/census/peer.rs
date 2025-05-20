@@ -75,9 +75,9 @@ impl Peer {
     }
 
     /// Returns true if content is within radius.
-    pub fn is_interested_in_content<TContentKey: OverlayContentKey>(
+    pub fn is_interested_in_content(
         &self,
-        content_key: &TContentKey,
+        content_key: &impl OverlayContentKey,
         content_id: &[u8; 32],
     ) -> bool {
         if content_key.affected_by_radius() {

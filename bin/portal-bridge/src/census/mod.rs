@@ -69,10 +69,10 @@ impl Census {
     }
 
     /// Selects peers to receive content.
-    pub fn select_peers<TContentKey: OverlayContentKey>(
+    pub fn select_peers(
         &self,
         subnetwork: Subnetwork,
-        content_key: &TContentKey,
+        content_key: &impl OverlayContentKey,
     ) -> Result<Vec<PeerInfo>, CensusError> {
         match subnetwork {
             Subnetwork::History => self.history.select_peers(content_key),

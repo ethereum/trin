@@ -11,16 +11,16 @@ use super::peer::{Peer, PeerInfo};
 
 /// A trait for calculating peer's weight.
 pub trait Weight: Send + Sync {
-    fn weight<TContentKey: OverlayContentKey>(
+    fn weight(
         &self,
-        content_key: &TContentKey,
+        content_key: &impl OverlayContentKey,
         content_id: &[u8; 32],
         peer: &Peer,
     ) -> u32;
 
-    fn weight_all<'a, TContentKey: OverlayContentKey>(
+    fn weight_all<'a>(
         &self,
-        content_key: &TContentKey,
+        content_key: &impl OverlayContentKey,
         peers: impl IntoIterator<Item = &'a Peer>,
     ) -> impl Iterator<Item = (&'a Peer, u32)> {
         let content_id = content_key.content_id();
@@ -81,9 +81,9 @@ impl Default for AdditiveWeight {
 }
 
 impl Weight for AdditiveWeight {
-    fn weight<TContentKey: OverlayContentKey>(
+    fn weight(
         &self,
-        content_key: &TContentKey,
+        content_key: &impl OverlayContentKey,
         content_id: &[u8; 32],
         peer: &Peer,
     ) -> u32 {
@@ -143,9 +143,9 @@ impl<W: Weight> PeerSelector<W> {
     }
 
     /// Selects up to `self.limit` peers based on their weights.
-    pub fn select_peers<'a, TContentKey: OverlayContentKey>(
+    pub fn select_peers<'a>(
         &self,
-        content_key: &TContentKey,
+        content_key: &impl OverlayContentKey,
         peers: impl IntoIterator<Item = &'a Peer>,
     ) -> Vec<PeerInfo> {
         let weighted_peers = self
