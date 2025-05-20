@@ -78,7 +78,7 @@ impl E2HSBuilder {
         let receipts_handle = tokio::spawn(async move {
             if receipts_required {
                 execution_api
-                    .get_receipts(starting_block..ending_block)
+                    .get_receipts_range(starting_block..ending_block)
                     .await
             } else {
                 Ok(HashMap::new())

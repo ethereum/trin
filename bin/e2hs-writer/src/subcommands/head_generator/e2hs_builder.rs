@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
-use anyhow::ensure;
+use anyhow::{bail, ensure};
 use e2store::e2hs::{E2HSWriter, BLOCKS_PER_E2HS};
+use ethereum_rpc_client::{consensus::ConsensusApi, execution::ExecutionApi};
 use ethportal_api::{
     consensus::{
         beacon_block::BeaconBlockElectra, beacon_state::HistoricalBatch,
@@ -14,7 +15,6 @@ use tempfile::TempDir;
 use tracing::info;
 use trin_validation::header_validator::HeaderValidator;
 
-use super::ethereum_api::EthereumApi;
 use crate::{cli::HeadGeneratorConfig, subcommands::full_block::FullBlock};
 
 struct ProvingAnchors {
@@ -41,7 +41,8 @@ impl ProvingAnchors {
 }
 
 pub struct E2HSBuilder {
-    pub ethereum_api: EthereumApi,
+    pub consensus_api: ConsensusApi,
+    pub execution_api: ExecutionApi,
     pub index: u64,
     slot_for_next_execution_number: u64,
     proving_anchors: ProvingAnchors,
@@ -50,20 +51,31 @@ pub struct E2HSBuilder {
 
 impl E2HSBuilder {
     pub async fn new(config: HeadGeneratorConfig, index: u64) -> anyhow::Result<Self> {
-        let ethereum_api = EthereumApi::new(
-            config.cl_provider,
-            config.el_provider,
+        let consensus_api = ConsensusApi::new(
+            config.cl_provider.clone(),
+            config.cl_provider.clone(),
+            config.request_timeout,
+        )
+        .await?;
+
+        let execution_api = ExecutionApi::new(
+            config.el_provider.clone(),
+            config.el_provider.clone(),
             config.request_timeout,
         )
         .await?;
 
         let next_execution_block_number = index * BLOCKS_PER_E2HS as u64;
-        let slot_for_next_execution_number = ethereum_api
-            .find_slot_for_execution_block_number(next_execution_block_number)
-            .await?;
+        let slot_for_next_execution_number = find_slot_for_execution_block_number(
+            &execution_api,
+            &consensus_api,
+            next_execution_block_number,
+        )
+        .await?;
 
         Ok(Self {
-            ethereum_api,
+            consensus_api,
+            execution_api,
             index,
             slot_for_next_execution_number,
             proving_anchors: ProvingAnchors::new(),
@@ -81,8 +93,8 @@ impl E2HSBuilder {
 
         for block_number in starting_block..ending_block {
             let beacon_block = self
-                .ethereum_api
-                .fetch_beacon_block_retry(self.slot_for_next_execution_number)
+                .consensus_api
+                .find_first_beacon_block(self.slot_for_next_execution_number)
                 .await?
                 .message;
             self.update_proving_anchors(beacon_block.slot).await?;
@@ -119,7 +131,7 @@ impl E2HSBuilder {
         }
 
         let state = self
-            .ethereum_api
+            .consensus_api
             .get_state_for_start_of_next_period(slot)
             .await?;
 
@@ -147,7 +159,7 @@ impl E2HSBuilder {
             beacon_block,
             &self.proving_anchors.current_historical_batch,
         )?;
-        let receipts = self.ethereum_api.get_receipts(block_number).await?;
+        let receipts = self.execution_api.get_receipts(block_number).await?;
 
         Ok(FullBlock {
             header_with_proof,
@@ -155,4 +167,23 @@ impl E2HSBuilder {
             receipts,
         })
     }
+}
+
+pub async fn find_slot_for_execution_block_number(
+    execution_api: &ExecutionApi,
+    consensus_api: &ConsensusApi,
+    execution_block_number: u64,
+) -> anyhow::Result<u64> {
+    // The `parent_beacon_block_root` refers to the block root of the *previous* beacon block.
+    // To fetch the corresponding beacon block, we must query using the *next* execution block
+    // number (i.e., `execution_block_number + 1`), since that's when the parent beacon
+    // block is referenced.
+    let block = execution_api.get_block(execution_block_number + 1).await?;
+    let Some(block_root) = block.header.parent_beacon_block_root else {
+        bail!("We should only be able to backfill blocks which contain block root's {execution_block_number}")
+    };
+    let beacon_block = consensus_api
+        .get_beacon_block(block_root.to_string())
+        .await?;
+    Ok(beacon_block.message.slot)
 }
