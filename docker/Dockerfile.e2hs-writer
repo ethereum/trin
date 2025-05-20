@@ -22,9 +22,9 @@ RUN cargo build --release --locked -p e2hs-writer
 FROM ubuntu AS runtime
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y ca-certificates
+
 # copy build artifacts from build stage
 COPY --from=builder /app/target/release/e2hs-writer /usr/bin/
-
-ENV RUST_LOG=debug
 
 ENTRYPOINT ["/usr/bin/e2hs-writer"]
