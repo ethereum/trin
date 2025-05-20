@@ -38,6 +38,9 @@ pub struct PaginateResult<TContentKey> {
 /// Different SQL table is created for each `ContentType`, with content-id as a primary key.
 /// It has a configurable capacity and it will prune data that is farthest from the `NodeId` once
 /// it uses more than storage capacity.
+///
+/// Only content that is affected by radius should be stored in this store, otherwise it might be
+/// removed as the radius shrinks because of the pruning.
 #[derive(Debug)]
 pub struct IdIndexedV1Store<TContentKey: OverlayContentKey, TMetric: Metric> {
     /// The configuration.
