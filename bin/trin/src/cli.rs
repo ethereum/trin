@@ -136,7 +136,7 @@ pub struct TrinConfig {
         long = "storage.total",
         alias = "mb",
         help = "Maximum storage capacity (in megabytes), shared between enabled subnetworks",
-        long_help = "Maximum storage capacity (in megabytes), shared between enabled subnetworks.\nCan't be used in combination with 'storage.{subnetwork}' flags (if storage of one subnetwork is specified explicitly, all have to be). If none of the flags is used, then `storage.total` is used with default value.\nThe actual storage can be higher than specified, due to overhead.",
+        long_help = "Maximum storage capacity (in megabytes), shared between enabled subnetworks.\nCan't be used in combination with 'storage.{subnetwork}' flags (if storage of one subnetwork is specified explicitly, all have to be). If none of the flags is used, then `storage.total` is used with default value.\nThe actual storage can be higher than specified, due to overhead.\nThe flag --mb is an alias to storage.total.",
         default_value_if("storage.beacon", ArgPredicate::IsPresent, None),
         default_value_if("storage.history", ArgPredicate::IsPresent, None),
         default_value_if("storage.state", ArgPredicate::IsPresent, None),
@@ -197,16 +197,16 @@ pub struct TrinConfig {
     pub ws: bool,
 
     #[arg(
-        long = "ws-port", 
-        help = "The WebSocket port to listen on.", 
+        long = "ws-port",
+        help = "The WebSocket port to listen on.",
         default_value_t = DEFAULT_WEB3_WS_PORT,
         requires = "ws"
     )]
     pub ws_port: u16,
 
     #[arg(
-        long = "utp-transfer-limit", 
-        help = "The limit of max background uTP transfers for any given channel (inbound or outbound) for each subnetwork", 
+        long = "utp-transfer-limit",
+        help = "The limit of max background uTP transfers for any given channel (inbound or outbound) for each subnetwork",
         default_value_t = DEFAULT_UTP_TRANSFER_LIMIT,
     )]
     pub utp_transfer_limit: usize,
