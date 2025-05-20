@@ -169,7 +169,7 @@ impl ConsensusApi {
 
         // The slot at the start of the period can be skipped, so we need to walk forward until we
         // find the first slot not missed
-        let state = loop {
+        loop {
             match self.get_beacon_state(slot.to_string()).await {
                 Ok(state) => {
                     // For some reason certain implementations will give us a State before the slot
@@ -185,7 +185,7 @@ impl ConsensusApi {
                         "The slot {slot} is not equal to the state slot {}",
                         state.slot
                     );
-                    break state;
+                    return Ok(state);
                 }
                 Err(err) => {
                     warn!("Failed to get beacon block for slot {slot}, the slot was probably skipped: {err}");
@@ -194,9 +194,7 @@ impl ConsensusApi {
                     slot += 1;
                 }
             }
-        };
-
-        Ok(state)
+        }
     }
 
     /// Fetches the Beacon Block for a given slot.
@@ -205,16 +203,16 @@ impl ConsensusApi {
     ///
     /// The retry limit is 5, because I don't think there is a gap of more than 5 slots in the
     /// beacon chain
-    pub async fn fetch_beacon_block_retry(
+    pub async fn find_first_beacon_block(
         &self,
         slot: u64,
     ) -> anyhow::Result<SignedBeaconBlockElectra> {
         let mut tries = 0;
         let mut slot = slot;
 
-        let block = loop {
+        loop {
             match self.get_beacon_block(slot.to_string()).await {
-                Ok(block) => break block,
+                Ok(block) => return Ok(block),
                 Err(err) => {
                     warn!("Failed to get beacon block for slot {slot}, the slot was probably skipped: {err}");
                     tries += 1;
@@ -222,9 +220,7 @@ impl ConsensusApi {
                     slot += 1;
                 }
             }
-        };
-
-        Ok(block)
+        }
     }
 
     /// Fetches the first block in the latest finalized period.
@@ -234,7 +230,7 @@ impl ConsensusApi {
         let latest_finalized_slot = self.get_beacon_block("finalized").await?.message.slot;
         let latest_provable_slot = first_slot_in_a_period(latest_finalized_slot);
         Ok(self
-            .fetch_beacon_block_retry(latest_provable_slot)
+            .find_first_beacon_block(latest_provable_slot)
             .await?
             .message)
     }

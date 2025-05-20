@@ -94,7 +94,7 @@ impl E2HSBuilder {
         for block_number in starting_block..ending_block {
             let beacon_block = self
                 .consensus_api
-                .fetch_beacon_block_retry(self.slot_for_next_execution_number)
+                .find_first_beacon_block(self.slot_for_next_execution_number)
                 .await?
                 .message;
             self.update_proving_anchors(beacon_block.slot).await?;
