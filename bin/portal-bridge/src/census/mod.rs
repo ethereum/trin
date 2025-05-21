@@ -1,7 +1,10 @@
 use std::{collections::HashSet, time::Duration};
 
 use discv5::enr::NodeId;
-use ethportal_api::types::{network::Subnetwork, portal_wire::OfferTrace};
+use ethportal_api::{
+    types::{network::Subnetwork, portal_wire::OfferTrace},
+    OverlayContentKey,
+};
 use network::{Network, NetworkAction, NetworkInitializationConfig, NetworkManager};
 use peer::PeerInfo;
 use thiserror::Error;
@@ -69,12 +72,12 @@ impl Census {
     pub fn select_peers(
         &self,
         subnetwork: Subnetwork,
-        content_id: &[u8; 32],
+        content_key: &impl OverlayContentKey,
     ) -> Result<Vec<PeerInfo>, CensusError> {
         match subnetwork {
-            Subnetwork::History => self.history.select_peers(content_id),
-            Subnetwork::State => self.state.select_peers(content_id),
-            Subnetwork::Beacon => self.beacon.select_peers(content_id),
+            Subnetwork::History => self.history.select_peers(content_key),
+            Subnetwork::State => self.state.select_peers(content_key),
+            Subnetwork::Beacon => self.beacon.select_peers(content_key),
             _ => Err(CensusError::UnsupportedSubnetwork(subnetwork)),
         }
     }

@@ -506,10 +506,7 @@ impl StateBridge {
         content_key: StateContentKey,
         content_value: StateContentValue,
     ) {
-        let Ok(peers) = self
-            .census
-            .select_peers(Subnetwork::State, &content_key.content_id())
-        else {
+        let Ok(peers) = self.census.select_peers(Subnetwork::State, &content_key) else {
             error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
             return;
         };

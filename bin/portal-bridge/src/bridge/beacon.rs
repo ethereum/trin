@@ -497,7 +497,7 @@ impl BeaconBridge {
         metrics: BridgeMetricsReporter,
         census: Census,
     ) {
-        let Ok(peers) = census.select_peers(Subnetwork::Beacon, &content_key.content_id()) else {
+        let Ok(peers) = census.select_peers(Subnetwork::Beacon, &content_key) else {
             error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
             return;
         };

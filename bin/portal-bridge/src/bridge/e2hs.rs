@@ -378,10 +378,7 @@ impl Gossiper {
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
     ) -> Vec<OfferTrace> {
-        let Ok(peers) = self
-            .census
-            .select_peers(Subnetwork::History, &content_key.content_id())
-        else {
+        let Ok(peers) = self.census.select_peers(Subnetwork::History, &content_key) else {
             error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
             return vec![];
         };
