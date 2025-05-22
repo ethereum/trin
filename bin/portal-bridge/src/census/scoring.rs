@@ -13,17 +13,20 @@ use super::peer::{Peer, PeerInfo};
 pub trait Weight: Send + Sync {
     fn weight(
         &self,
-        content_key: &impl OverlayContentKey,
-        content_id: &[u8; 32],
+        content_key: Option<&impl OverlayContentKey>,
+        content_id: &Option<[u8; 32]>,
         peer: &Peer,
     ) -> u32;
 
     fn weight_all<'a>(
         &self,
-        content_key: &impl OverlayContentKey,
+        content_key: Option<&impl OverlayContentKey>,
         peers: impl IntoIterator<Item = &'a Peer>,
     ) -> impl Iterator<Item = (&'a Peer, u32)> {
-        let content_id = content_key.content_id();
+        let content_id = content_key
+            .as_ref()
+            .map(|key| Some(key.content_id()))
+            .unwrap_or(None);
         peers
             .into_iter()
             .map(move |peer| (peer, self.weight(content_key, &content_id, peer)))
@@ -83,12 +86,14 @@ impl Default for AdditiveWeight {
 impl Weight for AdditiveWeight {
     fn weight(
         &self,
-        content_key: &impl OverlayContentKey,
-        content_id: &[u8; 32],
+        content_key: Option<&impl OverlayContentKey>,
+        content_id: &Option<[u8; 32]>,
         peer: &Peer,
     ) -> u32 {
-        if !peer.is_interested_in_content(content_key, content_id) {
-            return 0;
+        if let (Some(content_key), Some(content_id)) = (content_key, content_id) {
+            if !peer.is_interested_in_content(content_key, content_id) {
+                return 0;
+            }
         }
 
         let liveness_weight = peer
@@ -145,7 +150,7 @@ impl<W: Weight> PeerSelector<W> {
     /// Selects up to `self.limit` peers based on their weights.
     pub fn select_peers<'a>(
         &self,
-        content_key: &impl OverlayContentKey,
+        content_key: Option<&impl OverlayContentKey>,
         peers: impl IntoIterator<Item = &'a Peer>,
     ) -> Vec<PeerInfo> {
         let weighted_peers = self
