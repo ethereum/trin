@@ -98,11 +98,12 @@ impl ExecutionApi {
         Ok((content_key, content_value))
     }
 
-    /// This function should only be used if we know the receipts should exist.
+    /// Fetches the receipts for a given block number.
     ///
-    /// The function will retry 5 times if the receipts are not ready yet.
-    /// Especially when querying for receipts at the end of the chain their is a delay until they
-    /// become available.
+    /// The function will retry 5 times if the result is null. Execution providers may return null
+    /// for any reason,
+    /// - if receipts are not available for the block yet
+    /// - too many requests are sent to the provider to rate limit
     pub async fn get_receipts(&self, block_number: u64) -> anyhow::Result<Receipts> {
         let block_param = format!("0x{block_number:01X}");
         let params = Params::Array(vec![json!(block_param)]);
