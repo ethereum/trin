@@ -20,7 +20,7 @@ use tracing::{debug, error, info, warn};
 use url::Url;
 
 use super::http_client::{ClientWithBaseUrl, ContentType};
-use crate::constants::FALLBACK_RETRY_AFTER;
+use crate::constants::{FALLBACK_RETRY_AFTER, GET_RECEIPTS_RETRY_AFTER};
 
 /// Limit the number of requests in a single batch to avoid exceeding the
 /// provider's batch size limit configuration of 10.
@@ -98,13 +98,34 @@ impl ExecutionApi {
         Ok((content_key, content_value))
     }
 
+    /// Fetches the receipts for a given block number.
+    ///
+    /// The function will retry 5 times if the result is null. Execution providers may return null
+    /// for any reason,
+    /// - if receipts are not available for the block yet
+    /// - too many requests are sent to the provider to rate limit
     pub async fn get_receipts(&self, block_number: u64) -> anyhow::Result<Receipts> {
-        self.get_receipts_range(block_number..=block_number)
-            .await?
-            .remove(&block_number)
-            .ok_or_else(|| {
-                anyhow!("Unable to fetch receipts for block {block_number} from provider")
-            })
+        let block_param = format!("0x{block_number:01X}");
+        let params = Params::Array(vec![json!(block_param)]);
+        let request = JsonRequest::new("eth_getBlockReceipts".to_string(), params, 1);
+        for _ in 0..5 {
+            let response = self.try_request(request.clone()).await?;
+            let result = response.get("result").ok_or_else(|| {
+                anyhow!(
+                    "Unable to fetch block receipts result for height: {block_number} {response:?}"
+                )
+            })?;
+
+            // Check if the result is null, if so, sleep and retry.
+            if result.is_null() {
+                sleep(GET_RECEIPTS_RETRY_AFTER).await;
+                continue;
+            }
+            return serde_json::from_value(response).map_err(|err| {
+                anyhow!("Unable to parse receipts from provider response: {err:?}")
+            });
+        }
+        bail!("Unable to fetch receipts for block: {block_number}");
     }
 
     pub async fn get_receipts_range<I>(
