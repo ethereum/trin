@@ -2828,7 +2828,7 @@ checksum = "1c7a8fb8a9fbf66c1f703fe16184d10ca0ee9d23be5b4436400408ba54a95005"
 
 [[package]]
 name = "e2hs-writer"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "alloy-hardforks",
@@ -2946,7 +2946,7 @@ dependencies = [
 
 [[package]]
 name = "ef-tests"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "anyhow",
@@ -3133,7 +3133,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-rpc-client"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "alloy-hardforks",
@@ -3204,7 +3204,7 @@ dependencies = [
 
 [[package]]
 name = "ethportal-api"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "alloy",
  "alloy-chains",
@@ -3259,7 +3259,7 @@ dependencies = [
 
 [[package]]
 name = "ethportal-peertest"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "alloy-hardforks",
@@ -4813,7 +4813,7 @@ dependencies = [
 
 [[package]]
 name = "light-client"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "anyhow",
@@ -5640,7 +5640,7 @@ dependencies = [
 
 [[package]]
 name = "portal-bridge"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "anyhow",
@@ -5684,7 +5684,7 @@ dependencies = [
 
 [[package]]
 name = "portalnet"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "anyhow",
@@ -6541,7 +6541,7 @@ checksum = "afab94fb28594581f62d981211a9a4d53cc8130bbcbbb89a0440d9b8e81a7746"
 
 [[package]]
 name = "rpc"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "discv5",
@@ -8261,7 +8261,7 @@ dependencies = [
 
 [[package]]
 name = "trin"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "anyhow",
@@ -8288,7 +8288,7 @@ dependencies = [
 
 [[package]]
 name = "trin-beacon"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "anyhow",
@@ -8320,7 +8320,7 @@ dependencies = [
 
 [[package]]
 name = "trin-evm"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "ethportal-api",
@@ -8331,7 +8331,7 @@ dependencies = [
 
 [[package]]
 name = "trin-execution"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "alloy-rlp",
@@ -8367,7 +8367,7 @@ dependencies = [
 
 [[package]]
 name = "trin-history"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "anyhow",
@@ -8401,7 +8401,7 @@ dependencies = [
 
 [[package]]
 name = "trin-metrics"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "ethportal-api",
@@ -8411,7 +8411,7 @@ dependencies = [
 
 [[package]]
 name = "trin-state"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "anyhow",
@@ -8441,7 +8441,7 @@ dependencies = [
 
 [[package]]
 name = "trin-storage"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "anyhow",
@@ -8462,7 +8462,7 @@ dependencies = [
 
 [[package]]
 name = "trin-utils"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "ansi_term",
@@ -8481,7 +8481,7 @@ dependencies = [
 
 [[package]]
 name = "trin-validation"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alloy",
  "alloy-hardforks",
@@ -8692,7 +8692,7 @@ dependencies = [
 
 [[package]]
 name = "utp-testing"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "clap",
