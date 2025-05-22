@@ -18,6 +18,7 @@ anyhow.workspace = true
 ethereum_ssz.workspace = true
 ethereum_ssz_derive.workspace = true
 ethportal-api.workspace = true
+eventsource-client.workspace = true
 reqwest.workspace = true
 reqwest-middleware = { version = "0.4", features = ["json"] }
 reqwest-retry = "0.7"

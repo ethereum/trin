@@ -1,7 +1,8 @@
 use std::{env, time::Duration};
 
+use anyhow::bail;
 use reqwest::{
-    header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
+    header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, CONTENT_TYPE},
     Client, IntoUrl, Request, Response,
 };
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
@@ -31,7 +32,7 @@ impl ClientWithBaseUrl {
         url: Url,
         request_timeout: u64,
         content_type: ContentType,
-    ) -> Result<ClientWithBaseUrl, String> {
+    ) -> anyhow::Result<ClientWithBaseUrl> {
         let mut headers = HeaderMap::new();
         match content_type {
             ContentType::Json => {
@@ -43,40 +44,16 @@ impl ClientWithBaseUrl {
             }
         }
 
-        if let Some(host) = url.host_str() {
-            if host.contains("pandaops.io") {
-                let client_id = env::var("PANDAOPS_CLIENT_ID").unwrap_or_else(|_| {
-                    error!("Pandaops provider detected without PANDAOPS_CLIENT_ID set");
-                    "null".to_string()
-                });
-
-                let client_secret = env::var("PANDAOPS_CLIENT_SECRET").unwrap_or_else(|_| {
-                    error!("Pandaops provider detected without PANDAOPS_CLIENT_SECRET set");
-                    "null".to_string()
-                });
-
-                headers.insert(
-                    "CF-Access-Client-Id",
-                    HeaderValue::from_str(&client_id)
-                        .map_err(|_| "Invalid client id header value")?,
-                );
-
-                headers.insert(
-                    "CF-Access-Client-Secret",
-                    HeaderValue::from_str(&client_secret)
-                        .map_err(|_| "Invalid client secret header value")?,
-                );
-            }
-        } else {
-            return Err("Failed to find host string".into());
+        let authentication_headers = get_authorization_headers(url.clone())?;
+        for (key, value) in authentication_headers {
+            headers.insert(key, value);
         }
 
         // Add retry middleware
         let reqwest_client = Client::builder()
             .default_headers(headers)
             .timeout(Duration::from_secs(request_timeout))
-            .build()
-            .map_err(|_| "Failed to build HTTP client")?;
+            .build()?;
         let client = ClientBuilder::new(reqwest_client)
             .with(RetryTransientMiddleware::new_with_policy(
                 ExponentialBackoff::builder().build_with_max_retries(3),
@@ -110,4 +87,33 @@ impl ClientWithBaseUrl {
     pub async fn execute(&self, request: Request) -> Result<Response, reqwest_middleware::Error> {
         self.client.execute(request).await
     }
+}
+
+pub fn get_authorization_headers(url: Url) -> anyhow::Result<Vec<(HeaderName, HeaderValue)>> {
+    let mut headers = vec![];
+    if let Some(host) = url.host_str() {
+        if host.contains("pandaops.io") {
+            let client_id = env::var("PANDAOPS_CLIENT_ID").unwrap_or_else(|_| {
+                error!("Pandaops provider detected without PANDAOPS_CLIENT_ID set");
+                "null".to_string()
+            });
+
+            let client_secret = env::var("PANDAOPS_CLIENT_SECRET").unwrap_or_else(|_| {
+                error!("Pandaops provider detected without PANDAOPS_CLIENT_SECRET set");
+                "null".to_string()
+            });
+
+            headers.push((
+                HeaderName::from_static("cf-access-client-id"),
+                HeaderValue::from_str(&client_id)?,
+            ));
+            headers.push((
+                HeaderName::from_static("cf-access-client-secret"),
+                HeaderValue::from_str(&client_secret)?,
+            ));
+        }
+    } else {
+        bail!("Failed to find host string");
+    }
+    Ok(headers)
 }

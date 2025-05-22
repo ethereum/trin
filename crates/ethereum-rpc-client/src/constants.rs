@@ -21,3 +21,6 @@ pub const FALLBACK_BASE_EL_ENDPOINT: &str = "https://geth-lighthouse.mainnet.eu1
 /// We use Nimbus as the CL client, because it supports light client data by default.
 pub const DEFAULT_BASE_CL_ENDPOINT: &str = "https://nimbus-geth.mainnet.eu1.ethpandaops.io/";
 pub const FALLBACK_BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.na1.ethpandaops.io/";
+
+// Number of seconds to wait before retrying a provider request for get_receipts
+pub const GET_RECEIPTS_RETRY_AFTER: Duration = Duration::from_secs(1);
