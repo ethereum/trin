@@ -1,6 +1,3 @@
-// todo: remove once ephemeral history bridge is added
-#![allow(dead_code)]
-
 use ethportal_api::{consensus::beacon_block::BeaconBlockElectra, BlockBody, Receipts};
 use revm_primitives::B256;
 

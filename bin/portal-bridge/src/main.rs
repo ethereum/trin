@@ -1,10 +1,13 @@
 use std::future::Future;
 
 use clap::Parser;
-use ethereum_rpc_client::consensus::ConsensusApi;
+use ethereum_rpc_client::{consensus::ConsensusApi, execution::ExecutionApi};
 use ethportal_api::types::network::Subnetwork;
 use portal_bridge::{
-    bridge::{beacon::BeaconBridge, e2hs::E2HSBridge, state::StateBridge},
+    bridge::{
+        beacon::BeaconBridge, e2hs::E2HSBridge, ephemeral_history::EphemeralHistoryBridge,
+        state::StateBridge,
+    },
     census::Census,
     cli::BridgeConfig,
     handle::start_trin,
@@ -84,6 +87,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         e2hs_bridge
                             .launch()
                             .instrument(tracing::trace_span!("history(e2hs)")),
+                    )
+                    .await;
+
+                    census_handle
+                }
+                BridgeMode::EphemeralHistory => {
+                    // Create and initialize the census to acquire critical view of network before
+                    // gossiping
+                    let mut census = Census::new(subnetwork_overlays.clone(), &bridge_config);
+                    let census_handle = census.init([Subnetwork::History]).await?;
+
+                    let history_network = subnetwork_overlays
+                        .history
+                        .expect("History network not found in SubnetworkOverlays");
+
+                    let consensus_api = ConsensusApi::new(
+                        bridge_config.cl_provider.clone(),
+                        bridge_config.cl_provider_fallback.clone(),
+                        bridge_config.request_timeout,
+                    )
+                    .await?;
+                    let execution_api = ExecutionApi::new(
+                        bridge_config.el_provider.clone(),
+                        bridge_config.el_provider_fallback.clone(),
+                        bridge_config.request_timeout,
+                    )
+                    .await?;
+                    let ephemeral_history_bridge = EphemeralHistoryBridge::new(
+                        history_network,
+                        bridge_config.offer_limit,
+                        consensus_api,
+                        execution_api,
+                        census,
+                    )
+                    .await?;
+
+                    run_with_shutdown(
+                        ephemeral_history_bridge
+                            .launch()
+                            .instrument(tracing::trace_span!("history(ephemeral)")),
                     )
                     .await;
 

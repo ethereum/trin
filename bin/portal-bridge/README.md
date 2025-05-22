@@ -29,6 +29,7 @@ cargo run -p portal-bridge --release -- --mode e2hs --e2hs-range 100000-2000000
 - `"--mode e2hs --e2hs-range 100-200"`: gossip a block range from #100 to #200 (inclusive) using `E2HS` files as the data source
 - `"--mode e2hs --e2hs-range 100-"`: gossip a block range from #100 to latest (inclusive) using `E2HS` files as the data source. Latest is determined by the latest e2hs file available.
 - `"--mode e2hs --e2hs-range 1000-10000 --e2hs-randomize"`: randomize the order in which epochs from block range are gossiped
+- `"--mode ephemeral-history"`: gossip ephemeral history data. This mode is used for the History Network and is the default mode.
 
 #### Beacon Subnetwork
 
