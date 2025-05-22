@@ -1,6 +1,3 @@
-// todo: remove once ephemeral history bridge is added
-#![allow(dead_code)]
-
 use alloy::{
     consensus::{BlockBody as AlloyBlockBody, Header},
     rpc::types::{Withdrawal, Withdrawals},
@@ -32,7 +29,7 @@ impl EphemeralBundle {
         }
     }
 
-    fn next_parent_hash(&self) -> B256 {
+    pub fn next_parent_root(&self) -> B256 {
         self.blocks
             .last()
             .map(|(header, ..)| {
@@ -49,8 +46,8 @@ impl EphemeralBundle {
         receipts: Receipts,
     ) -> anyhow::Result<()> {
         ensure!(
-            self.next_parent_hash() == beacon_block.tree_hash_root(),
-            "Beacon block root does not match the expected parent hash"
+            self.next_parent_root() == beacon_block.tree_hash_root(),
+            "Beacon block root does not match the expected parent root"
         );
         let payload = &beacon_block.body.execution_payload;
         let transactions =
