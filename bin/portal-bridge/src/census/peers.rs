@@ -123,7 +123,10 @@ impl<W: Weight> Peers<W> {
     }
 
     /// Selects peers to receive content.
-    pub fn select_peers(&self, content_key: &impl OverlayContentKey) -> Vec<PeerInfo> {
+    ///
+    /// If content key is present, only peers interested in content will be returned.
+    /// Otherwise, all peers are eligible.
+    pub fn select_peers(&self, content_key: Option<&impl OverlayContentKey>) -> Vec<PeerInfo> {
         self.selector
             .select_peers(content_key, self.read().peers.values())
     }
