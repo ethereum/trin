@@ -38,7 +38,7 @@ rust-version = "1.87.0"
 version = "0.3.2"
 
 [workspace.dependencies]
-alloy = { version = "1.0", default-features = false, features = ["std", "serde", "getrandom"] }
+alloy = { version = "1.0", default-features = false, features = ["std", "serde", "getrandom", "rpc-types-beacon"] }
 alloy-chains = "0.2"
 alloy-hardforks = "0.2.0"
 alloy-rlp = { version = "0.3.8", default-features = false, features = ["derive"] }
@@ -56,6 +56,7 @@ ethereum_hashing = "0.7.0"
 ethereum_serde_utils = "0.8"
 ethereum_ssz = "0.9"
 ethereum_ssz_derive = "0.9"
+eventsource-client = "0.15.0"
 futures = "0.3.23"
 futures-util = "0.3.23"
 hex = "0.4.3"

@@ -1,9 +1,10 @@
 pub mod constants;
+pub mod event;
 pub mod rpc_types;
 
-use std::{fmt::Display, time::Duration};
+use std::{fmt::Display, pin::Pin, time::Duration};
 
-use alloy::primitives::B256;
+use alloy::{primitives::B256, rpc::types::beacon::events::BeaconNodeEventTopic};
 use anyhow::{anyhow, bail, ensure};
 use constants::DEFAULT_BEACON_STATE_REQUEST_TIMEOUT;
 use ethportal_api::{
@@ -17,6 +18,9 @@ use ethportal_api::{
         optimistic_update::LightClientOptimisticUpdateElectra, update::LightClientUpdateElectra,
     },
 };
+use event::BeaconEvent;
+use eventsource_client::{Client, ClientBuilder, SSE};
+use futures::{Stream, StreamExt};
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
     Response,
@@ -24,12 +28,13 @@ use reqwest::{
 use rpc_types::{RootResponse, VersionResponse, VersionedDataResponse, VersionedDataResult};
 use serde::de::DeserializeOwned;
 use ssz::Decode;
-use tracing::{debug, warn};
+use tracing::{debug, error, info, warn};
 use url::Url;
 
 use super::http_client::{
     ClientWithBaseUrl, ContentType, JSON_ACCEPT_PRIORITY, JSON_CONTENT_TYPE, SSZ_CONTENT_TYPE,
 };
+use crate::http_client::get_authorization_headers;
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug)]
@@ -233,6 +238,55 @@ impl ConsensusApi {
             .find_first_beacon_block(latest_provable_slot)
             .await?
             .message)
+    }
+
+    pub fn get_events_stream(
+        &self,
+        topics: &[BeaconNodeEventTopic],
+        stream_tag: &'static str,
+    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = BeaconEvent> + Send>>> {
+        let endpoint = self.primary.base_url().join(&format!(
+            "/eth/v1/events?topics={}",
+            topics
+                .iter()
+                .map(|topic| topic.query_value())
+                .collect::<Vec<_>>()
+                .join(",")
+        ))?;
+
+        let mut client_builder = ClientBuilder::for_url(endpoint.as_str())?;
+        for (key, value) in get_authorization_headers(self.primary.base_url().clone())? {
+            client_builder = client_builder.header(key.as_ref(), value.to_str()?)?;
+        }
+
+        Ok(client_builder
+            .build()
+            .stream()
+            .filter_map(move |event| async move {
+                let event = match event {
+                    Ok(SSE::Event(event)) => event,
+                    Ok(SSE::Connected(connection_details)) => {
+                        info!("{stream_tag}: Connected to SSE stream: {connection_details:?}");
+                        return None;
+                    }
+                    Ok(SSE::Comment(comment)) => {
+                        info!("{stream_tag}: Received comment: {comment:?}");
+                        return None;
+                    }
+                    Err(err) => {
+                        error!("{stream_tag}: Error receiving event: {err:?}");
+                        return None;
+                    }
+                };
+                match BeaconEvent::try_from(event) {
+                    Ok(event) => Some(event),
+                    Err(err) => {
+                        error!("{stream_tag}: Failed to decode event: {err:?}");
+                        None
+                    }
+                }
+            })
+            .boxed())
     }
 
     /// Make a request to the cl provider. If the primary provider fails, it will retry with the
