@@ -3157,6 +3157,7 @@ dependencies = [
  "ethereum_ssz_derive",
  "ethportal-api",
  "eventsource-client",
+ "futures",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
