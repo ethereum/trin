@@ -106,6 +106,9 @@ impl Network {
     }
 
     /// Selects peers to receive content.
+    ///
+    /// If content key is present, only peers interested in content will be returned.
+    /// Otherwise, all peers are eligible.
     pub fn select_peers(
         &self,
         content_key: Option<&impl OverlayContentKey>,

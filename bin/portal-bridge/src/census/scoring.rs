@@ -11,10 +11,13 @@ use super::peer::{Peer, PeerInfo};
 
 /// A trait for calculating peer's weight.
 pub trait Weight: Send + Sync {
+    /// Calculates peer's weight based on
+    /// - content key and id
+    /// - OfferResult's
+    /// - LivenessCheck's
     fn weight(
         &self,
-        content_key: Option<&impl OverlayContentKey>,
-        content_id: &Option<[u8; 32]>,
+        content_key_and_id: &Option<(&impl OverlayContentKey, [u8; 32])>,
         peer: &Peer,
     ) -> u32;
 
@@ -23,13 +26,10 @@ pub trait Weight: Send + Sync {
         content_key: Option<&impl OverlayContentKey>,
         peers: impl IntoIterator<Item = &'a Peer>,
     ) -> impl Iterator<Item = (&'a Peer, u32)> {
-        let content_id = content_key
-            .as_ref()
-            .map(|key| Some(key.content_id()))
-            .unwrap_or(None);
+        let content_key_and_id = content_key.map(|key| (key, key.content_id()));
         peers
             .into_iter()
-            .map(move |peer| (peer, self.weight(content_key, &content_id, peer)))
+            .map(move |peer| (peer, self.weight(&content_key_and_id, peer)))
     }
 }
 
@@ -86,12 +86,11 @@ impl Default for AdditiveWeight {
 impl Weight for AdditiveWeight {
     fn weight(
         &self,
-        content_key: Option<&impl OverlayContentKey>,
-        content_id: &Option<[u8; 32]>,
+        content_key_and_id: &Option<(&impl OverlayContentKey, [u8; 32])>,
         peer: &Peer,
     ) -> u32 {
-        if let (Some(content_key), Some(content_id)) = (content_key, content_id) {
-            if !peer.is_interested_in_content(content_key, content_id) {
+        if let Some((content_key, content_id)) = content_key_and_id {
+            if !peer.is_interested_in_content(*content_key, content_id) {
                 return 0;
             }
         }
