@@ -9,7 +9,7 @@ Currently the main priority is executing to the head of the chain so we can goss
 
 ## How to run
 ```bash
-cargo run -p trin-execution
+cargo run --release -p trin-execution
 ```
 
 ### Want to get a trace of the EVM's execution?

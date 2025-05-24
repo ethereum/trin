@@ -23,7 +23,7 @@ use trin_evm::{
 
 use super::post_block_beneficiaries::get_post_block_beneficiaries;
 use crate::{
-    era::types::{ProcessedBlock, TransactionsWithSender},
+    e2hs::types::{ProcessedBlock, TransactionsWithSender},
     evm::pre_block_contracts::apply_pre_block_contracts,
     metrics::{
         set_int_gauge_vec, start_timer_vec, stop_timer, BLOCK_HEIGHT, BLOCK_PROCESSING_TIMES,

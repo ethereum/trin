@@ -263,7 +263,7 @@ impl StateBridge {
         trin_execution: &mut TrinExecution,
     ) -> anyhow::Result<()> {
         let block_hash = trin_execution
-            .era_manager
+            .e2hs_manager
             .lock()
             .await
             .last_fetched_block()

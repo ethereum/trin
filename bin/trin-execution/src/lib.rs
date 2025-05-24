@@ -1,8 +1,8 @@
 pub mod cli;
 pub mod config;
 pub mod content;
+pub mod e2hs;
 pub mod engine;
-pub mod era;
 pub mod evm;
 pub mod execution;
 pub mod metrics;

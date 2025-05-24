@@ -20,7 +20,8 @@ use reqwest::{
     Client,
 };
 use tracing::info;
-use trin_execution::era::binary_search::EraBinarySearch;
+
+use crate::subcommands::single_generator::binary_search::EraBinarySearch;
 
 pub enum EraSource {
     // processed era1 file

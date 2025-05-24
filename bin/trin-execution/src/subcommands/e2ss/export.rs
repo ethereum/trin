@@ -20,7 +20,7 @@ use tracing::info;
 use crate::{
     cli::ExportStateConfig,
     config::StateConfig,
-    era::manager::EraManager,
+    e2hs::manager::E2HSManager,
     storage::{
         account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
         utils::setup_rocksdb,
@@ -46,7 +46,7 @@ impl StateExporter {
 
         let last_executed_block_number = execution_position.next_block_number() - 1;
 
-        let header = EraManager::new(last_executed_block_number)
+        let header = E2HSManager::new(last_executed_block_number)
             .await?
             .get_next_block()
             .await?

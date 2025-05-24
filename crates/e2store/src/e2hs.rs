@@ -223,12 +223,12 @@ impl E2HSMemory {
         Ok(buf)
     }
 
-    pub fn epoch_number_from_block_number(block_number: u64) -> u64 {
+    pub fn index_from_block_number(block_number: u64) -> u64 {
         block_number / (BLOCKS_PER_E2HS as u64)
     }
 
-    pub fn epoch_number(&self) -> u64 {
-        Self::epoch_number_from_block_number(self.block_index.block_index.starting_number)
+    pub fn index(&self) -> u64 {
+        Self::index_from_block_number(self.block_index.block_index.starting_number)
     }
 }
 

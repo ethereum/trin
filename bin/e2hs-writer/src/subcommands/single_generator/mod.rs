@@ -1,3 +1,4 @@
+mod binary_search;
 mod e2hs_builder;
 mod provider;
 
