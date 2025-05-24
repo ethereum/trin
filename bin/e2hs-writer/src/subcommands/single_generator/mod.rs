@@ -1,5 +1,5 @@
-mod binary_search;
 mod e2hs_builder;
+mod era_binary_search;
 mod provider;
 
 use std::time::Instant;

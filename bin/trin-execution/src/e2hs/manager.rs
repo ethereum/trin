@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::{bail, ensure};
+use anyhow::{anyhow, bail, ensure};
 use e2store::{e2hs::E2HSMemory, utils::get_e2hs_files};
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
@@ -9,8 +9,10 @@ use reqwest::{
 use tokio::task::JoinHandle;
 use tracing::info;
 
-use super::types::{ProcessedBlock, ProcessedE2HS};
-use crate::e2hs::utils::{download_raw_e2store_file, process_e2hs_file};
+use super::{
+    types::{ProcessedBlock, ProcessedE2HS},
+    utils::download_and_processed_e2hs_file,
+};
 
 pub struct E2HSManager {
     next_block_number: u64,
@@ -58,13 +60,20 @@ impl E2HSManager {
 
     pub async fn last_fetched_block(&self) -> anyhow::Result<&ProcessedBlock> {
         let Some(current_e2hs) = &self.current_e2hs else {
-            panic!("current_e2hs should be initialized in E2HSManager::new");
+            panic!("current_e2hs should always be present, perhaps it wasn't initialized in E2HSManager::new()?");
         };
         ensure!(
             self.next_block_number > 0,
             "next_block_number should be greater than 0"
         );
-        Ok(current_e2hs.get_block(self.next_block_number - 1))
+        current_e2hs
+            .get_block(self.next_block_number - 1)
+            .ok_or_else(|| {
+                anyhow!(
+                    "No block found for next_block_number: {}",
+                    self.next_block_number - 1
+                )
+            })
     }
 
     pub async fn get_next_block(&mut self) -> anyhow::Result<&ProcessedBlock> {
@@ -81,7 +90,14 @@ impl E2HSManager {
             processed_e2hs.contains_block(self.next_block_number),
             "Block not found in e2hs file"
         );
-        let block = processed_e2hs.get_block(self.next_block_number);
+        let block = processed_e2hs
+            .get_block(self.next_block_number)
+            .ok_or_else(|| {
+                anyhow!(
+                    "No block found for next_block_number: {}",
+                    self.next_block_number
+                )
+            })?;
         self.next_block_number += 1;
 
         Ok(block)
@@ -105,8 +121,7 @@ impl E2HSManager {
             let Some(next_e2hs_path) = next_e2hs_path else {
                 bail!("Unable to find next e2hs file's path: index {next_e2hs_index}");
             };
-            let raw_e2hs = download_raw_e2store_file(next_e2hs_path, http_client.clone()).await?;
-            process_e2hs_file(&raw_e2hs)
+            download_and_processed_e2hs_file(next_e2hs_path, http_client.clone()).await
         });
         self.next_e2hs = Some(join_handle);
 
@@ -122,7 +137,6 @@ impl E2HSManager {
         let Some(e2hs_path) = e2hs_files.get(&e2hs_index).cloned() else {
             bail!("Unable to find e2hs file's path during initialization: index {e2hs_index}");
         };
-        let raw_e2hs = download_raw_e2store_file(e2hs_path, http_client.clone()).await?;
-        process_e2hs_file(&raw_e2hs)
+        download_and_processed_e2hs_file(e2hs_path, http_client.clone()).await
     }
 }

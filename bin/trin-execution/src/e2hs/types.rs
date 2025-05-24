@@ -2,7 +2,7 @@ use alloy::{
     consensus::{Header, TxEip4844Variant, TxEnvelope},
     eips::eip4895::Withdrawal,
 };
-use e2store::e2hs::BLOCKS_PER_E2HS;
+use e2store::e2hs::{E2HSMemory, BLOCKS_PER_E2HS};
 use revm::context::TxEnv;
 use revm_primitives::Address;
 use trin_evm::tx_env_modifier::TxEnvModifier;
@@ -46,11 +46,11 @@ pub struct ProcessedE2HS {
 
 impl ProcessedE2HS {
     pub fn contains_block(&self, block_number: u64) -> bool {
-        let first_block_number = self.blocks[0].header.number;
-        (first_block_number..first_block_number + BLOCKS_PER_E2HS as u64).contains(&block_number)
+        self.index == E2HSMemory::index_from_block_number(block_number)
     }
 
-    pub fn get_block(&self, block_number: u64) -> &ProcessedBlock {
-        &self.blocks[block_number as usize - self.blocks[0].header.number as usize]
+    pub fn get_block(&self, block_number: u64) -> Option<&ProcessedBlock> {
+        let first_block_number = self.index as usize * BLOCKS_PER_E2HS;
+        self.blocks.get(block_number as usize - first_block_number)
     }
 }

@@ -21,7 +21,7 @@ use reqwest::{
 };
 use tracing::info;
 
-use crate::subcommands::single_generator::binary_search::EraBinarySearch;
+use crate::subcommands::single_generator::era_binary_search::EraBinarySearch;
 
 pub enum EraSource {
     // processed era1 file

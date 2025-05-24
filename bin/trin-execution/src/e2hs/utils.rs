@@ -54,10 +54,10 @@ pub async fn download_raw_e2store_file(
             Ok(raw_e2store) => break raw_e2store,
             Err(err) => {
                 warn!("Failed to download e2store file {attempts} times | Error: {err} | Path {e2store_path}");
-                attempts += 1;
-                if attempts > 10 {
+                if attempts >= 10 {
                     anyhow::bail!("Failed to download e2store file after {attempts} attempts");
                 }
+                attempts += 1;
                 sleep(Duration::from_secs_f64((attempts as f64).log2())).await;
             }
         }
@@ -65,4 +65,11 @@ pub async fn download_raw_e2store_file(
 
     info!("Done downloading e2store file {e2store_path}");
     Ok(raw_e2store)
+}
+
+pub async fn download_and_processed_e2hs_file(
+    e2hs_path: String,
+    http_client: Client,
+) -> anyhow::Result<ProcessedE2HS> {
+    process_e2hs_file(&download_raw_e2store_file(e2hs_path, http_client.clone()).await?)
 }
