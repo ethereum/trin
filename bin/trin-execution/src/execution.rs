@@ -15,7 +15,7 @@ use tracing::{info, warn};
 
 use super::config::StateConfig;
 use crate::{
-    era::manager::EraManager,
+    e2hs::manager::E2HSManager,
     evm::block_executor::BlockExecutor,
     metrics::{start_timer_vec, stop_timer, BLOCK_PROCESSING_TIMES},
     storage::{evm_db::EvmDB, execution_position::ExecutionPosition, utils::setup_rocksdb},
@@ -25,7 +25,7 @@ pub struct TrinExecution {
     pub database: EvmDB,
     pub config: StateConfig,
     pub execution_position: ExecutionPosition,
-    pub era_manager: Arc<Mutex<EraManager>>,
+    pub e2hs_manager: Arc<Mutex<E2HSManager>>,
     pub data_directory: PathBuf,
 }
 
@@ -37,14 +37,14 @@ impl TrinExecution {
         let database = EvmDB::new(config.clone(), db, &execution_position)
             .expect("Failed to create EVM database");
 
-        let era_manager = Arc::new(Mutex::new(
-            EraManager::new(execution_position.next_block_number()).await?,
+        let e2hs_manager = Arc::new(Mutex::new(
+            E2HSManager::new(execution_position.next_block_number()).await?,
         ));
 
         Ok(Self {
             execution_position,
             config,
-            era_manager,
+            e2hs_manager,
             database,
             data_directory: data_dir.to_path_buf(),
         })
@@ -80,9 +80,9 @@ impl TrinExecution {
 
         loop {
             let fetching_block_timer =
-                start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
+                start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_e2hs"]);
             let block = self
-                .era_manager
+                .e2hs_manager
                 .lock()
                 .await
                 .get_next_block()
@@ -169,7 +169,7 @@ mod tests {
     use trin_utils::dir::create_temp_test_dir;
 
     use super::*;
-    use crate::era::utils::process_era1_file;
+    use crate::e2hs::utils::process_e2hs_file;
 
     #[tokio::test]
     #[ignore = "This test downloads data from a remote server"]
@@ -178,9 +178,9 @@ mod tests {
         let mut trin_execution = TrinExecution::new(temp_directory.path(), StateConfig::default())
             .await
             .unwrap();
-        let raw_era1 = fs::read("../../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
-        let processed_era = process_era1_file(&raw_era1).unwrap();
-        for block in processed_era.blocks {
+        let raw_e2hs = fs::read("../../test_assets/e2hs/mainnet-00000-a6860fef.e2hs").unwrap();
+        let processed_e2hs = process_e2hs_file(&raw_e2hs).unwrap();
+        for block in processed_e2hs.blocks {
             trin_execution.process_next_block().await.unwrap();
             assert_eq!(trin_execution.get_root().unwrap(), block.header.state_root);
         }

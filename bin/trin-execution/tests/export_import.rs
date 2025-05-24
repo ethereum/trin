@@ -30,7 +30,7 @@ async fn execute_export_import_execute() -> anyhow::Result<()> {
     info!("Running test for {blocks} blocks");
 
     let temp_directory = create_temp_test_dir()?;
-    let e2ss_dir = temp_directory.path().join("era");
+    let e2ss_dir = temp_directory.path().join("e2ss");
     let dir_1 = temp_directory.path().join("dir_1");
     let dir_2 = temp_directory.path().join("dir_2");
 

@@ -109,7 +109,7 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
             trie_diff: changed_nodes,
         } = trin_execution.process_next_block().await?;
         let block = trin_execution
-            .era_manager
+            .e2hs_manager
             .lock()
             .await
             .last_fetched_block()

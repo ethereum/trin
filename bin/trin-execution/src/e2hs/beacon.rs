@@ -137,7 +137,7 @@ mod tests {
     };
     use ethportal_api::consensus::{beacon_block::SignedBeaconBlock, fork::ForkName};
 
-    use crate::era::beacon::ProcessBeaconBlock;
+    use crate::e2hs::beacon::ProcessBeaconBlock;
 
     #[tokio::test]
     async fn process_beacon_block() {

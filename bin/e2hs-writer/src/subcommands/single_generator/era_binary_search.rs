@@ -8,10 +8,11 @@ use ethportal_api::consensus::constants::SLOTS_PER_HISTORICAL_ROOT;
 use reqwest::Client;
 use revm_primitives::hardfork::SpecId;
 use trin_evm::spec_id::get_spec_block_number;
+use trin_execution::e2hs::utils::download_raw_e2store_file;
 
-use super::{constants::FIRST_ERA_EPOCH_WITH_EXECUTION_PAYLOAD, utils::download_raw_era};
+const FIRST_ERA_EPOCH_WITH_EXECUTION_PAYLOAD: u64 = 574;
 
-pub struct EraBinarySearch {}
+pub struct EraBinarySearch;
 
 impl EraBinarySearch {
     /// For era files there isn't really a good way to know which era file has the block we want,
@@ -50,7 +51,7 @@ impl EraBinarySearch {
             // mid plus 1 so we just manually check the last era file
             if mid + 1 > last_epoch_index {
                 let era_to_check =
-                    download_raw_era(era_links[&(mid)].clone(), http_client.clone()).await?;
+                    download_raw_e2store_file(era_links[&mid].clone(), http_client.clone()).await?;
 
                 let decoded_era = Era::deserialize(&era_to_check)?;
                 if decoded_era.contains(block_number) {
@@ -76,7 +77,7 @@ impl EraBinarySearch {
                 || (mid_block_number..mid_plus_one_block_number).contains(&block_number)
             {
                 let era_to_check =
-                    download_raw_era(era_links[&(mid)].clone(), http_client.clone()).await?;
+                    download_raw_e2store_file(era_links[&mid].clone(), http_client.clone()).await?;
 
                 let decoded_era = Era::deserialize(&era_to_check)?;
                 if decoded_era.contains(block_number) {

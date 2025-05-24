@@ -2,9 +2,10 @@ use alloy::{
     consensus::{Header, TxEip4844Variant, TxEnvelope},
     eips::eip4895::Withdrawal,
 };
+use e2store::e2hs::{E2HSMemory, BLOCKS_PER_E2HS};
 use revm::context::TxEnv;
-use revm_primitives::{hardfork::SpecId, Address};
-use trin_evm::{spec_id::get_spec_block_number, tx_env_modifier::TxEnvModifier};
+use revm_primitives::Address;
+use trin_evm::tx_env_modifier::TxEnvModifier;
 
 #[derive(Debug, Clone)]
 pub struct TransactionsWithSender {
@@ -38,44 +39,18 @@ pub struct ProcessedBlock {
     pub transactions: Vec<TransactionsWithSender>,
 }
 
-pub struct ProcessedEra {
+pub struct ProcessedE2HS {
     pub blocks: Vec<ProcessedBlock>,
-    pub era_type: EraType,
-    pub epoch_index: u64,
-    pub first_block_number: u64,
+    pub index: u64,
 }
 
-impl ProcessedEra {
+impl ProcessedE2HS {
     pub fn contains_block(&self, block_number: u64) -> bool {
-        (self.first_block_number..self.first_block_number + self.len() as u64)
-            .contains(&block_number)
+        self.index == E2HSMemory::index_from_block_number(block_number)
     }
 
-    pub fn get_block(&self, block_number: u64) -> &ProcessedBlock {
-        &self.blocks[block_number as usize - self.first_block_number as usize]
-    }
-
-    pub fn len(&self) -> usize {
-        self.blocks.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.blocks.is_empty()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EraType {
-    Era,
-    Era1,
-}
-
-impl EraType {
-    pub fn for_block_number(block_number: u64) -> Self {
-        if block_number < get_spec_block_number(SpecId::MERGE) {
-            Self::Era1
-        } else {
-            Self::Era
-        }
+    pub fn get_block(&self, block_number: u64) -> Option<&ProcessedBlock> {
+        let first_block_number = self.index as usize * BLOCKS_PER_E2HS;
+        self.blocks.get(block_number as usize - first_block_number)
     }
 }
