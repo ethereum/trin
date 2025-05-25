@@ -60,7 +60,7 @@ impl E2HSManager {
 
     pub async fn last_fetched_block(&self) -> anyhow::Result<&ProcessedBlock> {
         let Some(current_e2hs) = &self.current_e2hs else {
-            bail!("No blocks were fetched yet, current_e2hs is initialized in get_next_block");
+            bail!("No blocks were fetched yet, last_fetched_block is available only after successful get_next_block");
         };
         ensure!(
             self.next_block_number > 0,
