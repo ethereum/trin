@@ -3,26 +3,21 @@
 
 use std::{sync::Arc, time::Instant};
 
-use alloy::rpc::types::Withdrawal;
+use alloy::consensus::Header;
 use ethereum_rpc_client::consensus::ConsensusApi;
 use ethportal_api::{
     consensus::{beacon_block::BeaconBlockElectra, beacon_state::HistoricalBatch},
     types::{
         execution::{
-            builders::{
-                block::{decode_transactions, ExecutionBlockBuilder},
-                header::ExecutionHeaderBuilder,
-            },
-            ephermeral_header::EphemeralHeaderOffer,
-            header_with_proof::HeaderWithProof,
+            builders::block::ExecutionBlockBuilder, ephermeral_header::EphemeralHeaderOffer,
         },
         network::Subnetwork,
         portal_wire::{OfferTrace, OfferTraceMultipleItems},
     },
-    BlockBody, ContentValue, HistoryContentKey, HistoryContentValue, OverlayContentKey,
-    RawContentKey, RawContentValue, Receipts,
+    ContentValue, HistoryContentKey, HistoryContentValue, OverlayContentKey, RawContentKey,
+    RawContentValue,
 };
-use futures::future::join_all;
+use futures::{future::join_all, stream, StreamExt};
 use revm_primitives::B256;
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -78,19 +73,21 @@ impl Gossiper {
     /// Finishes once all content is gossiped.
     pub async fn gossip_ephemeral_bundle(&self, ephemeral_bundle: EphemeralBundle) {
         info!(head_block_root = %ephemeral_bundle.head_block_root,
-            headers_count = %ephemeral_bundle.beacon_blocks.len(),
-            bodies_count = %ephemeral_bundle.bodies.len(),
-            receipts_count = %ephemeral_bundle.receipts.len(),
+            block_count = %ephemeral_bundle.blocks.len(),
             "Gossiping ephemeral bundle"
         );
 
-        // Gossip header series and wait until it finishes
-        if let Err(err) = self
-            .start_gossip_header_series(ephemeral_bundle.beacon_blocks)
-            .await
-        {
-            error!(%err, "Error while trying to gossip BlockHeaderByHash");
+        let mut headers = vec![];
+        let mut bodies = vec![];
+        let mut receipts = vec![];
+        for (header, body, receipt) in ephemeral_bundle.blocks {
+            bodies.push((header.hash_slow(), body));
+            receipts.push((header.hash_slow(), receipt));
+            headers.push(header);
         }
+
+        // Gossip header series and wait until it finishes
+        self.gossip_content_header_series(headers).await;
 
         let mut gossip_tasks = vec![];
 
@@ -99,68 +96,19 @@ impl Gossiper {
         sleep(HEADER_SATURATION_DELAY).await;
 
         // Start gossiping BlockBody and BlockReceipts
-        for (block_hash, body) in ephemeral_bundle.bodies {
-            gossip_tasks.push(self.start_gossip_body_task(block_hash, body));
+        for (block_hash, body) in bodies {
+            let content_key = HistoryContentKey::new_block_body(block_hash);
+            let content_value = HistoryContentValue::BlockBody(body);
+            gossip_tasks.push(self.start_gossip_task(content_key, content_value));
         }
-        for (block_hash, receipts) in ephemeral_bundle.receipts {
-            gossip_tasks.push(self.start_gossip_receipts_task(block_hash, receipts));
+        for (block_hash, receipts) in receipts {
+            let content_key = HistoryContentKey::new_block_receipts(block_hash);
+            let content_value = HistoryContentValue::Receipts(receipts);
+            gossip_tasks.push(self.start_gossip_task(content_key, content_value));
         }
 
-        // Wait until Header series, BlockBody and BlockReceipts are gossiped
+        // Wait until BlockBody and BlockReceipts are gossiped
         join_all(gossip_tasks).await;
-    }
-
-    fn start_gossip_header_series(
-        &self,
-        beacon_blocks: Vec<BeaconBlockElectra>,
-    ) -> JoinHandle<Vec<OfferTraceMultipleItems>> {
-        let mut content_items = vec![];
-        for beacon_block in beacon_blocks {
-            let payload = &beacon_block.body.execution_payload;
-            let transactions =
-                decode_transactions(&payload.transactions).expect("Failed to decode transactions");
-            let withdrawals = payload
-                .withdrawals
-                .iter()
-                .map(Withdrawal::from)
-                .collect::<Vec<_>>();
-            let header = ExecutionHeaderBuilder::electra(
-                payload,
-                beacon_block.parent_root,
-                &transactions,
-                &withdrawals,
-                &beacon_block.body.execution_requests,
-            )
-            .expect("Failed to build header");
-
-            content_items.push((
-                HistoryContentKey::new_ephemeral_header_offer(header.hash_slow()).to_bytes(),
-                HistoryContentValue::EphemeralHeaderOffer(EphemeralHeaderOffer { header }).encode(),
-            ));
-        }
-
-        let executor = self.clone();
-        tokio::spawn(async move { executor.gossip_content_header_series(content_items).await })
-    }
-
-    fn start_gossip_body_task(
-        &self,
-        block_hash: B256,
-        body: BlockBody,
-    ) -> JoinHandle<Vec<OfferTrace>> {
-        let content_key = HistoryContentKey::new_block_body(block_hash);
-        let content_value = HistoryContentValue::BlockBody(body);
-        self.start_gossip_task(content_key, content_value)
-    }
-
-    fn start_gossip_receipts_task(
-        &self,
-        block_hash: B256,
-        receipts: Receipts,
-    ) -> JoinHandle<Vec<OfferTrace>> {
-        let content_key = HistoryContentKey::new_block_receipts(block_hash);
-        let content_value = HistoryContentValue::Receipts(receipts);
-        self.start_gossip_task(content_key, content_value)
     }
 
     /// The finalized state root should be for a finalized period. The beacon blocks passed in must
@@ -181,43 +129,29 @@ impl Gossiper {
             state_roots: state.state_roots,
         };
 
-        let mut gossip_tasks = vec![];
-        for beacon_block in beacon_blocks {
+        let gossip_futures = beacon_blocks.into_iter().flat_map(|beacon_block| {
             let (header_with_proof, _) =
                 ExecutionBlockBuilder::electra(&beacon_block, &historical_batch)
                     .expect("Failed to build header with proof");
 
-            gossip_tasks.push(self.start_gossip_header_by_hash_task(
-                header_with_proof.header.hash_slow(),
-                header_with_proof.clone(),
-            ));
-            gossip_tasks.push(self.start_gossip_header_by_number_task(
-                header_with_proof.header.number,
-                header_with_proof,
-            ));
-        }
+            let content_key =
+                HistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash_slow());
+            let content_value =
+                HistoryContentValue::BlockHeaderWithProof(header_with_proof.clone());
+            let header_by_hash_task = self.start_gossip_task(content_key, content_value);
 
-        join_all(gossip_tasks).await;
-    }
+            let content_key =
+                HistoryContentKey::new_block_header_by_number(header_with_proof.header.number);
+            let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
+            let header_by_number_task = self.start_gossip_task(content_key, content_value);
 
-    fn start_gossip_header_by_hash_task(
-        &self,
-        block_hash: B256,
-        header_with_proof: HeaderWithProof,
-    ) -> JoinHandle<Vec<OfferTrace>> {
-        let content_key = HistoryContentKey::new_block_header_by_hash(block_hash);
-        let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
-        self.start_gossip_task(content_key, content_value)
-    }
+            vec![header_by_hash_task, header_by_number_task]
+        });
 
-    fn start_gossip_header_by_number_task(
-        &self,
-        block_number: u64,
-        header_with_proof: HeaderWithProof,
-    ) -> JoinHandle<Vec<OfferTrace>> {
-        let content_key = HistoryContentKey::new_block_header_by_number(block_number);
-        let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
-        self.start_gossip_task(content_key, content_value)
+        stream::iter(gossip_futures)
+            .buffer_unordered(16)
+            .collect::<Vec<_>>()
+            .await;
     }
 
     /// Starts async task that gossips content, retuning [JoinHandle] for it.
@@ -226,8 +160,8 @@ impl Gossiper {
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
     ) -> JoinHandle<Vec<OfferTrace>> {
-        let executor = self.clone();
-        tokio::spawn(async move { executor.gossip_content(content_key, content_value).await })
+        let gossiper = self.clone();
+        tokio::spawn(async move { gossiper.gossip_content(content_key, content_value).await })
     }
 
     /// Spawn individual offer tasks for each interested enr found in Census.
@@ -345,8 +279,16 @@ impl Gossiper {
     /// Returns once all tasks complete.
     async fn gossip_content_header_series(
         &self,
-        content_items: Vec<(RawContentKey, RawContentValue)>,
+        headers: Vec<Header>,
     ) -> Vec<OfferTraceMultipleItems> {
+        let mut content_items = vec![];
+        for header in headers {
+            content_items.push((
+                HistoryContentKey::new_ephemeral_header_offer(header.hash_slow()).to_bytes(),
+                HistoryContentValue::EphemeralHeaderOffer(EphemeralHeaderOffer { header }).encode(),
+            ));
+        }
+
         let Ok(peers) = self.census.select_random_peers(Subnetwork::History) else {
             error!("Failed to request enrs for content key, this is unexpected");
             return vec![];

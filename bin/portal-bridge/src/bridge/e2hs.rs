@@ -366,8 +366,8 @@ impl Gossiper {
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
     ) -> JoinHandle<Vec<OfferTrace>> {
-        let executor = self.clone();
-        tokio::spawn(async move { executor.gossip_content(content_key, content_value).await })
+        let gossiper = self.clone();
+        tokio::spawn(async move { gossiper.gossip_content(content_key, content_value).await })
     }
 
     /// Spawn individual offer tasks for each interested enr found in Census.
