@@ -1,4 +1,7 @@
-use alloy::{consensus::TxEnvelope, eips::eip4895::Withdrawal};
+use alloy::{
+    consensus::{transaction::SignerRecoverable, TxEnvelope},
+    eips::eip4895::Withdrawal,
+};
 use ethportal_api::{
     consensus::beacon_block::{
         SignedBeaconBlock, SignedBeaconBlockBellatrix, SignedBeaconBlockCapella,
