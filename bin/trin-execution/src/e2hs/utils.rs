@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use alloy::primitives::bytes::Bytes;
+use alloy::{consensus::transaction::SignerRecoverable, primitives::bytes::Bytes};
 use e2store::e2hs::{BlockTuple, E2HSMemory, BLOCKS_PER_E2HS};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use reqwest::Client;
