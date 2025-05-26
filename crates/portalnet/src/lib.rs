@@ -8,6 +8,7 @@ pub mod constants;
 pub mod discovery;
 pub mod events;
 pub mod find;
+pub mod gossip;
 pub mod overlay;
 pub mod put_content;
 pub mod socket;

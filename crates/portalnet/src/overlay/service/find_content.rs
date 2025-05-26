@@ -140,14 +140,19 @@ impl<
                 }
             }
             // If we can't obtain a permit or don't have data to send back, send the requester a
-            // list of closer ENRs.
+            // list of ENRs.
             (Ok(_), None) | (Ok(None), _) => {
-                let mut enrs = self
-                    .kbuckets
-                    .closest_to_content_id::<TMetric>(
+                let enrs = if content_key.affected_by_radius() {
+                    // If content is affected by radius, return ENRs that are closest
+                    self.kbuckets.closest_to_content_id::<TMetric>(
                         &content_key.content_id(),
                         FIND_CONTENT_MAX_NODES,
                     )
+                } else {
+                    // Otherwise, return no ENRs
+                    vec![]
+                };
+                let mut enrs = enrs
                     .into_iter()
                     .filter(|enr| &enr.node_id() != source)
                     .map(SszEnr)
@@ -640,10 +645,16 @@ impl<
                 continue;
             };
 
-            // If the content is within the node's radius, then offer the node the content.
-            let is_within_radius =
-                TMetric::distance(&node_id.raw(), &content_id) <= node.data_radius;
-            if is_within_radius {
+            // Currently we have two types of content:
+            // 1. node should store it if it falls within its radius
+            // 2. all nodes should store it
+            let should_poke = if content_key.affected_by_radius() {
+                TMetric::distance(&node_id.raw(), &content_id) <= node.data_radius
+            } else {
+                true
+            };
+
+            if should_poke {
                 let content_items: Vec<(RawContentKey, RawContentValue)> =
                     vec![(raw_content_key.clone(), content.clone())];
                 let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
@@ -722,10 +733,15 @@ impl<
             overall_timeout: config.timeout.unwrap_or(self.query_timeout),
         };
 
-        let closest_enrs = self
-            .kbuckets
-            .closest_to_content_id::<TMetric>(&target.content_id(), query_config.num_results);
-        if closest_enrs.is_empty() {
+        let peers_enrs = if target.affected_by_radius() {
+            // if target is affected by radius, use closest peers
+            self.kbuckets
+                .closest_to_content_id::<TMetric>(&target.content_id(), query_config.num_results)
+        } else {
+            // Otherwise, use random peers
+            self.kbuckets.random_peers(query_config.num_results)
+        };
+        if peers_enrs.is_empty() {
             // If there are no connected nodes in the routing table the query cannot proceed.
             warn!("No connected nodes in routing table, find content query cannot proceed.");
             let _ = callback.send(Err(OverlayRequestError::ContentNotFound {
@@ -738,7 +754,7 @@ impl<
         }
 
         // Convert ENRs into k-bucket keys.
-        let closest_nodes: Vec<Key<NodeId>> = closest_enrs
+        let peers_node_keys: Vec<Key<NodeId>> = peers_enrs
             .iter()
             .map(|enr| Key::from(enr.node_id()))
             .collect();
@@ -747,7 +763,7 @@ impl<
             if config.is_trace {
                 let mut trace = QueryTrace::new(&self.local_enr(), target_node_id.raw().into());
                 let local_enr = self.local_enr();
-                trace.node_responded_with(&local_enr, closest_enrs.iter().collect());
+                trace.node_responded_with(&local_enr, peers_enrs.iter().collect());
                 Some(trace)
             } else {
                 None
@@ -759,11 +775,11 @@ impl<
                 target: target.clone(),
                 callback,
             },
-            untrusted_enrs: SmallVec::from_vec(closest_enrs),
+            untrusted_enrs: SmallVec::from_vec(peers_enrs),
             trace,
         };
 
-        let query = FindContentQuery::with_config(query_config, target_key, closest_nodes);
+        let query = FindContentQuery::with_config(query_config, target_key, peers_node_keys);
         let query_id = self.find_content_query_pool.add_query(query_info, query);
         trace!(
             query.id = %query_id,

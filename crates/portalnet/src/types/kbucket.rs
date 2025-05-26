@@ -11,6 +11,7 @@ use discv5::{
 use ethportal_api::types::distance::{Distance, Metric};
 use itertools::Itertools;
 use parking_lot::RwLock;
+use rand::{rng, seq::IteratorRandom};
 use tracing::debug;
 
 use super::node::Node;
@@ -242,6 +243,19 @@ impl SharedKBucketsTable {
         result
     }
 
+    /// Returns up to `limit` random connected nodes.
+    pub fn random_peers(&self, limit: usize) -> Vec<Enr> {
+        self.kbuckets
+            .write()
+            .iter()
+            // Filter out disconnected nodes.
+            .filter(|entry| entry.status.is_connected())
+            .choose_multiple(&mut rng(), limit)
+            .into_iter()
+            .map(|entry| entry.node.value.enr())
+            .collect()
+    }
+
     /// Returns up to `limit` connected nodes that are closest to the given node id.
     pub fn closest_to_node_id(&self, target: NodeId, limit: usize) -> Vec<Enr> {
         let target_key = Key::from(target);
@@ -277,34 +291,22 @@ impl SharedKBucketsTable {
             .collect()
     }
 
-    /// Returns all nodes that are connected and interested into provided content id.
-    pub fn interested_enrs<TMetric: Metric>(&self, content_id: &[u8; 32]) -> Vec<Enr> {
-        self.kbuckets
-            .write()
-            .iter()
-            // Filter out disconnected nodes.
-            .filter(|entry| entry.status.is_connected())
-            .map(|entry| entry.node)
-            // Keep only nodes that are interested in content
-            .filter(|node| {
-                TMetric::distance(content_id, &node.key.preimage().raw()) <= node.value.data_radius
-            })
-            .map(|node| node.value.enr())
-            .collect()
-    }
-
     /// For each content id, returns all ENRs that are connected and interested into it.
+    ///
+    /// This function uses radius and distance to decides if peer is interested in content. If
+    /// interest in content is not decided based on radius, then different function should be used
+    /// instead.
     ///
     /// The keys of the resulting map will always contain all `content_ids`. If none of the nodes is
     /// interested into specific content id, it will still be present in the result but the value
     /// associated with it will be empty.
-    pub fn batch_interested_enrs<TMetric: Metric>(
+    pub fn batch_interested_enrs<'id, TMetric: Metric>(
         &self,
-        content_ids: &[&[u8; 32]],
-    ) -> HashMap<[u8; 32], Vec<Enr>> {
+        content_ids: &[&'id [u8; 32]],
+    ) -> HashMap<&'id [u8; 32], Vec<Enr>> {
         let mut result = content_ids
             .iter()
-            .map(|content_id| (**content_id, vec![]))
+            .map(|&content_id| (content_id, vec![]))
             .collect::<HashMap<_, _>>();
         for entry in self.kbuckets.write().iter() {
             // Skip non-connected nodes
@@ -312,13 +314,10 @@ impl SharedKBucketsTable {
                 continue;
             }
             let node = entry.node;
-            for content_id in content_ids {
+            for &content_id in content_ids {
                 let distance = TMetric::distance(content_id, &node.key.preimage().raw());
                 if distance <= node.value.data_radius {
-                    result
-                        .entry(**content_id)
-                        .or_default()
-                        .push(node.value.enr());
+                    result.entry(content_id).or_default().push(node.value.enr());
                 }
             }
         }
@@ -358,9 +357,52 @@ impl From<&SharedKBucketsTable> for ethportal_api::KBucketsTable {
     }
 }
 
+// SharedKBucketsTable utility functions for testing purposes
+#[cfg(test)]
+impl SharedKBucketsTable {
+    const MAX_INCOMING_PER_BUCKET: usize = 16;
+
+    // 1 second is enough for testing purposes
+    const PENDING_TIMEOUT_SEC: std::time::Duration = std::time::Duration::from_secs(1);
+
+    const CONNECTED: NodeStatus = NodeStatus {
+        state: ConnectionState::Connected,
+        direction: ConnectionDirection::Outgoing,
+    };
+    const DISCONNECTED: NodeStatus = NodeStatus {
+        state: ConnectionState::Disconnected,
+        direction: ConnectionDirection::Outgoing,
+    };
+
+    pub fn new_for_tests(node_id: NodeId) -> Self {
+        Self::new(KBucketsTable::new(
+            Key::from(node_id),
+            Self::PENDING_TIMEOUT_SEC,
+            Self::MAX_INCOMING_PER_BUCKET,
+            /* table_filter= */ None,
+            /* bucket_filter= */ None,
+        ))
+    }
+
+    pub fn insert_or_update_connected(
+        &self,
+        enr: &Enr,
+        data_radius: Distance,
+    ) -> InsertResult<NodeId> {
+        self.insert_or_update(Node::new(enr.clone(), data_radius), Self::CONNECTED)
+    }
+    pub fn insert_or_update_disconnected(
+        &self,
+        enr: &Enr,
+        data_radius: Distance,
+    ) -> InsertResult<NodeId> {
+        self.insert_or_update(Node::new(enr.clone(), data_radius), Self::DISCONNECTED)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::{thread::sleep, time::Duration};
+    use std::thread::sleep;
 
     use discv5::{
         enr::CombinedKey,
@@ -371,31 +413,9 @@ mod tests {
 
     use super::*;
 
-    const MAX_INCOMING_PER_BUCKET: usize = 16;
-
-    lazy_static::lazy_static! {
-        // 1 second is enough for testing purposes
-        static ref PENDING_TIMEOUT_SEC: Duration = Duration::from_secs(1);
-
-        static ref CONNECTED: NodeStatus = NodeStatus {
-            state: ConnectionState::Connected,
-            direction: ConnectionDirection::Outgoing,
-        };
-        static ref DISCONNECTED: NodeStatus = NodeStatus {
-            state: ConnectionState::Disconnected,
-            direction: ConnectionDirection::Outgoing,
-        };
-    }
-
     fn create_kbuckets_table() -> (Enr, SharedKBucketsTable) {
         let (_, local_enr) = generate_random_remote_enr();
-        let kbuckets = SharedKBucketsTable::new(KBucketsTable::new(
-            Key::from(local_enr.node_id()),
-            *PENDING_TIMEOUT_SEC,
-            MAX_INCOMING_PER_BUCKET,
-            /* table_filter= */ None,
-            /* bucket_filter= */ None,
-        ));
+        let kbuckets = SharedKBucketsTable::new_for_tests(local_enr.node_id());
         (local_enr, kbuckets)
     }
 
@@ -441,14 +461,8 @@ mod tests {
             let (_local_enr, kbuckets) = create_kbuckets_table();
 
             let (_, enr) = generate_random_remote_enr();
-            let node = Node::new(enr.clone(), Distance::MAX);
-            let status = NodeStatus {
-                state: ConnectionState::Connected,
-                direction: ConnectionDirection::Outgoing,
-            };
-
             assert!(matches!(
-                kbuckets.insert_or_update(node, status),
+                kbuckets.insert_or_update_connected(&enr, Distance::MAX),
                 InsertResult::Inserted,
             ));
 
@@ -463,22 +477,20 @@ mod tests {
 
             // Insert into bucket until full
             for _ in 0..MAX_NODES_PER_BUCKET {
-                let enr = generate_random_enr(local_node_id, log2_distance);
-                let node = Node::new(enr, Distance::MAX);
                 assert!(matches!(
-                    kbuckets.insert_or_update(node, *CONNECTED),
+                    kbuckets.insert_or_update_connected(
+                        &generate_random_enr(local_node_id, log2_distance),
+                        Distance::MAX
+                    ),
                     InsertResult::Inserted,
                 ));
             }
 
-            let node_1 = Node::new(
-                generate_random_enr(local_node_id, log2_distance),
-                Distance::MAX,
-            );
+            let enr = generate_random_enr(local_node_id, log2_distance);
 
             // 1. Inserting connected node into bucket full of connected nodes should fail
             assert!(matches!(
-                kbuckets.insert_or_update(node_1.clone(), *CONNECTED),
+                kbuckets.insert_or_update_connected(&enr, Distance::MAX),
                 InsertResult::Failed(FailureReason::BucketFull),
             ));
 
@@ -499,34 +511,33 @@ mod tests {
 
             // 3. Inserting disconnected node into full bucket should fail
             assert!(matches!(
-                kbuckets.insert_or_update(node_1.clone(), *DISCONNECTED,),
+                kbuckets.insert_or_update_disconnected(&enr, Distance::MAX),
                 InsertResult::Failed(FailureReason::BucketFull),
             ));
 
             // 4. Inserting connected node into full bucket should put it in pending
             assert!(matches!(
-                kbuckets.insert_or_update(node_1.clone(), *CONNECTED),
+                kbuckets.insert_or_update_connected(&enr, Distance::MAX),
                 InsertResult::Pending { .. },
             ));
             assert!(matches!(
-                kbuckets.entry(node_1.enr.node_id()),
+                kbuckets.entry(enr.node_id()),
                 Entry::Pending(_, _),
             ));
 
-            // 5. Inserting connected node into full bucket with pending node should fail.
-            let node_2 = Node::new(
-                generate_random_enr(local_node_id, log2_distance),
-                Distance::MAX,
-            );
+            // 5. Inserting connected node into full bucket with pending node should fail
             assert!(matches!(
-                kbuckets.insert_or_update(node_2.clone(), *DISCONNECTED),
+                kbuckets.insert_or_update_connected(
+                    &generate_random_enr(local_node_id, log2_distance),
+                    Distance::MAX,
+                ),
                 InsertResult::Failed(FailureReason::BucketFull),
             ));
 
             // 6. Waiting PENDING_TIMEOUT_SEC should be enough to insert node_1 into bucket
-            sleep(*PENDING_TIMEOUT_SEC);
+            sleep(SharedKBucketsTable::PENDING_TIMEOUT_SEC);
             assert!(matches!(
-                kbuckets.entry(node_1.enr.node_id()),
+                kbuckets.entry(enr.node_id()),
                 Entry::Present(_, _)
             ));
         }
@@ -572,11 +583,11 @@ mod tests {
             assert!(result.removed_nodes.is_empty());
             assert!(matches!(
                 kbuckets.entry(node_id_1),
-                Entry::Present(node, status) if node.enr == old_enr_1 && status == *DISCONNECTED,
+                Entry::Present(node, status) if node.enr == old_enr_1 && status == SharedKBucketsTable::DISCONNECTED,
             ));
             assert!(matches!(
                 kbuckets.entry(node_id_2),
-                Entry::Present(node, status) if node.enr == new_enr_2 && status == *DISCONNECTED,
+                Entry::Present(node, status) if node.enr == new_enr_2 && status == SharedKBucketsTable::DISCONNECTED,
             ));
 
             // 3. Update connection status of node_id_1
@@ -586,7 +597,7 @@ mod tests {
             );
             assert!(matches!(
                 kbuckets.entry(node_id_1),
-                Entry::Present(node, status) if node.enr == old_enr_1 && status == *CONNECTED,
+                Entry::Present(node, status) if node.enr == old_enr_1 && status == SharedKBucketsTable::CONNECTED,
             ));
 
             // 4. Insert and Update:
@@ -602,15 +613,15 @@ mod tests {
             assert!(result.removed_nodes.is_empty());
             assert!(matches!(
                 kbuckets.entry(node_id_1),
-                Entry::Present(node, status) if node.enr == new_enr_1 && status == *CONNECTED,
+                Entry::Present(node, status) if node.enr == new_enr_1 && status == SharedKBucketsTable::CONNECTED,
             ));
             assert!(matches!(
                 kbuckets.entry(node_id_2),
-                Entry::Present(node, status) if node.enr == new_enr_2 && status == *DISCONNECTED,
+                Entry::Present(node, status) if node.enr == new_enr_2 && status == SharedKBucketsTable::DISCONNECTED,
             ));
             assert!(matches!(
                 kbuckets.entry(node_id_3),
-                Entry::Present(node, status) if node.enr == enr_3 && status == *DISCONNECTED,
+                Entry::Present(node, status) if node.enr == enr_3 && status == SharedKBucketsTable::DISCONNECTED,
             ));
         }
 
@@ -623,8 +634,7 @@ mod tests {
             // Insert until bucket is full
             for _ in 0..MAX_NODES_PER_BUCKET {
                 let enr_256 = generate_random_enr(local_node_id, log2_distance);
-                let _ =
-                    kbuckets.insert_or_update(Node::new(enr_256, Distance::ZERO), *DISCONNECTED);
+                let _ = kbuckets.insert_or_update_disconnected(&enr_256, Distance::ZERO);
             }
 
             // insert_or_update_discovered_nodes shouldn't do anything
@@ -644,16 +654,14 @@ mod tests {
             // Insert until bucket is full
             for _ in 0..MAX_NODES_PER_BUCKET {
                 let enr_256 = generate_random_enr(local_node_id, log2_distance);
-                let _ =
-                    kbuckets.insert_or_update(Node::new(enr_256, Distance::ZERO), *DISCONNECTED);
+                let _ = kbuckets.insert_or_update_disconnected(&enr_256, Distance::ZERO);
             }
 
             // Insert one node as pending
             let (secret_key, mut pending_enr) =
                 generate_random_enr_with_key(local_node_id, log2_distance);
             assert!(matches!(
-                kbuckets
-                    .insert_or_update(Node::new(pending_enr.clone(), Distance::MAX), *CONNECTED),
+                kbuckets.insert_or_update_connected(&pending_enr, Distance::MAX),
                 InsertResult::Pending { .. }
             ));
 
@@ -697,8 +705,7 @@ mod tests {
                 .collect_vec();
 
             for enr in chain(&closer_nodes, &farther_nodes) {
-                let _ =
-                    kbuckets.insert_or_update(Node::new(enr.clone(), Distance::MAX), *CONNECTED);
+                let _ = kbuckets.insert_or_update_connected(enr, Distance::MAX);
             }
 
             // Check that local node is always returned when distance 0 is present
@@ -733,8 +740,7 @@ mod tests {
                 .map(|_| generate_random_enr(local_node_id, 255))
                 .collect_vec();
             for enr in &closer_nodes {
-                let _ =
-                    kbuckets.insert_or_update(Node::new(enr.clone(), Distance::MAX), *DISCONNECTED);
+                let _ = kbuckets.insert_or_update_disconnected(enr, Distance::MAX);
             }
 
             // Insert farther nodes as connected
@@ -742,14 +748,57 @@ mod tests {
                 .map(|_| generate_random_enr(local_node_id, 256))
                 .collect_vec();
             for enr in &farther_nodes {
-                let _ =
-                    kbuckets.insert_or_update(Node::new(enr.clone(), Distance::MAX), *CONNECTED);
+                let _ = kbuckets.insert_or_update_connected(enr, Distance::MAX);
             }
 
             // Check that only connected (farther) nodes are returned
             assert_same_enrs(
                 kbuckets.nodes_by_distances(local_enr.clone(), &[255, 256], 2 * nodes_per_bucket),
                 farther_nodes,
+            );
+        }
+    }
+
+    mod random {
+        use super::*;
+
+        #[test]
+        fn simple() {
+            let (_local_enr, kbuckets) = create_kbuckets_table();
+            let content_id = NodeId::random().raw();
+
+            let nodes_per_distance = 5;
+
+            // Distance 254 and disconnected
+            let enr_dis_254_disconnected = (0..nodes_per_distance)
+                .map(|_| generate_random_enr(content_id, 254))
+                .collect_vec();
+            for enr in &enr_dis_254_disconnected {
+                let _ = kbuckets.insert_or_update_disconnected(enr, Distance::MAX);
+            }
+
+            // Distances 255 and 256 and connected
+            let enr_dis_255_connected = (0..nodes_per_distance)
+                .map(|_| generate_random_enr(content_id, 255))
+                .collect_vec();
+            let enr_dis_256_connected = (0..nodes_per_distance)
+                .map(|_| generate_random_enr(content_id, 256))
+                .collect_vec();
+            let all_connected = chain(&enr_dis_255_connected, &enr_dis_256_connected)
+                .cloned()
+                .collect_vec();
+
+            for enr in &all_connected {
+                let _ = kbuckets.insert_or_update_connected(enr, Distance::MAX);
+            }
+
+            // With high limit, all connected are returned
+            assert_same_enrs(kbuckets.random_peers(3 * nodes_per_distance), all_connected);
+
+            // With small limit, random up to limit are returned
+            assert_eq!(
+                kbuckets.random_peers(nodes_per_distance).len(),
+                nodes_per_distance
             );
         }
     }
@@ -768,8 +817,7 @@ mod tests {
                 .map(|_| generate_random_enr(target_node_id, 254))
                 .collect_vec();
             for enr in &enr_dis_254_disconnected {
-                let _ =
-                    kbuckets.insert_or_update(Node::new(enr.clone(), Distance::MAX), *DISCONNECTED);
+                let _ = kbuckets.insert_or_update_disconnected(enr, Distance::MAX);
             }
 
             // Distances 255 and 256 and connected
@@ -784,8 +832,7 @@ mod tests {
                 .collect_vec();
 
             for enr in &all_connected {
-                let _ =
-                    kbuckets.insert_or_update(Node::new(enr.clone(), Distance::MAX), *CONNECTED);
+                let _ = kbuckets.insert_or_update_connected(enr, Distance::MAX);
             }
 
             // With high limit, all connected are returned
@@ -813,8 +860,7 @@ mod tests {
                 .map(|_| generate_random_enr(content_id, 254))
                 .collect_vec();
             for enr in &enr_dis_254_disconnected {
-                let _ =
-                    kbuckets.insert_or_update(Node::new(enr.clone(), Distance::MAX), *DISCONNECTED);
+                let _ = kbuckets.insert_or_update_disconnected(enr, Distance::MAX);
             }
 
             // Distances 255 and 256 and connected
@@ -829,8 +875,7 @@ mod tests {
                 .collect_vec();
 
             for enr in &all_connected {
-                let _ =
-                    kbuckets.insert_or_update(Node::new(enr.clone(), Distance::MAX), *CONNECTED);
+                let _ = kbuckets.insert_or_update_connected(enr, Distance::MAX);
             }
 
             // With high limit, all connected are returned
@@ -853,43 +898,6 @@ mod tests {
         use super::*;
 
         #[test]
-        fn single() {
-            let (_local_enr, kbuckets) = create_kbuckets_table();
-            let content_id = NodeId::random().raw();
-
-            // Connected node with zero radius
-            let (_, enr_zero_connected) = generate_random_remote_enr();
-            let _ = kbuckets
-                .insert_or_update(Node::new(enr_zero_connected, Distance::ZERO), *CONNECTED);
-
-            // Connected node with max radius
-            let (_, enr_max_connected) = generate_random_remote_enr();
-            let _ = kbuckets.insert_or_update(
-                Node::new(enr_max_connected.clone(), Distance::MAX),
-                *CONNECTED,
-            );
-
-            // Disconnected node with max radius
-            let (_, enr_max_disconnected) = generate_random_remote_enr();
-            let _ = kbuckets.insert_or_update(
-                Node::new(enr_max_disconnected.clone(), Distance::MAX),
-                *DISCONNECTED,
-            );
-
-            // Connected node at exact distance
-            let (_, enr_exact_connected) = generate_random_remote_enr();
-            let distance = XorMetric::distance(&content_id, &enr_exact_connected.node_id().raw());
-            let _ = kbuckets
-                .insert_or_update(Node::new(enr_exact_connected.clone(), distance), *CONNECTED);
-
-            // Should return only connected nodes with radius that contains content id
-            assert_same_enrs(
-                kbuckets.interested_enrs::<XorMetric>(&content_id),
-                vec![enr_max_connected, enr_exact_connected],
-            );
-        }
-
-        #[test]
         fn batch() {
             let (_local_enr, kbuckets) = create_kbuckets_table();
 
@@ -900,20 +908,15 @@ mod tests {
             // Node that should contain content_id_1 but not content_id_2
             let enr = generate_random_enr(content_id_1, 255);
             let half_max_distance = Distance::from(U256::MAX.wrapping_shr(1));
-            let node = Node::new(enr.clone(), half_max_distance);
-            let _ = kbuckets.insert_or_update(node, *CONNECTED);
+            let _ = kbuckets.insert_or_update_connected(&enr, half_max_distance);
 
             // Connected node with zero radius, shouldn't be returned
             let (_, enr_zero_connected) = generate_random_remote_enr();
-            let _ = kbuckets
-                .insert_or_update(Node::new(enr_zero_connected, Distance::ZERO), *CONNECTED);
+            let _ = kbuckets.insert_or_update_connected(&enr_zero_connected, Distance::ZERO);
 
             // Disconnected node with max radius, shouldn't be returned
             let (_, enr_max_disconnected) = generate_random_remote_enr();
-            let _ = kbuckets.insert_or_update(
-                Node::new(enr_max_disconnected.clone(), Distance::MAX),
-                *DISCONNECTED,
-            );
+            let _ = kbuckets.insert_or_update_disconnected(&enr_max_disconnected, Distance::MAX);
 
             let mut result =
                 kbuckets.batch_interested_enrs::<XorMetric>(&[&content_id_1, &content_id_2]);
@@ -923,10 +926,7 @@ mod tests {
 
             // Add connected node with max radius, should always be returned
             let (_, enr_max_connected) = generate_random_remote_enr();
-            let _ = kbuckets.insert_or_update(
-                Node::new(enr_max_connected.clone(), Distance::MAX),
-                *CONNECTED,
-            );
+            let _ = kbuckets.insert_or_update_connected(&enr_max_connected, Distance::MAX);
 
             let mut result =
                 kbuckets.batch_interested_enrs::<XorMetric>(&[&content_id_1, &content_id_2]);
