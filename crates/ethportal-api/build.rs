@@ -10,8 +10,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .target_triple(true)
         .build()?;
     let git2 = Git2Builder::default()
-        .describe(false, true, None)
-        .dirty(true)
+        .describe(
+            /* tags= */ true, /* dirty= */ false, /* matches= */ None,
+        )
         .sha(false)
         .build()?;
     let rustc = RustcBuilder::default().semver(true).build()?;
