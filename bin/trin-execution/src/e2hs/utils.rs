@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use alloy::{consensus::transaction::SignerRecoverable, primitives::bytes::Bytes};
+use anyhow::anyhow;
 use e2store::e2hs::{BlockTuple, E2HSMemory, BLOCKS_PER_E2HS};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use reqwest::Client;
@@ -22,11 +23,12 @@ pub fn process_e2hs_file(raw_e2hs: &[u8]) -> anyhow::Result<ProcessedE2HS> {
             .transactions
             .par_iter()
             .map(|tx| {
-                tx.recover_signer()
+                tx.recover_signer_unchecked()
                     .map(|sender_address| TransactionsWithSender {
                         transaction: tx.clone(),
                         sender_address,
                     })
+                    .map_err(|err| anyhow!("Failed to e2hs recover signer: {err:?}"))
             })
             .collect::<Result<Vec<_>, _>>()?;
         blocks.push(ProcessedBlock {

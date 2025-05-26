@@ -2,6 +2,7 @@ use alloy::{
     consensus::{transaction::SignerRecoverable, TxEnvelope},
     eips::eip4895::Withdrawal,
 };
+use anyhow::anyhow;
 use ethportal_api::{
     consensus::beacon_block::{
         SignedBeaconBlock, SignedBeaconBlockBellatrix, SignedBeaconBlockCapella,
@@ -120,12 +121,12 @@ fn process_transactions(
         .into_par_iter()
         .map(|transaction| {
             transaction
-                .recover_signer()
+                .recover_signer_unchecked()
                 .map(|sender_address| TransactionsWithSender {
                     sender_address,
                     transaction,
                 })
-                .map_err(|err| anyhow::anyhow!("Failed to recover signer: {err:?}"))
+                .map_err(|err| anyhow!("Failed to recover signer: {err:?}"))
         })
         .collect::<anyhow::Result<Vec<_>>>()
 }
