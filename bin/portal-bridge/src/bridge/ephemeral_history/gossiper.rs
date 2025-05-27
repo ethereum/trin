@@ -57,14 +57,14 @@ impl Gossiper {
         history_network: Arc<HistoryNetwork>,
         metrics: BridgeMetricsReporter,
         head_offer_limit: usize,
-        proven_headers_offer_limit: usize,
+        non_ephemeral_offer_limit: usize,
     ) -> Self {
         Self {
             census,
             history_network,
             metrics,
             head_semaphore: Arc::new(Semaphore::new(head_offer_limit)),
-            non_ephemeral_headers_semaphore: Arc::new(Semaphore::new(proven_headers_offer_limit)),
+            non_ephemeral_headers_semaphore: Arc::new(Semaphore::new(non_ephemeral_offer_limit)),
         }
     }
 
@@ -192,19 +192,15 @@ impl Gossiper {
         let encoded_content_value = content_value.encode();
         let mut tasks = vec![];
         for peer in peers.clone() {
-            let offer_permit = if is_head_offer {
-                self.head_semaphore
-                    .clone()
-                    .acquire_owned()
-                    .await
-                    .expect("to be able to acquire semaphore")
+            let semaphore = if is_head_offer {
+                self.head_semaphore.clone()
             } else {
-                self.non_ephemeral_headers_semaphore
-                    .clone()
-                    .acquire_owned()
-                    .await
-                    .expect("to be able to acquire semaphore")
+                self.non_ephemeral_headers_semaphore.clone()
             };
+            let offer_permit = semaphore
+                .acquire_owned()
+                .await
+                .expect("to be able to acquire semaphore");
             let content_key = content_key.clone();
             let raw_content_value = encoded_content_value.clone();
 
