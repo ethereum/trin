@@ -12,7 +12,7 @@ use revm::{
     database::{states::bundle_state::BundleRetention, State},
     handler::MainnetContext,
     inspector::inspectors::TracerEip3155,
-    Context, DatabaseCommit, ExecuteEvm, MainBuilder, MainnetEvm,
+    Context, DatabaseCommit, ExecuteEvm, InspectEvm, MainBuilder, MainnetEvm,
 };
 use revm_primitives::{hardfork::SpecId, keccak256, Address, B256, U256};
 use serde::{Deserialize, Serialize};
@@ -228,7 +228,7 @@ impl BlockExecutor {
         let result = match tracer_fn(&tx.transaction) {
             Some(tracer) => {
                 create_evm_with_tracer(self.evm.block().clone(), tx, self.evm.db(), tracer)
-                    .replay()?
+                    .inspect_replay()?
             }
             None => self.evm.replay()?,
         };
