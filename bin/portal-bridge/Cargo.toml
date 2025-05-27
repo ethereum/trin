@@ -36,6 +36,7 @@ ssz_types.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+tree_hash.workspace = true
 trin.workspace = true
 trin-beacon.workspace = true
 trin-history.workspace = true
