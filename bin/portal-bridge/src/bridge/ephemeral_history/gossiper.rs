@@ -17,7 +17,7 @@ use ethportal_api::{
     ContentValue, HistoryContentKey, HistoryContentValue, OverlayContentKey, RawContentKey,
     RawContentValue,
 };
-use futures::{future::join_all, stream, StreamExt};
+use futures::future::join_all;
 use revm_primitives::B256;
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -139,7 +139,8 @@ impl Gossiper {
             state_roots: state.state_roots,
         };
 
-        let gossip_futures = beacon_blocks.into_iter().flat_map(|beacon_block| {
+        let mut gossip_tasks = vec![];
+        for beacon_block in beacon_blocks {
             let (header_with_proof, _) =
                 ExecutionBlockBuilder::electra(&beacon_block, &historical_batch)
                     .expect("Failed to build header with proof");
@@ -148,20 +149,15 @@ impl Gossiper {
                 HistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash_slow());
             let content_value =
                 HistoryContentValue::BlockHeaderWithProof(header_with_proof.clone());
-            let header_by_hash_task = self.start_gossip_task(content_key, content_value, false);
+            gossip_tasks.push(self.start_gossip_task(content_key, content_value, false));
 
             let content_key =
                 HistoryContentKey::new_block_header_by_number(header_with_proof.header.number);
             let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
-            let header_by_number_task = self.start_gossip_task(content_key, content_value, false);
+            gossip_tasks.push(self.start_gossip_task(content_key, content_value, false));
+        }
 
-            vec![header_by_hash_task, header_by_number_task]
-        });
-
-        stream::iter(gossip_futures)
-            .buffer_unordered(16)
-            .collect::<Vec<_>>()
-            .await;
+        join_all(gossip_tasks).await;
     }
 
     /// Starts async task that gossips content, retuning [JoinHandle] for it.
