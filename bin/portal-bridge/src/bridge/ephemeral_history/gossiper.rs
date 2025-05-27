@@ -47,8 +47,8 @@ pub struct Gossiper {
     metrics: BridgeMetricsReporter,
     /// Semaphore used to limit the number of concurrent offers sent at the head of the chain
     head_semaphore: Arc<Semaphore>,
-    /// Semaphore used to limit the number of proven headers gossiped at once
-    proven_headers_semaphore: Arc<Semaphore>,
+    /// Semaphore used to limit the number of non ephemeral headers gossiped at once
+    non_ephemeral_headers_semaphore: Arc<Semaphore>,
 }
 
 impl Gossiper {
@@ -64,7 +64,7 @@ impl Gossiper {
             history_network,
             metrics,
             head_semaphore: Arc::new(Semaphore::new(head_offer_limit)),
-            proven_headers_semaphore: Arc::new(Semaphore::new(proven_headers_offer_limit)),
+            non_ephemeral_headers_semaphore: Arc::new(Semaphore::new(proven_headers_offer_limit)),
         }
     }
 
@@ -202,7 +202,7 @@ impl Gossiper {
                     .await
                     .expect("to be able to acquire semaphore")
             } else {
-                self.proven_headers_semaphore
+                self.non_ephemeral_headers_semaphore
                     .clone()
                     .acquire_owned()
                     .await
