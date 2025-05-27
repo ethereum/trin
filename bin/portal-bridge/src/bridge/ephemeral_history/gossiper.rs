@@ -45,9 +45,10 @@ pub struct Gossiper {
     history_network: Arc<HistoryNetwork>,
     /// Records and reports bridge metrics
     metrics: BridgeMetricsReporter,
-    /// Semaphore used to limit the number of active offer transfers, in order to make sure we
-    /// don't overwhelm the trin client
-    offer_semaphore: Arc<Semaphore>,
+    /// Semaphore used to limit the number of concurrent offers sent at the head of the chain
+    head_semaphore: Arc<Semaphore>,
+    /// Semaphore used to limit the number of proven headers gossiped at once
+    proven_headers_semaphore: Arc<Semaphore>,
 }
 
 impl Gossiper {
@@ -55,13 +56,15 @@ impl Gossiper {
         census: Census,
         history_network: Arc<HistoryNetwork>,
         metrics: BridgeMetricsReporter,
-        offer_limit: usize,
+        head_offer_limit: usize,
+        proven_headers_offer_limit: usize,
     ) -> Self {
         Self {
             census,
             history_network,
             metrics,
-            offer_semaphore: Arc::new(Semaphore::new(offer_limit)),
+            head_semaphore: Arc::new(Semaphore::new(head_offer_limit)),
+            proven_headers_semaphore: Arc::new(Semaphore::new(proven_headers_offer_limit)),
         }
     }
 
@@ -101,21 +104,26 @@ impl Gossiper {
         for (block_hash, body) in bodies {
             let content_key = HistoryContentKey::new_block_body(block_hash);
             let content_value = HistoryContentValue::BlockBody(body);
-            gossip_tasks.push(self.start_gossip_task(content_key, content_value));
+            gossip_tasks.push(self.start_gossip_task(content_key, content_value, true));
         }
         for (block_hash, receipts) in receipts {
             let content_key = HistoryContentKey::new_block_receipts(block_hash);
             let content_value = HistoryContentValue::Receipts(receipts);
-            gossip_tasks.push(self.start_gossip_task(content_key, content_value));
+            gossip_tasks.push(self.start_gossip_task(content_key, content_value, true));
         }
 
         // Wait until BlockBody and BlockReceipts are gossiped
         join_all(gossip_tasks).await;
+
+        info!(
+            head_block_root = %ephemeral_bundle.head_beacon_block_root,
+            "Finished gossiping ephemeral bundle"
+        );
     }
 
     /// The finalized state root should be for a finalized period. The beacon blocks passed in must
     /// be contained with that respective period's block roots to be provable.
-    pub async fn gossiped_proven_headers(
+    pub async fn gossiped_non_ephemeral_headers(
         &self,
         finalized_period_state_root: B256,
         beacon_blocks: Vec<BeaconBlockElectra>,
@@ -140,12 +148,12 @@ impl Gossiper {
                 HistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash_slow());
             let content_value =
                 HistoryContentValue::BlockHeaderWithProof(header_with_proof.clone());
-            let header_by_hash_task = self.start_gossip_task(content_key, content_value);
+            let header_by_hash_task = self.start_gossip_task(content_key, content_value, false);
 
             let content_key =
                 HistoryContentKey::new_block_header_by_number(header_with_proof.header.number);
             let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
-            let header_by_number_task = self.start_gossip_task(content_key, content_value);
+            let header_by_number_task = self.start_gossip_task(content_key, content_value, false);
 
             vec![header_by_hash_task, header_by_number_task]
         });
@@ -161,9 +169,14 @@ impl Gossiper {
         &self,
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
+        is_head_offer: bool,
     ) -> JoinHandle<Vec<OfferTrace>> {
         let gossiper = self.clone();
-        tokio::spawn(async move { gossiper.gossip_content(content_key, content_value).await })
+        tokio::spawn(async move {
+            gossiper
+                .gossip_content(content_key, content_value, is_head_offer)
+                .await
+        })
     }
 
     /// Spawn individual offer tasks for each interested enr found in Census.
@@ -173,6 +186,7 @@ impl Gossiper {
         &self,
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
+        is_head_offer: bool,
     ) -> Vec<OfferTrace> {
         let Ok(peers) = self.census.select_peers(Subnetwork::History, &content_key) else {
             error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
@@ -181,7 +195,19 @@ impl Gossiper {
         let encoded_content_value = content_value.encode();
         let mut tasks = vec![];
         for peer in peers.clone() {
-            let offer_permit = self.acquire_offer_permit().await;
+            let offer_permit = if is_head_offer {
+                self.head_semaphore
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .expect("to be able to acquire semaphore")
+            } else {
+                self.proven_headers_semaphore
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .expect("to be able to acquire semaphore")
+            };
             let content_key = content_key.clone();
             let raw_content_value = encoded_content_value.clone();
 
@@ -297,7 +323,12 @@ impl Gossiper {
         };
         let mut tasks = vec![];
         for peer in peers.clone() {
-            let offer_permit = self.acquire_offer_permit().await;
+            let offer_permit = self
+                .head_semaphore
+                .clone()
+                .acquire_owned()
+                .await
+                .expect("to be able to acquire semaphore");
 
             let gossiper = self.clone();
             let content_items = content_items.clone();
@@ -362,13 +393,5 @@ impl Gossiper {
         drop(offer_permit);
 
         offer_trace
-    }
-
-    async fn acquire_offer_permit(&self) -> OwnedSemaphorePermit {
-        self.offer_semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("to be able to acquire semaphore")
     }
 }
