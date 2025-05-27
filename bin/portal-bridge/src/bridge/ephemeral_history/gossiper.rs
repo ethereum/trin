@@ -72,7 +72,8 @@ impl Gossiper {
     ///
     /// Finishes once all content is gossiped.
     pub async fn gossip_ephemeral_bundle(&self, ephemeral_bundle: EphemeralBundle) {
-        info!(head_block_root = %ephemeral_bundle.head_block_root,
+        info!(
+            head_block_root = %ephemeral_bundle.head_beacon_block_root,
             block_count = %ephemeral_bundle.blocks.len(),
             "Gossiping ephemeral bundle"
         );
@@ -81,8 +82,9 @@ impl Gossiper {
         let mut bodies = vec![];
         let mut receipts = vec![];
         for (header, body, receipt) in ephemeral_bundle.blocks {
-            bodies.push((header.hash_slow(), body));
-            receipts.push((header.hash_slow(), receipt));
+            let block_hash = header.hash_slow();
+            bodies.push((block_hash, body));
+            receipts.push((block_hash, receipt));
             headers.push(header);
         }
 
@@ -351,9 +353,9 @@ impl Gossiper {
             }
         };
 
-        // todo: add census record offer result for multiple items
+        // todo: add census record offer result for multiple items https://github.com/ethereum/trin/issues/1861
 
-        // todo: add metrics report offer for multiple items
+        // todo: add metrics report offer for multiple items https://github.com/ethereum/trin/issues/1862
 
         self.metrics.stop_process_timer(timer);
         // Release permit
