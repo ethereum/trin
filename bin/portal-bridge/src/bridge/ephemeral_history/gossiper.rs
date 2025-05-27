@@ -145,16 +145,17 @@ impl Gossiper {
                 ExecutionBlockBuilder::electra(&beacon_block, &historical_batch)
                     .expect("Failed to build header with proof");
 
-            let content_key =
+            let header_by_hash_key =
                 HistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash_slow());
-            let content_value =
-                HistoryContentValue::BlockHeaderWithProof(header_with_proof.clone());
-            gossip_tasks.push(self.start_gossip_task(content_key, content_value, false));
-
-            let content_key =
+            let header_by_number_key =
                 HistoryContentKey::new_block_header_by_number(header_with_proof.header.number);
             let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
-            gossip_tasks.push(self.start_gossip_task(content_key, content_value, false));
+            gossip_tasks.push(self.start_gossip_task(
+                header_by_hash_key,
+                content_value.clone(),
+                false,
+            ));
+            gossip_tasks.push(self.start_gossip_task(header_by_number_key, content_value, false));
         }
 
         join_all(gossip_tasks).await;
