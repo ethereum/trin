@@ -1,7 +1,7 @@
 use std::{
     cmp::Ordering,
     sync::{Arc, Mutex as StdMutex},
-    time::{Instant, SystemTime},
+    time::{Duration, Instant},
 };
 
 use alloy::primitives::B256;
@@ -22,6 +22,7 @@ use ethportal_api::{
             ForkVersionedHistoricalSummariesWithProof, LightClientUpdatesByRange,
         },
         network::Subnetwork,
+        network_spec::network_spec,
         portal_wire::OfferTrace,
     },
     BeaconContentKey, BeaconContentValue, ContentValue, LightClientBootstrapKey,
@@ -30,19 +31,14 @@ use ethportal_api::{
 use ssz_types::VariableList;
 use tokio::{
     sync::Mutex,
-    time::{interval, sleep, timeout, Duration, MissedTickBehavior},
+    time::{interval_at, sleep, timeout, Instant as TokioInstant, MissedTickBehavior},
 };
 use tracing::{error, info, warn, Instrument};
 use trin_beacon::network::BeaconNetwork;
 use trin_metrics::bridge::BridgeMetricsReporter;
 
 use super::{constants::SERVE_BLOCK_TIMEOUT, offer_report::OfferReport};
-use crate::{
-    census::Census,
-    constants::BEACON_GENESIS_TIME,
-    types::mode::BridgeMode,
-    utils::{duration_until_next_update, expected_current_slot},
-};
+use crate::{census::Census, types::mode::BridgeMode, utils::duration_until_next_update};
 
 /// A helper struct to hold the finalized beacon state metadata.
 #[derive(Clone, Debug, Default)]
@@ -119,14 +115,12 @@ impl BeaconBridge {
 
         // Sleep until next update becomes available. This sets up the interval to update as soon as
         // the following slot becomes available.
-        let now = SystemTime::now();
-        let next_update = duration_until_next_update(BEACON_GENESIS_TIME, now)
-            .to_std()
-            .expect("failed to convert chrono duration to std duration");
-        sleep(next_update).await;
+        let until_next_update = duration_until_next_update();
+        let mut interval = interval_at(
+            TokioInstant::now() + until_next_update,
+            Duration::from_secs(12),
+        );
 
-        // Run the beacon bridge update once every slot
-        let mut interval = interval(Duration::from_secs(12));
         // If serving takes a little too long, then we want to serve the next one as soon as
         // possible, but not serve any extras until the following slot. "Skip" gets this behavior.
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -314,9 +308,7 @@ impl BeaconBridge {
         metrics: BridgeMetricsReporter,
         census: Census,
     ) -> anyhow::Result<()> {
-        let now = SystemTime::now();
-        let expected_current_period =
-            expected_current_slot(BEACON_GENESIS_TIME, now) / SLOTS_PER_HISTORICAL_ROOT;
+        let expected_current_period = network_spec().current_slot() / SLOTS_PER_HISTORICAL_ROOT;
         match expected_current_period.cmp(&*current_period.lock().await) {
             Ordering::Equal => {
                 // We already gossiped the latest data from the current period, no need to serve it

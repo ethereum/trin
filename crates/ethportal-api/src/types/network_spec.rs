@@ -1,4 +1,7 @@
-use std::sync::{Arc, LazyLock};
+use std::{
+    sync::{Arc, LazyLock},
+    time::{Duration, SystemTime},
+};
 
 use alloy_hardforks::{EthereumChainHardforks, EthereumHardfork, EthereumHardforks, ForkCondition};
 use anyhow::anyhow;
@@ -8,6 +11,7 @@ use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 
 use super::{
+    consensus::constants::SECONDS_PER_SLOT,
     network::{Network, Subnetwork},
     protocol_versions::{
         ProtocolVersion, ProtocolVersionError, ProtocolVersionList, ENR_PROTOCOL_VERSION_KEY,
@@ -51,7 +55,7 @@ pub struct NetworkSpec {
     portal_subnetworks: BiHashMap<Subnetwork, String>,
     supported_protocol_versions: ProtocolVersionList,
     hardforks: EthereumChainHardforks,
-    beacon_genesis_timestamp: u64,
+    beacon_genesis_timestamp: SystemTime,
 }
 
 impl NetworkSpec {
@@ -70,7 +74,8 @@ impl NetworkSpec {
             network,
             supported_protocol_versions,
             hardforks,
-            beacon_genesis_timestamp,
+            beacon_genesis_timestamp: SystemTime::UNIX_EPOCH
+                + Duration::from_secs(beacon_genesis_timestamp),
         })
     }
 
@@ -123,8 +128,24 @@ impl NetworkSpec {
             .ok_or(ProtocolVersionError::NoMatchingVersion)
     }
 
-    pub fn slot_to_timestamp(&self, slot: u64) -> u64 {
-        self.beacon_genesis_timestamp + slot * 12
+    pub fn slot_to_timestamp(&self, slot: u64) -> SystemTime {
+        self.beacon_genesis_timestamp + (SECONDS_PER_SLOT * slot as u32)
+    }
+
+    pub fn slot_to_timestamp_u64(&self, slot: u64) -> u64 {
+        self.slot_to_timestamp(slot)
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Slot's timestamp must be after UNIX EPOCH timestamp")
+            .as_secs()
+    }
+
+    pub fn current_slot(&self) -> u64 {
+        let seconds_since_genesis = self
+            .beacon_genesis_timestamp
+            .elapsed()
+            .expect("Genesis timestamp must be in the past")
+            .as_secs();
+        seconds_since_genesis / SECONDS_PER_SLOT.as_secs()
     }
 }
 

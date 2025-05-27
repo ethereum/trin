@@ -1,7 +1,10 @@
 use lazy_static::lazy_static;
 use prometheus_exporter::prometheus::default_registry;
 
-use crate::{bridge::BridgeMetrics, overlay::OverlayMetrics, storage::StorageMetrics};
+use crate::{
+    bridge::BridgeMetrics, chain_head::ChainHeadMetrics, overlay::OverlayMetrics,
+    storage::StorageMetrics,
+};
 
 // We use lazy_static to ensure that the metrics registry is initialized only once, for each
 // runtime. This is important because the registry is a global singleton, and if it is
@@ -17,6 +20,7 @@ fn initialize_metrics_registry() -> PortalnetMetrics {
 
 pub struct PortalnetMetrics {
     bridge: BridgeMetrics,
+    chain_head: ChainHeadMetrics,
     overlay: OverlayMetrics,
     storage: StorageMetrics,
 }
@@ -24,14 +28,24 @@ pub struct PortalnetMetrics {
 impl PortalnetMetrics {
     pub fn new() -> anyhow::Result<Self> {
         let registry = default_registry();
+        let bridge = BridgeMetrics::new(registry)?;
+        let chain_head = ChainHeadMetrics::new(registry)?;
         let overlay = OverlayMetrics::new(registry)?;
         let storage = StorageMetrics::new(registry)?;
-        let bridge = BridgeMetrics::new(registry)?;
         Ok(Self {
+            bridge,
+            chain_head,
             overlay,
             storage,
-            bridge,
         })
+    }
+
+    pub fn bridge(&self) -> BridgeMetrics {
+        self.bridge.clone()
+    }
+
+    pub fn chain_head(&self) -> ChainHeadMetrics {
+        self.chain_head.clone()
     }
 
     pub fn overlay(&self) -> OverlayMetrics {
@@ -40,9 +54,5 @@ impl PortalnetMetrics {
 
     pub fn storage(&self) -> StorageMetrics {
         self.storage.clone()
-    }
-
-    pub fn bridge(&self) -> BridgeMetrics {
-        self.bridge.clone()
     }
 }

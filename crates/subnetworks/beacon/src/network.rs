@@ -1,9 +1,10 @@
-use std::{str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc, time::SystemTime};
 
 use alloy::primitives::B256;
 use anyhow::anyhow;
 use ethportal_api::{
-    types::{distance::XorMetric, network::Subnetwork},
+    consensus::constants::SECONDS_PER_SLOT,
+    types::{distance::XorMetric, network::Subnetwork, network_spec::network_spec},
     BeaconContentKey,
 };
 use light_client::{consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client};
@@ -13,8 +14,12 @@ use portalnet::{
     discovery::{Discovery, UtpPeer},
     overlay::{config::OverlayConfig, protocol::OverlayProtocol},
 };
-use tokio::sync::{Mutex, RwLock};
+use tokio::{
+    sync::{Mutex, RwLock},
+    time::{interval_at, Instant, Interval},
+};
 use tracing::{error, info};
+use trin_metrics::chain_head::ChainHeadMetricsReporter;
 use trin_storage::PortalStorageConfig;
 use trin_validation::{chain_head::ChainHead, oracle::HeaderOracle};
 use utp_rs::socket::UtpSocket;
@@ -98,9 +103,16 @@ impl BeaconNetwork {
             let mut watch_receivers = client.get_light_client_watch_receivers().await;
             *beacon_client_clone.lock().await = Some(client);
 
+            // Update ChainHeadMetrics at every slot timestamp
+            let metrics = ChainHeadMetricsReporter::new();
+            let mut slot_internal = get_slot_interval();
+
             // Watch for light clients updates and update ChainHead
             loop {
                 tokio::select! {
+                    _ = slot_internal.tick() => {
+                        metrics.on_slot(network_spec().current_slot());
+                    }
                     Ok(()) = watch_receivers.update.changed() => {
                         let update = watch_receivers
                             .update
@@ -168,6 +180,17 @@ fn get_trusted_block_root(
 fn get_default_trusted_root() -> anyhow::Result<B256> {
     B256::from_str(DEFAULT_TRUSTED_BLOCK_ROOT.trim())
         .map_err(|err| anyhow!("Failed to parse trusted block root: {err}"))
+}
+
+/// Returns the [Interval] that ticks on every slot timestamp.
+fn get_slot_interval() -> Interval {
+    let now = SystemTime::now();
+    let next_slot = network_spec().current_slot() + 1;
+    let next_slot_timestamp = network_spec().slot_to_timestamp(next_slot);
+    let until_next_slot = next_slot_timestamp
+        .duration_since(now)
+        .expect("Next slot must be in the future");
+    interval_at(Instant::now() + until_next_slot, SECONDS_PER_SLOT)
 }
 
 #[cfg(test)]

@@ -1,9 +1,11 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 use alloy::primitives::B256;
-use chrono::Duration;
 use discv5::enr::{CombinedKey, Enr, NodeId};
-use ethportal_api::{types::network_spec::network_spec, utils::bytes::hex_encode};
+use ethportal_api::{
+    consensus::constants::SECONDS_PER_SLOT, types::network_spec::network_spec,
+    utils::bytes::hex_encode,
+};
 
 /// Generates a set of N private keys, with node ids that are equally spaced
 /// around the 256-bit keys space.
@@ -51,33 +53,24 @@ fn random_node_id() -> (NodeId, CombinedKey) {
 
 /// Gets the duration until the next light client update
 /// Updates are scheduled for 4 seconds into each slot
-pub fn duration_until_next_update(genesis_time: u64, now: SystemTime) -> Duration {
-    let current_slot = expected_current_slot(genesis_time, now);
-    let next_slot = current_slot + 1;
-    let next_slot_timestamp = network_spec().slot_to_timestamp(next_slot);
+pub fn duration_until_next_update() -> Duration {
+    let current_slot_timestamp = network_spec().slot_to_timestamp(network_spec().current_slot());
 
-    let now = now
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_secs();
+    // Calculate the update timestamp for current timestamp
+    let mut next_update_timestamp = current_slot_timestamp + Duration::from_secs(4);
 
-    let time_to_next_slot = next_slot_timestamp - now;
-    let next_update = time_to_next_slot + 4;
-
-    Duration::seconds(next_update as i64)
-}
-
-pub fn expected_current_slot(genesis_time: u64, now: SystemTime) -> u64 {
-    let now = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
-    let since_genesis = now - std::time::Duration::from_secs(genesis_time);
-
-    since_genesis.as_secs() / 12
+    // 4 seconds into current slot might have passed already, so we should try next slot
+    loop {
+        if let Ok(until_next_update) = next_update_timestamp.duration_since(SystemTime::now()) {
+            return until_next_update;
+        }
+        next_update_timestamp += SECONDS_PER_SLOT;
+    }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use chrono::{DateTime, TimeZone, Utc};
     use ethportal_api::{
         types::distance::{Metric, XorMetric},
         utils::bytes::hex_decode,
@@ -85,7 +78,6 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::constants::BEACON_GENESIS_TIME;
 
     #[rstest]
     #[case(2)]
@@ -112,25 +104,5 @@ mod tests {
             distance > min_spread,
             "{distance} vs {min_spread}, first bytes: {first_byte1} vs {first_byte2}"
         );
-    }
-
-    #[rstest]
-    #[case(10, 5)]
-    #[case(11, 16)]
-    fn test_duration_until_next_update(#[case] seconds: u32, #[case] expected_duration: i64) {
-        let date: DateTime<Utc> = Utc.with_ymd_and_hms(2023, 8, 23, 11, 00, seconds).unwrap();
-        let now = SystemTime::from(date);
-        let duration = duration_until_next_update(BEACON_GENESIS_TIME, now);
-        assert_eq!(duration, Duration::seconds(expected_duration));
-    }
-
-    #[rstest]
-    #[case(10, 7163698)]
-    #[case(11, 7163699)]
-    fn test_expected_current_slot(#[case] seconds: u32, #[case] expected_slot: u64) {
-        let date: DateTime<Utc> = Utc.with_ymd_and_hms(2023, 8, 23, 11, 00, seconds).unwrap();
-        let now = SystemTime::from(date);
-        let slot = expected_current_slot(BEACON_GENESIS_TIME, now);
-        assert_eq!(slot, expected_slot);
     }
 }
