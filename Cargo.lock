@@ -8536,6 +8536,7 @@ dependencies = [
  "tracing",
  "tree_hash",
  "tree_hash_derive",
+ "trin-metrics",
  "trin-utils",
 ]
 

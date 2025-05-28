@@ -477,7 +477,7 @@ mod test {
             create_header_validator()
                 .verify_merge_to_capella_header(
                     block_number,
-                    network_spec().slot_to_timestamp(proof.slot),
+                    network_spec().slot_to_timestamp_u64(proof.slot),
                     header_hash,
                     &proof,
                 )
@@ -546,7 +546,7 @@ mod test {
 
             create_header_validator()
                 .verify_capella_to_deneb_header(
-                    network_spec().slot_to_timestamp(proof.slot),
+                    network_spec().slot_to_timestamp_u64(proof.slot),
                     header_hash,
                     &proof,
                 )
@@ -612,7 +612,7 @@ mod test {
 
             create_header_validator()
                 .verify_post_deneb_header(
-                    network_spec().slot_to_timestamp(proof.slot),
+                    network_spec().slot_to_timestamp_u64(proof.slot),
                     header_hash,
                     &proof,
                 )
