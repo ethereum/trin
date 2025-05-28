@@ -1,17 +1,11 @@
-# All Command Line Flags
+# trin
 
-> See our guide on [how to run trin](startup.md) for the most common flags.
-
-Below is the current list of all command line flags.
-
-Note that these flags may change over time, so run `trin --help` to get the most up-to-date information for your version.
-
-<!--
-Generate the following text with: trin --help to get the long version, instead of trin -h
--->
-```text
 Run an eth portal client
 
+```bash
+$ trin --help
+```
+```txt
 Usage: trin [OPTIONS]
 
 Options:
@@ -28,7 +22,7 @@ Options:
       --web3-ipc-path <WEB3_IPC_PATH>
           path to json-rpc endpoint over IPC
 
-          [default: /tmp/trin-jsonrpc.ipc]
+          [default: <CACHE_DIR>-jsonrpc.ipc]
 
       --discovery-port <DISCOVERY_PORT>
           The UDP port to listen on.

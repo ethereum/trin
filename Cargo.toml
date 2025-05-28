@@ -25,6 +25,7 @@ members = [
 
 default-members = ["bin/trin"]
 resolver = "2"
+exclude = ["book/src/cli"]
 
 [workspace.package]
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
