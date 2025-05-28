@@ -770,21 +770,21 @@ mod tests {
             let nodes_per_distance = 5;
 
             // Distance 254 and disconnected
-            let enr_dis_254_disconnected = (0..nodes_per_distance)
+            let enr_distance_254_disconnected = (0..nodes_per_distance)
                 .map(|_| generate_random_enr(content_id, 254))
                 .collect_vec();
-            for enr in &enr_dis_254_disconnected {
+            for enr in &enr_distance_254_disconnected {
                 let _ = kbuckets.insert_or_update_disconnected(enr, Distance::MAX);
             }
 
             // Distances 255 and 256 and connected
-            let enr_dis_255_connected = (0..nodes_per_distance)
+            let enr_distance_255_connected = (0..nodes_per_distance)
                 .map(|_| generate_random_enr(content_id, 255))
                 .collect_vec();
-            let enr_dis_256_connected = (0..nodes_per_distance)
+            let enr_distance_256_connected = (0..nodes_per_distance)
                 .map(|_| generate_random_enr(content_id, 256))
                 .collect_vec();
-            let all_connected = chain(&enr_dis_255_connected, &enr_dis_256_connected)
+            let all_connected = chain(&enr_distance_255_connected, &enr_distance_256_connected)
                 .cloned()
                 .collect_vec();
 
@@ -813,21 +813,21 @@ mod tests {
             let nodes_per_distance = 5;
 
             // Distance 254 and disconnected
-            let enr_dis_254_disconnected = (0..nodes_per_distance)
+            let enr_distance_254_disconnected = (0..nodes_per_distance)
                 .map(|_| generate_random_enr(target_node_id, 254))
                 .collect_vec();
-            for enr in &enr_dis_254_disconnected {
+            for enr in &enr_distance_254_disconnected {
                 let _ = kbuckets.insert_or_update_disconnected(enr, Distance::MAX);
             }
 
             // Distances 255 and 256 and connected
-            let enr_dis_255_connected = (0..nodes_per_distance)
+            let enr_distance_255_connected = (0..nodes_per_distance)
                 .map(|_| generate_random_enr(target_node_id, 255))
                 .collect_vec();
-            let enr_dis_256_connected = (0..nodes_per_distance)
+            let enr_distance_256_connected = (0..nodes_per_distance)
                 .map(|_| generate_random_enr(target_node_id, 256))
                 .collect_vec();
-            let all_connected = chain(&enr_dis_255_connected, &enr_dis_256_connected)
+            let all_connected = chain(&enr_distance_255_connected, &enr_distance_256_connected)
                 .cloned()
                 .collect_vec();
 
@@ -844,7 +844,7 @@ mod tests {
             // With small limit, closest are returned
             assert_same_enrs(
                 kbuckets.closest_to_node_id(target_node_id, nodes_per_distance),
-                enr_dis_255_connected,
+                enr_distance_255_connected,
             );
         }
 
@@ -856,21 +856,21 @@ mod tests {
             let nodes_per_distance = 5;
 
             // Distance 254 and disconnected
-            let enr_dis_254_disconnected = (0..nodes_per_distance)
+            let enr_distance_254_disconnected = (0..nodes_per_distance)
                 .map(|_| generate_random_enr(content_id, 254))
                 .collect_vec();
-            for enr in &enr_dis_254_disconnected {
+            for enr in &enr_distance_254_disconnected {
                 let _ = kbuckets.insert_or_update_disconnected(enr, Distance::MAX);
             }
 
             // Distances 255 and 256 and connected
-            let enr_dis_255_connected = (0..nodes_per_distance)
+            let enr_distance_255_connected = (0..nodes_per_distance)
                 .map(|_| generate_random_enr(content_id, 255))
                 .collect_vec();
-            let enr_dis_256_connected = (0..nodes_per_distance)
+            let enr_distance_256_connected = (0..nodes_per_distance)
                 .map(|_| generate_random_enr(content_id, 256))
                 .collect_vec();
-            let all_connected = chain(&enr_dis_255_connected, &enr_dis_256_connected)
+            let all_connected = chain(&enr_distance_255_connected, &enr_distance_256_connected)
                 .cloned()
                 .collect_vec();
 
@@ -887,7 +887,7 @@ mod tests {
             // With small limit, closest are returned
             assert_same_enrs(
                 kbuckets.closest_to_content_id::<XorMetric>(&content_id, nodes_per_distance),
-                enr_dis_255_connected,
+                enr_distance_255_connected,
             );
         }
     }
