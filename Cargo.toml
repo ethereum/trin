@@ -74,7 +74,7 @@ rand = "0.9"
 rayon = "1.10.0"
 reqwest = { version = "0.12.17", features = ["native-tls-vendored", "json"] }
 reth-ipc = { tag = "v1.3.12", git = "https://github.com/paradigmxyz/reth.git"}
-revm = { version = "23.1", default-features = false, features = ["std", "secp256k1", "serde-json", "c-kzg"] }
+revm = { version = "24.0", default-features = false, features = ["std", "secp256k1", "serde-json", "c-kzg"] }
 revm-primitives = { version = "19.0.0", default-features = false, features = ["std", "serde"] }
 rstest = "0.25"
 rust-embed = "8.5.0"

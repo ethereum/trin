@@ -34,7 +34,7 @@ pub fn process_e2hs_file(raw_e2hs: &[u8]) -> anyhow::Result<ProcessedE2HS> {
         blocks.push(ProcessedBlock {
             header: header_with_proof.header_with_proof.header,
             uncles: Some(body.body.0.ommers),
-            withdrawals: None,
+            withdrawals: body.body.0.withdrawals.map(|withdrawals| withdrawals.0),
             transactions: transactions_with_recovered_senders,
         });
     }
