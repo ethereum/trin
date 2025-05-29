@@ -4,10 +4,9 @@ mod gossiper;
 use std::{collections::BTreeMap, num::NonZero, sync::Arc};
 
 use alloy::rpc::types::beacon::events::{
-    BeaconNodeEventTopic, ChainReorgEvent, FinalizedCheckpointEvent, HeadEvent,
-    LightClientOptimisticUpdateEvent,
+    BeaconNodeEventTopic, FinalizedCheckpointEvent, HeadEvent, LightClientOptimisticUpdateEvent,
 };
-use anyhow::{bail, ensure};
+use anyhow::{anyhow, bail};
 use ephemeral_bundle::EphemeralBundle;
 use ethereum_rpc_client::{
     consensus::{event::BeaconEvent, ConsensusApi},
@@ -33,7 +32,12 @@ use trin_metrics::bridge::BridgeMetricsReporter;
 
 use crate::census::Census;
 
-const BUFFER_HEADER_COUNT: u64 = 8;
+/// Total number of blocks we need to buffer in the bridge.
+/// - 1 for the head block
+/// - 4 blocks as wiggle room for re-orgs, re-orgs should never been greater than 7 slots
+/// - 8 blocks as a buffer for network stability, if there are any problems on the network this will
+///   ensure we are good
+const TOTAL_BUFFER_COUNT: u64 = 1 + 4 + 8;
 
 pub struct EphemeralHistoryBridge {
     /// Gossips the content.
@@ -45,7 +49,6 @@ pub struct EphemeralHistoryBridge {
     execution_api: ExecutionApi,
     beacon_blocks: BTreeMap<B256, BeaconBlockElectra>,
     receipts: LruCache<u64, Receipts>,
-    ephemeral_bundle: Option<EphemeralBundle>,
 }
 
 impl EphemeralHistoryBridge {
@@ -76,7 +79,6 @@ impl EphemeralHistoryBridge {
             receipts: LruCache::new(
                 NonZero::new(SLOTS_PER_EPOCH as usize * 2).expect("Should be non-zero"),
             ),
-            ephemeral_bundle: None,
         })
     }
 
@@ -88,7 +90,6 @@ impl EphemeralHistoryBridge {
             .get_events_stream(
                 &[
                     BeaconNodeEventTopic::Head,
-                    BeaconNodeEventTopic::ChainReorg,
                     BeaconNodeEventTopic::LightClientOptimisticUpdate,
                     BeaconNodeEventTopic::FinalizedCheckpoint,
                 ],
@@ -98,91 +99,57 @@ impl EphemeralHistoryBridge {
 
         while let Some(event) = stream.next().await {
             match event {
-                BeaconEvent::ChainReorg(chain_reorg_event) => {
-                    info!("Received chain reorg: {chain_reorg_event:?}");
-
-                    match self.process_chain_reorg(chain_reorg_event).await {
-                        Ok(ephemeral_bundle) => self.ephemeral_bundle = Some(ephemeral_bundle),
-                        Err(err) => error!("Failed to process chain reorg: {err:?}"),
-                    }
-                }
                 BeaconEvent::Head(head_event) => {
                     info!("Received head: {head_event:?}");
 
-                    match self.process_head(head_event).await {
-                        Ok(ephemeral_bundle) => self.ephemeral_bundle = Some(ephemeral_bundle),
-                        Err(err) => error!("Failed to process head: {err:?}"),
+                    if let Err(err) = self.process_head(head_event).await {
+                        error!("Failed to process head: {err:?}");
                     }
                 }
                 BeaconEvent::LightClientOptimisticUpdate(light_client_optimistic_update_event) => {
                     info!("Received light client optimistic update: {light_client_optimistic_update_event:?}");
 
-                    if let Err(err) = self
-                        .process_light_client_optimistic_update(
-                            light_client_optimistic_update_event,
-                        )
-                        .await
-                    {
+                    if let Err(err) = self.process_light_client_optimistic_update(
+                        light_client_optimistic_update_event,
+                    ) {
                         error!("Failed to process light client optimistic update: {err:?}");
                     }
                 }
                 BeaconEvent::FinalizedCheckpoint(finalized_checkpoint_event) => {
                     info!("Received finalized checkpoint: {finalized_checkpoint_event:?}");
 
-                    if let Err(err) = self
-                        .process_finalized_checkpoint(finalized_checkpoint_event)
-                        .await
+                    if let Err(err) = self.process_finalized_checkpoint(finalized_checkpoint_event)
                     {
                         error!("Failed to process finalized checkpoint: {err:?}");
                     }
                 }
+                _ => warn!("Received unexpected event: {event:?}"),
             }
         }
     }
 
-    async fn process_chain_reorg(
-        &mut self,
-        chain_reorg_event: ChainReorgEvent,
-    ) -> anyhow::Result<EphemeralBundle> {
-        // clear reorged blocks
-        let mut target_root = chain_reorg_event.old_head_block;
-        for _ in 0..chain_reorg_event.depth {
-            if let Some(beacon_block) = self.beacon_blocks.remove(&target_root) {
-                target_root = beacon_block.parent_root;
+    async fn process_head(&mut self, head_event: HeadEvent) -> anyhow::Result<()> {
+        let mut next_root = head_event.block;
+        for _ in 0..TOTAL_BUFFER_COUNT {
+            if let Some(parent_root) = self.check_or_download_block(next_root).await? {
+                next_root = parent_root;
+            } else {
+                break;
             }
         }
 
-        let mut ephemeral_bundle = EphemeralBundle::new(chain_reorg_event.new_head_block);
-
-        // apply head + reorg
-        for _ in 0..(1 + chain_reorg_event.depth) {
-            self.download_next_block_for_ephemeral_bundle(&mut ephemeral_bundle)
-                .await?;
-        }
-
-        // apply buffer headers
-        self.append_8_buffer_headers(&mut ephemeral_bundle).await?;
-
-        Ok(ephemeral_bundle)
+        Ok(())
     }
 
-    async fn process_head(&mut self, head_event: HeadEvent) -> anyhow::Result<EphemeralBundle> {
-        let mut ephemeral_bundle = EphemeralBundle::new(head_event.block);
-        self.download_next_block_for_ephemeral_bundle(&mut ephemeral_bundle)
-            .await?;
-        self.append_8_buffer_headers(&mut ephemeral_bundle).await?;
-
-        Ok(ephemeral_bundle)
-    }
-
-    async fn process_light_client_optimistic_update(
+    fn process_light_client_optimistic_update(
         &mut self,
         light_client_event: LightClientOptimisticUpdateEvent,
     ) -> anyhow::Result<JoinHandle<()>> {
-        let Some(ephemeral_bundle) = self.ephemeral_bundle.take() else {
-            warn!("Ephemeral bundle is not set");
+        if self.beacon_blocks.is_empty() {
+            warn!("Received light client optimistic update with no beacon blocks, skipping processing");
             return Ok(tokio::spawn(async {}));
-        };
+        }
+
         let alloy_beacon_block = light_client_event.data.attested_header.beacon;
         let beacon_block = BeaconBlockHeader {
             slot: alloy_beacon_block.slot,
@@ -191,10 +158,11 @@ impl EphemeralHistoryBridge {
             state_root: alloy_beacon_block.state_root,
             body_root: alloy_beacon_block.body_root,
         };
-        ensure!(
-            ephemeral_bundle.head_beacon_block_root == beacon_block.tree_hash_root(),
-            "Head block root does not match, this indicates a bug in the bundle creation logic"
-        );
+
+        let mut ephemeral_bundle = EphemeralBundle::new(beacon_block.tree_hash_root());
+        for _ in 0..TOTAL_BUFFER_COUNT {
+            self.append_next_block_to_ephemeral_bundle(&mut ephemeral_bundle)?;
+        }
 
         let gossiper = self.gossiper.clone();
         Ok(tokio::spawn(async move {
@@ -202,123 +170,96 @@ impl EphemeralHistoryBridge {
         }))
     }
 
-    async fn process_finalized_checkpoint(
+    fn process_finalized_checkpoint(
         &mut self,
         finalized_checkpoint_event: FinalizedCheckpointEvent,
     ) -> anyhow::Result<Option<JoinHandle<()>>> {
-        if finalized_checkpoint_event.epoch % (SLOTS_PER_HISTORICAL_ROOT / SLOTS_PER_EPOCH) == 0 {
-            let mut blocks = vec![];
-
-            // The finalized period proves the last 8192 slots, it can't be proven until the next
-            // cycle
-            let Some(beacon_block) = self.beacon_blocks.get(&finalized_checkpoint_event.block)
-            else {
-                bail!(
-                    "Beacon block not found for finalized checkpoint, this is a critical bug: {:?}",
-                    finalized_checkpoint_event
-                );
-            };
-
-            let mut last_block_root = beacon_block.parent_root;
-            while let Some(beacon_block) = self.beacon_blocks.remove(&last_block_root) {
-                last_block_root = beacon_block.parent_root;
-                blocks.push(beacon_block);
-            }
-
-            let consensus_api = self.consensus_api.clone();
-            let gossiper = self.gossiper.clone();
-            return Ok(Some(tokio::spawn(async move {
-                gossiper
-                    .gossiped_non_ephemeral_headers(
-                        finalized_checkpoint_event.state,
-                        blocks,
-                        consensus_api,
-                    )
-                    .await;
-            })));
+        if finalized_checkpoint_event.epoch % (SLOTS_PER_HISTORICAL_ROOT / SLOTS_PER_EPOCH) != 0 {
+            return Ok(None);
         }
 
-        Ok(None)
+        let mut blocks = vec![];
+
+        // The finalized period proves the last 8192 slots, it can't be proven until the next
+        // cycle
+        let Some(beacon_block) = self.beacon_blocks.get(&finalized_checkpoint_event.block) else {
+            bail!(
+                "Beacon block not found for finalized checkpoint, this is a critical bug: {:?}",
+                finalized_checkpoint_event
+            );
+        };
+
+        let mut last_block_root = beacon_block.parent_root;
+        while let Some(beacon_block) = self.beacon_blocks.remove(&last_block_root) {
+            last_block_root = beacon_block.parent_root;
+            blocks.push(beacon_block);
+        }
+
+        // Flush all re-organized blocks, which would have been missed above
+        self.beacon_blocks
+            .retain(|_, block| block.slot >= finalized_checkpoint_event.epoch * SLOTS_PER_EPOCH);
+
+        let consensus_api = self.consensus_api.clone();
+        let gossiper = self.gossiper.clone();
+        Ok(Some(tokio::spawn(async move {
+            gossiper
+                .gossiped_non_ephemeral_headers(
+                    finalized_checkpoint_event.state,
+                    blocks,
+                    consensus_api,
+                )
+                .await;
+        })))
     }
 
-    /// Downloads the next block as indicated by the EphemeralBundle.
-    async fn download_next_block_for_ephemeral_bundle(
+    /// Checks if the block is already downloaded, and if not, downloads it and its receipts, if we
+    /// downloaded a block we return the parent root of the block.
+    async fn check_or_download_block(
         &mut self,
-        ephemeral_bundle: &mut EphemeralBundle,
-    ) -> anyhow::Result<()> {
+        beacon_block_root: B256,
+    ) -> anyhow::Result<Option<B256>> {
+        if self.beacon_blocks.contains_key(&beacon_block_root) {
+            return Ok(None);
+        }
+
         let beacon_block = self
             .consensus_api
-            .get_beacon_block(ephemeral_bundle.next_parent_root().to_string())
+            .get_beacon_block(beacon_block_root.to_string())
             .await?
             .message;
 
-        ensure!(
-            ephemeral_bundle.next_parent_root() == beacon_block.tree_hash_root(),
-            "Block root does not match: {} != {}",
-            ephemeral_bundle.next_parent_root(),
-            beacon_block.tree_hash_root()
-        );
-
-        self.beacon_blocks
-            .insert(beacon_block.tree_hash_root(), beacon_block.clone());
         let receipts = self
             .execution_api
             .get_receipts(beacon_block.body.execution_payload.block_number)
             .await?;
-        self.receipts.push(
-            beacon_block.body.execution_payload.block_number,
-            receipts.clone(),
-        );
 
-        ephemeral_bundle.push_parent(beacon_block, receipts)?;
-
-        Ok(())
+        let parent_root = beacon_block.parent_root;
+        self.receipts
+            .push(beacon_block.body.execution_payload.block_number, receipts);
+        self.beacon_blocks
+            .insert(beacon_block.tree_hash_root(), beacon_block);
+        Ok(Some(parent_root))
     }
 
-    async fn append_8_buffer_headers(
+    fn append_next_block_to_ephemeral_bundle(
         &mut self,
         ephemeral_bundle: &mut EphemeralBundle,
     ) -> anyhow::Result<()> {
-        for _ in 0..BUFFER_HEADER_COUNT {
-            let beacon_block = if let Some(beacon_block) =
-                self.beacon_blocks.get(&ephemeral_bundle.next_parent_root())
-            {
-                beacon_block.clone()
-            } else if let Ok(beacon_block) = self
-                .consensus_api
-                .get_beacon_block(ephemeral_bundle.next_parent_root().to_string())
-                .await
-            {
-                self.beacon_blocks.insert(
-                    beacon_block.message.tree_hash_root(),
-                    beacon_block.message.clone(),
-                );
-                beacon_block.message
-            } else {
-                bail!("Beacon block not found well applying buffer headers");
-            };
-
-            let receipts = if let Some(receipts) = self
-                .receipts
-                .get(&beacon_block.body.execution_payload.block_number)
-            {
-                receipts.clone()
-            } else if let Ok(receipts) = self
-                .execution_api
-                .get_receipts(beacon_block.body.execution_payload.block_number)
-                .await
-            {
-                self.receipts.push(
-                    beacon_block.body.execution_payload.block_number,
-                    receipts.clone(),
-                );
-                receipts
-            } else {
-                bail!("Receipts not found well applying buffer headers");
-            };
-
-            ephemeral_bundle.push_parent(beacon_block, receipts)?;
-        }
+        let beacon_block = self
+            .beacon_blocks
+            .get(&ephemeral_bundle.next_parent_root())
+            .ok_or_else(|| {
+                anyhow!("Beacon block not found while appending next block to ephemeral bundle")
+            })?
+            .clone();
+        let receipts = self
+            .receipts
+            .get(&beacon_block.body.execution_payload.block_number)
+            .ok_or_else(|| {
+                anyhow!("Receipts not found while appending next block to ephemeral bundle")
+            })?
+            .clone();
+        ephemeral_bundle.push_parent(beacon_block, receipts)?;
 
         Ok(())
     }

@@ -5,6 +5,7 @@ use alloy::rpc::types::beacon::events::{
 use eventsource_client::Event;
 use serde::de::{DeserializeOwned, Error};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BeaconEvent {
     ChainReorg(ChainReorgEvent),
     Head(HeadEvent),
