@@ -525,37 +525,36 @@ impl<
                 .await;
             utp_processing
                 .metrics
-                .report_validation(validation_result.is_ok());
+                .report_validation(validation_result.is_valid());
 
-            let validation_result = match validation_result {
-                Ok(validation_result) => validation_result,
-                Err(err) => {
-                    warn!(
-                        error = ?err,
-                        content.id = %hex_encode_compact(content_id),
-                        content.key = %content_key,
-                        "Error validating content"
-                    );
-                    // Indicate to the query that the content is invalid
-                    let _ = valid_content_callback.send(None);
-                    if let Some(query_trace_events_tx) = query_trace_events_tx {
-                        let _ = query_trace_events_tx.send(QueryTraceEvent::Failure(
-                            query_id,
-                            sending_peer,
-                            QueryFailureKind::InvalidContent,
-                        ));
-                    }
-                    return;
+            if !validation_result.is_valid() {
+                warn!(
+                    content.id = %hex_encode_compact(content_id),
+                    content.key = %content_key,
+                    ?validation_result,
+                    "Error validating content"
+                );
+                // Indicate to the query that the content is invalid
+                let _ = valid_content_callback.send(None);
+                if let Some(query_trace_events_tx) = query_trace_events_tx {
+                    let _ = query_trace_events_tx.send(QueryTraceEvent::Failure(
+                        query_id,
+                        sending_peer,
+                        QueryFailureKind::InvalidContent,
+                    ));
                 }
+                return;
             };
 
-            // skip storing if content is not valid for storing, the content
-            // is already stored or if there's an error reading the store
-            let should_store = validation_result.valid_for_storing
+            // store content that:
+            // - is canonically valid
+            // - is not already stored
+            // - is within radius (if applicable)
+            let should_store = validation_result.is_canonically_valid()
                 && utp_processing
                     .store
                     .lock()
-                    .is_key_within_radius_and_unavailable(&content_key)
+                    .should_we_store(&content_key)
                     .map_or_else(
                         |err| {
                             error!("Unable to read store: {err}");
@@ -571,17 +570,12 @@ impl<
                 {
                     Ok(dropped_content) => {
                         let mut content_to_propagate = vec![(content_key.clone(), content.clone())];
-                        if let Some(additional_content_to_propagate) =
-                            validation_result.additional_content_to_propagate
-                        {
-                            content_to_propagate.push(additional_content_to_propagate);
-                        }
                         if !dropped_content.is_empty() && utp_processing.gossip_dropped {
                             debug!(
                                 "Dropped {:?} pieces of content after inserting new content, propagating them back into the network.",
                                 dropped_content.len(),
                             );
-                            content_to_propagate.extend(dropped_content.clone());
+                            content_to_propagate.extend(dropped_content);
                         }
                         propagate_put_content_cross_thread::<_, TMetric>(
                             content_to_propagate,

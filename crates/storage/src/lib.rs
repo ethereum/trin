@@ -39,6 +39,7 @@ pub trait ContentStore {
     fn get(&self, key: &Self::Key) -> Result<Option<RawContentValue>, ContentStoreError>;
 
     /// Puts a piece of content into the store.
+    ///
     /// Returns a list of keys that were evicted from the store, which should be gossiped into the
     /// network. In the future this might be updated to a separate table that stores a queue
     /// of content keys to be gossiped and gossips them in a background task.
@@ -51,10 +52,17 @@ pub trait ContentStore {
 
     /// Returns whether the content denoted by `key` is within the radius of the data store and not
     /// already stored within the data store.
-    fn is_key_within_radius_and_unavailable(
+    fn should_we_store(&self, key: &Self::Key) -> Result<ShouldWeStoreContent, ContentStoreError>;
+
+    /// Performs [ContentStore::should_we_store] for multiple content keys.
+    ///
+    /// The default implementation calls `self.should_we_store` for each key.
+    fn should_we_store_batch(
         &self,
-        key: &Self::Key,
-    ) -> Result<ShouldWeStoreContent, ContentStoreError>;
+        keys: &[Self::Key],
+    ) -> Result<Vec<ShouldWeStoreContent>, ContentStoreError> {
+        keys.iter().map(|key| self.should_we_store(key)).collect()
+    }
 
     /// Returns the radius of the data store.
     fn radius(&self) -> Distance;
@@ -122,10 +130,7 @@ impl<TMetric: Metric> ContentStore for MemoryContentStore<TMetric> {
         Ok(vec![])
     }
 
-    fn is_key_within_radius_and_unavailable(
-        &self,
-        key: &Self::Key,
-    ) -> Result<ShouldWeStoreContent, ContentStoreError> {
+    fn should_we_store(&self, key: &Self::Key) -> Result<ShouldWeStoreContent, ContentStoreError> {
         if key.affected_by_radius() && self.distance_to_key(key) > self.radius {
             return Ok(ShouldWeStoreContent::NotWithinRadius);
         }
@@ -251,18 +256,14 @@ pub mod test {
         // Arbitrary key within radius and unavailable.
         let arb_key = IdentityContentKey::new(node_id.raw());
         assert_eq!(
-            store
-                .is_key_within_radius_and_unavailable(&arb_key)
-                .unwrap(),
+            store.should_we_store(&arb_key).unwrap(),
             ShouldWeStoreContent::Store
         );
 
         // Arbitrary key available.
         let _ = store.put(arb_key.clone(), val);
         assert_eq!(
-            store
-                .is_key_within_radius_and_unavailable(&arb_key)
-                .unwrap(),
+            store.should_we_store(&arb_key).unwrap(),
             ShouldWeStoreContent::AlreadyStored
         );
     }

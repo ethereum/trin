@@ -17,6 +17,7 @@ use ethportal_api::{
     OverlayContentKey, RawContentKey, RawContentValue,
 };
 use futures::{channel::oneshot, future::join_all};
+use itertools::Itertools;
 use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 use tracing::{debug, enabled, error, trace, warn, Level};
@@ -118,18 +119,19 @@ impl<
 
         let mut accepted_keys: Vec<TContentKey> = Vec::default();
 
-        for (i, key) in content_keys.iter().enumerate() {
-            // Accept content if within radius and not already present in the data store.
-            let accept = self
-                .store
-                .lock()
-                .is_key_within_radius_and_unavailable(key)
-                .map_err(|err| {
-                    OverlayRequestError::AcceptError(format!(
-                        "Unable to check content availability {err}"
-                    ))
-                })?;
-            let accept_code = match accept {
+        let should_we_store_batch = self
+            .store
+            .lock()
+            .should_we_store_batch(content_keys.as_slice())
+            .map_err(|err| {
+                OverlayRequestError::AcceptError(format!(
+                    "Unable to check content availability {err}"
+                ))
+            })?;
+        for (i, should_we_store) in should_we_store_batch.iter().enumerate() {
+            let key = &content_keys[i];
+            let accept_code = match should_we_store {
+                // Accept content if within radius and not already present in the data store.
                 ShouldWeStoreContent::Store => {
                     // accept all keys that are successfully added to the queue
                     if self.accept_queue.write().add_key_to_queue(key, &enr) {
@@ -162,10 +164,13 @@ impl<
         let cid: ConnectionId<NodeId> = self.utp_controller.cid(enr.node_id(), false);
         let cid_send = cid.send;
 
-        let content_keys_string: Vec<String> = content_keys
+        let content_keys_string: Vec<String> = request
+            .content_keys
             .iter()
-            .map(|content_key| content_key.to_hex())
+            .map(ToString::to_string)
             .collect();
+        let accepted_keys_string: Vec<String> =
+            accepted_keys.iter().map(ToString::to_string).collect();
 
         trace!(
             protocol = %self.protocol,
@@ -174,6 +179,7 @@ impl<
             cid.recv = cid.recv,
             enr = enr_str,
             request.content_keys = ?content_keys_string,
+            accepted_keys = ?accepted_keys_string,
             "Content keys handled by offer",
         );
 
@@ -210,7 +216,11 @@ impl<
                                     protocol_version
                                 )
                                 .await {
-                                    debug!(%err, ?content_key, "Fallback FINDCONTENT task failed, after uTP transfer failed");
+                                    debug!(
+                                        %err,
+                                        ?content_key,
+                                        "Fallback FINDCONTENT task failed, after uTP transfer failed",
+                                    );
                                 }
                             })
                         })
@@ -221,13 +231,12 @@ impl<
                 }
             };
 
-            // Spawn fallback FINDCONTENT tasks for each content key
-            // in payloads that failed to be accepted.
-            let content_values = match decode_and_validate_content_payload(&accepted_keys, data) {
+            let content_items = match decode_payload(&accepted_keys, data) {
                 Ok(content_values) => content_values,
                 Err(err) => {
-                    debug!(%err, ?content_keys_string, "Decoding and validating content payload failed");
-                    let handles: Vec<JoinHandle<_>> = content_keys
+                    // Spawn fallback FINDCONTENT tasks for each content key that was accepted.
+                    debug!(%err, ?accepted_keys_string, "Decoding and validating content payload failed");
+                    let handles: Vec<JoinHandle<_>> = accepted_keys
                         .into_iter()
                         .map(|content_key| {
                             let utp_processing = utp_processing.clone();
@@ -238,7 +247,11 @@ impl<
                                     protocol_version
                                 )
                                 .await {
-                                    debug!(%err, ?content_key, "Fallback FINDCONTENT task failed, decoding and validating content payload failed");
+                                    debug!(
+                                        %err,
+                                        ?content_key,
+                                        "Fallback FINDCONTENT task failed, decoding and validating content payload failed",
+                                    );
                                 }
                             })
                         })
@@ -249,63 +262,39 @@ impl<
                 }
             };
 
-            let handles = accepted_keys
+            let validated_content =
+                Self::validate_content(content_items, utp_processing.clone()).await;
+
+            let content_to_propagate = validated_content
                 .into_iter()
-                .zip(content_values)
-                .map(|(key, value)| {
-                    let utp_processing = utp_processing.clone();
-                    tokio::spawn(async move {
-                        match Self::validate_and_store_content(
-                            key.clone(),
+                .flat_map(|(key, value, valid)| {
+                    if valid {
+                        utp_processing.accept_queue.write().remove_key(&key);
+                        Self::store_content(
+                            &key,
                             value,
                             utp_processing.clone(),
                         )
-                        .await
-                        {
-                            Some(validated_content) => {
-                                utp_processing.accept_queue.write().remove_key(&key);
-                                Some(validated_content)
+                    } else {
+                        // Spawn a fallback FINDCONTENT task for each content key that failed
+                        // validation
+                        let utp_processing = utp_processing.clone();
+                        tokio::spawn(async move {
+                            if let Err(err) = Self::fallback_find_content(
+                                key.clone(),
+                                utp_processing,
+                                protocol_version
+                            )
+                            .await {
+                                debug!(%err, ?key, "Fallback FINDCONTENT task failed, after validating and storing content failed");
                             }
-                            None => {
-                                // Spawn a fallback FINDCONTENT task for each content key
-                                // that failed individual processing.
-                                if let Err(err) = Self::fallback_find_content(
-                                    key.clone(),
-                                    utp_processing,
-                                    protocol_version
-                                )
-                                .await {
-                                    debug!(%err, ?key, "Fallback FINDCONTENT task failed, after validating and storing content failed");
-                                }
-                                None
-                            }
-                        }
-                    })
+                        });
+                        vec![]
+                    }
                 })
                 .collect::<Vec<_>>();
-            let validated_content: Vec<(TContentKey, RawContentValue)> = join_all(handles)
-                .await
-                .into_iter()
-                .enumerate()
-                .filter_map(|(index, value)| {
-                    value.unwrap_or_else(|err| {
-                        let err = err.into_panic();
-                        let err = if let Some(err) = err.downcast_ref::<&'static str>() {
-                            err.to_string()
-                        } else if let Some(err) = err.downcast_ref::<String>() {
-                            err.clone()
-                        } else {
-                            format!("{err:?}")
-                        };
-                        debug!(err, content_key = ?content_keys_string[index], "Process uTP payload tokio task failed:");
-                        // Do we want to fallback find content here?
-                        None
-                    })
-                })
-                .flatten()
-                .collect();
             propagate_put_content_cross_thread::<_, TMetric>(
-                validated_content,
+                content_to_propagate,
                 &utp_processing.kbuckets,
                 utp_processing.command_tx.clone(),
                 Some(utp_processing.utp_controller),
@@ -485,54 +474,52 @@ impl<
                 None,
                 None,
             )))?;
-        let data: RawContentValue = match rx.await? {
-            Ok(Response::Content(found_content)) => {
-                match found_content {
-                    Content::Content(content) => content,
-                    Content::Enrs(_) => return Err(anyhow!("expected content, got ENRs")),
-                    // Init uTP stream if `connection_id` is received
-                    Content::ConnectionId(conn_id) => {
-                        let conn_id = u16::from_be(conn_id);
-                        let cid = utp_rs::cid::ConnectionId {
-                            recv: conn_id,
-                            send: conn_id.wrapping_add(1),
-                            peer_id: fallback_peer.node_id(),
-                        };
-                        let bytes = utp_processing
-                            .utp_controller
-                            .connect_inbound_stream(cid, UtpPeer(fallback_peer.clone()))
-                            .await?;
+        let content_value: RawContentValue = match rx.await? {
+            Ok(Response::Content(Content::Content(content))) => content,
+            Ok(Response::Content(Content::Enrs(_))) => bail!("expected content, got ENRs"),
+            Ok(Response::Content(Content::ConnectionId(conn_id))) => {
+                let conn_id = u16::from_be(conn_id);
+                let cid = utp_rs::cid::ConnectionId {
+                    recv: conn_id,
+                    send: conn_id.wrapping_add(1),
+                    peer_id: fallback_peer.node_id(),
+                };
+                let bytes = utp_processing
+                    .utp_controller
+                    .connect_inbound_stream(cid, UtpPeer(fallback_peer.clone()))
+                    .await?;
 
-                        match protocol_version.is_v1_enabled() {
-                            true => match decode_single_content_payload(bytes) {
-                                Ok(bytes) => bytes,
-                                Err(err) => bail!(
-                                    "Unable to decode content payload from FINDCONTENT v1 response {err:?}",
-                                ),
-                            },
-                            false => bytes,
-                        }
+                if protocol_version.is_v1_enabled() {
+                    match decode_single_content_payload(bytes) {
+                        Ok(bytes) => bytes,
+                        Err(err) => bail!(
+                            "Unable to decode content payload from FINDCONTENT v1 response {err:?}",
+                        ),
                     }
+                } else {
+                    bytes
                 }
             }
-            _ => return Err(anyhow!("invalid response")),
-        };
-        let validated_content = match Self::validate_and_store_content(
-            content_key,
-            data,
-            utp_processing.clone(),
-        )
-        .await
-        {
-            Some(validated_content) => validated_content,
-            None => {
-                debug!("Fallback FINDCONTENT request to peer {fallback_peer} did not yield valid content");
-                return Ok(());
-            }
+            Ok(response) => bail!("invalid overlay response: {response:?}"),
+            Err(err) => bail!("overlay request error: {err}"),
         };
 
+        let (content_key, content_value, valid) =
+            Self::validate_content(vec![(content_key, content_value)], utp_processing.clone())
+                .await
+                .remove(0);
+
+        if !valid {
+            debug!(
+                "Fallback FINDCONTENT request to peer {fallback_peer} did not yield valid content"
+            );
+            return Ok(());
+        }
+
+        let content_to_propagate =
+            Self::store_content(&content_key, content_value, utp_processing.clone());
         propagate_put_content_cross_thread::<_, TMetric>(
-            validated_content,
+            content_to_propagate,
             &utp_processing.kbuckets,
             utp_processing.command_tx.clone(),
             Some(utp_processing.utp_controller),
@@ -540,71 +527,68 @@ impl<
         Ok(())
     }
 
-    /// Validates & stores content value received from peer.
-    /// Checks if validated content should be stored, and stores it if true
-    /// Returns validated content/content dropped from storage to
-    /// propagate to other peers.
-    // (this step requires a dedicated task since it might require
-    // non-blocking requests to this/other overlay networks).
-    async fn validate_and_store_content(
-        key: TContentKey,
+    /// Validates content values received from a peer.
+    ///
+    /// Returns content items that were successfully validated.
+    async fn validate_content(
+        content_items: Vec<(TContentKey, RawContentValue)>,
+        utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
+    ) -> Vec<(TContentKey, RawContentValue, bool)> {
+        let validation_results = utp_processing
+            .validator
+            .validate_content_batch(&content_items)
+            .await;
+
+        content_items
+            .into_iter()
+            .zip_eq(validation_results)
+            .map(|((content_key, content_value), validation_result)| {
+                utp_processing
+                    .metrics
+                    .report_validation(validation_result.is_canonically_valid());
+
+                if validation_result.is_canonically_valid() {
+                    (content_key, content_value, true)
+                } else {
+                    warn!(
+                        content.key = %content_key.to_hex(),
+                        ?validation_result,
+                        "Error validating accepted content"
+                    );
+                    (content_key, content_value, false)
+                }
+            })
+            .collect()
+    }
+
+    /// Stores content item received from a peer.
+    ///
+    /// It assumes that content is already validated.
+    ///
+    /// Returns stored content and content dropped from storage, that should be propagate to other
+    /// peers.
+    fn store_content(
+        key: &TContentKey,
         content_value: RawContentValue,
         utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
-    ) -> Option<Vec<(TContentKey, RawContentValue)>> {
-        // Validate received content
-        let validation_result = utp_processing
-            .validator
-            .validate_content(&key, &content_value)
-            .await;
-        utp_processing
-            .metrics
-            .report_validation(validation_result.is_ok());
-
-        let validation_result = match validation_result {
-            Ok(validation_result) => validation_result,
-            Err(err) => {
-                // Skip storing & propagating content if it's not valid
-                warn!(
-                    error = %err,
-                    content.key = %key.to_hex(),
-                    "Error validating accepted content"
-                );
-                return None;
-            }
-        };
-
-        if !validation_result.valid_for_storing {
-            // Content received via Offer/Accept should be valid for storing.
-            // If it isn't, don't store it and don't propagate it.
-            warn!(
-                content.key = %key.to_hex(),
-                "Error validating accepted content - not valid for storing"
-            );
-            return None;
-        }
-
+    ) -> Vec<(TContentKey, RawContentValue)> {
         // Collect all content to propagate
         let mut content_to_propagate = vec![(key.clone(), content_value.clone())];
-        if let Some(additional_content_to_propagate) =
-            validation_result.additional_content_to_propagate
-        {
-            content_to_propagate.push(additional_content_to_propagate);
-        }
 
-        // Check if data should be stored, and store if it is within our radius and not
-        // already stored.
-        let key_desired = utp_processing
-            .store
-            .lock()
-            .is_key_within_radius_and_unavailable(&key);
+        // Check if data should be stored, and store if it is within our radius and not already
+        // stored.
+        let key_desired = utp_processing.store.lock().should_we_store(key);
         match key_desired {
             Ok(ShouldWeStoreContent::Store) => {
                 match utp_processing.store.lock().put(key.clone(), &content_value) {
                     Ok(dropped_content) => {
                         if !dropped_content.is_empty() && utp_processing.gossip_dropped {
                             // add dropped content to validation result, so it will be propagated
-                            debug!("Dropped {:?} pieces of content after inserting new content, propagating them back into the network.", dropped_content.len());
-                            content_to_propagate.extend(dropped_content.clone());
+                            debug!(
+                                "Dropped {} pieces of content after inserting new content, propagating them back into the network.",
+                                dropped_content.len(),
+                            );
+                            content_to_propagate.extend(dropped_content);
                         }
                     }
                     Err(err) => warn!(
@@ -634,7 +618,7 @@ impl<
                 );
             }
         };
-        Some(content_to_propagate)
+        content_to_propagate
     }
 
     /// Provide the requested content key and content value for the acceptor
@@ -676,10 +660,10 @@ impl<
     }
 }
 
-fn decode_and_validate_content_payload<TContentKey>(
+fn decode_payload<TContentKey: OverlayContentKey>(
     accepted_keys: &[TContentKey],
     payload: Bytes,
-) -> anyhow::Result<Vec<RawContentValue>> {
+) -> anyhow::Result<Vec<(TContentKey, RawContentValue)>> {
     let content_values = portal_wire::decode_content_payload(payload)?;
     // Accepted content keys len should match content value len
     let keys_len = accepted_keys.len();
@@ -691,5 +675,9 @@ fn decode_and_validate_content_payload<TContentKey>(
             vals_len
         ));
     }
-    Ok(content_values)
+    Ok(accepted_keys
+        .iter()
+        .cloned()
+        .zip_eq(content_values)
+        .collect())
 }

@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
-use alloy::{consensus::Header, primitives::B256};
-use anyhow::{anyhow, ensure};
+use alloy::{hex::ToHexExt, primitives::B256};
 use ethportal_api::{
     types::execution::{
         block_body::BlockBody, header_with_proof::HeaderWithProof, receipts::Receipts,
     },
-    utils::bytes::hex_encode,
     HistoryContentKey,
 };
 use ssz::Decode;
@@ -36,98 +34,127 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
     async fn validate_content(
         &self,
         content_key: &HistoryContentKey,
-        content: &[u8],
-    ) -> anyhow::Result<ValidationResult<HistoryContentKey>> {
+        content_value: &[u8],
+    ) -> ValidationResult {
         match content_key {
             HistoryContentKey::BlockHeaderByHash(key) => {
-                let header_with_proof =
-                    HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
-                        anyhow!("Header by hash content has invalid encoding: {err:?}")
-                    })?;
-                let header_hash = header_with_proof.header.hash_slow();
-                ensure!(
-                    header_hash == B256::from(key.block_hash),
-                    "Content validation failed: Invalid header hash. Found: {header_hash:?} - Expected: {:?}",
-                    hex_encode(header_hash)
-                );
-                self.header_validator
-                    .validate_header_with_proof(&header_with_proof)
-                    .await?;
+                let Ok(header_with_proof) = HeaderWithProof::from_ssz_bytes(content_value) else {
+                    return ValidationResult::Invalid(
+                        "Header by hash content has invalid encoding".to_string(),
+                    );
+                };
 
-                Ok(ValidationResult::new(true))
+                let header_hash = header_with_proof.header.hash_slow();
+                if header_hash != B256::from(key.block_hash) {
+                    return ValidationResult::Invalid(format!(
+                        "Content validation failed: Invalid header hash. Found: {header_hash} - Expected: {:?}",
+                        key.block_hash.encode_hex_with_prefix(),
+                    ));
+                }
+
+                if let Err(err) = self
+                    .header_validator
+                    .validate_header_with_proof(&header_with_proof)
+                    .await
+                {
+                    return ValidationResult::Invalid(err.to_string());
+                }
+
+                ValidationResult::CanonicallyValid
             }
             HistoryContentKey::BlockHeaderByNumber(key) => {
-                let header_with_proof =
-                    HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
-                        anyhow!("Header by number content has invalid encoding: {err:?}")
-                    })?;
-                let header_number = header_with_proof.header.number;
-                ensure!(
-                    header_number == key.block_number,
-                    "Content validation failed: Invalid header number. Found: {header_number} - Expected: {}",
-                    key.block_number
-                );
-                self.header_validator
-                    .validate_header_with_proof(&header_with_proof)
-                    .await?;
+                let Ok(header_with_proof) = HeaderWithProof::from_ssz_bytes(content_value) else {
+                    return ValidationResult::Invalid(
+                        "Header by number content has invalid encoding".to_string(),
+                    );
+                };
 
-                Ok(ValidationResult::new(true))
+                let header_number = header_with_proof.header.number;
+                if header_number != key.block_number {
+                    return ValidationResult::Invalid(format!(
+                        "Content validation failed: Invalid header number. Found: {header_number} - Expected: {}",
+                        key.block_number
+                    ));
+                }
+
+                if let Err(err) = self
+                    .header_validator
+                    .validate_header_with_proof(&header_with_proof)
+                    .await
+                {
+                    return ValidationResult::Invalid(err.to_string());
+                }
+
+                ValidationResult::CanonicallyValid
             }
             HistoryContentKey::BlockBody(key) => {
-                let block_body = BlockBody::from_ssz_bytes(content)
-                    .map_err(|msg| anyhow!("Block Body content has invalid encoding: {:?}", msg))?;
-                let trusted_header: Header = self
+                let Ok(block_body) = BlockBody::from_ssz_bytes(content_value) else {
+                    return ValidationResult::Invalid(
+                        "Block Body content has invalid encoding".to_string(),
+                    );
+                };
+
+                let trusted_header = match self
                     .header_oracle
                     .read()
                     .await
                     .recursive_find_header_by_hash_with_proof(B256::from(key.block_hash))
-                    .await?
-                    .header;
-                let actual_uncles_root = block_body.calculate_ommers_root();
-                if actual_uncles_root != trusted_header.ommers_hash {
-                    return Err(anyhow!(
-                        "Content validation failed: Invalid uncles root. Found: {:?} - Expected: {:?}",
-                        actual_uncles_root,
-                        trusted_header.ommers_hash
-                    ));
+                    .await
+                {
+                    Ok(header_with_proof) => header_with_proof.header,
+                    Err(err) => {
+                        return ValidationResult::Invalid(format!(
+                            "Can't find header by hash. Error: {err:?}",
+                        ))
+                    }
+                };
+
+                match block_body.validate_against_header(&trusted_header) {
+                    Ok(_) => ValidationResult::CanonicallyValid,
+                    Err(err) => {
+                        ValidationResult::Invalid(format!("Error validating BlockBody: {err:?}",))
+                    }
                 }
-                let actual_txs_root = block_body.transactions_root();
-                if actual_txs_root != trusted_header.transactions_root {
-                    return Err(anyhow!(
-                        "Content validation failed: Invalid transactions root. Found: {:?} - Expected: {:?}",
-                        actual_txs_root,
-                        trusted_header.transactions_root
-                    ));
-                }
-                Ok(ValidationResult::new(true))
             }
             HistoryContentKey::BlockReceipts(key) => {
-                let receipts = Receipts::from_ssz_bytes(content).map_err(|msg| {
-                    anyhow!("Block Receipts content has invalid encoding: {:?}", msg)
-                })?;
-                let trusted_header: Header = self
+                let Ok(receipts) = Receipts::from_ssz_bytes(content_value) else {
+                    return ValidationResult::Invalid(
+                        "Block Receipts content has invalid encoding".to_string(),
+                    );
+                };
+
+                let trusted_header = match self
                     .header_oracle
                     .read()
                     .await
                     .recursive_find_header_by_hash_with_proof(B256::from(key.block_hash))
-                    .await?
-                    .header;
+                    .await
+                {
+                    Ok(header_with_proof) => header_with_proof.header,
+                    Err(err) => {
+                        return ValidationResult::Invalid(format!(
+                            "Can't find header by hash. Error: {err:?}",
+                        ))
+                    }
+                };
+
                 let actual_receipts_root = receipts.root();
                 if actual_receipts_root != trusted_header.receipts_root {
-                    return Err(anyhow!(
+                    return ValidationResult::Invalid(format!(
                         "Content validation failed: Invalid receipts root. Found: {:?} - Expected: {:?}",
                         actual_receipts_root,
                         trusted_header.receipts_root
                     ));
                 }
-                Ok(ValidationResult::new(true))
+
+                ValidationResult::CanonicallyValid
             }
-            HistoryContentKey::EphemeralHeaderOffer(_) => Err(anyhow!(
-                "Validation is not implemented for EphemeralHeaderOffer yet"
-            )),
-            HistoryContentKey::EphemeralHeadersFindContent(_) => Err(anyhow!(
-                "Validation is not implemented for EphemeralHeadersFindContent yet"
-            )),
+            HistoryContentKey::EphemeralHeaderOffer(_) => ValidationResult::Invalid(
+                "Validation is not implemented for EphemeralHeaderOffer yet".to_string(),
+            ),
+            HistoryContentKey::EphemeralHeadersFindContent(_) => ValidationResult::Invalid(
+                "Validation is not implemented for EphemeralHeadersFindContent yet".to_string(),
+            ),
         }
     }
 }
@@ -163,14 +190,13 @@ mod tests {
         let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key =
             HistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash_slow());
-        chain_history_validator
+        assert!(chain_history_validator
             .validate_content(&content_key, &header_with_proof_ssz)
             .await
-            .unwrap();
+            .is_canonically_valid());
     }
 
     #[test_log::test(tokio::test)]
-    #[should_panic(expected = "Execution block proof verification failed for pre-Merge header")]
     async fn invalidate_header_by_hash_with_invalid_number() {
         let header_with_proof_ssz = get_header_with_proof_ssz();
         let mut header =
@@ -183,14 +209,17 @@ mod tests {
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash_slow());
-        chain_history_validator
-            .validate_content(&content_key, &content_value)
-            .await
-            .unwrap();
+        assert_eq!(
+            chain_history_validator
+                .validate_content(&content_key, &content_value)
+                .await,
+            ValidationResult::Invalid(
+                "Execution block proof verification failed for pre-Merge header".to_string()
+            ),
+        );
     }
 
     #[test_log::test(tokio::test)]
-    #[should_panic(expected = "Execution block proof verification failed for pre-Merge header")]
     async fn invalidate_header_by_hash_with_invalid_gaslimit() {
         let header_with_proof_ssz = get_header_with_proof_ssz();
         let mut header =
@@ -204,10 +233,15 @@ mod tests {
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash_slow());
-        chain_history_validator
-            .validate_content(&content_key, &content_value)
-            .await
-            .unwrap();
+
+        assert_eq!(
+            chain_history_validator
+                .validate_content(&content_key, &content_value)
+                .await,
+            ValidationResult::Invalid(
+                "Execution block proof verification failed for pre-Merge header".to_string()
+            ),
+        );
     }
 
     #[test_log::test(tokio::test)]
@@ -219,14 +253,13 @@ mod tests {
         let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key =
             HistoryContentKey::new_block_header_by_number(header_with_proof.header.number);
-        chain_history_validator
+        assert!(chain_history_validator
             .validate_content(&content_key, &header_with_proof_ssz)
             .await
-            .unwrap();
+            .is_canonically_valid());
     }
 
     #[test_log::test(tokio::test)]
-    #[should_panic(expected = "Execution block proof verification failed for pre-Merge header")]
     async fn invalidate_header_by_number_with_invalid_number() {
         let header_with_proof_ssz = get_header_with_proof_ssz();
         let mut header =
@@ -239,14 +272,17 @@ mod tests {
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key = HistoryContentKey::new_block_header_by_number(header.header.number);
-        chain_history_validator
-            .validate_content(&content_key, &content_value)
-            .await
-            .unwrap();
+        assert_eq!(
+            chain_history_validator
+                .validate_content(&content_key, &content_value)
+                .await,
+            ValidationResult::Invalid(
+                "Execution block proof verification failed for pre-Merge header".to_string()
+            ),
+        );
     }
 
     #[test_log::test(tokio::test)]
-    #[should_panic(expected = "Execution block proof verification failed for pre-Merge header")]
     async fn invalidate_header_by_number_with_invalid_gaslimit() {
         let header_with_proof_ssz: Vec<u8> = get_header_with_proof_ssz();
         let mut header =
@@ -260,10 +296,14 @@ mod tests {
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator::new(header_oracle);
         let content_key = HistoryContentKey::new_block_header_by_number(header.header.number);
-        chain_history_validator
-            .validate_content(&content_key, &content_value)
-            .await
-            .unwrap();
+        assert_eq!(
+            chain_history_validator
+                .validate_content(&content_key, &content_value)
+                .await,
+            ValidationResult::Invalid(
+                "Execution block proof verification failed for pre-Merge header".to_string()
+            ),
+        );
     }
 
     fn default_header_oracle() -> Arc<RwLock<HeaderOracle>> {
