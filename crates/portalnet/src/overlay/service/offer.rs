@@ -120,15 +120,11 @@ impl<
 
         for (i, key) in content_keys.iter().enumerate() {
             // Accept content if within radius and not already present in the data store.
-            let accept = self
-                .store
-                .lock()
-                .is_key_within_radius_and_unavailable(key)
-                .map_err(|err| {
-                    OverlayRequestError::AcceptError(format!(
-                        "Unable to check content availability {err}"
-                    ))
-                })?;
+            let accept = self.store.lock().should_we_store(key).map_err(|err| {
+                OverlayRequestError::AcceptError(format!(
+                    "Unable to check content availability {err}"
+                ))
+            })?;
             let accept_code = match accept {
                 ShouldWeStoreContent::Store => {
                     // accept all keys that are successfully added to the queue
@@ -558,45 +554,23 @@ impl<
             .await;
         utp_processing
             .metrics
-            .report_validation(validation_result.is_ok());
+            .report_validation(validation_result.is_valid());
 
-        let validation_result = match validation_result {
-            Ok(validation_result) => validation_result,
-            Err(err) => {
-                // Skip storing & propagating content if it's not valid
-                warn!(
-                    error = %err,
-                    content.key = %key.to_hex(),
-                    "Error validating accepted content"
-                );
-                return None;
-            }
-        };
-
-        if !validation_result.valid_for_storing {
-            // Content received via Offer/Accept should be valid for storing.
-            // If it isn't, don't store it and don't propagate it.
+        if !validation_result.is_canonically_valid() {
             warn!(
                 content.key = %key.to_hex(),
-                "Error validating accepted content - not valid for storing"
+                ?validation_result,
+                "Error validating accepted content",
             );
             return None;
         }
 
         // Collect all content to propagate
         let mut content_to_propagate = vec![(key.clone(), content_value.clone())];
-        if let Some(additional_content_to_propagate) =
-            validation_result.additional_content_to_propagate
-        {
-            content_to_propagate.push(additional_content_to_propagate);
-        }
 
         // Check if data should be stored, and store if it is within our radius and not
         // already stored.
-        let key_desired = utp_processing
-            .store
-            .lock()
-            .is_key_within_radius_and_unavailable(&key);
+        let key_desired = utp_processing.store.lock().should_we_store(&key);
         match key_desired {
             Ok(ShouldWeStoreContent::Store) => {
                 match utp_processing.store.lock().put(key.clone(), &content_value) {

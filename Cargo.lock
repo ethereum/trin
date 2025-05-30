@@ -8518,6 +8518,7 @@ dependencies = [
  "ethereum_ssz",
  "ethereum_ssz_derive",
  "ethportal-api",
+ "futures",
  "lazy_static",
  "parking_lot 0.12.3",
  "quickcheck",

@@ -196,7 +196,7 @@ impl ContentStore for BeaconStorage {
     }
 
     /// The "radius" concept is not applicable for Beacon network
-    fn is_key_within_radius_and_unavailable(
+    fn should_we_store(
         &self,
         key: &BeaconContentKey,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
@@ -836,21 +836,21 @@ mod test {
         assert_eq!(result, value.as_ssz_bytes());
 
         // Test is_key_within_radius_and_unavailable for the same finalized slot
-        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        let should_store_content = storage.should_we_store(&key).unwrap();
         assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
 
         // Test is_key_within_radius_and_unavailable for older finalized slot
         let key = BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
             finalized_slot: finalized_slot - 1,
         });
-        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        let should_store_content = storage.should_we_store(&key).unwrap();
         assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
 
         // Test is_key_within_radius_and_unavailable for newer finalized slot
         let key = BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
             finalized_slot: finalized_slot + 1,
         });
-        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        let should_store_content = storage.should_we_store(&key).unwrap();
         assert_eq!(should_store_content, ShouldWeStoreContent::Store);
 
         // Test getting the latest finality update
@@ -875,21 +875,21 @@ mod test {
         assert_eq!(result, value.as_ssz_bytes());
 
         // Test is_key_within_radius_and_unavailable for the same signature slot
-        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        let should_store_content = storage.should_we_store(&key).unwrap();
         assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
 
         // Test is_key_within_radius_and_unavailable for older signature slot
         let key = BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
             signature_slot: signature_slot - 1,
         });
-        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        let should_store_content = storage.should_we_store(&key).unwrap();
         assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
 
         // Test is_key_within_radius_and_unavailable for newer signature slot
         let key = BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
             signature_slot: signature_slot + 1,
         });
-        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        let should_store_content = storage.should_we_store(&key).unwrap();
         assert_eq!(should_store_content, ShouldWeStoreContent::Store);
 
         // Test getting unavailable optimistic update
@@ -927,21 +927,21 @@ mod test {
         assert_eq!(result, value.encode());
 
         // Test is_key_within_radius_and_unavailable for the same epoch
-        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        let should_store_content = storage.should_we_store(&key).unwrap();
         assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
 
         // Test is_key_within_radius_and_unavailable for older epoch
         let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
             epoch: epoch - 1,
         });
-        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        let should_store_content = storage.should_we_store(&key).unwrap();
         assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
 
         // Test is_key_within_radius_and_unavailable for newer epoch
         let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
             epoch: epoch + 1,
         });
-        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        let should_store_content = storage.should_we_store(&key).unwrap();
         assert_eq!(should_store_content, ShouldWeStoreContent::Store);
 
         // Test getting unavailable historical summaries with proof
