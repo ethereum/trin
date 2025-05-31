@@ -12,14 +12,12 @@ use ethportal_api::{
         portal_wire::{
             Accept, Content, FindContent, Offer, OfferTraceMultipleItems, Request, Response,
         },
-        protocol_versions::ProtocolVersion,
     },
     OverlayContentKey, RawContentKey, RawContentValue,
 };
-use futures::{channel::oneshot, future::join_all};
+use futures::{channel::oneshot, future::JoinAll};
 use itertools::Itertools;
 use parking_lot::Mutex;
-use tokio::task::JoinHandle;
 use tracing::{debug, enabled, error, trace, warn, Level};
 use trin_storage::{ContentStore, ShouldWeStoreContent};
 use trin_validation::validator::Validator;
@@ -194,38 +192,18 @@ impl<
             {
                 Ok(data) => data,
                 Err(err) => {
-                    debug!(%err, cid.send, cid.recv, peer = ?peer_client, content_keys = ?content_keys_string, "unable to complete uTP transfer");
-                    // Spawn a fallback FINDCONTENT task for each content key
-                    // in a payload that failed to be received.
-                    //
-                    // We spawn these additional fallback FINDCONTENT tasks using
-                    // the same semaphore permit that was initially acquired for
-                    // the ACCEPT utp stream.
-                    let handles: Vec<JoinHandle<_>> = content_keys
-                        .into_iter()
-                        .map(|content_key| {
-                            let utp_processing = utp_processing.clone();
-                            tokio::spawn(async move {
-                                // We don't really care about the result from these fallbacks.
-                                // If the fallback FINDCONTENT task fails, that's fine for now.
-                                // In the future, we might want to cycle through all available
-                                // fallback peers on an error.
-                                if let Err(err) = Self::fallback_find_content(
-                                    content_key.clone(),
-                                    utp_processing,
-                                    protocol_version
-                                )
-                                .await {
-                                    debug!(
-                                        %err,
-                                        ?content_key,
-                                        "Fallback FINDCONTENT task failed, after uTP transfer failed",
-                                    );
-                                }
-                            })
-                        })
-                        .collect();
-                    let _ = join_all(handles).await;
+                    debug!(
+                        %err,
+                        cid.send,
+                        cid.recv,
+                        peer = ?peer_client,
+                        accepted_keys = ?accepted_keys_string,
+                        "unable to complete uTP transfer",
+                    );
+
+                    // Try to fetch accepted content keys
+                    Self::fallback_find_content(accepted_keys, &utp_processing).await;
+
                     permit.drop();
                     return;
                 }
@@ -234,29 +212,11 @@ impl<
             let content_items = match decode_payload(&accepted_keys, data) {
                 Ok(content_values) => content_values,
                 Err(err) => {
-                    // Spawn fallback FINDCONTENT tasks for each content key that was accepted.
-                    debug!(%err, ?accepted_keys_string, "Decoding and validating content payload failed");
-                    let handles: Vec<JoinHandle<_>> = accepted_keys
-                        .into_iter()
-                        .map(|content_key| {
-                            let utp_processing = utp_processing.clone();
-                            tokio::spawn(async move {
-                                if let Err(err) = Self::fallback_find_content(
-                                    content_key.clone(),
-                                    utp_processing,
-                                    protocol_version
-                                )
-                                .await {
-                                    debug!(
-                                        %err,
-                                        ?content_key,
-                                        "Fallback FINDCONTENT task failed, decoding and validating content payload failed",
-                                    );
-                                }
-                            })
-                        })
-                        .collect();
-                    let _ = join_all(handles).await;
+                    debug!(%err, ?accepted_keys_string, "Decoding content payload failed");
+
+                    // Try to fetch accepted content keys
+                    Self::fallback_find_content(accepted_keys, &utp_processing).await;
+
                     permit.drop();
                     return;
                 }
@@ -265,34 +225,25 @@ impl<
             let validated_content =
                 Self::validate_content(content_items, utp_processing.clone()).await;
 
-            let content_to_propagate = validated_content
-                .into_iter()
-                .flat_map(|(key, value, valid)| {
-                    if valid {
-                        utp_processing.accept_queue.write().remove_key(&key);
-                        Self::store_content(
-                            &key,
-                            value,
-                            utp_processing.clone(),
-                        )
-                    } else {
-                        // Spawn a fallback FINDCONTENT task for each content key that failed
-                        // validation
-                        let utp_processing = utp_processing.clone();
-                        tokio::spawn(async move {
-                            if let Err(err) = Self::fallback_find_content(
-                                key.clone(),
-                                utp_processing,
-                                protocol_version
-                            )
-                            .await {
-                                debug!(%err, ?key, "Fallback FINDCONTENT task failed, after validating and storing content failed");
-                            }
-                        });
-                        vec![]
-                    }
-                })
-                .collect::<Vec<_>>();
+            let mut content_to_propagate = vec![];
+            let mut failed_content_keys = vec![];
+
+            for (key, value, valid) in validated_content {
+                if valid {
+                    utp_processing.accept_queue.write().remove_key(&key);
+                    content_to_propagate.extend(Self::store_content(
+                        &key,
+                        value,
+                        utp_processing.clone(),
+                    ))
+                } else {
+                    failed_content_keys.push(key);
+                }
+            }
+
+            // Try to fetch content keys that failed validation
+            Self::fallback_find_content(failed_content_keys, &utp_processing).await;
+
             propagate_put_content_cross_thread::<_, TMetric>(
                 content_to_propagate,
                 &utp_processing.kbuckets,
@@ -440,13 +391,63 @@ impl<
         Ok(())
     }
 
-    /// Attempts to send a single FINDCONTENT request to a fallback peer,
-    /// if found in the accept queue. Then validate, store & propagate the content.
+    /// Attempts to find content that was accepted but not received.
+    ///
+    /// Sometimes, while in the process of receiving the content for an accepted offer, we receive
+    /// other offers for the same content key from other peers, which we reject. If accepted offer
+    /// ends up failing for some reason (e.g. utp, decoding or validation error), we can ask one of
+    /// the peers that we previously rejected and fetch the content from them.
+    ///
+    /// This function is used to fetch such content. For each content key, it spawns async task
+    /// that calls [Self::single_fallback_find_content].
+    ///
+    /// The caller should ensure that they are holding the inbound semaphore permit until this
+    /// function finishes.
     async fn fallback_find_content(
+        content_keys: impl IntoIterator<Item = TContentKey>,
+        utp_processing: &UtpProcessing<TValidator, TStore, TContentKey>,
+    ) {
+        content_keys
+            .into_iter()
+            .map(|content_key| {
+                let utp_processing = utp_processing.clone();
+                tokio::spawn(async move {
+                    // We don't really care about the result from these fallbacks.
+                    // If the fallback FINDCONTENT task fails, that's fine for now.
+                    // In the future, we might want to cycle through all available
+                    // fallback peers on an error.
+                    if let Err(err) = Self::single_fallback_find_content(
+                        content_key.clone(),
+                        utp_processing.clone(),
+                    )
+                    .await
+                    {
+                        debug!(%err, ?content_key, "Fallback FINDCONTENT task failed");
+                    }
+                })
+            })
+            .collect::<JoinAll<_>>()
+            .await;
+    }
+
+    /// Attempts to find content that was accepted but not received.
+    ///
+    /// See [Self::fallback_find_content] for more context.
+    ///
+    /// Sends a single FINDCONTENT request to a fallback peer, if found in the accept queue. Then
+    /// validates, stores & propagates the content.
+    async fn single_fallback_find_content(
         content_key: TContentKey,
         utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
-        protocol_version: ProtocolVersion,
     ) -> anyhow::Result<()> {
+        if !content_key.affected_by_radius() {
+            debug!(
+                content_key = content_key.to_hex(),
+                "Not using fallback logic, content not affected by radius"
+            );
+            return Ok(());
+        }
+
         let fallback_peer = match utp_processing
             .accept_queue
             .write()
@@ -458,22 +459,25 @@ impl<
                 return Ok(());
             }
         };
-        let request = Request::FindContent(FindContent {
-            content_key: content_key.to_bytes(),
-        });
-        let direction = RequestDirection::Outgoing {
-            destination: fallback_peer.clone(),
+        let protocol_version = match network_spec().latest_common_protocol_version(&fallback_peer) {
+            Ok(protocol_version) => protocol_version,
+            Err(err) => {
+                bail!("Unable to get latest common protocol version: {err:?}");
+            }
         };
         let (tx, rx) = oneshot::channel();
-        utp_processing
-            .command_tx
-            .send(OverlayCommand::Request(OverlayRequest::new(
-                request,
-                direction,
-                Some(tx),
-                None,
-                None,
-            )))?;
+        let command = OverlayCommand::Request(OverlayRequest::new(
+            Request::FindContent(FindContent {
+                content_key: content_key.to_bytes(),
+            }),
+            RequestDirection::Outgoing {
+                destination: fallback_peer.clone(),
+            },
+            Some(tx),
+            /* query_id= */ None,
+            /* request_permit= */ None,
+        ));
+        utp_processing.command_tx.send(command)?;
         let content_value: RawContentValue = match rx.await? {
             Ok(Response::Content(Content::Content(content))) => content,
             Ok(Response::Content(Content::Enrs(_))) => bail!("expected content, got ENRs"),
