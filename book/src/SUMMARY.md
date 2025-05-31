@@ -11,8 +11,9 @@
     - [Requirements](users/requirements.md)
     - [Monitoring](users/monitoring.md)
     - [Problems](users/problems.md)
-    - [FAQ](users/faq.md)
-    - [All Command Line Flags](users/cli.md)
+    - [All Command Line Flags](cli/cli.md) <!-- CLI_REFERENCE START -->
+      - [`trin`](./cli/trin.md)
+    - [FAQ](users/faq.md) <!-- CLI_REFERENCE END -->
 - [Portal Concepts](concepts/README.md)
     - [Portal Network](introduction/portal_network.md)
     - [Portal vs Standard Clients](concepts/portal_vs_standard.md)
