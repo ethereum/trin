@@ -1,13 +1,17 @@
 use std::sync::Arc;
 
-use alloy::primitives::{keccak256, B256};
+use alloy::{
+    hex::ToHexExt,
+    primitives::{keccak256, B256},
+};
 use ethportal_api::{
     types::content_key::state::{
         AccountTrieNodeKey, ContractBytecodeKey, ContractStorageTrieNodeKey,
     },
-    ContentValue, StateContentKey, StateContentValue,
+    ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
 };
 use tokio::sync::RwLock;
+use tracing::debug;
 use trin_validation::{
     oracle::HeaderOracle,
     validator::{ValidationResult, Validator},
@@ -31,13 +35,15 @@ impl Validator<StateContentKey> for StateValidator {
         content_key: &StateContentKey,
         content_value: &[u8],
     ) -> ValidationResult {
-        let content_value = match StateContentValue::decode(content_key, content_value) {
-            Ok(content_value) => content_value,
-            Err(err) => {
-                return ValidationResult::Invalid(format!(
-                    "Error decoding StateContentValue: {err}"
-                ));
-            }
+        let Ok(content_value) = StateContentValue::decode(content_key, content_value) else {
+            debug!(
+                content_key = content_key.to_hex(),
+                content_value = content_value.encode_hex_with_prefix(),
+                "Error decoding StateContentValue",
+            );
+            return ValidationResult::Invalid(format!(
+                "Error decoding StateContentValue for key: {content_key:?}",
+            ));
         };
 
         let validation_result = match content_key {

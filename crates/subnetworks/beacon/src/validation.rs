@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use alloy::hex::ToHexExt;
 use anyhow::anyhow;
 use chrono::Duration;
 use ethportal_api::{
@@ -31,7 +32,7 @@ use light_client::{
 };
 use ssz::Decode;
 use tokio::sync::RwLock;
-use tracing::warn;
+use tracing::{debug, warn};
 use tree_hash::TreeHash;
 use trin_validation::{
     merkle::proof::verify_merkle_proof,
@@ -65,6 +66,10 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                 let Ok(bootstrap) =
                     ForkVersionedLightClientBootstrap::from_ssz_bytes(content_value)
                 else {
+                    debug!(
+                        content_value = content_value.encode_hex_with_prefix(),
+                        "Error decoding ForkVersionedLightClientBootstrap",
+                    );
                     return ValidationResult::Invalid(
                         "Error decoding light client bootstrap content value".to_string(),
                     );
@@ -97,6 +102,10 @@ impl Validator<BeaconContentKey> for BeaconValidator {
             BeaconContentKey::LightClientUpdatesByRange(key) => {
                 let Ok(lc_updates) = LightClientUpdatesByRange::from_ssz_bytes(content_value)
                 else {
+                    debug!(
+                        content_value = content_value.encode_hex_with_prefix(),
+                        "Error decoding LightClientUpdatesByRange",
+                    );
                     return ValidationResult::Invalid(
                         "Error decoding Light client updates content value".to_string(),
                     );
@@ -148,6 +157,10 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                 let Ok(lc_finality_update) =
                     ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(content_value)
                 else {
+                    debug!(
+                        content_value = content_value.encode_hex_with_prefix(),
+                        "Error decoding ForkVersionedLightClientFinalityUpdate",
+                    );
                     return ValidationResult::Invalid(
                         "Error decoding Light client finality update content value".to_string(),
                     );
@@ -207,6 +220,10 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                 let Ok(lc_optimistic_update) =
                     ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(content_value)
                 else {
+                    debug!(
+                        content_value = content_value.encode_hex_with_prefix(),
+                        "Error decoding ForkVersionedLightClientOptimisticUpdate",
+                    );
                     return ValidationResult::Invalid(
                         "Error decoding Light client optimistic update content value".to_string(),
                     );
@@ -308,8 +325,13 @@ impl BeaconValidator {
         key: &HistoricalSummariesWithProofKey,
     ) -> anyhow::Result<HistoricalSummariesWithProof> {
         let fork_versioned_historical_summaries =
-            ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(content)
-                .map_err(|_| anyhow!("Error decoding hisorical summaries content value"))?;
+            ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(content).map_err(|_| {
+                debug!(
+                    content_value = content.encode_hex_with_prefix(),
+                    "Error decoding ForkVersionedHistoricalSummariesWithProof",
+                );
+                anyhow!("Error decoding hisorical summaries content value")
+            })?;
 
         let historical_summaries_with_proof =
             fork_versioned_historical_summaries.historical_summaries_with_proof;

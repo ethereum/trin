@@ -9,6 +9,7 @@ use ethportal_api::{
 };
 use ssz::Decode;
 use tokio::sync::RwLock;
+use tracing::debug;
 use trin_validation::{
     header_validator::HeaderValidator,
     oracle::HeaderOracle,
@@ -64,6 +65,10 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
             }
             HistoryContentKey::BlockHeaderByNumber(key) => {
                 let Ok(header_with_proof) = HeaderWithProof::from_ssz_bytes(content_value) else {
+                    debug!(
+                        content_value = content_value.encode_hex_with_prefix(),
+                        "Error decoding HeaderWithProof",
+                    );
                     return ValidationResult::Invalid(
                         "Header by number content has invalid encoding".to_string(),
                     );
@@ -89,6 +94,10 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
             }
             HistoryContentKey::BlockBody(key) => {
                 let Ok(block_body) = BlockBody::from_ssz_bytes(content_value) else {
+                    debug!(
+                        content_value = content_value.encode_hex_with_prefix(),
+                        "Error decoding BlockBody",
+                    );
                     return ValidationResult::Invalid(
                         "Block Body content has invalid encoding".to_string(),
                     );
@@ -118,6 +127,10 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
             }
             HistoryContentKey::BlockReceipts(key) => {
                 let Ok(receipts) = Receipts::from_ssz_bytes(content_value) else {
+                    debug!(
+                        content_value = content_value.encode_hex_with_prefix(),
+                        "Error decoding Receipts",
+                    );
                     return ValidationResult::Invalid(
                         "Block Receipts content has invalid encoding".to_string(),
                     );
