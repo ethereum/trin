@@ -26,6 +26,7 @@ ethportal-api.workspace = true
 futures.workspace = true
 humanize-duration.workspace = true
 itertools.workspace = true
+lru.workspace = true
 portalnet.workspace = true
 prometheus_exporter.workspace = true
 rand.workspace = true

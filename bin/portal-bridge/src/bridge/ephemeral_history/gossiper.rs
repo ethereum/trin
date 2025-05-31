@@ -1,6 +1,3 @@
-// todo: remove once ephemeral history bridge is added
-#![allow(dead_code)]
-
 use std::{sync::Arc, time::Instant};
 
 use alloy::consensus::Header;
