@@ -34,7 +34,7 @@ impl ContentStore for HistoryStorage {
             .insert(&key, RawContentValue::copy_from_slice(value.as_ref()))
     }
 
-    fn is_key_within_radius_and_unavailable(
+    fn should_we_store(
         &self,
         key: &HistoryContentKey,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {

@@ -1,56 +1,58 @@
+use std::{fmt::Debug, future::Future};
+
 use ethportal_api::{types::content_key::overlay::IdentityContentKey, RawContentValue};
+use futures::future::JoinAll;
 
 /// The result of the content key/value validation.
-#[derive(Debug, PartialEq, Eq)]
-pub struct ValidationResult<TContentKey> {
-    /// Whether validation proved that content is canonical, in which case it's safe to store it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValidationResult {
+    /// The content is proved to be canonical, and it's safe to store it.
+    CanonicallyValid,
+    /// The content value is proven to match content key, but it's not proven that it's canonical.
     ///
-    /// Content obtained via Offer/Accept should always be provable, but that's not always the case
-    /// for content obtained via Find/Found Content (e.g.for the state network, we can verify that
-    /// content-value corresponds to the content-key, but not that it's canonical).
-    pub valid_for_storing: bool,
-
-    /// The optional content key/value pair to be propagated (together with original content
-    /// key/value). This is used for Recursive Gossip in the state network (see [specs](
-    /// https://github.com/ethereum/portal-network-specs/blob/04cc360179aeda179e0b1cac6fea900a74e87f2b/state-network.md#gossip
-    /// ) for details.).
-    pub additional_content_to_propagate: Option<(TContentKey, RawContentValue)>,
+    /// This type of content is not safe for storing, but it is safe to return as a result of Find
+    /// Content request.
+    Valid,
+    /// Content is invalid or validation failed for some other reason.
+    Invalid(String),
 }
 
-impl<TContentKey> ValidationResult<TContentKey> {
-    pub fn new(valid_for_storing: bool) -> Self {
-        Self {
-            valid_for_storing,
-            additional_content_to_propagate: None,
-        }
+impl ValidationResult {
+    /// Returns `true` if content is [ValidationResult::CanonicallyValid].
+    pub fn is_canonically_valid(&self) -> bool {
+        self == &Self::CanonicallyValid
     }
 
-    pub fn new_with_additional_content_to_propagate(
-        additional_content_key: TContentKey,
-        additional_content_value: RawContentValue,
-    ) -> Self {
-        Self {
-            valid_for_storing: true,
-            additional_content_to_propagate: Some((
-                additional_content_key,
-                additional_content_value,
-            )),
-        }
+    /// Returns `true` if content is [ValidationResult::CanonicallyValid] or
+    /// [ValidationResult::Valid].
+    ///
+    /// See [ValidationResult] for details.
+    pub fn is_valid(&self) -> bool {
+        matches!(self, Self::CanonicallyValid | Self::Valid)
     }
 }
 
 /// Used by all overlay-network Validators to validate content in the overlay service.
-pub trait Validator<TContentKey: Send> {
-    /// The `Ok` indicates that `content` corresponds to the `content_key`, but not necessarily
-    /// that content is canonical. See `ValidationResult` for details.
-    ///
-    /// The `Err` indicates that either content is not valid or that validation failed for some
-    /// other reason.
+pub trait Validator<TContentKey> {
+    /// Validates the provided content key/value pair.
     fn validate_content(
         &self,
         content_key: &TContentKey,
-        content: &[u8],
-    ) -> impl std::future::Future<Output = anyhow::Result<ValidationResult<TContentKey>>> + Send;
+        content_value: &[u8],
+    ) -> impl Future<Output = ValidationResult> + Send;
+
+    /// Validates multiple content key/value pairs.
+    ///
+    /// The default implementation calls `self.validate_content(key, value)` for each content pair.
+    fn validate_content_batch(
+        &self,
+        content: &[(TContentKey, RawContentValue)],
+    ) -> impl Future<Output = Vec<ValidationResult>> + Send {
+        content
+            .iter()
+            .map(|(content_key, content_value)| self.validate_content(content_key, content_value))
+            .collect::<JoinAll<_>>()
+    }
 }
 
 /// For use in tests where no validation needs to be performed.
@@ -60,8 +62,8 @@ impl Validator<IdentityContentKey> for MockValidator {
     async fn validate_content(
         &self,
         _content_key: &IdentityContentKey,
-        _content: &[u8],
-    ) -> anyhow::Result<ValidationResult<IdentityContentKey>> {
-        Ok(ValidationResult::new(true))
+        _content_value: &[u8],
+    ) -> ValidationResult {
+        ValidationResult::CanonicallyValid
     }
 }

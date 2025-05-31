@@ -227,11 +227,7 @@ impl<
         content_key: TContentKey,
         content_value: RawContentValue,
     ) -> PutContentInfo {
-        let should_we_store = match self
-            .store
-            .lock()
-            .is_key_within_radius_and_unavailable(&content_key)
-        {
+        let should_we_store = match self.store.lock().should_we_store(&content_key) {
             Ok(should_we_store) => matches!(should_we_store, ShouldWeStoreContent::Store),
             Err(err) => {
                 warn!(
@@ -492,12 +488,14 @@ impl<
             Ok(Response::Content(found_content)) => {
                 match found_content {
                     Content::Content(content) => {
-                        match self.validate_content(&content_key, &content).await {
-                            Ok(_) => Ok((Content::Content(content), false)),
-                            Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
-                                "Network: {:?}, Reason: {msg:?}",
+                        let validation_result = self.validate_content(&content_key, &content).await;
+                        if validation_result.is_valid() {
+                            Ok((Content::Content(content), false))
+                        } else {
+                            Err(OverlayRequestError::FailedValidation(format!(
+                                "Network: {:?}, Reason: {validation_result:?}",
                                 self.protocol
-                            ))),
+                            )))
                         }
                     }
                     Content::Enrs(_) => Ok((found_content, false)),
@@ -514,12 +512,14 @@ impl<
                         };
                         let content = RawContentValue::from(bytes);
 
-                        match self.validate_content(&content_key, &content).await {
-                            Ok(_) => Ok((Content::Content(content), true)),
-                            Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
-                                "Network: {:?}, Reason: {msg:?}",
+                        let validation_result = self.validate_content(&content_key, &content).await;
+                        if validation_result.is_valid() {
+                            Ok((Content::Content(content), true))
+                        } else {
+                            Err(OverlayRequestError::FailedValidation(format!(
+                                "Network: {:?}, Reason: {validation_result:?}",
                                 self.protocol
-                            ))),
+                            )))
                         }
                     }
                 }
@@ -533,13 +533,18 @@ impl<
         &self,
         content_key: &TContentKey,
         content: &[u8],
-    ) -> anyhow::Result<ValidationResult<TContentKey>> {
+    ) -> ValidationResult {
         let validation_result = self.validator.validate_content(content_key, content).await;
-        self.metrics.report_validation(validation_result.is_ok());
 
-        validation_result.map_err(|err| {
-            anyhow!("Content validation failed for content key {content_key:?} with error: {err:?}")
-        })
+        self.metrics.report_validation(validation_result.is_valid());
+        if !validation_result.is_valid() {
+            warn!(
+                "Content validation failed for content key {}: {validation_result:?}",
+                content_key.to_bytes(),
+            )
+        }
+
+        validation_result
     }
 
     /// Initialize FindContent uTP stream with remote node

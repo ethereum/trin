@@ -1,14 +1,17 @@
 use std::sync::Arc;
 
-use alloy::primitives::{keccak256, B256};
-use anyhow::anyhow;
+use alloy::{
+    hex::ToHexExt,
+    primitives::{keccak256, B256},
+};
 use ethportal_api::{
     types::content_key::state::{
         AccountTrieNodeKey, ContractBytecodeKey, ContractStorageTrieNodeKey,
     },
-    ContentValue, StateContentKey, StateContentValue,
+    ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
 };
 use tokio::sync::RwLock;
+use tracing::debug;
 use trin_validation::{
     oracle::HeaderOracle,
     validator::{ValidationResult, Validator},
@@ -31,21 +34,33 @@ impl Validator<StateContentKey> for StateValidator {
         &self,
         content_key: &StateContentKey,
         content_value: &[u8],
-    ) -> anyhow::Result<ValidationResult<StateContentKey>> {
-        let content_value = StateContentValue::decode(content_key, content_value)
-            .map_err(|err| anyhow!("Error decoding StateContentValue: {err}"))?;
+    ) -> ValidationResult {
+        let Ok(content_value) = StateContentValue::decode(content_key, content_value) else {
+            debug!(
+                content_key = content_key.to_hex(),
+                content_value = content_value.encode_hex_with_prefix(),
+                "Error decoding StateContentValue",
+            );
+            return ValidationResult::Invalid(format!(
+                "Error decoding StateContentValue for key: {content_key:?}",
+            ));
+        };
 
-        match content_key {
+        let validation_result = match content_key {
             StateContentKey::AccountTrieNode(key) => {
-                Ok(self.validate_account_trie_node(key, content_value).await?)
+                self.validate_account_trie_node(key, content_value).await
             }
-            StateContentKey::ContractStorageTrieNode(key) => Ok(self
-                .validate_contract_storage_trie_node(key, content_value)
-                .await?),
+            StateContentKey::ContractStorageTrieNode(key) => {
+                self.validate_contract_storage_trie_node(key, content_value)
+                    .await
+            }
             StateContentKey::ContractBytecode(key) => {
-                Ok(self.validate_contract_bytecode(key, content_value).await?)
+                self.validate_contract_bytecode(key, content_value).await
             }
-        }
+        };
+        validation_result.unwrap_or_else(|err| {
+            ValidationResult::Invalid(format!("Error validating StateContentValue: {err:?}"))
+        })
     }
 }
 
@@ -54,11 +69,11 @@ impl StateValidator {
         &self,
         key: &AccountTrieNodeKey,
         value: StateContentValue,
-    ) -> Result<ValidationResult<StateContentKey>, StateValidationError> {
+    ) -> Result<ValidationResult, StateValidationError> {
         match value {
             StateContentValue::TrieNode(value) => {
                 check_node_hash(&value.node, &key.node_hash)?;
-                Ok(ValidationResult::new(/* valid_for_storing= */ false))
+                Ok(ValidationResult::Valid)
             }
             StateContentValue::AccountTrieNodeWithProof(value) => {
                 let state_root = match DISABLE_HISTORY_HEADER_CHECK {
@@ -67,7 +82,7 @@ impl StateValidator {
                 };
                 validate_node_trie_proof(state_root, key.node_hash, &key.path, &value.proof)?;
 
-                Ok(ValidationResult::new(/* valid_for_storing= */ true))
+                Ok(ValidationResult::CanonicallyValid)
             }
             _ => Err(StateValidationError::InvalidContentValueType(
                 "AccountTrieNodeKey",
@@ -79,11 +94,11 @@ impl StateValidator {
         &self,
         key: &ContractStorageTrieNodeKey,
         value: StateContentValue,
-    ) -> Result<ValidationResult<StateContentKey>, StateValidationError> {
+    ) -> Result<ValidationResult, StateValidationError> {
         match value {
             StateContentValue::TrieNode(value) => {
                 check_node_hash(&value.node, &key.node_hash)?;
-                Ok(ValidationResult::new(/* valid_for_storing= */ false))
+                Ok(ValidationResult::Valid)
             }
             StateContentValue::ContractStorageTrieNodeWithProof(value) => {
                 let state_root = match DISABLE_HISTORY_HEADER_CHECK {
@@ -99,7 +114,7 @@ impl StateValidator {
                     &value.storage_proof,
                 )?;
 
-                Ok(ValidationResult::new(/* valid_for_storing= */ true))
+                Ok(ValidationResult::CanonicallyValid)
             }
             _ => Err(StateValidationError::InvalidContentValueType(
                 "ContractStorageTrieNodeKey",
@@ -111,12 +126,12 @@ impl StateValidator {
         &self,
         key: &ContractBytecodeKey,
         value: StateContentValue,
-    ) -> Result<ValidationResult<StateContentKey>, StateValidationError> {
+    ) -> Result<ValidationResult, StateValidationError> {
         match value {
             StateContentValue::ContractBytecode(value) => {
                 let bytecode_hash = keccak256(&value.code[..]);
                 if bytecode_hash == key.code_hash {
-                    Ok(ValidationResult::new(/* valid_for_storing= */ false))
+                    Ok(ValidationResult::Valid)
                 } else {
                     Err(StateValidationError::InvalidBytecodeHash {
                         bytecode_hash,
@@ -140,7 +155,7 @@ impl StateValidator {
                 let account_state =
                     validate_account_state(state_root, &key.address_hash, &value.account_proof)?;
                 if account_state.code_hash == key.code_hash {
-                    Ok(ValidationResult::new(/* valid_for_storing= */ true))
+                    Ok(ValidationResult::CanonicallyValid)
                 } else {
                     Err(StateValidationError::InvalidBytecodeHash {
                         bytecode_hash,
@@ -235,10 +250,10 @@ mod tests {
 
             let validation_result = create_validator()
                 .validate_content(&content_key, content_value.as_ref())
-                .await?;
+                .await;
             assert_eq!(
                 validation_result,
-                ValidationResult::new(false),
+                ValidationResult::Valid,
                 "testing content_key: {}",
                 content_key.to_hex()
             );
@@ -258,11 +273,11 @@ mod tests {
             let validation_result =
                 create_validator_with_header(Header::decode(&mut header.as_ref())?)
                     .validate_content(&content_key, content_value.as_ref())
-                    .await?;
+                    .await;
 
             assert_eq!(
                 validation_result,
-                ValidationResult::new(true),
+                ValidationResult::CanonicallyValid,
                 "testing content_key: {}",
                 content_key.to_hex()
             );
@@ -280,10 +295,10 @@ mod tests {
 
             let validation_result = create_validator()
                 .validate_content(&content_key, content_value.as_ref())
-                .await?;
+                .await;
             assert_eq!(
                 validation_result,
-                ValidationResult::new(false),
+                ValidationResult::Valid,
                 "testing content_key: {}",
                 content_key.to_hex()
             );
@@ -303,11 +318,11 @@ mod tests {
             let validation_result =
                 create_validator_with_header(Header::decode(&mut header.as_ref())?)
                     .validate_content(&content_key, content_value.as_ref())
-                    .await?;
+                    .await;
 
             assert_eq!(
                 validation_result,
-                ValidationResult::new(true),
+                ValidationResult::CanonicallyValid,
                 "testing content_key: {}",
                 content_key.to_hex()
             );
@@ -325,10 +340,10 @@ mod tests {
 
             let validation_result = create_validator()
                 .validate_content(&content_key, content_value.as_ref())
-                .await?;
+                .await;
             assert_eq!(
                 validation_result,
-                ValidationResult::new(false),
+                ValidationResult::Valid,
                 "testing content_key: {}",
                 content_key.to_hex()
             );
@@ -348,10 +363,10 @@ mod tests {
             let validation_result =
                 create_validator_with_header(Header::decode(&mut header.as_ref())?)
                     .validate_content(&content_key, content_value.as_ref())
-                    .await?;
+                    .await;
             assert_eq!(
                 validation_result,
-                ValidationResult::new(true),
+                ValidationResult::CanonicallyValid,
                 "testing content_key: {}",
                 content_key.to_hex()
             );

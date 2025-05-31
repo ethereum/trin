@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy::primitives::B256;
+use alloy::hex::ToHexExt;
 use anyhow::anyhow;
 use chrono::Duration;
 use ethportal_api::{
@@ -32,7 +32,7 @@ use light_client::{
 };
 use ssz::Decode;
 use tokio::sync::RwLock;
-use tracing::warn;
+use tracing::{debug, warn};
 use tree_hash::TreeHash;
 use trin_validation::{
     merkle::proof::verify_merkle_proof,
@@ -59,17 +59,21 @@ impl Validator<BeaconContentKey> for BeaconValidator {
     async fn validate_content(
         &self,
         content_key: &BeaconContentKey,
-        content: &[u8],
-    ) -> anyhow::Result<ValidationResult<BeaconContentKey>> {
+        content_value: &[u8],
+    ) -> ValidationResult {
         match content_key {
             BeaconContentKey::LightClientBootstrap(_) => {
-                let bootstrap = ForkVersionedLightClientBootstrap::from_ssz_bytes(content)
-                    .map_err(|err| {
-                        anyhow!(
-                            "Fork versioned light client bootstrap has invalid SSZ bytes: {:?}",
-                            err
-                        )
-                    })?;
+                let Ok(bootstrap) =
+                    ForkVersionedLightClientBootstrap::from_ssz_bytes(content_value)
+                else {
+                    debug!(
+                        content_value = content_value.encode_hex_with_prefix(),
+                        "Error decoding ForkVersionedLightClientBootstrap",
+                    );
+                    return ValidationResult::Invalid(
+                        "Error decoding light client bootstrap content value".to_string(),
+                    );
+                };
 
                 // Check if the light client bootstrap slot is ole than 4 months
                 let four_months = Duration::days(30 * 4);
@@ -79,9 +83,8 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                 let bootstrap_slot = bootstrap.get_slot();
 
                 if bootstrap_slot < four_months_ago_slot {
-                    return Err(anyhow!(
-                        "Light client bootstrap slot is too old: {}",
-                        bootstrap_slot
+                    return ValidationResult::Invalid(format!(
+                        "Light client bootstrap slot is too old: {bootstrap_slot}",
                     ));
                 }
 
@@ -90,24 +93,27 @@ impl Validator<BeaconContentKey> for BeaconValidator {
 
                 if let Ok(finalized_header) = finalized_header {
                     if finalized_header != bootstrap_block_header {
-                        return Err(anyhow!(
+                        return ValidationResult::Invalid(format!(
                             "Light client bootstrap header does not match the finalized header: {finalized_header:?} != {bootstrap_block_header:?}",
                         ));
                     }
                 }
             }
             BeaconContentKey::LightClientUpdatesByRange(key) => {
-                let lc_updates =
-                    LightClientUpdatesByRange::from_ssz_bytes(content).map_err(|err| {
-                        anyhow!(
-                            "Light client updates by range has invalid SSZ bytes: {:?}",
-                            err
-                        )
-                    })?;
+                let Ok(lc_updates) = LightClientUpdatesByRange::from_ssz_bytes(content_value)
+                else {
+                    debug!(
+                        content_value = content_value.encode_hex_with_prefix(),
+                        "Error decoding LightClientUpdatesByRange",
+                    );
+                    return ValidationResult::Invalid(
+                        "Error decoding Light client updates content value".to_string(),
+                    );
+                };
 
                 // Check if lc updates count match the content key count
                 if lc_updates.0.len() as u64 != key.count {
-                    return Err(anyhow!(
+                    return ValidationResult::Invalid(format!(
                         "Light client updates count does not match the content key count: {} != {}",
                         lc_updates.0.len(),
                         key.count
@@ -126,35 +132,43 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                         match &update.update {
                             LightClientUpdate::Electra(update) => {
                                 let generic_update: GenericUpdate = update.into();
-                                verify_generic_update(
+                                if let Err(err) = verify_generic_update(
                                     &light_client_store,
                                     &generic_update,
                                     expected_slot,
                                     self.light_client_config.chain.genesis_root,
                                     self.light_client_config.forks.electra.fork_version,
-                                )?;
+                                ) {
+                                    return ValidationResult::Invalid(format!(
+                                        "Light client update not valid: {err:?}",
+                                    ));
+                                }
                             }
                             _ => {
-                                return Err(anyhow!("Unsupported light client update fork version"))
+                                return ValidationResult::Invalid(
+                                    "Unsupported light client update fork version".to_string(),
+                                );
                             }
                         }
                     }
                 }
             }
             BeaconContentKey::LightClientFinalityUpdate(key) => {
-                let lc_finality_update = ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(
-                    content,
-                )
-                .map_err(|err| {
-                    anyhow!(
-                        "Fork versioned light client finality update has invalid SSZ bytes: {:?}",
-                        err
-                    )
-                })?;
+                let Ok(lc_finality_update) =
+                    ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(content_value)
+                else {
+                    debug!(
+                        content_value = content_value.encode_hex_with_prefix(),
+                        "Error decoding ForkVersionedLightClientFinalityUpdate",
+                    );
+                    return ValidationResult::Invalid(
+                        "Error decoding Light client finality update content value".to_string(),
+                    );
+                };
 
                 // Check if the light client finality update is from the recent fork
                 if lc_finality_update.fork_name != ForkName::Electra {
-                    return Err(anyhow!(
+                    return ValidationResult::Invalid(format!(
                         "Light client finality update is not from the recent fork. Expected Electra, got {}",
                         lc_finality_update.fork_name
                     ));
@@ -165,7 +179,7 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                 let finalized_slot = lc_finality_update.get_finalized_slot();
 
                 if key.finalized_slot > finalized_slot {
-                    return Err(anyhow!(
+                    return ValidationResult::Invalid(format!(
                         "Light client finality update finalized slot should be equal or greater than content key finalized slot: {} < {}",
                         finalized_slot,
                         key.finalized_slot
@@ -182,36 +196,42 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                             .await
                         {
                             let generic_update: GenericUpdate = update.into();
-                            verify_generic_update(
+                            if let Err(err) = verify_generic_update(
                                 &light_client_store,
                                 &generic_update,
                                 expected_current_slot(),
                                 self.light_client_config.chain.genesis_root,
                                 self.light_client_config.forks.electra.fork_version,
-                            )?;
+                            ) {
+                                return ValidationResult::Invalid(format!(
+                                    "Light client finality update not valid: {err:?}",
+                                ));
+                            }
                         }
                     }
                     _ => {
-                        return Err(anyhow!(
-                            "Unsupported light client finality update fork version"
-                        ))
+                        return ValidationResult::Invalid(
+                            "Unsupported light client finality update fork version".to_string(),
+                        );
                     }
                 }
             }
             BeaconContentKey::LightClientOptimisticUpdate(key) => {
-                let lc_optimistic_update =
-                    ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(content).map_err(
-                        |err| {
-                            anyhow!(
-                        "Fork versioned light client optimistic update has invalid SSZ bytes: {:?}",
-                        err
-                    )
-                        },
-                    )?;
+                let Ok(lc_optimistic_update) =
+                    ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(content_value)
+                else {
+                    debug!(
+                        content_value = content_value.encode_hex_with_prefix(),
+                        "Error decoding ForkVersionedLightClientOptimisticUpdate",
+                    );
+                    return ValidationResult::Invalid(
+                        "Error decoding Light client optimistic update content value".to_string(),
+                    );
+                };
 
                 // Check if the light client optimistic update is from the recent fork
                 if lc_optimistic_update.fork_name != ForkName::Electra {
-                    return Err(anyhow!(
+                    return ValidationResult::Invalid(format!(
                         "Light client optimistic update is not from the recent fork. Expected Electra, got {}",
                         lc_optimistic_update.fork_name
                     ));
@@ -220,7 +240,7 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                 // Check if key signature slot matches the light client optimistic update signature
                 // slot
                 if &key.signature_slot != lc_optimistic_update.update.signature_slot() {
-                    return Err(anyhow!(
+                    return ValidationResult::Invalid(format!(
                         "Light client optimistic update signature slot does not match the content key signature slot: {} != {}",
                         lc_optimistic_update.update.signature_slot(),
                         key.signature_slot
@@ -238,25 +258,32 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                         {
                             let generic_update: GenericUpdate = update.into();
 
-                            verify_generic_update(
+                            if let Err(err) = verify_generic_update(
                                 &light_client_store,
                                 &generic_update,
                                 expected_current_slot(),
                                 self.light_client_config.chain.genesis_root,
                                 self.light_client_config.forks.electra.fork_version,
-                            )?;
+                            ) {
+                                return ValidationResult::Invalid(format!(
+                                    "Light client optimistic update not valid: {err:?}",
+                                ));
+                            }
                         }
                     }
                     _ => {
-                        return Err(anyhow!(
-                            "Unsupported light client optimistic update fork version"
-                        ))
+                        return ValidationResult::Invalid(
+                            "Unsupported light client optimistic update fork version".to_string(),
+                        );
                     }
                 }
             }
             BeaconContentKey::HistoricalSummariesWithProof(key) => {
                 let historical_summaries_with_proof =
-                    Self::general_summaries_validation(content, key)?;
+                    match Self::general_summaries_validation(content_value, key) {
+                        Ok(historical_summaries_with_proof) => historical_summaries_with_proof,
+                        Err(err) => return ValidationResult::Invalid(err.to_string()),
+                    };
 
                 let latest_finalized_root = self
                     .header_oracle
@@ -266,17 +293,28 @@ impl Validator<BeaconContentKey> for BeaconValidator {
                     .await;
 
                 if let Ok(latest_finalized_root) = latest_finalized_root {
-                    Self::state_summaries_validation(
-                        historical_summaries_with_proof,
+                    // Validate historical summaries against the latest finalized state root
+                    if !verify_merkle_proof(
+                        historical_summaries_with_proof
+                            .historical_summaries
+                            .tree_hash_root(),
+                        &historical_summaries_with_proof.proof,
+                        HistoricalSummariesProof::capacity(),
+                        HISTORICAL_SUMMARIES_GINDEX,
                         latest_finalized_root,
-                    )?
+                    ) {
+                        return ValidationResult::Invalid(
+                            "Merkle proof validation failed for HistoricalSummariesProof"
+                                .to_string(),
+                        );
+                    }
                 } else {
                     warn!("Failed to get latest finalized state root. Bypassing historical summaries with proof validation");
                 }
             }
         }
 
-        Ok(ValidationResult::new(true))
+        ValidationResult::CanonicallyValid
     }
 }
 
@@ -287,8 +325,12 @@ impl BeaconValidator {
         key: &HistoricalSummariesWithProofKey,
     ) -> anyhow::Result<HistoricalSummariesWithProof> {
         let fork_versioned_historical_summaries =
-            ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(content).map_err(|err| {
-                anyhow!("Historical summaries with proof has invalid SSZ bytes: {err:?}")
+            ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(content).map_err(|_| {
+                debug!(
+                    content_value = content.encode_hex_with_prefix(),
+                    "Error decoding ForkVersionedHistoricalSummariesWithProof",
+                );
+                anyhow!("Error decoding hisorical summaries content value")
             })?;
 
         let historical_summaries_with_proof =
@@ -302,33 +344,12 @@ impl BeaconValidator {
                         key.epoch
                     ));
         }
+
         Ok(historical_summaries_with_proof)
     }
-
-    /// Validate historical summaries against the latest finalized state root
-    fn state_summaries_validation(
-        historical_summaries_with_proof: HistoricalSummariesWithProof,
-        latest_finalized_root: B256,
-    ) -> anyhow::Result<()> {
-        if verify_merkle_proof(
-            historical_summaries_with_proof
-                .historical_summaries
-                .tree_hash_root(),
-            &historical_summaries_with_proof.proof,
-            HistoricalSummariesProof::capacity(),
-            HISTORICAL_SUMMARIES_GINDEX,
-            latest_finalized_root,
-        ) {
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "Merkle proof validation failed for HistoricalSummariesProof"
-            ))
-        }
-    }
 }
+
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use ethportal_api::{
         types::{
@@ -359,12 +380,10 @@ mod tests {
         let content_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
             block_hash: [0; 32],
         });
-        let result = validator
+        assert!(validator
             .validate_content(&content_key, &content)
             .await
-            .unwrap();
-
-        assert!(result.valid_for_storing);
+            .is_canonically_valid());
 
         // Expect error because the light client bootstrap slot is too old
         bootstrap
@@ -374,14 +393,9 @@ mod tests {
             .beacon
             .slot = 0;
         let content = bootstrap.as_ssz_bytes();
-        let result = validator
-            .validate_content(&content_key, &content)
-            .await
-            .unwrap_err();
-
         assert_eq!(
-            result.to_string(),
-            "Light client bootstrap slot is too old: 0"
+            validator.validate_content(&content_key, &content).await,
+            ValidationResult::Invalid("Light client bootstrap slot is too old: 0".to_string()),
         );
     }
 
@@ -396,25 +410,21 @@ mod tests {
                 start_period: 0,
                 count: 1,
             });
-        let result = validator
+        assert!(validator
             .validate_content(&content_key, &content)
             .await
-            .unwrap();
-
-        assert!(result.valid_for_storing);
+            .is_canonically_valid());
 
         let lc_update_1 = test_utils::get_light_client_update(1);
         let updates = LightClientUpdatesByRange(VariableList::from(vec![lc_update_0, lc_update_1]));
         let content = updates.as_ssz_bytes();
         // Expect error because the count does not match the content key count
-        let result = validator
-            .validate_content(&content_key, &content)
-            .await
-            .unwrap_err();
-
         assert_eq!(
-            result.to_string(),
-            "Light client updates count does not match the content key count: 2 != 1"
+            validator.validate_content(&content_key, &content).await,
+            ValidationResult::Invalid(
+                "Light client updates count does not match the content key count: 2 != 1"
+                    .to_string()
+            ),
         );
     }
 
@@ -429,12 +439,10 @@ mod tests {
                 finalized_slot: 10934316269310501102,
             });
 
-        let result = validator
+        assert!(validator
             .validate_content(&content_key, &content)
             .await
-            .unwrap();
-
-        assert!(result.valid_for_storing);
+            .is_canonically_valid());
 
         // Expect error because the content key finalized slot is greaten than the light client
         // update  finalized slot
@@ -442,14 +450,12 @@ mod tests {
             BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
                 finalized_slot: 10934316269310501102 + 1,
             });
-        let result = validator
-            .validate_content(&invalid_content_key, &content)
-            .await
-            .unwrap_err();
-
         assert_eq!(
-            result.to_string(),
-            "Light client finality update finalized slot should be equal or greater than content key finalized slot: 10934316269310501102 < 10934316269310501103"
+            validator.validate_content(&invalid_content_key, &content).await,
+            ValidationResult::Invalid(
+                "Light client finality update finalized slot should be equal or greater than content key finalized slot: 10934316269310501102 < 10934316269310501103"
+                    .to_string()
+            ),
         );
     }
 
@@ -463,49 +469,45 @@ mod tests {
             BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
                 signature_slot: 15067541596220156845,
             });
-        let result = validator
+        assert!(validator
             .validate_content(&content_key, &content)
             .await
-            .unwrap();
-
-        assert!(result.valid_for_storing);
+            .is_canonically_valid());
 
         // Expect error because the signature slot does not match the content key signature slot
         let invalid_content_key =
             BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
                 signature_slot: 0,
             });
-        let result = validator
-            .validate_content(&invalid_content_key, &content)
-            .await
-            .unwrap_err();
-
         assert_eq!(
-            result.to_string(),
-            "Light client optimistic update signature slot does not match the content key signature slot: 15067541596220156845 != 0"
+            validator.validate_content(&invalid_content_key, &content).await,
+            ValidationResult::Invalid(
+                "Light client optimistic update signature slot does not match the content key signature slot: 15067541596220156845 != 0"
+                    .to_string()
+            ),
         );
     }
 
     mod historical_summaries {
+        use alloy::primitives::B256;
+
         use super::*;
 
         #[tokio::test]
         async fn validate() {
             let test_data = read_test_data();
 
-            let validation_result = test_data
+            assert!(test_data
                 .create_validator()
                 .validate_content(
                     &test_data.content.content_key,
                     &test_data.content.raw_content_value,
                 )
                 .await
-                .expect("Should validate content");
-            assert!(validation_result.valid_for_storing);
+                .is_canonically_valid());
         }
 
         #[tokio::test]
-        #[should_panic = "Historical summaries with proof epoch does not match the content key epoch"]
         async fn validate_invalid_epoch() {
             let test_data = read_test_data();
 
@@ -515,15 +517,19 @@ mod tests {
                 key.epoch += 1;
             }
 
-            test_data
-                .create_validator()
-                .validate_content(&content_key, &test_data.content.raw_content_value)
-                .await
-                .unwrap();
+            assert_eq!(
+                test_data
+                    .create_validator()
+                    .validate_content(&content_key, &test_data.content.raw_content_value)
+                    .await,
+                ValidationResult::Invalid(
+                    "Historical summaries with proof epoch does not match the content key epoch: 450508969718611630 != 450508969718611631"
+                        .to_string()
+                ),
+            );
         }
 
         #[tokio::test]
-        #[should_panic = "Merkle proof validation failed for HistoricalSummariesProof"]
         async fn validate_invalid_proof() {
             let test_data = read_test_data();
 
@@ -539,11 +545,15 @@ mod tests {
                     .swap(0, 1);
             }
 
-            test_data
-                .create_validator()
-                .validate_content(&test_data.content.content_key, &content_value.encode())
-                .await
-                .unwrap();
+            assert_eq!(
+                test_data
+                    .create_validator()
+                    .validate_content(&test_data.content.content_key, &content_value.encode())
+                    .await,
+                ValidationResult::Invalid(
+                    "Merkle proof validation failed for HistoricalSummariesProof".to_string()
+                ),
+            );
         }
 
         fn read_test_data() -> TestData {

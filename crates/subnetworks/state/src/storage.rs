@@ -49,7 +49,7 @@ impl ContentStore for StateStorage {
         }
     }
 
-    fn is_key_within_radius_and_unavailable(
+    fn should_we_store(
         &self,
         key: &StateContentKey,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
