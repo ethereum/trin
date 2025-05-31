@@ -1,15 +1,19 @@
 mod ephemeral_bundle;
 mod gossiper;
 
-use std::{collections::BTreeMap, num::NonZero, sync::Arc};
+use std::{
+    collections::{btree_map::Entry, BTreeMap},
+    num::NonZero,
+    sync::Arc,
+};
 
 use alloy::rpc::types::beacon::events::{
     BeaconNodeEventTopic, FinalizedCheckpointEvent, HeadEvent, LightClientOptimisticUpdateEvent,
 };
-use anyhow::{anyhow, bail};
+use anyhow::{bail, ensure};
 use ephemeral_bundle::EphemeralBundle;
 use ethereum_rpc_client::{
-    consensus::{event::BeaconEvent, ConsensusApi},
+    consensus::{event::BeaconEvent, first_slot_in_a_period, ConsensusApi},
     execution::ExecutionApi,
 };
 use ethportal_api::{
@@ -40,10 +44,6 @@ use crate::census::Census;
 const TOTAL_BUFFER_COUNT: u64 = 1 + 4 + 8;
 
 pub struct EphemeralHistoryBridge {
-    /// Gossips the content.
-    ///
-    /// Creates tasks responsible to gossiping the content, but gossip rate is limited with
-    /// [Gossiper::offer_semaphore].
     gossiper: Gossiper,
     consensus_api: ConsensusApi,
     execution_api: ExecutionApi,
@@ -74,8 +74,7 @@ impl EphemeralHistoryBridge {
             consensus_api,
             execution_api,
             beacon_blocks: BTreeMap::new(),
-            // We use a cache of 2x SLOTS_PER_EPOCH to ensure we have enough space for the for the
-            // receipts
+            // We use a cache of 2x SLOTS_PER_EPOCH to ensure we have enough space for the receipts
             receipts: LruCache::new(
                 NonZero::new(SLOTS_PER_EPOCH as usize * 2).expect("Should be non-zero"),
             ),
@@ -100,14 +99,21 @@ impl EphemeralHistoryBridge {
         while let Some(event) = stream.next().await {
             match event {
                 BeaconEvent::Head(head_event) => {
-                    info!("Received head: {head_event:?}");
+                    info!(block_root = ?head_event.block, "Received head");
 
                     if let Err(err) = self.process_head(head_event).await {
                         error!("Failed to process head: {err:?}");
                     }
                 }
                 BeaconEvent::LightClientOptimisticUpdate(light_client_optimistic_update_event) => {
-                    info!("Received light client optimistic update: {light_client_optimistic_update_event:?}");
+                    info!(
+                        slot = ?light_client_optimistic_update_event
+                            .data
+                            .attested_header
+                            .beacon
+                            .slot,
+                        "Received light client optimistic update"
+                    );
 
                     if let Err(err) = self.process_light_client_optimistic_update(
                         light_client_optimistic_update_event,
@@ -116,7 +122,10 @@ impl EphemeralHistoryBridge {
                     }
                 }
                 BeaconEvent::FinalizedCheckpoint(finalized_checkpoint_event) => {
-                    info!("Received finalized checkpoint: {finalized_checkpoint_event:?}");
+                    info!(
+                        block_root = ?finalized_checkpoint_event.block,
+                        "Received finalized checkpoint"
+                    );
 
                     if let Err(err) = self.process_finalized_checkpoint(finalized_checkpoint_event)
                     {
@@ -131,11 +140,8 @@ impl EphemeralHistoryBridge {
     async fn process_head(&mut self, head_event: HeadEvent) -> anyhow::Result<()> {
         let mut next_root = head_event.block;
         for _ in 0..TOTAL_BUFFER_COUNT {
-            if let Some(parent_root) = self.check_or_download_block(next_root).await? {
-                next_root = parent_root;
-            } else {
-                break;
-            }
+            let beacon_block = self.get_or_download_beacon_block(next_root).await?;
+            next_root = beacon_block.parent_root;
         }
 
         Ok(())
@@ -178,8 +184,6 @@ impl EphemeralHistoryBridge {
             return Ok(None);
         }
 
-        let mut blocks = vec![];
-
         // The finalized period proves the last 8192 slots, it can't be proven until the next
         // cycle
         let Some(beacon_block) = self.beacon_blocks.get(&finalized_checkpoint_event.block) else {
@@ -189,13 +193,22 @@ impl EphemeralHistoryBridge {
             );
         };
 
+        let mut blocks = vec![];
         let mut last_block_root = beacon_block.parent_root;
+        let first_slot_in_period =
+            first_slot_in_a_period((finalized_checkpoint_event.epoch - 1) * SLOTS_PER_EPOCH);
         while let Some(beacon_block) = self.beacon_blocks.remove(&last_block_root) {
             last_block_root = beacon_block.parent_root;
+            let slot = first_slot_in_a_period(beacon_block.slot);
+            ensure!(
+                slot == first_slot_in_period,
+                "Beacon block slot does not match the expected period: {slot:?} != {first_slot_in_period:?}",
+            );
             blocks.push(beacon_block);
         }
 
-        // Flush all re-organized blocks, which would have been missed above
+        // Delete all blocks that are older than finalized epoch.
+        // This can happen if there was chain reorg (and maybe in some other unexpected situations).
         self.beacon_blocks
             .retain(|_, block| block.slot >= finalized_checkpoint_event.epoch * SLOTS_PER_EPOCH);
 
@@ -212,53 +225,60 @@ impl EphemeralHistoryBridge {
         })))
     }
 
-    /// Checks if the block is already downloaded, and if not, downloads it and its receipts, if we
-    /// downloaded a block we return the parent root of the block.
-    async fn check_or_download_block(
+    /// Return the [BeaconBlock] for a given beacon block root.
+    ///
+    /// If beacon block is not already in `self.beacon_blocks`, it downloads it and puts it there.
+    async fn get_or_download_beacon_block(
         &mut self,
         beacon_block_root: B256,
-    ) -> anyhow::Result<Option<B256>> {
-        if self.beacon_blocks.contains_key(&beacon_block_root) {
-            return Ok(None);
+    ) -> anyhow::Result<&BeaconBlockElectra> {
+        match self.beacon_blocks.entry(beacon_block_root) {
+            Entry::Occupied(occupied_beacon_block) => Ok(occupied_beacon_block.into_mut()),
+            Entry::Vacant(vacant_beacon_block) => {
+                let beacon_block = self
+                    .consensus_api
+                    .get_beacon_block(beacon_block_root.to_string())
+                    .await?
+                    .message;
+
+                let receipts = self
+                    .execution_api
+                    .get_receipts(beacon_block.body.execution_payload.block_number)
+                    .await?;
+
+                self.receipts
+                    .push(beacon_block.body.execution_payload.block_number, receipts);
+                Ok(vacant_beacon_block.insert(beacon_block))
+            }
         }
-
-        let beacon_block = self
-            .consensus_api
-            .get_beacon_block(beacon_block_root.to_string())
-            .await?
-            .message;
-
-        let receipts = self
-            .execution_api
-            .get_receipts(beacon_block.body.execution_payload.block_number)
-            .await?;
-
-        let parent_root = beacon_block.parent_root;
-        self.receipts
-            .push(beacon_block.body.execution_payload.block_number, receipts);
-        self.beacon_blocks
-            .insert(beacon_block.tree_hash_root(), beacon_block);
-        Ok(Some(parent_root))
     }
 
     fn append_next_block_to_ephemeral_bundle(
         &mut self,
         ephemeral_bundle: &mut EphemeralBundle,
     ) -> anyhow::Result<()> {
-        let beacon_block = self
+        let Some(beacon_block) = self
             .beacon_blocks
             .get(&ephemeral_bundle.next_parent_root())
-            .ok_or_else(|| {
-                anyhow!("Beacon block not found while appending next block to ephemeral bundle")
-            })?
-            .clone();
-        let receipts = self
+            .cloned()
+        else {
+            bail!(
+                "Beacon block not found for next parent root: {:?}",
+                ephemeral_bundle.next_parent_root()
+            );
+        };
+
+        let Some(receipts) = self
             .receipts
             .get(&beacon_block.body.execution_payload.block_number)
-            .ok_or_else(|| {
-                anyhow!("Receipts not found while appending next block to ephemeral bundle")
-            })?
-            .clone();
+            .cloned()
+        else {
+            bail!(
+                "Receipts not found for block number: {}",
+                beacon_block.body.execution_payload.block_number
+            );
+        };
+
         ephemeral_bundle.push_parent(beacon_block, receipts)?;
 
         Ok(())
