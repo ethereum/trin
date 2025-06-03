@@ -4,6 +4,7 @@ use redb::{Database as ReDB, Error};
 use tracing::info;
 
 /// Helper function for opening a ReDB database at the specified path.
+#[allow(clippy::result_large_err)]
 pub fn setup_redb(path: &Path) -> Result<ReDB, Error> {
     let redb_path = path.join("redb");
     info!(path = %redb_path.display(), "Setting up ReDB");
