@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use eth_trie::DB;
-
 use redb::{Database as ReDB, TableDefinition};
 
 // Define a table type: key and value are byte arrays

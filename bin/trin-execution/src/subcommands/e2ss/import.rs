@@ -13,13 +13,13 @@ use crate::{
     e2hs::manager::E2HSManager,
     evm::block_executor::BLOCKHASH_SERVE_WINDOW,
     storage::{
-        account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
+        account_db::AccountDB,
+        evm_db::{EvmDB, ACCOUNTS_TABLE, BLOCK_HASHES_TABLE, CONTRACTS_TABLE},
+        execution_position::ExecutionPosition,
         utils::setup_redb,
     },
     subcommands::e2ss::utils::percentage_from_address_hash,
 };
-
-use crate::storage::evm_db::{ACCOUNTS_TABLE, BLOCK_HASHES_TABLE, CONTRACTS_TABLE};
 
 pub struct StateImporter {
     config: ImportStateConfig,
@@ -163,29 +163,19 @@ impl StateImporter {
     /// insert the last 256 block hashes into the database
     async fn import_last_256_block_hashes(&self, block_number: u64) -> anyhow::Result<()> {
         let first_block_hash_to_add = block_number.saturating_sub(BLOCKHASH_SERVE_WINDOW);
-<<<<<<< HEAD
         let mut e2hs_manager = E2HSManager::new(first_block_hash_to_add).await?;
-        while e2hs_manager.next_block_number() <= block_number {
-            let block = e2hs_manager.get_next_block().await?;
-            self.evm_db.db.put(
-                keccak256(B256::from(U256::from(block.header.number))),
-                block.header.hash_slow(),
-            )?
-=======
-        let mut era_manager = EraManager::new(first_block_hash_to_add).await?;
 
         let txn = self.evm_db.db.begin_write()?;
         {
             let mut table = txn.open_table(BLOCK_HASHES_TABLE)?;
 
-            while era_manager.next_block_number() <= block_number {
-                let block = era_manager.get_next_block().await?;
+            while e2hs_manager.next_block_number() <= block_number {
+                let block = e2hs_manager.get_next_block().await?;
                 table.insert(
                     keccak256(B256::from(U256::from(block.header.number))).as_slice(),
                     block.header.hash_slow().as_slice(),
                 )?;
             }
->>>>>>> 7c448cc7 (Replace RocksDB with Redb as backing for EVM database)
         }
         txn.commit()?;
 

@@ -22,13 +22,13 @@ use crate::{
     config::StateConfig,
     e2hs::manager::E2HSManager,
     storage::{
-        account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
+        account_db::AccountDB,
+        evm_db::{EvmDB, CONTRACTS_TABLE},
+        execution_position::ExecutionPosition,
         utils::setup_redb,
     },
     subcommands::e2ss::utils::percentage_from_address_hash,
 };
-
-use crate::storage::evm_db::CONTRACTS_TABLE;
 
 pub struct StateExporter {
     config: ExportStateConfig,
