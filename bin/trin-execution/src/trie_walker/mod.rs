@@ -182,15 +182,15 @@ mod tests {
     use crate::{
         config::StateConfig,
         execution::TrinExecution,
-        storage::{trie_db::TrieRocksDB, utils::setup_rocksdb},
+        storage::{trie_db::TrieReDB, utils::setup_redb},
         utils::full_nibble_path_to_address_hash,
     };
 
     #[tokio::test]
     async fn test_state_walker() {
         let temp_directory = create_temp_test_dir().unwrap();
-        let db = Arc::new(setup_rocksdb(temp_directory.path()).unwrap());
-        let mut trie = EthTrie::new(Arc::new(TrieRocksDB::new(false, db.clone())));
+        let db = Arc::new(setup_redb(temp_directory.path()).unwrap());
+        let mut trie = EthTrie::new(Arc::new(TrieReDB::new(false, db.clone())));
 
         for i in 1..=18 {
             trie.insert(

@@ -23,10 +23,12 @@ use crate::{
     e2hs::manager::E2HSManager,
     storage::{
         account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
-        utils::setup_rocksdb,
+        utils::setup_redb
     },
     subcommands::e2ss::utils::percentage_from_address_hash,
 };
+
+use crate::storage::evm_db::CONTRACTS_TABLE;
 
 pub struct StateExporter {
     config: ExportStateConfig,
@@ -36,9 +38,9 @@ pub struct StateExporter {
 
 impl StateExporter {
     pub async fn new(config: ExportStateConfig, data_dir: &Path) -> anyhow::Result<Self> {
-        let rocks_db = Arc::new(setup_rocksdb(data_dir)?);
+        let red_db = Arc::new(setup_redb(data_dir)?);
 
-        let execution_position = ExecutionPosition::initialize_from_db(rocks_db.clone())?;
+        let execution_position = ExecutionPosition::initialize_from_db(red_db.clone())?;
         ensure!(
             execution_position.next_block_number() > 0,
             "Trin execution not initialized!"
@@ -53,7 +55,7 @@ impl StateExporter {
             .header
             .clone();
 
-        let evm_db = EvmDB::new(StateConfig::default(), rocks_db, &execution_position)
+        let evm_db = EvmDB::new(StateConfig::default(), red_db, &execution_position)
             .expect("Failed to create EVM database");
         ensure!(
             evm_db.trie.lock().root_hash()? == header.state_root,
@@ -82,9 +84,10 @@ impl StateExporter {
 
             let account_state = AccountState::decode(&mut account_state.as_slice())?;
             let bytecode = if account_state.code_hash != KECCAK_EMPTY {
-                self.evm_db
-                    .db
-                    .get(account_state.code_hash)?
+                let txn = self.evm_db.db.begin_read()?;
+                let table = txn.open_table(CONTRACTS_TABLE)?;
+                table.get(account_state.code_hash.as_slice())?
+                    .map(|val| val.value().to_vec())
                     .expect("If code hash is not empty, code must be present")
             } else {
                 vec![]
@@ -92,7 +95,7 @@ impl StateExporter {
 
             let mut storage: Vec<StorageItem> = vec![];
             if account_state.storage_root != EMPTY_ROOT_HASH {
-                let account_db = AccountDB::new(account_hash, self.evm_db.db.clone());
+                let account_db = AccountDB::new(account_hash, self.evm_db.db.clone())?;
                 let account_trie = Arc::new(Mutex::new(EthTrie::from(
                     Arc::new(account_db),
                     account_state.storage_root,

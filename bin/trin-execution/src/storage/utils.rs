@@ -1,24 +1,19 @@
 use std::path::Path;
 
-use rocksdb::{Options, DB as RocksDB};
+use redb::{Database as ReDB, Error};
 use tracing::info;
 
-/// Helper function for opening a RocksDB connection for the radius-constrained db.
-pub fn setup_rocksdb(path: &Path) -> anyhow::Result<RocksDB> {
-    let rocksdb_path = path.join("rocksdb");
-    info!(path = %rocksdb_path.display(), "Setting up RocksDB");
 
-    let cache_size = 1024 * 1024 * 1024; // 1GB
+/// Helper function for opening a ReDB database at the specified path.
+pub fn setup_redb(path: &Path) -> Result<ReDB, Error> {
+    let redb_path = path.join("redb");
+    info!(path = %redb_path.display(), "Setting up ReDB");
 
-    let mut db_opts = Options::default();
-    db_opts.create_if_missing(true);
-    db_opts.set_write_buffer_size(cache_size / 4);
-    let mut factory = rocksdb::BlockBasedOptions::default();
-    factory.set_block_cache(&rocksdb::Cache::new_lru_cache(cache_size / 2));
-    db_opts.set_block_based_table_factory(&factory);
+    let db = if redb_path.exists() {
+        ReDB::open(redb_path)?
+    } else {
+        ReDB::create(redb_path)?
+    };
 
-    // Set the max number of open files to 150. MacOs has a default limit of 256 open files per
-    // process. This limit prevents issues with the OS running out of file descriptors.
-    db_opts.set_max_open_files(150);
-    Ok(RocksDB::open(&db_opts, rocksdb_path)?)
+    Ok(db)
 }
