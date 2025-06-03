@@ -102,7 +102,7 @@ impl StateImporter {
                 account_state.code_hash == keccak256(&bytecode),
                 "Code hash mismatch, .e2ss import failed"
             );
-            
+
             let db = &self.evm_db.db;
             let txn = db.begin_write()?;
 
@@ -111,14 +111,17 @@ impl StateImporter {
                 let mut contracts = txn.open_table(CONTRACTS_TABLE)?;
 
                 if !bytecode.is_empty() {
-                contracts.insert(keccak256(&bytecode).as_slice(), bytecode.as_slice())?;
+                    contracts.insert(keccak256(&bytecode).as_slice(), bytecode.as_slice())?;
                 }
 
                 // Insert account into accounts table
-                accounts.insert(address_hash.as_slice(), alloy::rlp::encode(&account_state).as_slice(),)?;
+                accounts.insert(
+                    address_hash.as_slice(),
+                    alloy::rlp::encode(&account_state).as_slice(),
+                )?;
             }
             txn.commit()?;
-        
+
             self.evm_db
                 .trie
                 .lock()
@@ -127,7 +130,12 @@ impl StateImporter {
             let txn = self.evm_db.db.begin_write()?;
             {
                 let mut accounts = txn.open_table(ACCOUNTS_TABLE)?;
-                accounts.insert(address_hash.as_slice(), alloy::rlp::encode(account_state).as_slice()).expect("Inserting account should never fail");
+                accounts
+                    .insert(
+                        address_hash.as_slice(),
+                        alloy::rlp::encode(account_state).as_slice(),
+                    )
+                    .expect("Inserting account should never fail");
             }
             txn.commit()?;
 
@@ -172,7 +180,10 @@ impl StateImporter {
 
             while era_manager.next_block_number() <= block_number {
                 let block = era_manager.get_next_block().await?;
-                table.insert(keccak256(B256::from(U256::from(block.header.number))).as_slice(), block.header.hash_slow().as_slice())?;
+                table.insert(
+                    keccak256(B256::from(U256::from(block.header.number))).as_slice(),
+                    block.header.hash_slow().as_slice(),
+                )?;
             }
 >>>>>>> 7c448cc7 (Replace RocksDB with Redb as backing for EVM database)
         }

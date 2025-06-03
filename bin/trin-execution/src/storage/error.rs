@@ -10,7 +10,7 @@ pub enum EVMError {
     RLP(#[from] alloy::rlp::Error),
 
     #[error("redb error {0}")]
-    DB(#[from] redb::Error),
+    DB(#[from] Box<redb::Error>),
 
     #[error("ethportal error {0}")]
     ANYHOW(#[from] anyhow::Error),
@@ -23,7 +23,6 @@ pub enum EVMError {
 }
 
 impl DBErrorMarker for EVMError {}
-
 
 impl From<redb::DatabaseError> for EVMError {
     fn from(err: redb::DatabaseError) -> Self {

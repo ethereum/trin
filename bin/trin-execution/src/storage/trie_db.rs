@@ -26,7 +26,7 @@ impl DB for TrieReDB {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         let txn = self.storage.begin_read()?;
         let table = txn.open_table(TABLE)?;
-       Ok(table.get(key)?.map(|val| val.value().to_vec()))
+        Ok(table.get(key)?.map(|val| val.value().to_vec()))
     }
 
     fn insert(&self, key: &[u8], value: Vec<u8>) -> Result<(), Self::Error> {

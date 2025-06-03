@@ -23,7 +23,7 @@ use crate::{
     e2hs::manager::E2HSManager,
     storage::{
         account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
-        utils::setup_redb
+        utils::setup_redb,
     },
     subcommands::e2ss::utils::percentage_from_address_hash,
 };
@@ -86,7 +86,8 @@ impl StateExporter {
             let bytecode = if account_state.code_hash != KECCAK_EMPTY {
                 let txn = self.evm_db.db.begin_read()?;
                 let table = txn.open_table(CONTRACTS_TABLE)?;
-                table.get(account_state.code_hash.as_slice())?
+                table
+                    .get(account_state.code_hash.as_slice())?
                     .map(|val| val.value().to_vec())
                     .expect("If code hash is not empty, code must be present")
             } else {

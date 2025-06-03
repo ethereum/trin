@@ -129,9 +129,9 @@ impl BlockExecutor {
             serde_json::from_str(include_str!("../../resources/genesis/mainnet.json"))?;
         let db = &self.evm.db().database.db;
         let txn = db.begin_write()?;
-            {
-                let mut table = txn.open_table(ACCOUNTS_TABLE)?;
-                for (address, alloc_balance) in genesis.alloc {
+        {
+            let mut table = txn.open_table(ACCOUNTS_TABLE)?;
+            for (address, alloc_balance) in genesis.alloc {
                 let address_hash = keccak256(address);
                 let mut account = AccountState::default();
                 account.balance += alloc_balance.balance;
@@ -142,7 +142,10 @@ impl BlockExecutor {
                     .lock()
                     .insert(address_hash.as_ref(), &alloy::rlp::encode(&account))?;
 
-                table.insert(address_hash.as_slice(), alloy::rlp::encode(account).as_slice())?;
+                table.insert(
+                    address_hash.as_slice(),
+                    alloy::rlp::encode(account).as_slice(),
+                )?;
             }
         }
         txn.commit()?;
@@ -252,7 +255,9 @@ impl BlockExecutor {
             table.insert(key.as_slice(), value.as_slice())?;
 
             if header.number >= BLOCKHASH_SERVE_WINDOW {
-                let old_key = keccak256(B256::from(U256::from(header.number - BLOCKHASH_SERVE_WINDOW)));
+                let old_key = keccak256(B256::from(U256::from(
+                    header.number - BLOCKHASH_SERVE_WINDOW,
+                )));
                 table.remove(old_key.as_slice())?;
             }
         }
