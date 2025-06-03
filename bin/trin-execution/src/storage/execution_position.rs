@@ -4,8 +4,8 @@ use alloy::{
     consensus::{Header, EMPTY_ROOT_HASH},
     rlp::{Decodable, RlpDecodable, RlpEncodable},
 };
-use revm_primitives::B256;
 use redb::{Database as ReDB, TableDefinition};
+use revm_primitives::B256;
 use serde::{Deserialize, Serialize};
 
 const TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("execution");
@@ -29,7 +29,7 @@ impl ExecutionPosition {
         let table = txn.open_table(TABLE)?;
         match table.get(EXECUTION_POSITION_DB_KEY.as_slice())? {
             Some(value) => Ok(Decodable::decode(&mut value.value().as_ref())?),
-            None => Ok(Self::default())
+            None => Ok(Self::default()),
         }
     }
 
@@ -53,14 +53,13 @@ impl ExecutionPosition {
         {
             let mut table = txn.open_table(TABLE)?;
             table.insert(
-                EXECUTION_POSITION_DB_KEY.as_slice(), 
-                &alloy::rlp::encode(self)[..]
+                EXECUTION_POSITION_DB_KEY.as_slice(),
+                &alloy::rlp::encode(self)[..],
             )?;
         }
         txn.commit()?;
         Ok(())
     }
-
 }
 
 impl Default for ExecutionPosition {

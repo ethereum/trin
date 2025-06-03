@@ -10,13 +10,13 @@ use ethportal_api::types::state_trie::account_state::AccountState;
 use hashbrown::{HashMap as BrownHashMap, HashSet};
 use parking_lot::Mutex;
 use prometheus_exporter::prometheus::HistogramTimer;
+use redb::{Database as ReDB, Table, TableDefinition};
 use revm::{
     database::{states::PlainStorageChangeset, BundleState, OriginalValuesKnown},
     state::{AccountInfo, Bytecode},
     Database, DatabaseRef,
 };
 use revm_primitives::KECCAK_EMPTY;
-use redb::{Database as ReDB, Table, TableDefinition};
 use tracing::info;
 
 use super::{account_db::AccountDB, execution_position::ExecutionPosition, trie_db::TrieReDB};
@@ -53,7 +53,7 @@ pub struct EvmDB {
     pub db: Arc<ReDB>,
     /// To get proofs and to verify trie state.
     pub trie: Arc<Mutex<EthTrie<TrieReDB>>>,
-} 
+}
 
 impl EvmDB {
     pub fn new(
@@ -61,7 +61,7 @@ impl EvmDB {
         db: Arc<ReDB>,
         execution_position: &ExecutionPosition,
     ) -> anyhow::Result<Self> {
-        // Initialize empty byte code in the database       
+        // Initialize empty byte code in the database
         let txn = db.begin_write()?;
         {
             let mut contracts_table = txn.open_table(CONTRACTS_TABLE)?;
@@ -70,7 +70,7 @@ impl EvmDB {
             contracts_table.insert(B256::ZERO.as_slice(), empty_bytecode.as_ref())?;
         }
         txn.commit()?;
-        
+
         // db.put(KECCAK_EMPTY, Bytecode::new().bytes().as_ref())?;
         // db.put(B256::ZERO, Bytecode::new().bytes().as_ref())?;
 
@@ -100,7 +100,9 @@ impl EvmDB {
         let mut trie_diff = BrownHashMap::new();
 
         let txn = self.db.begin_read().expect("Redb read transaction failed");
-        let storage_table = txn.open_table(STORAGE_TABLE).expect("Failed to open Redb storage table");
+        let storage_table = txn
+            .open_table(STORAGE_TABLE)
+            .expect("Failed to open Redb storage table");
 
         for key in self
             .storage_cache
@@ -213,7 +215,10 @@ impl EvmDB {
             let txn = self.db.begin_write()?;
             {
                 let mut table = txn.open_table(ACCOUNTS_TABLE)?;
-                table.insert(address_hash.as_slice(), alloy::rlp::encode(&account_state).as_slice())?;
+                table.insert(
+                    address_hash.as_slice(),
+                    alloy::rlp::encode(&account_state).as_slice(),
+                )?;
             }
             txn.commit()?;
 
@@ -291,7 +296,10 @@ impl EvmDB {
         let txn = self.db.begin_write()?;
         {
             let mut table = txn.open_table(ACCOUNTS_TABLE)?;
-            table.insert(address_hash.as_slice(), alloy::rlp::encode(&account_state).as_slice())?;
+            table.insert(
+                address_hash.as_slice(),
+                alloy::rlp::encode(&account_state).as_slice(),
+            )?;
         }
         txn.commit()?;
         stop_timer(timer);
@@ -355,10 +363,12 @@ impl EvmDB {
             let txn = self.db.begin_write()?;
             {
                 let mut table = txn.open_table(CONTRACTS_TABLE)?;
-                table.insert(hash.as_slice(), bytecode.original_bytes().as_ref()).expect("Inserting contract code should never fail");
+                table
+                    .insert(hash.as_slice(), bytecode.original_bytes().as_ref())
+                    .expect("Inserting contract code should never fail");
             }
             txn.commit()?;
-            
+
             stop_timer(timer);
         }
         stop_timer(timer);
@@ -431,7 +441,7 @@ impl DatabaseRef for EvmDB {
         let result = match table.get(code_hash.as_slice()) {
             Ok(Some(value)) => Ok(Bytecode::new_raw(value.value().to_vec().into())),
             Ok(None) => Err(Self::Error::NotFound("code_by_hash".to_string())),
-            Err(e) => Err(Self::Error::DB(e.into())),
+            Err(e) => Err(Self::Error::DB(Box::new(e.into()))),
         };
         stop_timer(timer);
         result
@@ -470,7 +480,7 @@ impl DatabaseRef for EvmDB {
         let result = match table.get(key.as_slice()) {
             Ok(Some(value)) => Ok(B256::from_slice(value.value())),
             Ok(None) => Err(Self::Error::NotFound("block_hash".to_string())),
-            Err(e) => Err(Self::Error::DB(e.into())),
+            Err(e) => Err(Self::Error::DB(Box::new(e.into()))),
         };
 
         stop_timer(timer);

@@ -3,7 +3,6 @@ use std::path::Path;
 use redb::{Database as ReDB, Error};
 use tracing::info;
 
-
 /// Helper function for opening a ReDB database at the specified path.
 pub fn setup_redb(path: &Path) -> Result<ReDB, Error> {
     let redb_path = path.join("redb");

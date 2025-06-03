@@ -13,7 +13,13 @@ const ACCOUNT_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("accou
 #[derive(Debug, Clone)]
 pub struct AccountDB {
     pub address_hash: B256,
-    pub db: Arc<ReDB>
+    pub db: Arc<ReDB>,
+}
+
+impl From<redb::Error> for EVMError {
+    fn from(e: redb::Error) -> Self {
+        EVMError::DB(Box::new(e))
+    }
 }
 
 impl AccountDB {
@@ -22,7 +28,7 @@ impl AccountDB {
         txn.open_table(ACCOUNT_TABLE).map_err(EVMError::from)?;
         txn.commit().map_err(EVMError::from)?;
 
-        Ok(Self {address_hash, db})
+        Ok(Self { address_hash, db })
     }
 
     pub fn get_db_key(&self, key: &[u8]) -> Vec<u8> {
@@ -44,7 +50,7 @@ impl DB for AccountDB {
 
         match table.get(db_key.as_slice()).map_err(EVMError::from)? {
             Some(access_guard) => Ok(Some(access_guard.value().to_vec())),
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -57,7 +63,9 @@ impl DB for AccountDB {
         {
             let mut table = txn.open_table(ACCOUNT_TABLE).map_err(EVMError::from)?;
             let db_key = self.get_db_key(key);
-            table.insert(db_key.as_slice(), value.as_slice()).map_err(EVMError::from)?;
+            table
+                .insert(db_key.as_slice(), value.as_slice())
+                .map_err(EVMError::from)?;
         }
         txn.commit().map_err(EVMError::from)?;
         Ok(())
