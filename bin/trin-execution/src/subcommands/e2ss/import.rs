@@ -19,7 +19,7 @@ use crate::{
     subcommands::e2ss::utils::percentage_from_address_hash,
 };
 
-use crate::storage::evm_db::{ACCOUNTS_TABLE, BLOCK_HASHES_TABLE, CONTRACTS_TABLE, STORAGE_TABLE};
+use crate::storage::evm_db::{ACCOUNTS_TABLE, BLOCK_HASHES_TABLE, CONTRACTS_TABLE};
 
 pub struct StateImporter {
     config: ImportStateConfig,
