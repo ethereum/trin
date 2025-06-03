@@ -28,7 +28,7 @@ impl ExecutionPosition {
         let txn = db.begin_read()?;
         let table = txn.open_table(TABLE)?;
         match table.get(EXECUTION_POSITION_DB_KEY.as_slice())? {
-            Some(value) => Ok(Decodable::decode(&mut value.value().as_ref())?),
+            Some(value) => Ok(Decodable::decode(&mut value.value())?),
             None => Ok(Self::default()),
         }
     }
