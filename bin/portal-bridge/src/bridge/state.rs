@@ -37,7 +37,7 @@ use trin_execution::{
     execution::TrinExecution,
     storage::{
         account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
-        utils::setup_rocksdb,
+        utils::setup_redb,
     },
     subcommands::e2ss::{
         import::StateImporter,
@@ -181,8 +181,8 @@ impl StateBridge {
         // 1. Download the e2ss file and import the state snapshot
         let data_dir = setup_data_dir(APP_NAME, self.data_dir.clone(), false)?;
         let next_block_number = {
-            let rocks_db = Arc::new(setup_rocksdb(&data_dir)?);
-            let execution_position = ExecutionPosition::initialize_from_db(rocks_db.clone())?;
+            let red_db = Arc::new(setup_redb(&data_dir)?);
+            let execution_position = ExecutionPosition::initialize_from_db(red_db.clone())?;
             execution_position.next_block_number()
         };
 
@@ -240,15 +240,15 @@ impl StateBridge {
 
         // 2. Start the state bridge
 
-        let rocks_db = Arc::new(setup_rocksdb(&data_dir)?);
+        let redb_db = Arc::new(setup_redb(&data_dir)?);
 
-        let execution_position = ExecutionPosition::initialize_from_db(rocks_db.clone())?;
+        let execution_position = ExecutionPosition::initialize_from_db(redb_db.clone())?;
         ensure!(
             execution_position.next_block_number() > 0,
             "Trin execution not initialized!"
         );
 
-        let mut evm_db = EvmDB::new(StateConfig::default(), rocks_db, &execution_position)
+        let mut evm_db = EvmDB::new(StateConfig::default(), redb_db, &execution_position)
             .expect("Failed to create EVM database");
 
         self.gossip_whole_state_snapshot(&mut evm_db, execution_position)
@@ -424,7 +424,7 @@ impl StateBridge {
 
             // check contract storage content key/value
             if account.storage_root != EMPTY_ROOT_HASH {
-                let account_db = AccountDB::new(address_hash, evm_db.db.clone());
+                let account_db = AccountDB::new(address_hash, evm_db.db.clone())?;
                 let trie = EthTrie::from(Arc::new(account_db), account.storage_root)?.db;
 
                 let storage_walker = TrieWalker::new(account.storage_root, trie, None)?;

@@ -14,10 +14,12 @@ use crate::{
     evm::block_executor::BLOCKHASH_SERVE_WINDOW,
     storage::{
         account_db::AccountDB, evm_db::EvmDB, execution_position::ExecutionPosition,
-        utils::setup_rocksdb,
+        utils::setup_redb,
     },
     subcommands::e2ss::utils::percentage_from_address_hash,
 };
+
+use crate::storage::evm_db::{ACCOUNTS_TABLE, BLOCK_HASHES_TABLE, CONTRACTS_TABLE, STORAGE_TABLE};
 
 pub struct StateImporter {
     config: ImportStateConfig,
@@ -26,15 +28,15 @@ pub struct StateImporter {
 
 impl StateImporter {
     pub async fn new(config: ImportStateConfig, data_dir: &Path) -> anyhow::Result<Self> {
-        let rocks_db = Arc::new(setup_rocksdb(data_dir)?);
+        let red_db = Arc::new(setup_redb(data_dir)?);
 
-        let execution_position = ExecutionPosition::initialize_from_db(rocks_db.clone())?;
+        let execution_position = ExecutionPosition::initialize_from_db(red_db.clone())?;
         ensure!(
             execution_position.next_block_number() == 0,
             "Cannot import state from .e2ss, database is not empty",
         );
 
-        let evm_db = EvmDB::new(StateConfig::default(), rocks_db, &execution_position)
+        let evm_db = EvmDB::new(StateConfig::default(), red_db, &execution_position)
             .expect("Failed to create EVM database");
 
         Ok(Self { config, evm_db })
@@ -72,7 +74,7 @@ impl StateImporter {
             } = account;
 
             // Build storage trie
-            let account_db = AccountDB::new(address_hash, self.evm_db.db.clone());
+            let account_db = AccountDB::new(address_hash, self.evm_db.db.clone())?;
             let mut storage_trie = EthTrie::new(Arc::new(account_db));
             for _ in 0..storage_count {
                 let Some(AccountOrStorageEntry::Storage(storage_entry)) = e2ss.next() else {
@@ -100,20 +102,34 @@ impl StateImporter {
                 account_state.code_hash == keccak256(&bytecode),
                 "Code hash mismatch, .e2ss import failed"
             );
-            if !bytecode.is_empty() {
-                self.evm_db.db.put(keccak256(&bytecode), bytecode.clone())?;
-            }
+            
+            let db = &self.evm_db.db;
+            let txn = db.begin_write()?;
 
-            // Insert account into state trie
+            {
+                let mut accounts = txn.open_table(ACCOUNTS_TABLE)?;
+                let mut contracts = txn.open_table(CONTRACTS_TABLE)?;
+
+                if !bytecode.is_empty() {
+                contracts.insert(keccak256(&bytecode).as_slice(), bytecode.as_slice())?;
+                }
+
+                // Insert account into accounts table
+                accounts.insert(address_hash.as_slice(), alloy::rlp::encode(&account_state).as_slice(),)?;
+            }
+            txn.commit()?;
+        
             self.evm_db
                 .trie
                 .lock()
                 .insert(address_hash.as_slice(), &alloy::rlp::encode(&account_state))?;
 
-            self.evm_db
-                .db
-                .put(address_hash, alloy::rlp::encode(account_state))
-                .expect("Inserting account should never fail");
+            let txn = self.evm_db.db.begin_write()?;
+            {
+                let mut accounts = txn.open_table(ACCOUNTS_TABLE)?;
+                accounts.insert(address_hash.as_slice(), alloy::rlp::encode(account_state).as_slice()).expect("Inserting account should never fail");
+            }
+            txn.commit()?;
 
             accounts_imported += 1;
             if accounts_imported % 1000 == 0 {
@@ -139,6 +155,7 @@ impl StateImporter {
     /// insert the last 256 block hashes into the database
     async fn import_last_256_block_hashes(&self, block_number: u64) -> anyhow::Result<()> {
         let first_block_hash_to_add = block_number.saturating_sub(BLOCKHASH_SERVE_WINDOW);
+<<<<<<< HEAD
         let mut e2hs_manager = E2HSManager::new(first_block_hash_to_add).await?;
         while e2hs_manager.next_block_number() <= block_number {
             let block = e2hs_manager.get_next_block().await?;
@@ -146,7 +163,20 @@ impl StateImporter {
                 keccak256(B256::from(U256::from(block.header.number))),
                 block.header.hash_slow(),
             )?
+=======
+        let mut era_manager = EraManager::new(first_block_hash_to_add).await?;
+
+        let txn = self.evm_db.db.begin_write()?;
+        {
+            let mut table = txn.open_table(BLOCK_HASHES_TABLE)?;
+
+            while era_manager.next_block_number() <= block_number {
+                let block = era_manager.get_next_block().await?;
+                table.insert(keccak256(B256::from(U256::from(block.header.number))).as_slice(), block.header.hash_slow().as_slice())?;
+            }
+>>>>>>> 7c448cc7 (Replace RocksDB with Redb as backing for EVM database)
         }
+        txn.commit()?;
 
         Ok(())
     }
