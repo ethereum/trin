@@ -4,10 +4,11 @@ use alloy::{
     consensus::{Header, EMPTY_ROOT_HASH},
     rlp::{Decodable, RlpDecodable, RlpEncodable},
 };
+use redb::{Database as ReDB, TableDefinition};
 use revm_primitives::B256;
-use rocksdb::DB as RocksDB;
 use serde::{Deserialize, Serialize};
 
+const TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("execution");
 // The location in the database which describes the current execution position.
 pub const EXECUTION_POSITION_DB_KEY: &[u8; 18] = b"EXECUTION_POSITION";
 
@@ -23,13 +24,13 @@ pub struct ExecutionPosition {
 }
 
 impl ExecutionPosition {
-    pub fn initialize_from_db(db: Arc<RocksDB>) -> anyhow::Result<Self> {
-        Ok(match db.get(EXECUTION_POSITION_DB_KEY)? {
-            Some(raw_execution_position) => {
-                Decodable::decode(&mut raw_execution_position.as_slice())?
-            }
-            None => Self::default(),
-        })
+    pub fn initialize_from_db(db: Arc<ReDB>) -> anyhow::Result<Self> {
+        let txn = db.begin_read()?;
+        let table = txn.open_table(TABLE)?;
+        match table.get(EXECUTION_POSITION_DB_KEY.as_slice())? {
+            Some(value) => Ok(Decodable::decode(&mut value.value())?),
+            None => Ok(Self::default()),
+        }
     }
 
     pub fn version(&self) -> u8 {
@@ -44,10 +45,19 @@ impl ExecutionPosition {
         self.state_root
     }
 
-    pub fn update_position(&mut self, db: Arc<RocksDB>, header: &Header) -> anyhow::Result<()> {
+    pub fn update_position(&mut self, db: Arc<ReDB>, header: &Header) -> anyhow::Result<()> {
         self.next_block_number = header.number + 1;
         self.state_root = header.state_root;
-        db.put(EXECUTION_POSITION_DB_KEY, alloy::rlp::encode(self))?;
+
+        let txn = db.begin_write()?;
+        {
+            let mut table = txn.open_table(TABLE)?;
+            table.insert(
+                EXECUTION_POSITION_DB_KEY.as_slice(),
+                &alloy::rlp::encode(self)[..],
+            )?;
+        }
+        txn.commit()?;
         Ok(())
     }
 }

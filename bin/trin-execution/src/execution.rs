@@ -18,7 +18,7 @@ use crate::{
     e2hs::manager::E2HSManager,
     evm::block_executor::BlockExecutor,
     metrics::{start_timer_vec, stop_timer, BLOCK_PROCESSING_TIMES},
-    storage::{evm_db::EvmDB, execution_position::ExecutionPosition, utils::setup_rocksdb},
+    storage::{evm_db::EvmDB, execution_position::ExecutionPosition, utils::setup_redb},
 };
 
 pub struct TrinExecution {
@@ -31,7 +31,7 @@ pub struct TrinExecution {
 
 impl TrinExecution {
     pub async fn new(data_dir: &Path, config: StateConfig) -> anyhow::Result<Self> {
-        let db = Arc::new(setup_rocksdb(data_dir)?);
+        let db = Arc::new(setup_redb(data_dir)?);
         let execution_position = ExecutionPosition::initialize_from_db(db.clone())?;
 
         let database = EvmDB::new(config.clone(), db, &execution_position)

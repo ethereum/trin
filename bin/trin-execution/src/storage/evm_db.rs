@@ -10,16 +10,16 @@ use ethportal_api::types::state_trie::account_state::AccountState;
 use hashbrown::{HashMap as BrownHashMap, HashSet};
 use parking_lot::Mutex;
 use prometheus_exporter::prometheus::HistogramTimer;
+use redb::{Database as ReDB, Table, TableDefinition};
 use revm::{
     database::{states::PlainStorageChangeset, BundleState, OriginalValuesKnown},
     state::{AccountInfo, Bytecode},
     Database, DatabaseRef,
 };
 use revm_primitives::KECCAK_EMPTY;
-use rocksdb::DB as RocksDB;
 use tracing::info;
 
-use super::{account_db::AccountDB, execution_position::ExecutionPosition, trie_db::TrieRocksDB};
+use super::{account_db::AccountDB, execution_position::ExecutionPosition, trie_db::TrieReDB};
 use crate::{
     config::StateConfig,
     metrics::{
@@ -27,6 +27,11 @@ use crate::{
     },
     storage::error::EVMError,
 };
+
+pub const ACCOUNTS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("accounts");
+pub const CONTRACTS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("contracts");
+pub const STORAGE_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("storage");
+pub const BLOCK_HASHES_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("block_hashes");
 
 fn start_commit_timer(name: &str) -> HistogramTimer {
     start_timer_vec(&BUNDLE_COMMIT_PROCESSING_TIMES, &[name])
@@ -45,26 +50,36 @@ pub struct EvmDB {
     /// Cache for newly created contracts required for gossiping stat diffs, keyed by code hash.
     newly_created_contracts: Arc<Mutex<FbHashMap<32, Bytecode>>>,
     /// The underlying database.
-    pub db: Arc<RocksDB>,
+    pub db: Arc<ReDB>,
     /// To get proofs and to verify trie state.
-    pub trie: Arc<Mutex<EthTrie<TrieRocksDB>>>,
+    pub trie: Arc<Mutex<EthTrie<TrieReDB>>>,
 }
 
 impl EvmDB {
     pub fn new(
         config: StateConfig,
-        db: Arc<RocksDB>,
+        db: Arc<ReDB>,
         execution_position: &ExecutionPosition,
     ) -> anyhow::Result<Self> {
-        db.put(KECCAK_EMPTY, Bytecode::new().bytes().as_ref())?;
-        db.put(B256::ZERO, Bytecode::new().bytes().as_ref())?;
+        // Initialize empty byte code in the database
+        let txn = db.begin_write()?;
+        {
+            let mut contracts_table = txn.open_table(CONTRACTS_TABLE)?;
+            let empty_bytecode = Bytecode::new().bytes();
+            contracts_table.insert(KECCAK_EMPTY.as_slice(), empty_bytecode.as_ref())?;
+            contracts_table.insert(B256::ZERO.as_slice(), empty_bytecode.as_ref())?;
+        }
+        txn.commit()?;
+
+        // db.put(KECCAK_EMPTY, Bytecode::new().bytes().as_ref())?;
+        // db.put(B256::ZERO, Bytecode::new().bytes().as_ref())?;
 
         let trie = Arc::new(Mutex::new(
             if execution_position.state_root() == EMPTY_ROOT_HASH {
-                EthTrie::new(Arc::new(TrieRocksDB::new(false, db.clone())))
+                EthTrie::new(Arc::new(TrieReDB::new(false, db.clone())))
             } else {
                 EthTrie::from(
-                    Arc::new(TrieRocksDB::new(false, db.clone())),
+                    Arc::new(TrieReDB::new(false, db.clone())),
                     execution_position.state_root(),
                 )?
             },
@@ -84,24 +99,23 @@ impl EvmDB {
     pub fn get_storage_trie_diff(&self, address_hash: B256) -> BrownHashMap<B256, Vec<u8>> {
         let mut trie_diff = BrownHashMap::new();
 
+        let txn = self.db.begin_read().expect("Redb read transaction failed");
+        let storage_table = txn
+            .open_table(STORAGE_TABLE)
+            .expect("Failed to open Redb storage table");
+
         for key in self
             .storage_cache
             .lock()
             .get(&address_hash)
             .unwrap_or(&HashSet::new())
         {
-            // storage trie keys are prefixed with the address hash in the database
-            let value = self
-                .db
-                .get(
-                    [address_hash.as_slice(), key.as_slice()]
-                        .concat()
-                        .as_slice(),
-                )
-                .expect("Getting storage value should never fail");
+            let mut full_key = [0u8; 64];
+            full_key[..32].copy_from_slice(address_hash.as_slice());
+            full_key[32..].copy_from_slice(key.as_slice());
 
-            if let Some(raw_value) = value {
-                trie_diff.insert(*key, raw_value);
+            if let Ok(Some(value)) = storage_table.get(&full_key[..]) {
+                trie_diff.insert(*key, value.value().to_vec());
             }
         }
         trie_diff
@@ -151,8 +165,16 @@ impl EvmDB {
         stop_timer(timer);
 
         let timer = start_commit_timer("account:put_account_into_db");
-        self.db
-            .put(address_hash, alloy::rlp::encode(account_state))?;
+        {
+            let txn = self.db.begin_write()?;
+            {
+                let mut table: Table<&[u8], &[u8]> = txn.open_table(ACCOUNTS_TABLE)?;
+                let key: &[u8] = address_hash.as_slice();
+                let value: Vec<u8> = alloy::rlp::encode(&account_state);
+                table.insert(key, value.as_slice())?;
+            }
+            txn.commit()?;
+        }
         stop_timer(timer);
 
         stop_timer(plain_state_some_account_timer);
@@ -173,7 +195,7 @@ impl EvmDB {
 
         // wipe storage trie and db
         if account_state.storage_root != EMPTY_ROOT_HASH {
-            let account_db = AccountDB::new(address_hash, self.db.clone());
+            let account_db = AccountDB::new(address_hash, self.db.clone())?;
             let mut trie = EthTrie::from(Arc::new(account_db), account_state.storage_root)?;
             trie.clear_trie_from_db()?;
             account_state.storage_root = EMPTY_ROOT_HASH;
@@ -181,11 +203,25 @@ impl EvmDB {
 
         // update account trie and db
         if delete_account {
-            self.db.delete(address_hash)?;
+            let txn = self.db.begin_write()?;
+            {
+                let mut table = txn.open_table(ACCOUNTS_TABLE)?;
+                table.remove(address_hash.as_slice())?;
+            }
+            txn.commit()?;
+
             let _ = self.trie.lock().remove(address_hash.as_ref());
         } else {
-            self.db
-                .put(address_hash, alloy::rlp::encode(&account_state))?;
+            let txn = self.db.begin_write()?;
+            {
+                let mut table = txn.open_table(ACCOUNTS_TABLE)?;
+                table.insert(
+                    address_hash.as_slice(),
+                    alloy::rlp::encode(&account_state).as_slice(),
+                )?;
+            }
+            txn.commit()?;
+
             let _ = self
                 .trie
                 .lock()
@@ -218,7 +254,7 @@ impl EvmDB {
     ) -> anyhow::Result<()> {
         let timer = start_commit_timer("storage:apply_updates");
 
-        let account_db = AccountDB::new(address_hash, self.db.clone());
+        let account_db = AccountDB::new(address_hash, self.db.clone())?;
         let mut account_state = self.fetch_account(address_hash)?.unwrap_or_default();
 
         let mut trie = if account_state.storage_root == EMPTY_ROOT_HASH {
@@ -257,8 +293,15 @@ impl EvmDB {
             .lock()
             .insert(address_hash.as_ref(), &alloy::rlp::encode(&account_state));
 
-        self.db
-            .put(address_hash, alloy::rlp::encode(account_state))?;
+        let txn = self.db.begin_write()?;
+        {
+            let mut table = txn.open_table(ACCOUNTS_TABLE)?;
+            table.insert(
+                address_hash.as_slice(),
+                alloy::rlp::encode(&account_state).as_slice(),
+            )?;
+        }
+        txn.commit()?;
         stop_timer(timer);
         Ok(())
     }
@@ -316,9 +359,16 @@ impl EvmDB {
                     .insert(hash, bytecode.clone());
             }
             let timer = start_commit_timer("committing_contract");
-            self.db
-                .put(hash, bytecode.original_bytes().as_ref())
-                .expect("Inserting contract code should never fail");
+
+            let txn = self.db.begin_write()?;
+            {
+                let mut table = txn.open_table(CONTRACTS_TABLE)?;
+                table
+                    .insert(hash.as_slice(), bytecode.original_bytes().as_ref())
+                    .expect("Inserting contract code should never fail");
+            }
+            txn.commit()?;
+
             stop_timer(timer);
         }
         stop_timer(timer);
@@ -332,9 +382,14 @@ impl EvmDB {
     }
 
     fn fetch_account(&self, address_hash: B256) -> anyhow::Result<Option<AccountState>> {
-        match self.db.get(address_hash)? {
-            Some(raw_account) => Ok(Some(AccountState::decode(&mut raw_account.as_slice())?)),
-            None => Ok(None),
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(ACCOUNTS_TABLE)?;
+
+        if let Some(raw_account) = table.get(address_hash.as_slice())? {
+            let decoded = AccountState::decode(&mut raw_account.value())?;
+            Ok(Some(decoded))
+        } else {
+            Ok(None)
         }
     }
 }
@@ -379,9 +434,14 @@ impl DatabaseRef for EvmDB {
 
     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
         let timer = start_processing_timer("database_get_code_by_hash");
-        let result = match self.db.get(code_hash)? {
-            Some(raw_code) => Ok(Bytecode::new_raw(raw_code.into())),
-            None => Err(Self::Error::NotFound("code_by_hash".to_string())),
+
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(CONTRACTS_TABLE)?;
+
+        let result = match table.get(code_hash.as_slice()) {
+            Ok(Some(value)) => Ok(Bytecode::new_raw(value.value().to_vec().into())),
+            Ok(None) => Err(Self::Error::NotFound("code_by_hash".to_string())),
+            Err(e) => Err(Self::Error::DB(Box::new(e.into()))),
         };
         stop_timer(timer);
         result
@@ -394,7 +454,7 @@ impl DatabaseRef for EvmDB {
             Some(account) => account,
             None => return Err(Self::Error::NotFound("storage".to_string())),
         };
-        let account_db = AccountDB::new(address_hash, self.db.clone());
+        let account_db = AccountDB::new(address_hash, self.db.clone())?;
         let raw_value = if account.storage_root == EMPTY_ROOT_HASH {
             None
         } else {
@@ -411,10 +471,18 @@ impl DatabaseRef for EvmDB {
 
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
         let timer = start_processing_timer("database_get_block_hash");
-        let result = match self.db.get(keccak256(B256::from(U256::from(number))))? {
-            Some(raw_hash) => Ok(B256::from_slice(&raw_hash)),
-            None => Err(Self::Error::NotFound("block_hash".to_string())),
+
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(BLOCK_HASHES_TABLE)?;
+
+        let key = keccak256(B256::from(U256::from(number)));
+
+        let result = match table.get(key.as_slice()) {
+            Ok(Some(value)) => Ok(B256::from_slice(value.value())),
+            Ok(None) => Err(Self::Error::NotFound("block_hash".to_string())),
+            Err(e) => Err(Self::Error::DB(Box::new(e.into()))),
         };
+
         stop_timer(timer);
         result
     }
