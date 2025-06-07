@@ -1,4 +1,5 @@
-use ethportal_api::{jsonrpsee::async_client::Client, HistoryNetworkApiClient};
+use ethportal_api::HistoryNetworkApiClient;
+
 use crate::Peertest;
 
 /// Minimal bridge test: checks that the bootnode can ping the first node.

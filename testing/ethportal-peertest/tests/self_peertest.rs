@@ -515,10 +515,8 @@ async fn peertest_invalidate_header_by_hash() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_bridge_ping() {
-    let (peertest, _target, handle) = setup_peertest(
-        Network::Mainnet,
-        &[Subnetwork::History],
-    ).await;
+    let (peertest, _target, handle) =
+        setup_peertest(Network::Mainnet, &[Subnetwork::History]).await;
     peertest::scenarios::bridge::test_bridge_ping(&peertest)
         .await
         .expect("Bridge ping failed");
