@@ -512,6 +512,7 @@ async fn peertest_invalidate_header_by_hash() {
     handle.stop().unwrap();
 }
 
+/// Creates a new peertest environment with a bootnode and a number of child nodes.
 async fn setup_peertest(
     network: Network,
     subnetworks: &[Subnetwork],
