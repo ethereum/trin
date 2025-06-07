@@ -25,7 +25,7 @@ mod utils;
 #[serial]
 async fn peertest_bridge_ping() {
     let (peertest, _target, handle) =
-        setup_peertest(Network::Mainnet, &[Subnetwork::History]).await;
+        setup_peertest(Network::Mainnet, &[Subnetwork::History], None).await;
     peertest::scenarios::bridge::test_bridge_ping(&peertest)
         .await
         .expect("Bridge ping failed");
@@ -37,6 +37,7 @@ async fn peertest_bridge_ping() {
 async fn setup_peertest(
     network: Network,
     subnetworks: &[Subnetwork],
+    port: Option<i32>
 ) -> (peertest::Peertest, Client, RpcServerHandle) {
     utils::init_tracing();
     set_network_spec(network_parser(&network.to_string()).expect("Failed to parse network"));
@@ -48,7 +49,7 @@ async fn setup_peertest(
 
     let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     // Use an uncommon port for the peertest to avoid clashes.
-    let test_discovery_port = 8999;
+    let test_discovery_port = port.unwrap_or(8999);
     let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
 
     let subnetworks = subnetworks
@@ -85,4 +86,4 @@ async fn setup_peertest(
         .await
         .unwrap();
     (peertest, target, test_client_rpc_handle.rpc_server_handle)
-} 
+}
