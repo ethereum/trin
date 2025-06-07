@@ -33,11 +33,23 @@ async fn peertest_bridge_ping() {
     handle.stop().unwrap();
 }
 
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn peertest_bridge_routing_table() {
+    let (peertest, _target, handle) =
+        setup_peertest(Network::Mainnet, &[Subnetwork::History], Some(9001)).await;
+    peertest::scenarios::bridge::test_bridge_routing_table(&peertest)
+        .await
+        .expect("Bridge routing table test failed");
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
 /// Creates a new peertest environment with a bootnode and a number of child nodes.
 async fn setup_peertest(
     network: Network,
     subnetworks: &[Subnetwork],
-    port: Option<i32>
+    port: Option<i32>,
 ) -> (peertest::Peertest, Client, RpcServerHandle) {
     utils::init_tracing();
     set_network_spec(network_parser(&network.to_string()).expect("Failed to parse network"));
