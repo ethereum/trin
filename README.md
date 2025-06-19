@@ -1,3 +1,7 @@
+# ⚠️ THIS PROJECT IS NO LONGER ACTIVELY MAINTAINED ⚠️
+
+**The project is no longer actively suuported and things will most likely not work**
+
 # Trin
 
 Trin is a Rust implementation of a [Portal Network](https://github.com/ethereum/portal-network-specs) client.

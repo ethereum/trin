@@ -1,3 +1,5 @@
+# ⚠️ THIS PROJECT IS NO LONGER ACTIVELY MAINTAINED ⚠️
+
 # ethportal-api
 
 > **Warning!**
