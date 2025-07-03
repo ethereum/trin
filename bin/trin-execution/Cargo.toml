@@ -33,7 +33,7 @@ reqwest =  { workspace = true, features = ["stream"] }
 revm.workspace = true
 revm-inspectors = "0.23"
 revm-primitives.workspace = true
-rocksdb = "0.23"
+redb = "2.5.0"
 serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
 thiserror.workspace = true
@@ -44,3 +44,4 @@ trin-utils.workspace = true
 
 [dev-dependencies]
 test-log.workspace = true
+tempfile = "3"

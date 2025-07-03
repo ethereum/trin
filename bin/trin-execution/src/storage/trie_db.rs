@@ -1,35 +1,51 @@
 use std::sync::Arc;
 
 use eth_trie::DB;
-use rocksdb::DB as RocksDB;
+use redb::{Database as ReDB, TableDefinition};
+
+// Define a table type: key and value are byte arrays
+const TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("trie");
 
 #[derive(Debug)]
-pub struct TrieRocksDB {
+pub struct TrieReDB {
     // If "light" is true, the data is deleted from the database at the time of submission.
     light: bool,
-    storage: Arc<RocksDB>,
+    storage: Arc<ReDB>,
 }
 
-impl TrieRocksDB {
-    pub fn new(light: bool, storage: Arc<RocksDB>) -> Self {
-        TrieRocksDB { light, storage }
+impl TrieReDB {
+    pub fn new(light: bool, storage: Arc<ReDB>) -> Self {
+        TrieReDB { light, storage }
     }
 }
 
-impl DB for TrieRocksDB {
-    type Error = rocksdb::Error;
+impl DB for TrieReDB {
+    type Error = redb::Error;
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
-        self.storage.get(key)
+        let txn = self.storage.begin_read()?;
+        let table = txn.open_table(TABLE)?;
+        Ok(table.get(key)?.map(|val| val.value().to_vec()))
     }
 
     fn insert(&self, key: &[u8], value: Vec<u8>) -> Result<(), Self::Error> {
-        self.storage.put(key, value)
+        let txn = self.storage.begin_write()?;
+        {
+            let mut table = txn.open_table(TABLE)?;
+            table.insert(key, value.as_slice())?;
+        }
+        txn.commit()?;
+        Ok(())
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), Self::Error> {
         if self.light {
-            self.storage.delete(key)?;
+            let txn = self.storage.begin_write()?;
+            {
+                let mut table = txn.open_table(TABLE)?;
+                table.remove(key)?;
+            }
+            txn.commit()?;
         }
         Ok(())
     }
