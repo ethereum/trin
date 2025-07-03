@@ -31,7 +31,7 @@ use revm_primitives::B256;
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 use tree_hash::TreeHash;
-use trin_history::network::LegacyHistoryNetwork;
+use trin_legacy_history::network::LegacyHistoryNetwork;
 use trin_metrics::bridge::BridgeMetricsReporter;
 
 use crate::census::Census;

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::bail;
 use rpc::RpcServerHandle;
 use trin_beacon::network::BeaconNetwork;
-use trin_history::network::LegacyHistoryNetwork;
+use trin_legacy_history::network::LegacyHistoryNetwork;
 use trin_state::network::StateNetwork;
 
 pub struct TrinHandle {

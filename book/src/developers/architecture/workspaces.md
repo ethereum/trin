@@ -27,7 +27,7 @@ This crate is responsible for the code that defines the main functions and data 
 - Database management
 - Ethereum related data structures
 
-## `trin-history`
+## `trin-legacy-history`
 
 This crate is responsible for the History sub-protocol. This means interacting with peers
 to retrieve and distribute the following:
@@ -46,7 +46,7 @@ be treated as a member of the broader family of `OverlayContentKey`s.
 
 > This crate exists mostly as a stub for future work.
 
-This crate is equivalent in function to the `trin-history` crate, but instead is responsible
+This crate is equivalent in function to the `trin-legacy-history` crate, but instead is responsible
 for the State sub-protocol.
 
 This means that it is responsible for:
