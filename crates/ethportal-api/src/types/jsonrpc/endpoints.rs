@@ -169,7 +169,7 @@ impl SubnetworkEndpoint for StateEndpoint {
 
 impl SubnetworkEndpoint for LegacyHistoryEndpoint {
     fn subnetwork() -> &'static str {
-        "history"
+        "legacy_history"
     }
 }
 
