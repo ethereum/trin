@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             census_handle
         }
-        Subnetwork::History => {
+        Subnetwork::LegacyHistory => {
             match bridge_config.mode {
                 BridgeMode::E2HS => {
                     let Some(e2hs_range) = bridge_config.e2hs_range.clone() else {
@@ -69,13 +69,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Create and initialize the census to acquire critical view of network before
                     // gossiping
                     let mut census = Census::new(subnetwork_overlays.clone(), &bridge_config);
-                    let census_handle = census.init([Subnetwork::History]).await?;
+                    let census_handle = census.init([Subnetwork::LegacyHistory]).await?;
 
-                    let history_network = subnetwork_overlays
-                        .history
-                        .expect("History network not found in SubnetworkOverlays");
+                    let legacy_history_network = subnetwork_overlays
+                        .legacy_history
+                        .expect("Legacy History network not found in SubnetworkOverlays");
                     let e2hs_bridge = E2HSBridge::new(
-                        history_network,
+                        legacy_history_network,
                         bridge_config.offer_limit,
                         e2hs_range,
                         bridge_config.e2hs_randomize,
@@ -86,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     run_with_shutdown(
                         e2hs_bridge
                             .launch()
-                            .instrument(tracing::trace_span!("history(e2hs)")),
+                            .instrument(tracing::trace_span!("legacy_history(e2hs)")),
                     )
                     .await;
 
@@ -96,10 +96,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Create and initialize the census to acquire critical view of network before
                     // gossiping
                     let mut census = Census::new(subnetwork_overlays.clone(), &bridge_config);
-                    let census_handle = census.init([Subnetwork::History]).await?;
+                    let census_handle = census.init([Subnetwork::LegacyHistory]).await?;
 
                     let history_network = subnetwork_overlays
-                        .history
+                        .legacy_history
                         .expect("History network not found in SubnetworkOverlays");
 
                     let consensus_api = ConsensusApi::new(

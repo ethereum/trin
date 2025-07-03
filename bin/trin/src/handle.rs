@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::bail;
 use rpc::RpcServerHandle;
 use trin_beacon::network::BeaconNetwork;
-use trin_history::network::HistoryNetwork;
+use trin_history::network::LegacyHistoryNetwork;
 use trin_state::network::StateNetwork;
 
 pub struct TrinHandle {
@@ -13,16 +13,16 @@ pub struct TrinHandle {
 
 #[derive(Default, Clone)]
 pub struct SubnetworkOverlays {
-    pub history: Option<Arc<HistoryNetwork>>,
+    pub legacy_history: Option<Arc<LegacyHistoryNetwork>>,
     pub state: Option<Arc<StateNetwork>>,
     pub beacon: Option<Arc<BeaconNetwork>>,
 }
 
 impl SubnetworkOverlays {
-    pub fn history(&self) -> anyhow::Result<Arc<HistoryNetwork>> {
-        match &self.history {
-            Some(history) => Ok(history.clone()),
-            None => bail!("History network is not available"),
+    pub fn history(&self) -> anyhow::Result<Arc<LegacyHistoryNetwork>> {
+        match &self.legacy_history {
+            Some(legacy_history) => Ok(legacy_history.clone()),
+            None => bail!("Legacy History network is not available"),
         }
     }
 

@@ -5,19 +5,19 @@ use portalnet::events::OverlayRequest;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{error, warn, Instrument};
 
-use crate::network::HistoryNetwork;
+use crate::network::LegacyHistoryNetwork;
 
-pub struct HistoryEvents {
-    pub network: Arc<HistoryNetwork>,
+pub struct LegacyHistoryEvents {
+    pub network: Arc<LegacyHistoryNetwork>,
     pub message_rx: UnboundedReceiver<OverlayRequest>,
 }
 
-impl HistoryEvents {
+impl LegacyHistoryEvents {
     pub async fn start(mut self) {
         loop {
             tokio::select! {
                 Some(msg) = self.message_rx.recv() => {
-                    self.handle_history_message(msg);
+                    self.handle_legacy_history_message(msg);
                 } else => {
                     error!("History event channel closed, shutting down");
                     break;
@@ -26,8 +26,8 @@ impl HistoryEvents {
         }
     }
 
-    /// Handle history network OverlayRequest.
-    fn handle_history_message(&self, msg: OverlayRequest) {
+    /// Handle legacy history network OverlayRequest.
+    fn handle_legacy_history_message(&self, msg: OverlayRequest) {
         let network = Arc::clone(&self.network);
         tokio::spawn(async move {
             match msg {
@@ -41,13 +41,16 @@ impl HistoryEvents {
         });
     }
 
-    /// Handle history network TALKREQ message.
-    async fn handle_talk_request(request: discv5::TalkRequest, network: &Arc<HistoryNetwork>) {
+    /// Handle legacy history network TALKREQ message.
+    async fn handle_talk_request(
+        request: discv5::TalkRequest,
+        network: &Arc<LegacyHistoryNetwork>,
+    ) {
         let talk_request_id = request.id().clone();
         let reply = match network
             .overlay
             .process_one_request(&request)
-            .instrument(tracing::info_span!("history_network", req = %talk_request_id))
+            .instrument(tracing::info_span!("legacy_history_network", req = %talk_request_id))
             .await
         {
             Ok(response) => Message::from(response).into(),
@@ -55,7 +58,7 @@ impl HistoryEvents {
                 error!(
                     error = %error,
                     request.discv5.id = %talk_request_id,
-                    "Error processing portal history request, responding with empty TALKRESP"
+                    "Error processing portal legacy history request, responding with empty TALKRESP"
                 );
                 // Return an empty TALKRESP if there was an error executing the request
                 "".into()

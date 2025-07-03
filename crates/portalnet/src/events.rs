@@ -51,8 +51,8 @@ impl From<TalkRequest> for OverlayRequest {
 pub struct PortalnetEvents {
     /// Receive Discv5 talk requests.
     pub talk_req_receiver: mpsc::Receiver<TalkRequest>,
-    /// History network send & receive handles.
-    pub history_handle: OverlayHandle,
+    /// Legacy History network send & receive handles.
+    pub legacy_history_handle: OverlayHandle,
     /// State network send & receive handles.
     pub state_handle: OverlayHandle,
     /// Beacon network send & receive handles.
@@ -64,14 +64,14 @@ pub struct PortalnetEvents {
 impl PortalnetEvents {
     pub async fn new(
         talk_req_receiver: mpsc::Receiver<TalkRequest>,
-        history_channels: OverlayChannels,
+        legacy_history_channels: OverlayChannels,
         state_channels: OverlayChannels,
         beacon_channels: OverlayChannels,
         utp_talk_reqs: mpsc::UnboundedSender<TalkRequest>,
     ) -> Self {
         Self {
             talk_req_receiver,
-            history_handle: history_channels.into(),
+            legacy_history_handle: legacy_history_channels.into(),
             state_handle: state_channels.into(),
             beacon_handle: beacon_channels.into(),
             utp_talk_reqs,
@@ -81,7 +81,7 @@ impl PortalnetEvents {
     /// Main loop to dispatch `Discv5` and uTP events
     pub async fn start(mut self) {
         let mut receivers = vec![];
-        if let Some(rx) = self.history_handle.rx.take() {
+        if let Some(rx) = self.legacy_history_handle.rx.take() {
             receivers.push(rx);
         }
         if let Some(rx) = self.state_handle.rx.take() {
@@ -119,10 +119,10 @@ impl PortalnetEvents {
 
         match subnetwork {
             Ok(subnetwork) => match subnetwork {
-                Subnetwork::History => self.send_overlay_request(
-                    self.history_handle.tx.as_ref(),
+                Subnetwork::LegacyHistory => self.send_overlay_request(
+                    self.legacy_history_handle.tx.as_ref(),
                     request.into(),
-                    Subnetwork::History,
+                    Subnetwork::LegacyHistory,
                 ),
                 Subnetwork::Beacon => self.send_overlay_request(
                     self.beacon_handle.tx.as_ref(),
@@ -160,7 +160,11 @@ impl PortalnetEvents {
     fn dispatch_overlay_event(&self, event: EventEnvelope) {
         use OverlayRequest::Event;
 
-        let all_subnetworks = vec![Subnetwork::History, Subnetwork::Beacon, Subnetwork::State];
+        let all_subnetworks = vec![
+            Subnetwork::LegacyHistory,
+            Subnetwork::Beacon,
+            Subnetwork::State,
+        ];
         let mut recipients = event
             .destination
             .as_ref()
@@ -187,11 +191,11 @@ impl PortalnetEvents {
                 Subnetwork::State,
             );
         }
-        if recipients.contains(&Subnetwork::History) {
+        if recipients.contains(&Subnetwork::LegacyHistory) {
             self.send_overlay_request(
-                self.history_handle.tx.as_ref(),
+                self.legacy_history_handle.tx.as_ref(),
                 Event(event.clone()),
-                Subnetwork::History,
+                Subnetwork::LegacyHistory,
             );
         }
     }

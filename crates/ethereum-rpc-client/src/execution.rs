@@ -12,7 +12,7 @@ use ethportal_api::{
         jsonrpc::{params::Params, request::JsonRequest},
         network_spec::network_spec,
     },
-    HistoryContentKey, HistoryContentValue, Receipts,
+    LegacyHistoryContentKey, LegacyHistoryContentValue, Receipts,
 };
 use serde_json::{json, Value};
 use tokio::time::sleep;
@@ -90,11 +90,11 @@ impl ExecutionApi {
     pub async fn get_block_body(
         &self,
         block: &Block<TxEnvelope>,
-    ) -> anyhow::Result<(HistoryContentKey, HistoryContentValue)> {
+    ) -> anyhow::Result<(LegacyHistoryContentKey, LegacyHistoryContentValue)> {
         let block_body = BlockBody(block.body.clone());
         block_body.validate_against_header(&block.header)?;
-        let content_key = HistoryContentKey::new_block_body(block.header.hash_slow());
-        let content_value = HistoryContentValue::BlockBody(block_body);
+        let content_key = LegacyHistoryContentKey::new_block_body(block.header.hash_slow());
+        let content_value = LegacyHistoryContentValue::BlockBody(block_body);
         Ok((content_key, content_value))
     }
 

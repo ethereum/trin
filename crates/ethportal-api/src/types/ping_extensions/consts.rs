@@ -5,7 +5,7 @@ pub const BEACON_SUPPORTED_EXTENSIONS: &[PingExtensionType] = &[
     PingExtensionType::BasicRadius,
     PingExtensionType::Error,
 ];
-pub const HISTORY_SUPPORTED_EXTENSIONS: &[PingExtensionType] = &[
+pub const LEGACY_HISTORY_SUPPORTED_EXTENSIONS: &[PingExtensionType] = &[
     PingExtensionType::Capabilities,
     PingExtensionType::HistoryRadius,
     PingExtensionType::Error,

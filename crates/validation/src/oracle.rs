@@ -7,12 +7,13 @@ use ethportal_api::{
         content_key::beacon::HistoricalSummariesWithProofKey,
         execution::header_with_proof::HeaderWithProof,
         jsonrpc::{
-            endpoints::{BeaconEndpoint, HistoryEndpoint},
-            request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
+            endpoints::{BeaconEndpoint, LegacyHistoryEndpoint},
+            request::{BeaconJsonRpcRequest, LegacyHistoryJsonRpcRequest, StateJsonRpcRequest},
         },
         portal::GetContentInfo,
     },
-    BeaconContentKey, BeaconContentValue, ContentValue, HistoryContentKey, HistoryContentValue,
+    BeaconContentKey, BeaconContentValue, ContentValue, LegacyHistoryContentKey,
+    LegacyHistoryContentValue,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -25,7 +26,7 @@ pub struct HeaderOracle {
     // We could simply store the main portal jsonrpc tx channel here, rather than each
     // individual channel. But my sense is that this will be more useful in terms of
     // determining which subnetworks are actually available.
-    pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
+    pub legacy_history_jsonrpc_tx: Option<mpsc::UnboundedSender<LegacyHistoryJsonRpcRequest>>,
     pub beacon_jsonrpc_tx: Option<mpsc::UnboundedSender<BeaconJsonRpcRequest>>,
     pub state_jsonrpc_tx: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
 }
@@ -33,18 +34,18 @@ pub struct HeaderOracle {
 impl HeaderOracle {
     pub fn new() -> Self {
         Self {
-            history_jsonrpc_tx: None,
+            legacy_history_jsonrpc_tx: None,
             beacon_jsonrpc_tx: None,
             state_jsonrpc_tx: None,
         }
     }
 
-    pub fn history_jsonrpc_tx(
+    pub fn legacy_history_jsonrpc_tx(
         &self,
-    ) -> anyhow::Result<mpsc::UnboundedSender<HistoryJsonRpcRequest>> {
-        match self.history_jsonrpc_tx.clone() {
+    ) -> anyhow::Result<mpsc::UnboundedSender<LegacyHistoryJsonRpcRequest>> {
+        match self.legacy_history_jsonrpc_tx.clone() {
             Some(val) => Ok(val),
-            None => Err(anyhow!("History network is not available")),
+            None => Err(anyhow!("Legacy History network is not available")),
         }
     }
 
@@ -68,14 +69,15 @@ impl HeaderOracle {
         &self,
         block_hash: B256,
     ) -> anyhow::Result<HeaderWithProof> {
-        let content_key = HistoryContentKey::new_block_header_by_hash(block_hash);
-        let endpoint = HistoryEndpoint::GetContent(content_key.clone());
+        let content_key = LegacyHistoryContentKey::new_block_header_by_hash(block_hash);
+        let endpoint = LegacyHistoryEndpoint::GetContent(content_key.clone());
 
-        let GetContentInfo { content, .. } = self.send_history_request(endpoint).await?;
-        let content: HistoryContentValue = HistoryContentValue::decode(&content_key, &content)?;
+        let GetContentInfo { content, .. } = self.send_legacy_history_request(endpoint).await?;
+        let content: LegacyHistoryContentValue =
+            LegacyHistoryContentValue::decode(&content_key, &content)?;
 
         match content {
-            HistoryContentValue::BlockHeaderWithProof(content) => Ok(content),
+            LegacyHistoryContentValue::BlockHeaderWithProof(content) => Ok(content),
             _ => Err(anyhow!(
                 "Invalid HistoryContentValue received from HeaderWithProof lookup, expected BlockHeaderWithProof: {content:?}"
             )),
@@ -100,13 +102,13 @@ impl HeaderOracle {
         self.send_beacon_request(endpoint).await
     }
 
-    async fn send_history_request<T: for<'de> Deserialize<'de>>(
+    async fn send_legacy_history_request<T: for<'de> Deserialize<'de>>(
         &self,
-        endpoint: HistoryEndpoint,
+        endpoint: LegacyHistoryEndpoint,
     ) -> anyhow::Result<T> {
         let (resp, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
-        let request = HistoryJsonRpcRequest { endpoint, resp };
-        let tx = self.history_jsonrpc_tx()?;
+        let request = LegacyHistoryJsonRpcRequest { endpoint, resp };
+        let tx = self.legacy_history_jsonrpc_tx()?;
         tx.send(request)?;
 
         match resp_rx.recv().await {

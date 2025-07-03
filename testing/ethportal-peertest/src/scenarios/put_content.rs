@@ -2,7 +2,7 @@ use std::net::{IpAddr, Ipv4Addr};
 
 use ethportal_api::{
     jsonrpsee::async_client::Client, types::network::Network, version::APP_NAME, ContentValue,
-    Discv5ApiClient, HistoryNetworkApiClient,
+    Discv5ApiClient, LegacyHistoryNetworkApiClient,
 };
 use tracing::info;
 use trin::{run_trin_from_trin_config, TrinConfig};
@@ -11,7 +11,7 @@ use crate::{
     utils::{
         fixture_block_body_15040708, fixture_header_by_hash,
         fixture_header_by_hash_with_proof_15040641, fixture_header_by_hash_with_proof_15040708,
-        fixture_receipts_15040641, wait_for_history_content,
+        fixture_receipts_15040641, wait_for_legacy_history_content,
     },
     Peertest,
 };
@@ -19,7 +19,7 @@ use crate::{
 pub async fn test_put_content(peertest: &Peertest, target: &Client, network: Network) {
     info!("Testing Put Content");
 
-    let _ = HistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone(), None, None)
+    let _ = LegacyHistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone(), None, None)
         .await
         .unwrap();
     let (content_key, content_value) = fixture_header_by_hash();
@@ -32,7 +32,7 @@ pub async fn test_put_content(peertest: &Peertest, target: &Client, network: Net
 
     // Check if the stored content value in bootnode's DB matches the offered
     let received_content_value =
-        wait_for_history_content(&peertest.bootnode.ipc_client, content_key.clone()).await;
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, content_key.clone()).await;
     assert_eq!(
         content_value, received_content_value,
         "The received content {received_content_value:?}, must match the expected {content_value:?}",
@@ -48,7 +48,7 @@ pub async fn test_put_content(peertest: &Peertest, target: &Client, network: Net
     let fresh_enr = fresh_target.node_info().await.unwrap().enr;
 
     // connect to new node
-    let _ = HistoryNetworkApiClient::ping(target, fresh_enr, None, None)
+    let _ = LegacyHistoryNetworkApiClient::ping(target, fresh_enr, None, None)
         .await
         .unwrap();
 
@@ -61,7 +61,8 @@ pub async fn test_put_content(peertest: &Peertest, target: &Client, network: Net
     assert_eq!(result.peer_count, 2);
 
     // Check if the stored content value in fresh node's DB matches the offered
-    let received_content_value = wait_for_history_content(&fresh_target, content_key.clone()).await;
+    let received_content_value =
+        wait_for_legacy_history_content(&fresh_target, content_key.clone()).await;
     assert_eq!(
         content_value, received_content_value,
         "The received content {received_content_value:?}, must match the expected {content_value:?}",
@@ -84,7 +85,7 @@ pub async fn test_gossip_dropped_with_offer(
     info!("Testing gossip of dropped content after an offer message.");
 
     // connect target to network
-    let _ = HistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone(), None, None)
+    let _ = LegacyHistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone(), None, None)
         .await
         .unwrap();
 
@@ -100,7 +101,7 @@ pub async fn test_gossip_dropped_with_offer(
     // Store receipt_1 locally in client that is not connected to the network
     let (header_key_1, header_value_1) = fixture_header_by_hash_with_proof_15040641();
     let (receipts_key_1, receipts_value_1) = fixture_receipts_15040641();
-    let store_result = HistoryNetworkApiClient::store(
+    let store_result = LegacyHistoryNetworkApiClient::store(
         &fresh_target,
         header_key_1.clone(),
         header_value_1.encode(),
@@ -108,7 +109,7 @@ pub async fn test_gossip_dropped_with_offer(
     .await
     .unwrap();
     assert!(store_result);
-    let store_result = HistoryNetworkApiClient::store(
+    let store_result = LegacyHistoryNetworkApiClient::store(
         &fresh_target,
         receipts_key_1.clone(),
         receipts_value_1.encode(),
@@ -119,47 +120,47 @@ pub async fn test_gossip_dropped_with_offer(
 
     // check that fresh target has receipt_1
     assert!(
-        HistoryNetworkApiClient::local_content(&fresh_target, header_key_1.clone())
+        LegacyHistoryNetworkApiClient::local_content(&fresh_target, header_key_1.clone())
             .await
             .is_ok()
     );
     assert!(
-        HistoryNetworkApiClient::local_content(&fresh_target, receipts_key_1.clone())
+        LegacyHistoryNetworkApiClient::local_content(&fresh_target, receipts_key_1.clone())
             .await
             .is_ok()
     );
     // check that target does not have receipt_1
     assert!(
-        HistoryNetworkApiClient::local_content(target, header_key_1.clone())
+        LegacyHistoryNetworkApiClient::local_content(target, header_key_1.clone())
             .await
             .is_err()
     );
     assert!(
-        HistoryNetworkApiClient::local_content(target, receipts_key_1.clone())
+        LegacyHistoryNetworkApiClient::local_content(target, receipts_key_1.clone())
             .await
             .is_err()
     );
     // check that peertest node does not have receipt_1
-    assert!(HistoryNetworkApiClient::local_content(
+    assert!(LegacyHistoryNetworkApiClient::local_content(
         &peertest.nodes[0].ipc_client,
         header_key_1.clone()
     )
     .await
     .is_err());
-    assert!(HistoryNetworkApiClient::local_content(
+    assert!(LegacyHistoryNetworkApiClient::local_content(
         &peertest.nodes[0].ipc_client,
         receipts_key_1.clone()
     )
     .await
     .is_err());
     // check that peertest bootnode does not have receipt_1
-    assert!(HistoryNetworkApiClient::local_content(
+    assert!(LegacyHistoryNetworkApiClient::local_content(
         &peertest.bootnode.ipc_client,
         header_key_1.clone()
     )
     .await
     .is_err());
-    assert!(HistoryNetworkApiClient::local_content(
+    assert!(LegacyHistoryNetworkApiClient::local_content(
         &peertest.bootnode.ipc_client,
         receipts_key_1.clone()
     )
@@ -167,7 +168,7 @@ pub async fn test_gossip_dropped_with_offer(
     .is_err());
 
     // connect fresh target to network
-    let _ = HistoryNetworkApiClient::ping(
+    let _ = LegacyHistoryNetworkApiClient::ping(
         &fresh_target,
         target.node_info().await.unwrap().enr,
         None,
@@ -175,12 +176,22 @@ pub async fn test_gossip_dropped_with_offer(
     )
     .await
     .unwrap();
-    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.bootnode.enr.clone(), None, None)
-        .await
-        .unwrap();
-    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.nodes[0].enr.clone(), None, None)
-        .await
-        .unwrap();
+    let _ = LegacyHistoryNetworkApiClient::ping(
+        &fresh_target,
+        peertest.bootnode.enr.clone(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let _ = LegacyHistoryNetworkApiClient::ping(
+        &fresh_target,
+        peertest.nodes[0].enr.clone(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     // offer body_2 with receipt from target to fresh target
     // doesn't store the content locally in target
@@ -204,42 +215,44 @@ pub async fn test_gossip_dropped_with_offer(
     // check that the fresh target has stored block_2
     assert_eq!(
         body_value_2,
-        wait_for_history_content(&fresh_target, body_key_2.clone()).await
+        wait_for_legacy_history_content(&fresh_target, body_key_2.clone()).await
     );
     // check that the target has block_1 and block_2
     assert_eq!(
         body_value_2,
-        wait_for_history_content(target, body_key_2.clone()).await
+        wait_for_legacy_history_content(target, body_key_2.clone()).await
     );
     assert_eq!(
         receipts_value_1,
-        wait_for_history_content(target, receipts_key_1.clone()).await
+        wait_for_legacy_history_content(target, receipts_key_1.clone()).await
     );
 
     // check that the peertest bootnode has block_1 and block_2
     assert_eq!(
         body_value_2,
-        wait_for_history_content(&peertest.bootnode.ipc_client, body_key_2.clone()).await
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, body_key_2.clone()).await
     );
     assert_eq!(
         receipts_value_1,
-        wait_for_history_content(&peertest.bootnode.ipc_client, receipts_key_1.clone()).await
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, receipts_key_1.clone())
+            .await
     );
 
     // check that the peertest node has block_1 and block_2
     assert_eq!(
         body_value_2,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, body_key_2.clone()).await
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, body_key_2.clone()).await
     );
     assert_eq!(
         receipts_value_1,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, receipts_key_1.clone()).await
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, receipts_key_1.clone())
+            .await
     );
 
     // this must be at end of test, to guarantee that all propagation has concluded
     // check that the fresh target has dropped block_receipt_1
     assert!(
-        HistoryNetworkApiClient::local_content(&fresh_target, receipts_key_1.clone())
+        LegacyHistoryNetworkApiClient::local_content(&fresh_target, receipts_key_1.clone())
             .await
             .is_err()
     );
@@ -253,7 +266,7 @@ pub async fn test_gossip_dropped_with_find_content(
     info!("Testing gossip of dropped content after a find content message.");
 
     // connect target to network
-    let _ = HistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone(), None, None)
+    let _ = LegacyHistoryNetworkApiClient::ping(target, peertest.bootnode.enr.clone(), None, None)
         .await
         .unwrap();
 
@@ -267,7 +280,7 @@ pub async fn test_gossip_dropped_with_find_content(
 
     // Store receipts_1 locally in client, without validation, that is not connected to the network
     let (receipts_key_1, receipts_value_1) = fixture_receipts_15040641();
-    let store_result = HistoryNetworkApiClient::store(
+    let store_result = LegacyHistoryNetworkApiClient::store(
         &fresh_target,
         receipts_key_1.clone(),
         receipts_value_1.encode(),
@@ -281,23 +294,23 @@ pub async fn test_gossip_dropped_with_find_content(
     let (header_key_2, header_value_2) = fixture_header_by_hash_with_proof_15040708();
     let (body_key_2, body_value_2) = fixture_block_body_15040708();
     let store_result =
-        HistoryNetworkApiClient::store(target, header_key_1.clone(), header_value_1.encode())
+        LegacyHistoryNetworkApiClient::store(target, header_key_1.clone(), header_value_1.encode())
             .await
             .unwrap();
     assert!(store_result);
     let store_result =
-        HistoryNetworkApiClient::store(target, header_key_2.clone(), header_value_2.encode())
+        LegacyHistoryNetworkApiClient::store(target, header_key_2.clone(), header_value_2.encode())
             .await
             .unwrap();
     assert!(store_result);
     let store_result =
-        HistoryNetworkApiClient::store(target, body_key_2.clone(), body_value_2.encode())
+        LegacyHistoryNetworkApiClient::store(target, body_key_2.clone(), body_value_2.encode())
             .await
             .unwrap();
     assert!(store_result);
 
     // connect fresh target to network
-    let _ = HistoryNetworkApiClient::ping(
+    let _ = LegacyHistoryNetworkApiClient::ping(
         &fresh_target,
         target.node_info().await.unwrap().enr,
         None,
@@ -305,12 +318,22 @@ pub async fn test_gossip_dropped_with_find_content(
     )
     .await
     .unwrap();
-    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.bootnode.enr.clone(), None, None)
-        .await
-        .unwrap();
-    let _ = HistoryNetworkApiClient::ping(&fresh_target, peertest.nodes[0].enr.clone(), None, None)
-        .await
-        .unwrap();
+    let _ = LegacyHistoryNetworkApiClient::ping(
+        &fresh_target,
+        peertest.bootnode.enr.clone(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let _ = LegacyHistoryNetworkApiClient::ping(
+        &fresh_target,
+        peertest.nodes[0].enr.clone(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     // send get_content request from fresh target to target
     let _result = fresh_target.get_content(body_key_2.clone()).await.unwrap();
@@ -318,41 +341,43 @@ pub async fn test_gossip_dropped_with_find_content(
     // check that the fresh target has stored body_2 stored
     assert_eq!(
         body_value_2,
-        wait_for_history_content(&fresh_target, body_key_2.clone()).await
+        wait_for_legacy_history_content(&fresh_target, body_key_2.clone()).await
     );
     // check that the target has block_1 and block_2
     assert_eq!(
         body_value_2,
-        wait_for_history_content(target, body_key_2.clone()).await
+        wait_for_legacy_history_content(target, body_key_2.clone()).await
     );
     assert_eq!(
         receipts_value_1,
-        wait_for_history_content(target, receipts_key_1.clone()).await
+        wait_for_legacy_history_content(target, receipts_key_1.clone()).await
     );
     // check that the peertest bootnode has block_1 and block_2
     assert_eq!(
         body_value_2,
-        wait_for_history_content(&peertest.bootnode.ipc_client, body_key_2.clone()).await
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, body_key_2.clone()).await
     );
     assert_eq!(
         receipts_value_1,
-        wait_for_history_content(&peertest.bootnode.ipc_client, receipts_key_1.clone()).await
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, receipts_key_1.clone())
+            .await
     );
 
     // check that the peertest node has block_1 and block_2
     assert_eq!(
         body_value_2,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, body_key_2.clone()).await
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, body_key_2.clone()).await
     );
     assert_eq!(
         receipts_value_1,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, receipts_key_1.clone()).await
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, receipts_key_1.clone())
+            .await
     );
 
     // this must be at end of test, to guarantee that all propagation has concluded
     // check that the fresh target has dropped block_receipt_1
     assert!(
-        HistoryNetworkApiClient::local_content(&fresh_target, receipts_key_1.clone())
+        LegacyHistoryNetworkApiClient::local_content(&fresh_target, receipts_key_1.clone())
             .await
             .is_err()
     );
@@ -370,7 +395,7 @@ fn fresh_node_config(network: Network) -> (String, TrinConfig) {
         "--network",
         &network.to_string(),
         "--portal-subnetworks",
-        "beacon,history",
+        "beacon,legacy_history",
         "--external-address",
         external_addr.as_str(),
         "--mb",

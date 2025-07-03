@@ -21,10 +21,10 @@ pub use utils::create_store;
 pub enum ContentType {
     /// Corresponds to the state network content.
     State,
-    /// Corresponds to the non-ephemeral history network content.
-    HistoryEternal,
-    /// Corresponds to the ephemeral history network content.
-    HistoryEphemeral,
+    /// Corresponds to the non-ephemeral legacy history network content.
+    LegacyHistoryEternal,
+    /// Corresponds to the ephemeral legacy history network content.
+    LegacyHistoryEphemeral,
 }
 
 /// The version of the store. There should be exactly one implementation of the

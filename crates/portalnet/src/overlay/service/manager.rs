@@ -1040,7 +1040,7 @@ mod tests {
             overlay_config.bucket_filter,
         ));
 
-        let protocol = Subnetwork::History;
+        let protocol = Subnetwork::LegacyHistory;
         let active_outgoing_requests = Arc::new(RwLock::new(HashMap::new()));
         let peers_to_ping = HashSetDelay::default();
         let (command_tx, command_rx) = mpsc::unbounded_channel();

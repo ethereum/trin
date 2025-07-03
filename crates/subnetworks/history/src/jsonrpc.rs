@@ -3,13 +3,13 @@ use std::sync::Arc;
 use discv5::{enr::NodeId, Enr};
 use ethportal_api::{
     types::{
-        jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
+        jsonrpc::{endpoints::LegacyHistoryEndpoint, request::LegacyHistoryJsonRpcRequest},
         ping_extensions::{decode::PingExtension, extension_types::PingExtensionType},
         portal::{AcceptInfo, FindNodesInfo, GetContentInfo, PongInfo, TraceContentInfo},
         portal_wire::Content,
     },
     utils::bytes::hex_encode,
-    ContentValue, HistoryContentKey, HistoryContentValue, OverlayContentKey,
+    ContentValue, LegacyHistoryContentKey, LegacyHistoryContentValue, OverlayContentKey,
 };
 use portalnet::overlay::{config::FindContentConfig, errors::OverlayRequestError};
 use serde_json::{json, Value};
@@ -17,18 +17,18 @@ use tokio::sync::mpsc;
 use tracing::error;
 use trin_storage::ContentStore;
 
-use crate::network::HistoryNetwork;
+use crate::network::LegacyHistoryNetwork;
 
-/// Handles History network JSON-RPC requests
-pub struct HistoryRequestHandler {
-    pub network: Arc<HistoryNetwork>,
-    pub history_rx: mpsc::UnboundedReceiver<HistoryJsonRpcRequest>,
+/// Handles Legacy History network JSON-RPC requests
+pub struct LegacyHistoryRequestHandler {
+    pub network: Arc<LegacyHistoryNetwork>,
+    pub legacy_history_rx: mpsc::UnboundedReceiver<LegacyHistoryJsonRpcRequest>,
 }
 
-impl HistoryRequestHandler {
-    /// Complete RPC requests for the History network.
+impl LegacyHistoryRequestHandler {
+    /// Complete RPC requests for the Legacy History network.
     pub async fn handle_client_queries(mut self) {
-        while let Some(request) = self.history_rx.recv().await {
+        while let Some(request) = self.legacy_history_rx.recv().await {
             let network = self.network.clone();
             tokio::spawn(async move { complete_request(network, request).await });
         }
@@ -36,46 +36,57 @@ impl HistoryRequestHandler {
 }
 
 /// Generates a response for a given request and sends it to the receiver.
-async fn complete_request(network: Arc<HistoryNetwork>, request: HistoryJsonRpcRequest) {
+async fn complete_request(
+    network: Arc<LegacyHistoryNetwork>,
+    request: LegacyHistoryJsonRpcRequest,
+) {
     let response: Result<Value, String> = match request.endpoint {
-        HistoryEndpoint::LocalContent(content_key) => local_content(network, content_key).await,
-        HistoryEndpoint::PaginateLocalContentKeys(offset, limit) => {
+        LegacyHistoryEndpoint::LocalContent(content_key) => {
+            local_content(network, content_key).await
+        }
+        LegacyHistoryEndpoint::PaginateLocalContentKeys(offset, limit) => {
             paginate_local_content_keys(network, offset, limit).await
         }
-        HistoryEndpoint::Store(content_key, content_value) => {
+        LegacyHistoryEndpoint::Store(content_key, content_value) => {
             store(network, content_key, content_value).await
         }
-        HistoryEndpoint::GetContent(content_key) => get_content(network, content_key, false).await,
-        HistoryEndpoint::TraceGetContent(content_key) => {
+        LegacyHistoryEndpoint::GetContent(content_key) => {
+            get_content(network, content_key, false).await
+        }
+        LegacyHistoryEndpoint::TraceGetContent(content_key) => {
             get_content(network, content_key, true).await
         }
-        HistoryEndpoint::AddEnr(enr) => add_enr(network, enr).await,
-        HistoryEndpoint::DataRadius => {
+        LegacyHistoryEndpoint::AddEnr(enr) => add_enr(network, enr).await,
+        LegacyHistoryEndpoint::DataRadius => {
             let radius = network.overlay.data_radius();
             Ok(json!(*radius))
         }
-        HistoryEndpoint::DeleteEnr(node_id) => delete_enr(network, node_id).await,
-        HistoryEndpoint::FindContent(enr, content_key) => {
+        LegacyHistoryEndpoint::DeleteEnr(node_id) => delete_enr(network, node_id).await,
+        LegacyHistoryEndpoint::FindContent(enr, content_key) => {
             find_content(network, enr, content_key).await
         }
-        HistoryEndpoint::FindNodes(enr, distances) => find_nodes(network, enr, distances).await,
-        HistoryEndpoint::GetEnr(node_id) => get_enr(network, node_id).await,
-        HistoryEndpoint::PutContent(content_key, content_value) => {
+        LegacyHistoryEndpoint::FindNodes(enr, distances) => {
+            find_nodes(network, enr, distances).await
+        }
+        LegacyHistoryEndpoint::GetEnr(node_id) => get_enr(network, node_id).await,
+        LegacyHistoryEndpoint::PutContent(content_key, content_value) => {
             put_content(network, content_key, content_value).await
         }
-        HistoryEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
-        HistoryEndpoint::Offer(enr, content_items) => offer(network, enr, content_items).await,
-        HistoryEndpoint::TraceOffer(enr, content_key, content_value) => {
+        LegacyHistoryEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
+        LegacyHistoryEndpoint::Offer(enr, content_items) => {
+            offer(network, enr, content_items).await
+        }
+        LegacyHistoryEndpoint::TraceOffer(enr, content_key, content_value) => {
             trace_offer(network, enr, content_key, content_value).await
         }
-        HistoryEndpoint::Ping(enr, payload_type, payload) => {
+        LegacyHistoryEndpoint::Ping(enr, payload_type, payload) => {
             ping(network, enr, payload_type, payload).await
         }
-        HistoryEndpoint::RoutingTableInfo => {
+        LegacyHistoryEndpoint::RoutingTableInfo => {
             serde_json::to_value(network.overlay.routing_table_info())
                 .map_err(|err| err.to_string())
         }
-        HistoryEndpoint::RecursiveFindNodes(node_id) => {
+        LegacyHistoryEndpoint::RecursiveFindNodes(node_id) => {
             recursive_find_nodes(network, node_id).await
         }
     };
@@ -84,8 +95,8 @@ async fn complete_request(network: Arc<HistoryNetwork>, request: HistoryJsonRpcR
 
 /// Constructs a JSON call for the GetContent method.
 async fn get_content(
-    network: Arc<HistoryNetwork>,
-    content_key: HistoryContentKey,
+    network: Arc<LegacyHistoryNetwork>,
+    content_key: LegacyHistoryContentKey,
     is_trace: bool,
 ) -> Result<Value, String> {
     // local store data lookups are handled at the overlay service level
@@ -146,8 +157,8 @@ async fn get_content(
 
 /// Constructs a JSON call for the LocalContent method.
 async fn local_content(
-    network: Arc<HistoryNetwork>,
-    content_key: HistoryContentKey,
+    network: Arc<LegacyHistoryNetwork>,
+    content_key: LegacyHistoryContentKey,
 ) -> Result<Value, String> {
     let response = match network.overlay.store.lock().get(&content_key)
         {
@@ -171,7 +182,7 @@ async fn local_content(
 
 /// Constructs a JSON call for the PaginateLocalContentKeys method.
 async fn paginate_local_content_keys(
-    network: Arc<HistoryNetwork>,
+    network: Arc<LegacyHistoryNetwork>,
     offset: u64,
     limit: u64,
 ) -> Result<Value, String> {
@@ -187,9 +198,9 @@ async fn paginate_local_content_keys(
 
 /// Constructs a JSON call for the Store method.
 async fn store(
-    network: Arc<HistoryNetwork>,
-    content_key: HistoryContentKey,
-    content_value: ethportal_api::HistoryContentValue,
+    network: Arc<LegacyHistoryNetwork>,
+    content_key: LegacyHistoryContentKey,
+    content_value: ethportal_api::LegacyHistoryContentValue,
 ) -> Result<Value, String> {
     let data = content_value.encode().to_vec();
     let response = match network
@@ -205,7 +216,7 @@ async fn store(
 }
 
 /// Constructs a JSON call for the AddEnr method.
-async fn add_enr(network: Arc<HistoryNetwork>, enr: Enr) -> Result<Value, String> {
+async fn add_enr(network: Arc<LegacyHistoryNetwork>, enr: Enr) -> Result<Value, String> {
     match network.overlay.add_enr(enr) {
         Ok(_) => Ok(json!(true)),
         Err(err) => Err(format!("AddEnr failed: {err:?}")),
@@ -213,7 +224,7 @@ async fn add_enr(network: Arc<HistoryNetwork>, enr: Enr) -> Result<Value, String
 }
 
 /// Constructs a JSON call for the GetEnr method.
-async fn get_enr(network: Arc<HistoryNetwork>, node_id: NodeId) -> Result<Value, String> {
+async fn get_enr(network: Arc<LegacyHistoryNetwork>, node_id: NodeId) -> Result<Value, String> {
     match network.overlay.get_enr(node_id) {
         Ok(enr) => Ok(json!(enr)),
         Err(err) => Err(format!("GetEnr failed: {err:?}")),
@@ -221,13 +232,13 @@ async fn get_enr(network: Arc<HistoryNetwork>, node_id: NodeId) -> Result<Value,
 }
 
 /// Constructs a JSON call for the deleteEnr method.
-async fn delete_enr(network: Arc<HistoryNetwork>, node_id: NodeId) -> Result<Value, String> {
+async fn delete_enr(network: Arc<LegacyHistoryNetwork>, node_id: NodeId) -> Result<Value, String> {
     let is_deleted = network.overlay.delete_enr(node_id);
     Ok(json!(is_deleted))
 }
 
 /// Constructs a JSON call for the LookupEnr method.
-async fn lookup_enr(network: Arc<HistoryNetwork>, node_id: NodeId) -> Result<Value, String> {
+async fn lookup_enr(network: Arc<LegacyHistoryNetwork>, node_id: NodeId) -> Result<Value, String> {
     match network.overlay.lookup_enr(node_id).await {
         Ok(enr) => Ok(json!(enr)),
         Err(err) => Err(format!("LookupEnr failed: {err:?}")),
@@ -236,9 +247,9 @@ async fn lookup_enr(network: Arc<HistoryNetwork>, node_id: NodeId) -> Result<Val
 
 /// Constructs a JSON call for the FindContent method.
 async fn find_content(
-    network: Arc<HistoryNetwork>,
+    network: Arc<LegacyHistoryNetwork>,
     enr: Enr,
-    content_key: HistoryContentKey,
+    content_key: LegacyHistoryContentKey,
 ) -> Result<Value, String> {
     match network.overlay.send_find_content(enr, content_key.to_bytes()).await {
         Ok((content, utp_transfer)) => match content {
@@ -259,7 +270,7 @@ async fn find_content(
 
 /// Constructs a JSON call for the FindNodes method.
 async fn find_nodes(
-    network: Arc<HistoryNetwork>,
+    network: Arc<LegacyHistoryNetwork>,
     enr: Enr,
     distances: Vec<u16>,
 ) -> Result<Value, String> {
@@ -275,9 +286,9 @@ async fn find_nodes(
 
 /// Constructs a JSON call for the PutContent method.
 async fn put_content(
-    network: Arc<HistoryNetwork>,
-    content_key: HistoryContentKey,
-    content_value: ethportal_api::HistoryContentValue,
+    network: Arc<LegacyHistoryNetwork>,
+    content_key: LegacyHistoryContentKey,
+    content_value: ethportal_api::LegacyHistoryContentValue,
 ) -> Result<Value, String> {
     let data = content_value.encode();
     Ok(json!(network
@@ -287,9 +298,9 @@ async fn put_content(
 
 /// Constructs a JSON call for the Offer method.
 async fn offer(
-    network: Arc<HistoryNetwork>,
+    network: Arc<LegacyHistoryNetwork>,
     enr: Enr,
-    content_items: Vec<(HistoryContentKey, HistoryContentValue)>,
+    content_items: Vec<(LegacyHistoryContentKey, LegacyHistoryContentValue)>,
 ) -> Result<Value, String> {
     let content_items = content_items
         .into_iter()
@@ -303,10 +314,10 @@ async fn offer(
 
 /// Constructs a JSON call for the Offer method with trace.
 async fn trace_offer(
-    network: Arc<HistoryNetwork>,
+    network: Arc<LegacyHistoryNetwork>,
     enr: Enr,
-    content_key: HistoryContentKey,
-    content_value: HistoryContentValue,
+    content_key: LegacyHistoryContentKey,
+    content_value: LegacyHistoryContentValue,
 ) -> Result<Value, String> {
     match network
         .overlay
@@ -320,7 +331,7 @@ async fn trace_offer(
 
 /// Constructs a JSON call for the Ping method.
 async fn ping(
-    network: Arc<HistoryNetwork>,
+    network: Arc<LegacyHistoryNetwork>,
     enr: Enr,
     payload_type: Option<PingExtensionType>,
     payload: Option<PingExtension>,
@@ -344,7 +355,7 @@ async fn ping(
 
 /// Constructs a JSON call for the RecursiveFindNodes method.
 async fn recursive_find_nodes(
-    network: Arc<HistoryNetwork>,
+    network: Arc<LegacyHistoryNetwork>,
     node_id: NodeId,
 ) -> Result<Value, String> {
     let nodes = network.overlay.lookup_node(node_id).await;

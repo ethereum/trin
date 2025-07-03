@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     types::execution::header_with_proof::HeaderWithProof, ContentValue, ContentValueError,
-    HistoryContentKey, HistoryContentValue, OverlayContentKey, RawContentValue,
+    LegacyHistoryContentKey, LegacyHistoryContentValue, OverlayContentKey, RawContentValue,
 };
 
 /// A common type used in test files.
@@ -19,12 +19,12 @@ impl<K: OverlayContentKey> ContentItem<K> {
     }
 }
 
-impl ContentItem<HistoryContentKey> {
+impl ContentItem<LegacyHistoryContentKey> {
     /// Decodes content value as HeaderWithProof.
     ///
     /// Panics if content value is not HeaderWithProof.
     pub fn content_value_as_header_with_proof(&self) -> HeaderWithProof {
-        let HistoryContentValue::BlockHeaderWithProof(header_with_proof) =
+        let LegacyHistoryContentValue::BlockHeaderWithProof(header_with_proof) =
             self.content_value().unwrap()
         else {
             panic!(

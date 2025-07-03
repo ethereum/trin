@@ -16,7 +16,8 @@ use ethportal_api::{
     types::execution::{block_body::BlockBody, header_with_proof::HeaderWithProof},
     utils::bytes::hex_encode,
     version::APP_NAME,
-    ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
+    ContentValue, LegacyHistoryContentKey, LegacyHistoryContentValue,
+    LegacyHistoryNetworkApiClient,
 };
 use jsonrpsee::async_client::Client;
 use portalnet::constants::{DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
@@ -138,8 +139,8 @@ async fn test_eth_get_block_by_number() {
     // Store header with proof in server
     assert!(native_client
         .store(
-            HistoryContentKey::new_block_header_by_number(block_number),
-            HistoryContentValue::BlockHeaderWithProof(hwp.clone()).encode(),
+            LegacyHistoryContentKey::new_block_header_by_number(block_number),
+            LegacyHistoryContentValue::BlockHeaderWithProof(hwp.clone()).encode(),
         )
         .await
         .unwrap());
@@ -147,8 +148,8 @@ async fn test_eth_get_block_by_number() {
     // Store block in server
     assert!(native_client
         .store(
-            HistoryContentKey::new_block_body(hwp.header.hash_slow()),
-            HistoryContentValue::BlockBody(body.clone()).encode(),
+            LegacyHistoryContentKey::new_block_body(hwp.header.hash_slow()),
+            LegacyHistoryContentValue::BlockBody(body.clone()).encode(),
         )
         .await
         .unwrap());
@@ -199,8 +200,8 @@ async fn test_eth_get_block_by_number_hydrated() {
     // Store header with proof in server
     assert!(native_client
         .store(
-            HistoryContentKey::new_block_header_by_number(block_number),
-            HistoryContentValue::BlockHeaderWithProof(hwp.clone()).encode(),
+            LegacyHistoryContentKey::new_block_header_by_number(block_number),
+            LegacyHistoryContentValue::BlockHeaderWithProof(hwp.clone()).encode(),
         )
         .await
         .unwrap());
@@ -254,8 +255,8 @@ async fn test_eth_get_block_by_hash() {
     // Store header with proof in server
     assert!(native_client
         .store(
-            HistoryContentKey::new_block_header_by_hash(block_hash),
-            HistoryContentValue::BlockHeaderWithProof(hwp.clone()).encode(),
+            LegacyHistoryContentKey::new_block_header_by_hash(block_hash),
+            LegacyHistoryContentValue::BlockHeaderWithProof(hwp.clone()).encode(),
         )
         .await
         .unwrap());
@@ -263,8 +264,8 @@ async fn test_eth_get_block_by_hash() {
     // Store block in server
     assert!(native_client
         .store(
-            HistoryContentKey::new_block_body(block_hash),
-            HistoryContentValue::BlockBody(body.clone()).encode(),
+            LegacyHistoryContentKey::new_block_body(block_hash),
+            LegacyHistoryContentValue::BlockBody(body.clone()).encode(),
         )
         .await
         .unwrap());
@@ -315,8 +316,8 @@ async fn test_eth_get_block_by_hash_hydrated() {
     // Store header with proof in server
     assert!(native_client
         .store(
-            HistoryContentKey::new_block_header_by_hash(block_hash),
-            HistoryContentValue::BlockHeaderWithProof(hwp.clone()).encode(),
+            LegacyHistoryContentKey::new_block_header_by_hash(block_hash),
+            LegacyHistoryContentValue::BlockHeaderWithProof(hwp.clone()).encode(),
         )
         .await
         .unwrap());

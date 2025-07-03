@@ -48,7 +48,7 @@ impl std::str::FromStr for Network {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum Subnetwork {
     Beacon,
-    History,
+    LegacyHistory,
     State,
     CanonicalIndices,
     VerkleState,
@@ -61,7 +61,7 @@ impl fmt::Display for Subnetwork {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Subnetwork::Beacon => write!(f, "Beacon"),
-            Subnetwork::History => write!(f, "History"),
+            Subnetwork::LegacyHistory => write!(f, "Legacy History"),
             Subnetwork::State => write!(f, "State"),
             Subnetwork::CanonicalIndices => write!(f, "Canonical Indices"),
             Subnetwork::VerkleState => write!(f, "Verkle State"),
@@ -77,7 +77,7 @@ impl std::str::FromStr for Subnetwork {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "beacon" => Ok(Subnetwork::Beacon),
-            "history" => Ok(Subnetwork::History),
+            "legacy_history" => Ok(Subnetwork::LegacyHistory),
             "state" => Ok(Subnetwork::State),
             "canonical_indices" => Ok(Subnetwork::CanonicalIndices),
             "verkle_state" => Ok(Subnetwork::VerkleState),
@@ -93,7 +93,7 @@ impl Subnetwork {
     pub fn to_cli_arg(&self) -> String {
         match self {
             Subnetwork::Beacon => "beacon".to_string(),
-            Subnetwork::History => "history".to_string(),
+            Subnetwork::LegacyHistory => "legacy_history".to_string(),
             Subnetwork::State => "state".to_string(),
             Subnetwork::CanonicalIndices => "canonical_indices".to_string(),
             Subnetwork::VerkleState => "verkle_state".to_string(),
@@ -106,7 +106,7 @@ impl Subnetwork {
     pub fn is_active(&self) -> bool {
         match self {
             Subnetwork::Beacon => true,
-            Subnetwork::History => true,
+            Subnetwork::LegacyHistory => true,
             Subnetwork::State => true,
             Subnetwork::CanonicalIndices => false,
             Subnetwork::VerkleState => false,
@@ -118,8 +118,8 @@ impl Subnetwork {
     /// Returns Subnetworks that it depends on.
     pub fn dependencies(&self) -> Vec<Subnetwork> {
         match self {
-            Subnetwork::History => vec![Subnetwork::Beacon],
-            Subnetwork::State => vec![Subnetwork::History, Subnetwork::Beacon],
+            Subnetwork::LegacyHistory => vec![Subnetwork::Beacon],
+            Subnetwork::State => vec![Subnetwork::LegacyHistory, Subnetwork::Beacon],
             _ => vec![],
         }
     }

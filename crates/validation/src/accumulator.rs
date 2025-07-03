@@ -131,7 +131,7 @@ mod tests {
     use alloy::primitives::map::HashMap;
     use ethportal_api::{
         types::execution::header_with_proof::{BlockHeaderProof, HeaderWithProof},
-        HistoryContentKey, HistoryContentValue,
+        LegacyHistoryContentKey, LegacyHistoryContentValue,
     };
     use rstest::rstest;
     use trin_utils::{
@@ -152,7 +152,7 @@ mod tests {
         )]
         block_number: u64,
     ) {
-        let all_test_data: HashMap<u64, ContentItem<HistoryContentKey>> =
+        let all_test_data: HashMap<u64, ContentItem<LegacyHistoryContentKey>> =
             read_json_portal_spec_tests_file(
                 "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
             )
@@ -169,9 +169,9 @@ mod tests {
 
     #[rstest]
     fn construct_proof_from_partial_epoch(#[values(15_537_392, 15_537_393)] block_number: u64) {
-        let test_data: ContentItem<HistoryContentKey> = read_yaml_portal_spec_tests_file(format!(
-            "tests/mainnet/history/headers_with_proof/{block_number}.yaml"
-        ))
+        let test_data: ContentItem<LegacyHistoryContentKey> = read_yaml_portal_spec_tests_file(
+            format!("tests/mainnet/history/headers_with_proof/{block_number}.yaml"),
+        )
         .unwrap();
 
         let epoch_accumulator_bytes = fs::read("./src/assets/epoch_accs/0xe6ebe562c89bc8ecb94dc9b2889a27a816ec05d3d6bd1625acad72227071e721.bin").unwrap();
@@ -182,10 +182,10 @@ mod tests {
     }
 
     fn test_construct_proof(
-        content_item: ContentItem<HistoryContentKey>,
+        content_item: ContentItem<LegacyHistoryContentKey>,
         epoch_accumulator: EpochAccumulator,
     ) {
-        let HistoryContentValue::BlockHeaderWithProof(HeaderWithProof { header, proof }) =
+        let LegacyHistoryContentValue::BlockHeaderWithProof(HeaderWithProof { header, proof }) =
             content_item.content_value().unwrap()
         else {
             panic!("Expected BlockHeaderWithProof content value");

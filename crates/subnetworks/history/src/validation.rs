@@ -5,7 +5,7 @@ use ethportal_api::{
     types::execution::{
         block_body::BlockBody, header_with_proof::HeaderWithProof, receipts::Receipts,
     },
-    HistoryContentKey,
+    LegacyHistoryContentKey,
 };
 use ssz::Decode;
 use tokio::sync::RwLock;
@@ -16,12 +16,12 @@ use trin_validation::{
     validator::{ValidationResult, Validator},
 };
 
-pub struct ChainHistoryValidator {
+pub struct LegacyHistoryValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
     pub header_validator: HeaderValidator,
 }
 
-impl ChainHistoryValidator {
+impl LegacyHistoryValidator {
     pub fn new(header_oracle: Arc<RwLock<HeaderOracle>>) -> Self {
         let header_validator = HeaderValidator::new_with_header_oracle(header_oracle.clone());
         Self {
@@ -31,14 +31,14 @@ impl ChainHistoryValidator {
     }
 }
 
-impl Validator<HistoryContentKey> for ChainHistoryValidator {
+impl Validator<LegacyHistoryContentKey> for LegacyHistoryValidator {
     async fn validate_content(
         &self,
-        content_key: &HistoryContentKey,
+        content_key: &LegacyHistoryContentKey,
         content_value: &[u8],
     ) -> ValidationResult {
         match content_key {
-            HistoryContentKey::BlockHeaderByHash(key) => {
+            LegacyHistoryContentKey::BlockHeaderByHash(key) => {
                 let Ok(header_with_proof) = HeaderWithProof::from_ssz_bytes(content_value) else {
                     return ValidationResult::Invalid(
                         "Header by hash content has invalid encoding".to_string(),
@@ -63,7 +63,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 
                 ValidationResult::CanonicallyValid
             }
-            HistoryContentKey::BlockHeaderByNumber(key) => {
+            LegacyHistoryContentKey::BlockHeaderByNumber(key) => {
                 let Ok(header_with_proof) = HeaderWithProof::from_ssz_bytes(content_value) else {
                     debug!(
                         content_value = content_value.encode_hex_with_prefix(),
@@ -92,7 +92,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 
                 ValidationResult::CanonicallyValid
             }
-            HistoryContentKey::BlockBody(key) => {
+            LegacyHistoryContentKey::BlockBody(key) => {
                 let Ok(block_body) = BlockBody::from_ssz_bytes(content_value) else {
                     debug!(
                         content_value = content_value.encode_hex_with_prefix(),
@@ -125,7 +125,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     }
                 }
             }
-            HistoryContentKey::BlockReceipts(key) => {
+            LegacyHistoryContentKey::BlockReceipts(key) => {
                 let Ok(receipts) = Receipts::from_ssz_bytes(content_value) else {
                     debug!(
                         content_value = content_value.encode_hex_with_prefix(),
@@ -162,10 +162,10 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 
                 ValidationResult::CanonicallyValid
             }
-            HistoryContentKey::EphemeralHeaderOffer(_) => ValidationResult::Invalid(
+            LegacyHistoryContentKey::EphemeralHeaderOffer(_) => ValidationResult::Invalid(
                 "Validation is not implemented for EphemeralHeaderOffer yet".to_string(),
             ),
-            HistoryContentKey::EphemeralHeadersFindContent(_) => ValidationResult::Invalid(
+            LegacyHistoryContentKey::EphemeralHeadersFindContent(_) => ValidationResult::Invalid(
                 "Validation is not implemented for EphemeralHeadersFindContent yet".to_string(),
             ),
         }
@@ -200,9 +200,9 @@ mod tests {
         let header_with_proof =
             HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
+        let chain_history_validator = LegacyHistoryValidator::new(header_oracle);
         let content_key =
-            HistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash_slow());
+            LegacyHistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash_slow());
         assert!(chain_history_validator
             .validate_content(&content_key, &header_with_proof_ssz)
             .await
@@ -220,8 +220,9 @@ mod tests {
 
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
-        let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash_slow());
+        let chain_history_validator = LegacyHistoryValidator::new(header_oracle);
+        let content_key =
+            LegacyHistoryContentKey::new_block_header_by_hash(header.header.hash_slow());
         assert_eq!(
             chain_history_validator
                 .validate_content(&content_key, &content_value)
@@ -244,8 +245,9 @@ mod tests {
 
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
-        let content_key = HistoryContentKey::new_block_header_by_hash(header.header.hash_slow());
+        let chain_history_validator = LegacyHistoryValidator::new(header_oracle);
+        let content_key =
+            LegacyHistoryContentKey::new_block_header_by_hash(header.header.hash_slow());
 
         assert_eq!(
             chain_history_validator
@@ -263,9 +265,9 @@ mod tests {
         let header_with_proof =
             HeaderWithProof::from_ssz_bytes(&header_with_proof_ssz).expect("error decoding header");
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
+        let chain_history_validator = LegacyHistoryValidator::new(header_oracle);
         let content_key =
-            HistoryContentKey::new_block_header_by_number(header_with_proof.header.number);
+            LegacyHistoryContentKey::new_block_header_by_number(header_with_proof.header.number);
         assert!(chain_history_validator
             .validate_content(&content_key, &header_with_proof_ssz)
             .await
@@ -283,8 +285,8 @@ mod tests {
 
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
-        let content_key = HistoryContentKey::new_block_header_by_number(header.header.number);
+        let chain_history_validator = LegacyHistoryValidator::new(header_oracle);
+        let content_key = LegacyHistoryContentKey::new_block_header_by_number(header.header.number);
         assert_eq!(
             chain_history_validator
                 .validate_content(&content_key, &content_value)
@@ -307,8 +309,8 @@ mod tests {
 
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator::new(header_oracle);
-        let content_key = HistoryContentKey::new_block_header_by_number(header.header.number);
+        let chain_history_validator = LegacyHistoryValidator::new(header_oracle);
+        let content_key = LegacyHistoryContentKey::new_block_header_by_number(header.header.number);
         assert_eq!(
             chain_history_validator
                 .validate_content(&content_key, &content_value)

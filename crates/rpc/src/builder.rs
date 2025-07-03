@@ -5,8 +5,10 @@ use std::{
 };
 
 use ethportal_api::{
-    types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
-    BeaconNetworkApiServer, Discv5ApiServer, EthApiServer, HistoryNetworkApiServer,
+    types::jsonrpc::request::{
+        BeaconJsonRpcRequest, LegacyHistoryJsonRpcRequest, StateJsonRpcRequest,
+    },
+    BeaconNetworkApiServer, Discv5ApiServer, EthApiServer, LegacyHistoryNetworkApiServer,
     StateNetworkApiServer, Web3ApiServer,
 };
 use portalnet::discovery::Discovery;
@@ -18,7 +20,7 @@ use crate::{
     errors::{RpcError, WsHttpSamePortError},
     jsonrpsee::{Methods, RpcModule},
     rpc_server::{RpcServerConfig, RpcServerHandle},
-    BeaconNetworkApi, Discv5Api, EthApi, HistoryNetworkApi, StateNetworkApi, Web3Api,
+    BeaconNetworkApi, Discv5Api, EthApi, LegacyHistoryNetworkApi, StateNetworkApi, Web3Api,
 };
 
 /// Represents RPC modules that are supported by Trin
@@ -34,9 +36,9 @@ pub enum PortalRpcModule {
     Discv5,
     /// `eth_` module
     Eth,
-    /// `portal_history` module
-    History,
-    /// `state` module
+    /// `portal_legacyHistory` module
+    LegacyHistory,
+    /// `portal_state` module
     State,
     /// `web3_` module
     Web3,
@@ -149,7 +151,7 @@ impl TransportRpcModuleConfig {
 pub enum RpcModuleSelection {
     /// Use _all_ available modules.
     All,
-    /// The default modules `discv5`, `history`, `web3`, `beacon`.
+    /// The default modules `discv5`, `legacy-history`, `web3`, `beacon`.
     #[default]
     Standard,
     /// Only use the configured modules.
@@ -162,7 +164,7 @@ impl RpcModuleSelection {
         PortalRpcModule::Beacon,
         PortalRpcModule::Discv5,
         PortalRpcModule::Eth,
-        PortalRpcModule::History,
+        PortalRpcModule::LegacyHistory,
         PortalRpcModule::Web3,
     ];
 
@@ -283,8 +285,8 @@ pub struct RpcModuleBuilder {
     modules: HashMap<PortalRpcModule, Methods>,
     /// Discv5 protocol
     discv5: Arc<Discovery>,
-    /// History protocol
-    history_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
+    /// Legacy History protocol
+    legacy_history_tx: Option<mpsc::UnboundedSender<LegacyHistoryJsonRpcRequest>>,
     /// Beacon protocol
     beacon_tx: Option<mpsc::UnboundedSender<BeaconJsonRpcRequest>>,
     /// State protocol
@@ -296,17 +298,17 @@ impl RpcModuleBuilder {
         Self {
             modules: HashMap::new(),
             discv5,
-            history_tx: None,
+            legacy_history_tx: None,
             beacon_tx: None,
             state_tx: None,
         }
     }
 
-    pub fn maybe_with_history(
+    pub fn maybe_with_legacy_history(
         mut self,
-        history_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
+        legacy_history_tx: Option<mpsc::UnboundedSender<LegacyHistoryJsonRpcRequest>>,
     ) -> Self {
-        self.history_tx = history_tx;
+        self.legacy_history_tx = legacy_history_tx;
         self
     }
 
@@ -326,11 +328,11 @@ impl RpcModuleBuilder {
         self
     }
 
-    pub fn with_history(
+    pub fn with_legacy_history(
         mut self,
-        history_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+        legacy_history_tx: mpsc::UnboundedSender<LegacyHistoryJsonRpcRequest>,
     ) -> Self {
-        self.history_tx = Some(history_tx);
+        self.legacy_history_tx = Some(legacy_history_tx);
         self
     }
 
@@ -411,18 +413,18 @@ impl RpcModuleBuilder {
                         }
                         PortalRpcModule::Eth => {
                             let history_tx = self
-                                .history_tx
+                                .legacy_history_tx
                                 .clone()
-                                .expect("History protocol not initialized");
+                                .expect("Legacy History protocol not initialized");
                             let state_tx = self.state_tx.clone();
                             EthApi::new(history_tx, state_tx).into_rpc().into()
                         }
-                        PortalRpcModule::History => {
+                        PortalRpcModule::LegacyHistory => {
                             let history_tx = self
-                                .history_tx
+                                .legacy_history_tx
                                 .clone()
-                                .expect("History protocol not initialized");
-                            HistoryNetworkApi::new(history_tx).into_rpc().into()
+                                .expect("Legacy History protocol not initialized");
+                            LegacyHistoryNetworkApi::new(history_tx).into_rpc().into()
                         }
                         PortalRpcModule::Beacon => {
                             let beacon_tx = self
@@ -479,7 +481,7 @@ mod tests {
         (
                 "beacon" =>  PortalRpcModule::Beacon,
                 "discv5" =>  PortalRpcModule::Discv5,
-                "history" =>  PortalRpcModule::History,
+                "legacy-history" =>  PortalRpcModule::LegacyHistory,
                 "web3" =>  PortalRpcModule::Web3,
             );
     }
@@ -493,7 +495,7 @@ mod tests {
                 PortalRpcModule::Beacon,
                 PortalRpcModule::Discv5,
                 PortalRpcModule::Eth,
-                PortalRpcModule::History,
+                PortalRpcModule::LegacyHistory,
                 PortalRpcModule::Web3,
             ]
         )
@@ -501,23 +503,26 @@ mod tests {
 
     #[test]
     fn test_create_rpc_module_config() {
-        let selection = vec!["history", "web3"];
+        let selection = vec!["legacy-history", "web3"];
         let config = RpcModuleSelection::try_from_selection(selection).unwrap();
         assert_eq!(
             config,
-            RpcModuleSelection::Selection(vec![PortalRpcModule::History, PortalRpcModule::Web3])
+            RpcModuleSelection::Selection(vec![
+                PortalRpcModule::LegacyHistory,
+                PortalRpcModule::Web3
+            ])
         );
     }
 
     #[test]
     fn test_configure_transport_config() {
         let config = TransportRpcModuleConfig::default()
-            .with_http([PortalRpcModule::History, PortalRpcModule::Web3]);
+            .with_http([PortalRpcModule::LegacyHistory, PortalRpcModule::Web3]);
         assert_eq!(
             config,
             TransportRpcModuleConfig {
                 http: Some(RpcModuleSelection::Selection(vec![
-                    PortalRpcModule::History,
+                    PortalRpcModule::LegacyHistory,
                     PortalRpcModule::Web3
                 ])),
                 ws: None,

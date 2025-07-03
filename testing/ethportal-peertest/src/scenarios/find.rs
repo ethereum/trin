@@ -4,7 +4,7 @@ use discv5::enr::NodeId;
 use ethportal_api::{
     types::{network::Subnetwork, portal::FindContentInfo},
     utils::bytes::hex_decode,
-    BeaconNetworkApiClient, ContentValue, Enr, HistoryNetworkApiClient, OverlayContentKey,
+    BeaconNetworkApiClient, ContentValue, Enr, LegacyHistoryNetworkApiClient, OverlayContentKey,
     StateNetworkApiClient,
 };
 use jsonrpsee::async_client::Client;
@@ -48,7 +48,7 @@ pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) 
     let (content_key, _) = fixture_header_by_hash();
 
     // check if we can fetch data from routing table
-    match HistoryNetworkApiClient::get_enr(
+    match LegacyHistoryNetworkApiClient::get_enr(
         &peertest.bootnode.ipc_client,
         peertest.nodes[0].enr.node_id(),
     )
@@ -62,7 +62,7 @@ pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) 
         Err(err) => panic!("{err}"),
     }
 
-    let result = HistoryNetworkApiClient::find_content(
+    let result = LegacyHistoryNetworkApiClient::find_content(
         target,
         peertest.bootnode.enr.clone(),
         content_key.clone(),
@@ -84,7 +84,7 @@ pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) 
 pub async fn test_trace_get_content(peertest: &Peertest) {
     info!("Testing trace recursive find content");
     let (content_key, content_value) = fixture_header_by_hash();
-    let store_result = HistoryNetworkApiClient::store(
+    let store_result = LegacyHistoryNetworkApiClient::store(
         &peertest.bootnode.ipc_client,
         content_key.clone(),
         content_value.encode(),
@@ -99,7 +99,7 @@ pub async fn test_trace_get_content(peertest: &Peertest) {
         .unwrap_or_default()
         .as_millis() as u64;
 
-    let trace_content_info = HistoryNetworkApiClient::trace_get_content(
+    let trace_content_info = LegacyHistoryNetworkApiClient::trace_get_content(
         &peertest.nodes[0].ipc_client,
         content_key.clone(),
     )
@@ -144,7 +144,7 @@ pub async fn test_trace_get_content_for_absent_content(peertest: &Peertest) {
     let client = &peertest.nodes[0].ipc_client;
     let (content_key, _) = fixture_header_by_hash();
 
-    let error = HistoryNetworkApiClient::trace_get_content(client, content_key)
+    let error = LegacyHistoryNetworkApiClient::trace_get_content(client, content_key)
         .await
         .unwrap_err()
         .to_string();
@@ -157,7 +157,7 @@ pub async fn test_trace_get_content_for_absent_content(peertest: &Peertest) {
 pub async fn test_trace_get_content_local_db(peertest: &Peertest) {
     let (content_key, content_value) = fixture_header_by_hash();
 
-    let store_result = HistoryNetworkApiClient::store(
+    let store_result = LegacyHistoryNetworkApiClient::store(
         &peertest.bootnode.ipc_client,
         content_key.clone(),
         content_value.encode(),
@@ -167,10 +167,12 @@ pub async fn test_trace_get_content_local_db(peertest: &Peertest) {
 
     assert!(store_result);
 
-    let trace_content_info =
-        HistoryNetworkApiClient::trace_get_content(&peertest.bootnode.ipc_client, content_key)
-            .await
-            .unwrap();
+    let trace_content_info = LegacyHistoryNetworkApiClient::trace_get_content(
+        &peertest.bootnode.ipc_client,
+        content_key,
+    )
+    .await
+    .unwrap();
     assert!(!trace_content_info.utp_transfer);
     assert_eq!(trace_content_info.content, content_value.encode());
 
@@ -188,7 +190,9 @@ async fn call_recursive_find_nodes(
 ) -> Vec<Enr> {
     match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::recursive_find_nodes(client, node_id),
-        Subnetwork::History => HistoryNetworkApiClient::recursive_find_nodes(client, node_id),
+        Subnetwork::LegacyHistory => {
+            LegacyHistoryNetworkApiClient::recursive_find_nodes(client, node_id)
+        }
         Subnetwork::State => StateNetworkApiClient::recursive_find_nodes(client, node_id),
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }

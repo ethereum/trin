@@ -18,7 +18,7 @@ use crate::{
     types::mode::BridgeMode,
 };
 
-pub const DEFAULT_SUBNETWORK: &str = "history";
+pub const DEFAULT_SUBNETWORK: &str = "legacy_history";
 
 /// The maximum number of peers to send each piece of content.
 ///
@@ -50,7 +50,7 @@ pub struct BridgeConfig {
 
     #[arg(
         long = "portal-subnetwork",
-        help = "The name of the subnetwork to use. Options: [history, state, beacon]",
+        help = "The name of the subnetwork to use. Options: [legacy_history, state, beacon]",
         default_value = DEFAULT_SUBNETWORK,
     )]
     pub portal_subnetwork: Subnetwork,
@@ -242,7 +242,8 @@ mod test {
 
     #[test]
     fn test_default_bridge_config() {
-        let bridge_config = BridgeConfig::parse_from(["bridge", "--portal-subnetwork", "history"]);
+        let bridge_config =
+            BridgeConfig::parse_from(["bridge", "--portal-subnetwork", "legacy_history"]);
         assert_eq!(bridge_config.mode, BridgeMode::Latest);
         assert_eq!(
             bridge_config.el_provider.to_string(),
@@ -260,7 +261,7 @@ mod test {
             bridge_config.cl_provider_fallback.to_string(),
             FALLBACK_BASE_CL_ENDPOINT
         );
-        assert_eq!(bridge_config.portal_subnetwork, Subnetwork::History);
+        assert_eq!(bridge_config.portal_subnetwork, Subnetwork::LegacyHistory);
     }
 
     #[test]
@@ -268,7 +269,7 @@ mod test {
         const MODE: &str = "snapshot:60";
         let bridge_config = BridgeConfig::parse_from(["bridge", "--mode", MODE]);
         assert_eq!(bridge_config.mode, BridgeMode::Snapshot(60));
-        assert_eq!(bridge_config.portal_subnetwork, Subnetwork::History);
+        assert_eq!(bridge_config.portal_subnetwork, Subnetwork::LegacyHistory);
     }
 
     #[test]

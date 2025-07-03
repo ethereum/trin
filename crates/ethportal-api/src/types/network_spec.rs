@@ -158,7 +158,7 @@ impl EthereumHardforks for NetworkSpec {
 pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     let mut portal_subnetworks = BiHashMap::new();
     portal_subnetworks.insert(Subnetwork::State, "0x500A".to_string());
-    portal_subnetworks.insert(Subnetwork::History, "0x500B".to_string());
+    portal_subnetworks.insert(Subnetwork::LegacyHistory, "0x500B".to_string());
     portal_subnetworks.insert(Subnetwork::Beacon, "0x500C".to_string());
     portal_subnetworks.insert(Subnetwork::CanonicalIndices, "0x500D".to_string());
     portal_subnetworks.insert(Subnetwork::VerkleState, "0x500E".to_string());
@@ -179,7 +179,7 @@ pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
 pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     let mut portal_subnetworks = BiHashMap::new();
     portal_subnetworks.insert(Subnetwork::State, "0x504A".to_string());
-    portal_subnetworks.insert(Subnetwork::History, "0x504B".to_string());
+    portal_subnetworks.insert(Subnetwork::LegacyHistory, "0x504B".to_string());
     portal_subnetworks.insert(Subnetwork::Beacon, "0x504C".to_string());
     portal_subnetworks.insert(Subnetwork::CanonicalIndices, "0x504D".to_string());
     portal_subnetworks.insert(Subnetwork::VerkleState, "0x504E".to_string());
@@ -199,7 +199,7 @@ pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
 pub static SEPOLIA: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     let mut portal_subnetworks = BiHashMap::new();
     portal_subnetworks.insert(Subnetwork::State, "0x504A".to_string());
-    portal_subnetworks.insert(Subnetwork::History, "0x504B".to_string());
+    portal_subnetworks.insert(Subnetwork::LegacyHistory, "0x504B".to_string());
     portal_subnetworks.insert(Subnetwork::Beacon, "0x504C".to_string());
     portal_subnetworks.insert(Subnetwork::CanonicalIndices, "0x504D".to_string());
     portal_subnetworks.insert(Subnetwork::VerkleState, "0x504E".to_string());

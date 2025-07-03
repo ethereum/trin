@@ -1,6 +1,6 @@
 [package]
 name = "trin-history"
-description = "History network subprotocol for Trin."
+description = "Legacy History network subprotocol for Trin."
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true

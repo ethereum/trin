@@ -10,8 +10,8 @@ use ethportal_api::{
     },
     utils::bytes::hex_encode,
     version::get_trin_version,
-    BeaconNetworkApiClient, ContentValue, Discv5ApiClient, HistoryContentKey,
-    HistoryNetworkApiClient, StateNetworkApiClient, Web3ApiClient,
+    BeaconNetworkApiClient, ContentValue, Discv5ApiClient, LegacyHistoryContentKey,
+    LegacyHistoryNetworkApiClient, StateNetworkApiClient, Web3ApiClient,
 };
 use jsonrpsee::async_client::Client;
 use ssz::Encode;
@@ -198,7 +198,7 @@ pub async fn test_routing_table_info(subnetwork: Subnetwork, target: &Client) {
     let node_info = target.node_info().await.unwrap();
     let result = match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::routing_table_info(target),
-        Subnetwork::History => HistoryNetworkApiClient::routing_table_info(target),
+        Subnetwork::LegacyHistory => LegacyHistoryNetworkApiClient::routing_table_info(target),
         Subnetwork::State => StateNetworkApiClient::routing_table_info(target),
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
@@ -211,7 +211,7 @@ pub async fn test_radius(subnetwork: Subnetwork, target: &Client) {
     info!("Testing radius for {subnetwork}");
     let result = match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::radius(target),
-        Subnetwork::History => HistoryNetworkApiClient::radius(target),
+        Subnetwork::LegacyHistory => LegacyHistoryNetworkApiClient::radius(target),
         Subnetwork::State => StateNetworkApiClient::radius(target),
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
@@ -228,7 +228,7 @@ pub async fn test_add_enr(subnetwork: Subnetwork, target: &Client, peertest: &Pe
     let bootnode_enr = peertest.bootnode.enr.clone();
     let result = match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::add_enr(target, bootnode_enr),
-        Subnetwork::History => HistoryNetworkApiClient::add_enr(target, bootnode_enr),
+        Subnetwork::LegacyHistory => LegacyHistoryNetworkApiClient::add_enr(target, bootnode_enr),
         Subnetwork::State => StateNetworkApiClient::add_enr(target, bootnode_enr),
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
@@ -242,7 +242,7 @@ pub async fn test_get_enr(subnetwork: Subnetwork, target: &Client, peertest: &Pe
     let node_id = peertest.bootnode.enr.node_id();
     let result = match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::get_enr(target, node_id),
-        Subnetwork::History => HistoryNetworkApiClient::get_enr(target, node_id),
+        Subnetwork::LegacyHistory => LegacyHistoryNetworkApiClient::get_enr(target, node_id),
         Subnetwork::State => StateNetworkApiClient::get_enr(target, node_id),
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
@@ -256,7 +256,7 @@ pub async fn test_delete_enr(subnetwork: Subnetwork, target: &Client, peertest: 
     let node_id = peertest.bootnode.enr.node_id();
     let result = match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::delete_enr(target, node_id),
-        Subnetwork::History => HistoryNetworkApiClient::delete_enr(target, node_id),
+        Subnetwork::LegacyHistory => LegacyHistoryNetworkApiClient::delete_enr(target, node_id),
         Subnetwork::State => StateNetworkApiClient::delete_enr(target, node_id),
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
@@ -271,7 +271,7 @@ pub async fn test_lookup_enr(subnetwork: Subnetwork, peertest: &Peertest) {
     let node_id = peertest.nodes[0].enr.node_id();
     let result = match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::lookup_enr(target, node_id),
-        Subnetwork::History => HistoryNetworkApiClient::lookup_enr(target, node_id),
+        Subnetwork::LegacyHistory => LegacyHistoryNetworkApiClient::lookup_enr(target, node_id),
         Subnetwork::State => StateNetworkApiClient::lookup_enr(target, node_id),
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
@@ -285,7 +285,9 @@ pub async fn test_find_nodes(subnetwork: Subnetwork, target: &Client, peertest: 
     let bootnode_enr = peertest.bootnode.enr.clone();
     let result = match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
-        Subnetwork::History => HistoryNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
+        Subnetwork::LegacyHistory => {
+            LegacyHistoryNetworkApiClient::find_nodes(target, bootnode_enr, vec![256])
+        }
         Subnetwork::State => StateNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
@@ -303,7 +305,9 @@ pub async fn test_find_nodes_zero_distance(
     let bootnode_enr = peertest.bootnode.enr.clone();
     let result = match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
-        Subnetwork::History => HistoryNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
+        Subnetwork::LegacyHistory => {
+            LegacyHistoryNetworkApiClient::find_nodes(target, bootnode_enr, vec![0])
+        }
         Subnetwork::State => StateNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
@@ -312,19 +316,19 @@ pub async fn test_find_nodes_zero_distance(
     assert!(result.contains(&peertest.bootnode.enr));
 }
 
-pub async fn test_history_store(target: &Client) {
-    info!("Testing portal_historyStore");
+pub async fn test_legacy_history_store(target: &Client) {
+    info!("Testing portal_legacyHistoryStore");
     let (content_key, content_value) = fixture_header_by_hash();
-    let result = HistoryNetworkApiClient::store(target, content_key, content_value.encode())
+    let result = LegacyHistoryNetworkApiClient::store(target, content_key, content_value.encode())
         .await
         .unwrap();
     assert!(result);
 }
 
-pub async fn test_history_local_content_absent(target: &Client) {
-    info!("Testing portal_historyLocalContent absent");
-    let content_key = HistoryContentKey::new_block_header_by_hash(B256::random());
-    let error = HistoryNetworkApiClient::local_content(target, content_key)
+pub async fn test_legacy_history_local_content_absent(target: &Client) {
+    info!("Testing portal_legacyHistoryLocalContent absent");
+    let content_key = LegacyHistoryContentKey::new_block_header_by_hash(B256::random());
+    let error = LegacyHistoryNetworkApiClient::local_content(target, content_key)
         .await
         .unwrap_err();
     assert!(error

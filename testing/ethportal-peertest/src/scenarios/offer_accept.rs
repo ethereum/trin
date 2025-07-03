@@ -13,7 +13,8 @@ use ethportal_api::{
         },
         portal_wire::OfferTrace,
     },
-    ContentValue, Discv5ApiClient, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
+    ContentValue, Discv5ApiClient, LegacyHistoryContentKey, LegacyHistoryContentValue,
+    LegacyHistoryNetworkApiClient,
 };
 use portalnet::constants::DEFAULT_UTP_TRANSFER_LIMIT;
 use ssz::Decode;
@@ -25,7 +26,7 @@ use crate::{
         fixture_block_body, fixture_block_body_15040641, fixture_block_body_15040708,
         fixture_header_by_hash, fixture_header_by_hash_with_proof_15040641,
         fixture_header_by_hash_with_proof_15040708, fixture_receipts_15040641,
-        fixture_receipts_15040708, wait_for_history_content,
+        fixture_receipts_15040708, wait_for_legacy_history_content,
     },
     Peertest,
 };
@@ -50,7 +51,7 @@ pub async fn test_offer(peertest: &Peertest, target: &Client) {
     // Check if the stored content value in bootnode's DB matches the offered
     assert_eq!(
         content_value,
-        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await,
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, content_key).await,
     );
 }
 
@@ -88,7 +89,7 @@ pub async fn test_offer_with_trace(peertest: &Peertest, target: &Client) {
     // Check if the stored content value in bootnode's DB matches the offered
     assert_eq!(
         content_value,
-        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await,
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, content_key).await,
     );
 }
 
@@ -109,15 +110,15 @@ pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) 
     // validate that every node in the network now has a local copy of the header
     assert_eq!(
         content_value,
-        wait_for_history_content(target, content_key.clone()).await,
+        wait_for_legacy_history_content(target, content_key.clone()).await,
     );
     assert_eq!(
         content_value,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, content_key.clone()).await,
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, content_key.clone()).await,
     );
     assert_eq!(
         content_value,
-        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await,
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, content_key).await,
     );
 }
 
@@ -145,15 +146,15 @@ pub async fn test_offer_propagates_gossip_with_large_content(peertest: &Peertest
     // validate that every node in the network now has a local copy of the accumulator
     assert_eq!(
         body_value,
-        wait_for_history_content(target, body_key.clone()).await,
+        wait_for_legacy_history_content(target, body_key.clone()).await,
     );
     assert_eq!(
         body_value,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, body_key.clone()).await,
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, body_key.clone()).await,
     );
     assert_eq!(
         body_value,
-        wait_for_history_content(&peertest.bootnode.ipc_client, body_key).await,
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, body_key).await,
     );
 }
 
@@ -180,15 +181,15 @@ pub async fn test_offer_propagates_gossip_multiple_content_values(
     // check that header content is available
     assert_eq!(
         header_value,
-        wait_for_history_content(target, header_key.clone()).await,
+        wait_for_legacy_history_content(target, header_key.clone()).await,
     );
     assert_eq!(
         header_value,
-        wait_for_history_content(&peertest.bootnode.ipc_client, header_key.clone()).await,
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, header_key.clone()).await,
     );
     assert_eq!(
         header_value,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, header_key.clone()).await,
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, header_key.clone()).await,
     );
 
     // here everythings stored in target
@@ -206,28 +207,28 @@ pub async fn test_offer_propagates_gossip_multiple_content_values(
     // check that body content is available
     assert_eq!(
         body_value,
-        wait_for_history_content(target, body_key.clone()).await,
+        wait_for_legacy_history_content(target, body_key.clone()).await,
     );
     assert_eq!(
         body_value,
-        wait_for_history_content(&peertest.bootnode.ipc_client, body_key.clone()).await,
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, body_key.clone()).await,
     );
     assert_eq!(
         body_value,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, body_key.clone()).await,
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, body_key.clone()).await,
     );
     // check that receipts content is available
     assert_eq!(
         receipts_value,
-        wait_for_history_content(target, receipts_key.clone()).await,
+        wait_for_legacy_history_content(target, receipts_key.clone()).await,
     );
     assert_eq!(
         receipts_value,
-        wait_for_history_content(&peertest.bootnode.ipc_client, receipts_key.clone()).await,
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, receipts_key.clone()).await,
     );
     assert_eq!(
         receipts_value,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, receipts_key.clone()).await,
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, receipts_key.clone()).await,
     );
 }
 
@@ -277,57 +278,59 @@ pub async fn test_offer_propagates_gossip_multiple_large_content_values(
     // check that body_1 is available
     assert_eq!(
         body_value_1,
-        wait_for_history_content(target, body_key_1.clone()).await,
+        wait_for_legacy_history_content(target, body_key_1.clone()).await,
     );
     assert_eq!(
         body_value_1,
-        wait_for_history_content(&peertest.bootnode.ipc_client, body_key_1.clone()).await,
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, body_key_1.clone()).await,
     );
     assert_eq!(
         body_value_1,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, body_key_1).await,
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, body_key_1).await,
     );
 
     // check that receipts_1 is available
     assert_eq!(
         receipts_value_1,
-        wait_for_history_content(target, receipts_key_1.clone()).await,
+        wait_for_legacy_history_content(target, receipts_key_1.clone()).await,
     );
     assert_eq!(
         receipts_value_1,
-        wait_for_history_content(&peertest.bootnode.ipc_client, receipts_key_1.clone()).await,
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, receipts_key_1.clone())
+            .await,
     );
     assert_eq!(
         receipts_value_1,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, receipts_key_1).await,
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, receipts_key_1).await,
     );
 
     // check that body_2 is available
     assert_eq!(
         body_value_2,
-        wait_for_history_content(target, body_key_2.clone()).await,
+        wait_for_legacy_history_content(target, body_key_2.clone()).await,
     );
     assert_eq!(
         body_value_2,
-        wait_for_history_content(&peertest.bootnode.ipc_client, body_key_2.clone()).await,
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, body_key_2.clone()).await,
     );
     assert_eq!(
         body_value_2,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, body_key_2).await,
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, body_key_2).await,
     );
 
     // check that receipts_2 is available
     assert_eq!(
         receipts_value_2,
-        wait_for_history_content(target, receipts_key_2.clone()).await,
+        wait_for_legacy_history_content(target, receipts_key_2.clone()).await,
     );
     assert_eq!(
         receipts_value_2,
-        wait_for_history_content(&peertest.bootnode.ipc_client, receipts_key_2.clone()).await,
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, receipts_key_2.clone())
+            .await,
     );
     assert_eq!(
         receipts_value_2,
-        wait_for_history_content(&peertest.nodes[0].ipc_client, receipts_key_2).await,
+        wait_for_legacy_history_content(&peertest.nodes[0].ipc_client, receipts_key_2).await,
     );
 }
 
@@ -347,26 +350,26 @@ pub async fn test_offer_concurrent_utp_transfer_limit(peertest: &Peertest, targe
 
     // collect keys to offer based on limit
     let tuples = era1.take(limit).collect::<Vec<_>>();
-    let body_keys: Vec<HistoryContentKey> = tuples
+    let body_keys: Vec<LegacyHistoryContentKey> = tuples
         .iter()
-        .map(|tuple| HistoryContentKey::new_block_body(tuple.header.header.hash_slow()))
+        .map(|tuple| LegacyHistoryContentKey::new_block_body(tuple.header.header.hash_slow()))
         .collect();
-    let receipts_keys: Vec<HistoryContentKey> = tuples
+    let receipts_keys: Vec<LegacyHistoryContentKey> = tuples
         .iter()
-        .map(|tuple| HistoryContentKey::new_block_receipts(tuple.header.header.hash_slow()))
+        .map(|tuple| LegacyHistoryContentKey::new_block_receipts(tuple.header.header.hash_slow()))
         .collect();
 
     // store headers for validation
     for tuple in tuples.clone() {
         let header_key =
-            HistoryContentKey::new_block_header_by_hash(tuple.header.header.hash_slow());
+            LegacyHistoryContentKey::new_block_header_by_hash(tuple.header.header.hash_slow());
 
         let header = tuple.header.header.clone();
         let proof = PreMergeAccumulator::construct_proof(&header, &epoch_acc).unwrap();
         let proof = BlockHeaderProof::HistoricalHashes(proof);
 
         let header_value =
-            HistoryContentValue::BlockHeaderWithProof(HeaderWithProof { header, proof });
+            LegacyHistoryContentValue::BlockHeaderWithProof(HeaderWithProof { header, proof });
 
         let store_result = peertest
             .bootnode
@@ -378,13 +381,14 @@ pub async fn test_offer_concurrent_utp_transfer_limit(peertest: &Peertest, targe
     }
 
     // collect body and receipts to offer
-    let mut test_data: Vec<(HistoryContentKey, Bytes)> = vec![];
+    let mut test_data: Vec<(LegacyHistoryContentKey, Bytes)> = vec![];
     for tuple in tuples {
-        let body_key = HistoryContentKey::new_block_body(tuple.header.header.hash_slow());
-        let body_value = HistoryContentValue::BlockBody(tuple.body.body.clone());
+        let body_key = LegacyHistoryContentKey::new_block_body(tuple.header.header.hash_slow());
+        let body_value = LegacyHistoryContentValue::BlockBody(tuple.body.body.clone());
         test_data.push((body_key.clone(), body_value.encode()));
-        let receipts_key = HistoryContentKey::new_block_receipts(tuple.header.header.hash_slow());
-        let receipts_value = HistoryContentValue::Receipts(tuple.receipts.receipts.clone());
+        let receipts_key =
+            LegacyHistoryContentKey::new_block_receipts(tuple.header.header.hash_slow());
+        let receipts_value = LegacyHistoryContentValue::Receipts(tuple.receipts.receipts.clone());
         test_data.push((receipts_key.clone(), receipts_value.encode()));
     }
 
@@ -395,7 +399,7 @@ pub async fn test_offer_concurrent_utp_transfer_limit(peertest: &Peertest, targe
         let peer_enr_clone = peer_enr.clone();
         let target_clone = target.clone();
         let body_handle = tokio::spawn(async move {
-            let _result = HistoryNetworkApiClient::trace_offer(
+            let _result = LegacyHistoryNetworkApiClient::trace_offer(
                 &target_clone,
                 peer_enr_clone,
                 key.clone(),
@@ -409,9 +413,9 @@ pub async fn test_offer_concurrent_utp_transfer_limit(peertest: &Peertest, targe
 
     let _ = futures::future::join_all(handles).await;
     for key in body_keys {
-        wait_for_history_content(&peertest.bootnode.ipc_client, key.clone()).await;
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, key.clone()).await;
     }
     for key in receipts_keys {
-        wait_for_history_content(&peertest.bootnode.ipc_client, key.clone()).await;
+        wait_for_legacy_history_content(&peertest.bootnode.ipc_client, key.clone()).await;
     }
 }

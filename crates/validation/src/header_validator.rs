@@ -356,7 +356,7 @@ mod test {
     use alloy_hardforks::EthereumHardfork;
     use ethportal_api::{
         types::execution::header_with_proof::{BlockHeaderProof, HeaderWithProof},
-        HistoryContentKey,
+        LegacyHistoryContentKey,
     };
     use rstest::*;
     use serde::Deserialize;
@@ -387,7 +387,7 @@ mod test {
             )]
             block_number: u64,
         ) {
-            let test_data: HashMap<u64, ContentItem<HistoryContentKey>> =
+            let test_data: HashMap<u64, ContentItem<LegacyHistoryContentKey>> =
                 read_json_portal_spec_tests_file(
                     "tests/mainnet/history/headers_with_proof/1000001-1000010.json",
                 )
@@ -408,7 +408,7 @@ mod test {
         async fn verify_header_from_partial_epoch(
             #[values(15_537_392, 15_537_393)] block_number: u64,
         ) {
-            let test_data: ContentItem<HistoryContentKey> = read_yaml_portal_spec_tests_file(
+            let test_data: ContentItem<LegacyHistoryContentKey> = read_yaml_portal_spec_tests_file(
                 format!("tests/mainnet/history/headers_with_proof/{block_number}.yaml"),
             )
             .unwrap();
@@ -425,7 +425,7 @@ mod test {
         #[tokio::test]
         #[should_panic = "Execution block proof verification failed for pre-Merge header"]
         async fn invalidate_invalid_proofs() {
-            let test_data: ContentItem<HistoryContentKey> = read_yaml_portal_spec_tests_file(
+            let test_data: ContentItem<LegacyHistoryContentKey> = read_yaml_portal_spec_tests_file(
                 "tests/mainnet/history/headers_with_proof/1000010.yaml",
             )
             .unwrap();

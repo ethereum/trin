@@ -288,8 +288,8 @@ mod tests {
 
     fn create_config(temp_dir: &TempDir) -> EphemeralV1StoreConfig {
         EphemeralV1StoreConfig {
-            content_type: ContentType::HistoryEphemeral,
-            subnetwork: Subnetwork::History,
+            content_type: ContentType::LegacyHistoryEphemeral,
+            subnetwork: Subnetwork::LegacyHistory,
             node_data_dir: temp_dir.path().to_path_buf(),
             sql_connection_pool: setup_sql(temp_dir.path()).unwrap(),
         }
@@ -344,7 +344,7 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir);
         let store = EphemeralV1Store::<IdentityContentKey>::create(
-            ContentType::HistoryEphemeral,
+            ContentType::LegacyHistoryEphemeral,
             config.clone(),
         )?;
         assert_eq!(store.usage_stats.entry_count(), 0);
@@ -361,7 +361,7 @@ mod tests {
         create_and_populate_table(&config, item_count)?;
 
         let store = EphemeralV1Store::<IdentityContentKey>::create(
-            ContentType::HistoryEphemeral,
+            ContentType::LegacyHistoryEphemeral,
             config.clone(),
         )?;
 
@@ -380,7 +380,7 @@ mod tests {
 
         create_and_populate_table(&config, 50)?;
         let mut store = EphemeralV1Store::<IdentityContentKey>::create(
-            ContentType::HistoryEphemeral,
+            ContentType::LegacyHistoryEphemeral,
             config.clone(),
         )?;
 
@@ -421,7 +421,7 @@ mod tests {
 
         create_and_populate_table(&config, 50)?;
         let mut store = EphemeralV1Store::<IdentityContentKey>::create(
-            ContentType::HistoryEphemeral,
+            ContentType::LegacyHistoryEphemeral,
             config.clone(),
         )?;
 

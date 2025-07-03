@@ -228,7 +228,7 @@ mod tests {
         let storage_cfg_factory = PortalStorageConfigFactory::new(
             StorageCapacityConfig::Specific {
                 beacon_mb: Some(1),
-                history_mb: Some(1),
+                legacy_history_mb: Some(1),
                 state_mb: Some(1),
             },
             NodeId::random(),

@@ -18,7 +18,7 @@ pub enum StorageCapacityConfig {
     },
     Specific {
         beacon_mb: Option<u32>,
-        history_mb: Option<u32>,
+        legacy_history_mb: Option<u32>,
         state_mb: Option<u32>,
     },
 }
@@ -32,7 +32,7 @@ pub struct PortalStorageConfigFactory {
 }
 
 impl PortalStorageConfigFactory {
-    const HISTORY_CAPACITY_WEIGHT: u64 = 1;
+    const LEGACY_HISTORY_CAPACITY_WEIGHT: u64 = 1;
     const STATE_CAPACITY_WEIGHT: u64 = 1;
     const BEACON_CAPACITY_WEIGHT: u64 = 0; // Beacon doesn't care about given capacity
 
@@ -79,12 +79,12 @@ impl PortalStorageConfigFactory {
             }
             StorageCapacityConfig::Specific {
                 beacon_mb,
-                history_mb,
+                legacy_history_mb,
                 state_mb,
             } => {
                 let capacity_mb = match subnetwork {
                     Subnetwork::Beacon => *beacon_mb,
-                    Subnetwork::History => *history_mb,
+                    Subnetwork::LegacyHistory => *legacy_history_mb,
                     Subnetwork::State => *state_mb,
                     _ => None,
                 };
@@ -110,7 +110,7 @@ impl PortalStorageConfigFactory {
 
     fn get_capacity_weight(subnetwork: &Subnetwork) -> u64 {
         match subnetwork {
-            Subnetwork::History => Self::HISTORY_CAPACITY_WEIGHT,
+            Subnetwork::LegacyHistory => Self::LEGACY_HISTORY_CAPACITY_WEIGHT,
             Subnetwork::State => Self::STATE_CAPACITY_WEIGHT,
             Subnetwork::Beacon => Self::BEACON_CAPACITY_WEIGHT,
             _ => unreachable!("Subnetwork not activated: {subnetwork:?}"),
@@ -136,20 +136,20 @@ mod tests {
 
     #[rstest]
     #[case::none_beacon(vec![], 100, Subnetwork::Beacon, None)]
-    #[case::none_history(vec![], 100, Subnetwork::History, None)]
+    #[case::none_history(vec![], 100, Subnetwork::LegacyHistory, None)]
     #[case::none_state(vec![], 100, Subnetwork::State, None)]
-    #[case::historystate_zero_capacity_beacon(vec![Subnetwork::History, Subnetwork::State], 0, Subnetwork::Beacon, None)]
-    #[case::historystate_zero_capacity_history(vec![Subnetwork::History, Subnetwork::State], 0, Subnetwork::History, Some(0))]
-    #[case::historystate_zero_capacity_state(vec![Subnetwork::History, Subnetwork::State], 0, Subnetwork::State, Some(0))]
-    #[case::history_beacon(vec![Subnetwork::History], 100, Subnetwork::Beacon, None)]
-    #[case::history_history(vec![Subnetwork::History], 100, Subnetwork::History, Some(100_000_000))]
-    #[case::history_state(vec![Subnetwork::History], 100, Subnetwork::State, None)]
-    #[case::historystate_beacon(vec![Subnetwork::History, Subnetwork::State], 100, Subnetwork::Beacon, None)]
-    #[case::historystate_history(vec![Subnetwork::History, Subnetwork::State], 100, Subnetwork::History, Some(50_000_000))]
-    #[case::historystate_state(vec![Subnetwork::History, Subnetwork::State], 100, Subnetwork::State, Some(50_000_000))]
-    #[case::beaconhistorystate_beacon(vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State], 100, Subnetwork::Beacon, Some(0))]
-    #[case::beaconhistorystate_history(vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State], 100, Subnetwork::History, Some(50_000_000))]
-    #[case::beaconhistorystate_state(vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State], 100, Subnetwork::State, Some(50_000_000))]
+    #[case::historystate_zero_capacity_beacon(vec![Subnetwork::LegacyHistory, Subnetwork::State], 0, Subnetwork::Beacon, None)]
+    #[case::historystate_zero_capacity_history(vec![Subnetwork::LegacyHistory, Subnetwork::State], 0, Subnetwork::LegacyHistory, Some(0))]
+    #[case::historystate_zero_capacity_state(vec![Subnetwork::LegacyHistory, Subnetwork::State], 0, Subnetwork::State, Some(0))]
+    #[case::history_beacon(vec![Subnetwork::LegacyHistory], 100, Subnetwork::Beacon, None)]
+    #[case::history_history(vec![Subnetwork::LegacyHistory], 100, Subnetwork::LegacyHistory, Some(100_000_000))]
+    #[case::history_state(vec![Subnetwork::LegacyHistory], 100, Subnetwork::State, None)]
+    #[case::historystate_beacon(vec![Subnetwork::LegacyHistory, Subnetwork::State], 100, Subnetwork::Beacon, None)]
+    #[case::historystate_history(vec![Subnetwork::LegacyHistory, Subnetwork::State], 100, Subnetwork::LegacyHistory, Some(50_000_000))]
+    #[case::historystate_state(vec![Subnetwork::LegacyHistory, Subnetwork::State], 100, Subnetwork::State, Some(50_000_000))]
+    #[case::beaconhistorystate_beacon(vec![Subnetwork::Beacon, Subnetwork::LegacyHistory, Subnetwork::State], 100, Subnetwork::Beacon, Some(0))]
+    #[case::beaconhistorystate_history(vec![Subnetwork::Beacon, Subnetwork::LegacyHistory, Subnetwork::State], 100, Subnetwork::LegacyHistory, Some(50_000_000))]
+    #[case::beaconhistorystate_state(vec![Subnetwork::Beacon, Subnetwork::LegacyHistory, Subnetwork::State], 100, Subnetwork::State, Some(50_000_000))]
     fn combined_capacity_config(
         #[case] subnetworks: Vec<Subnetwork>,
         #[case] total_mb: u32,
@@ -185,7 +185,7 @@ mod tests {
         let factory = PortalStorageConfigFactory::new(
             StorageCapacityConfig::Specific {
                 beacon_mb: Some(100),
-                history_mb: Some(200),
+                legacy_history_mb: Some(200),
                 state_mb: Some(300),
             },
             NodeId::random(),
@@ -201,7 +201,7 @@ mod tests {
         );
         assert_eq!(
             factory
-                .create(&Subnetwork::History, Distance::MAX)
+                .create(&Subnetwork::LegacyHistory, Distance::MAX)
                 .unwrap()
                 .storage_capacity_bytes,
             200_000_000,
@@ -222,7 +222,7 @@ mod tests {
         let factory = PortalStorageConfigFactory::new(
             StorageCapacityConfig::Specific {
                 beacon_mb: None,
-                history_mb: Some(100),
+                legacy_history_mb: Some(100),
                 state_mb: None,
             },
             NodeId::random(),
@@ -231,7 +231,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             factory
-                .create(&Subnetwork::History, Distance::MAX)
+                .create(&Subnetwork::LegacyHistory, Distance::MAX)
                 .unwrap()
                 .storage_capacity_bytes,
             100_000_000,
@@ -253,7 +253,7 @@ mod tests {
         let factory = PortalStorageConfigFactory::new(
             StorageCapacityConfig::Specific {
                 beacon_mb: Some(0),
-                history_mb: Some(100),
+                legacy_history_mb: Some(100),
                 state_mb: None,
             },
             NodeId::random(),
@@ -269,7 +269,7 @@ mod tests {
         );
         assert_eq!(
             factory
-                .create(&Subnetwork::History, Distance::MAX)
+                .create(&Subnetwork::LegacyHistory, Distance::MAX)
                 .unwrap()
                 .storage_capacity_bytes,
             100_000_000,

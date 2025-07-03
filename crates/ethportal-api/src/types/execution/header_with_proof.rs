@@ -299,7 +299,7 @@ mod tests {
             read_json_portal_spec_tests_file, read_ssz_portal_spec_tests_file,
             read_yaml_portal_spec_tests_file, types::ContentItem,
         },
-        HistoryContentKey,
+        LegacyHistoryContentKey,
     };
 
     const TEST_DIR: &str = "tests/mainnet/history/headers_with_proof";
@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn decode_encode_headers_with_proof() {
-        let all_test_data: HashMap<u64, ContentItem<HistoryContentKey>> =
+        let all_test_data: HashMap<u64, ContentItem<LegacyHistoryContentKey>> =
             read_json_portal_spec_tests_file(test_path("1000001-1000010.json")).unwrap();
         for (block_number, test_data) in all_test_data {
             let header_with_proof = test_data.content_value_as_header_with_proof();
@@ -329,7 +329,7 @@ mod tests {
         )]
         block_number: u64,
     ) {
-        let test_data: ContentItem<HistoryContentKey> =
+        let test_data: ContentItem<LegacyHistoryContentKey> =
             read_yaml_portal_spec_tests_file(test_path(format!("{block_number}.yaml"))).unwrap();
         let header_with_proof = test_data.content_value_as_header_with_proof();
         assert_eq!(header_with_proof.header.number, block_number);
@@ -346,7 +346,7 @@ mod tests {
         fn bellatrix(
             #[values(15_537_394, 15_539_558, 15_547_621, 15_555_729, 17_034_869)] block_number: u64,
         ) -> anyhow::Result<()> {
-            let test_data: ContentItem<HistoryContentKey> =
+            let test_data: ContentItem<LegacyHistoryContentKey> =
                 read_yaml_portal_spec_tests_file(test_path(format!("{block_number}.yaml")))?;
             let header_with_proof = test_data.content_value_as_header_with_proof();
 
@@ -363,7 +363,7 @@ mod tests {
         fn capella(
             #[values(17_034_870, 17_042_287, 17_062_257, 19_426_586)] block_number: u64,
         ) -> anyhow::Result<()> {
-            let test_data: ContentItem<HistoryContentKey> =
+            let test_data: ContentItem<LegacyHistoryContentKey> =
                 read_yaml_portal_spec_tests_file(test_path(format!("{block_number}.yaml")))?;
             let header_with_proof = test_data.content_value_as_header_with_proof();
 
@@ -379,7 +379,7 @@ mod tests {
 
         #[rstest::rstest]
         fn deneb(#[values(19_426_587, 22_162_263)] block_number: u64) -> anyhow::Result<()> {
-            let test_data: ContentItem<HistoryContentKey> =
+            let test_data: ContentItem<LegacyHistoryContentKey> =
                 read_yaml_portal_spec_tests_file(test_path(format!("{block_number}.yaml")))?;
             let header_with_proof = test_data.content_value_as_header_with_proof();
 

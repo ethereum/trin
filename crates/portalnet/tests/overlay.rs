@@ -91,7 +91,7 @@ async fn spawn_overlay(
 
             if let Ok(req_subnetwork) = req_subnetwork {
                 match (req_subnetwork, overlay_protocol) {
-                    (Subnetwork::History, Subnetwork::History)
+                    (Subnetwork::LegacyHistory, Subnetwork::LegacyHistory)
                     | (Subnetwork::State, Subnetwork::State) => overlay_tx.send(talk_req).unwrap(),
                     _ => panic!("Unexpected subnetwork"),
                 }
@@ -120,7 +120,7 @@ async fn spawn_overlay(
 // Use sleeps to give time for background routing table processes.
 #[test_log::test(tokio::test)]
 async fn overlay() {
-    let protocol = Subnetwork::History;
+    let protocol = Subnetwork::LegacyHistory;
     let sleep_duration = Duration::from_millis(5);
     let ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 

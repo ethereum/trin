@@ -5,8 +5,8 @@ use crate::{
         enr::Enr,
         ping_extensions::{decode::PingExtension, extension_types::PingExtensionType},
     },
-    BeaconContentKey, BeaconContentValue, HistoryContentKey, HistoryContentValue, StateContentKey,
-    StateContentValue,
+    BeaconContentKey, BeaconContentValue, LegacyHistoryContentKey, LegacyHistoryContentValue,
+    StateContentKey, StateContentValue,
 };
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
@@ -59,7 +59,7 @@ pub enum StateEndpoint {
 
 /// History network JSON-RPC endpoints. Start with "portal_history" prefix
 #[derive(Debug, PartialEq, Clone)]
-pub enum HistoryEndpoint {
+pub enum LegacyHistoryEndpoint {
     /// params: [enr]
     AddEnr(Enr),
     /// params: None
@@ -67,29 +67,32 @@ pub enum HistoryEndpoint {
     /// params: [node_id]
     DeleteEnr(NodeId),
     /// params: [enr, content_key]
-    FindContent(Enr, HistoryContentKey),
+    FindContent(Enr, LegacyHistoryContentKey),
     /// params: [enr, distances]
     FindNodes(Enr, Vec<u16>),
     /// params: [node_id]
     GetEnr(NodeId),
     /// params: content_key
-    LocalContent(HistoryContentKey),
+    LocalContent(LegacyHistoryContentKey),
     /// params: [node_id]
     LookupEnr(NodeId),
     /// params: [content_key, content_value]
-    PutContent(HistoryContentKey, HistoryContentValue),
+    PutContent(LegacyHistoryContentKey, LegacyHistoryContentValue),
     /// params: [enr, Vec<(content_key, content_value)>]
-    Offer(Enr, Vec<(HistoryContentKey, HistoryContentValue)>),
+    Offer(
+        Enr,
+        Vec<(LegacyHistoryContentKey, LegacyHistoryContentValue)>,
+    ),
     /// params: [enr, content_key, content_value]
-    TraceOffer(Enr, HistoryContentKey, HistoryContentValue),
+    TraceOffer(Enr, LegacyHistoryContentKey, LegacyHistoryContentValue),
     /// params: [enr, payload_type, payload]
     Ping(Enr, Option<PingExtensionType>, Option<PingExtension>),
     /// params: content_key
-    GetContent(HistoryContentKey),
+    GetContent(LegacyHistoryContentKey),
     /// params: content_key
-    TraceGetContent(HistoryContentKey),
+    TraceGetContent(LegacyHistoryContentKey),
     /// params: [content_key, content_value]
-    Store(HistoryContentKey, HistoryContentValue),
+    Store(LegacyHistoryContentKey, LegacyHistoryContentValue),
     /// params: None
     RoutingTableInfo,
     // This endpoint is not History network specific
@@ -164,7 +167,7 @@ impl SubnetworkEndpoint for StateEndpoint {
     }
 }
 
-impl SubnetworkEndpoint for HistoryEndpoint {
+impl SubnetworkEndpoint for LegacyHistoryEndpoint {
     fn subnetwork() -> &'static str {
         "history"
     }
