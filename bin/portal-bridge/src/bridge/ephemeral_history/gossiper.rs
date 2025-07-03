@@ -22,7 +22,7 @@ use tokio::{
     time::{sleep, timeout},
 };
 use tracing::{error, info, warn};
-use trin_history::network::LegacyHistoryNetwork;
+use trin_legacy_history::network::LegacyHistoryNetwork;
 use trin_metrics::bridge::BridgeMetricsReporter;
 
 use super::ephemeral_bundle::EphemeralBundle;

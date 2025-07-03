@@ -14,7 +14,7 @@ members = [
     "crates/rpc",
     "crates/storage",
     "crates/subnetworks/beacon",
-    "crates/subnetworks/history", 
+    "crates/subnetworks/legacy-history", 
     "crates/subnetworks/state",
     "crates/utils",
     "crates/validation",    
@@ -115,7 +115,7 @@ trin = { path = "bin/trin"}
 trin-beacon = { path = "crates/subnetworks/beacon" }
 trin-evm = { path = "crates/evm" }
 trin-execution = { path = "bin/trin-execution" }
-trin-history = { path = "crates/subnetworks/history" }
+trin-legacy-history = { path = "crates/subnetworks/legacy-history" }
 trin-metrics = { path = "crates/metrics" }
 trin-state = { path = "crates/subnetworks/state" }
 trin-storage = { path = "crates/storage" }

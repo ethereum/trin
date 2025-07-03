@@ -40,8 +40,8 @@ cargo build --workspace
 cargo test --workspace
 
 # Build and run test suite for an individual crate
-cargo build -p trin-history
-cargo test -p trin-history
+cargo build -p trin-legacy-history
+cargo test -p trin-legacy-history
 
 # Run
 cargo run
@@ -105,8 +105,8 @@ cargo build --workspace
 cargo test --workspace
 
 # Build and run test suite for an individual crate
-cargo build -p trin-history
-cargo test -p trin-history
+cargo build -p trin-legacy-history
+cargo test -p trin-legacy-history
 
 # Run help
 cargo run -- --help

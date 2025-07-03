@@ -3289,8 +3289,6 @@ dependencies = [
  "tracing-subscriber 0.3.19",
  "tree_hash",
  "trin",
- "trin-history",
- "trin-state",
  "trin-utils",
  "trin-validation",
  "uds_windows",
@@ -5719,7 +5717,7 @@ dependencies = [
  "trin-beacon",
  "trin-evm",
  "trin-execution",
- "trin-history",
+ "trin-legacy-history",
  "trin-metrics",
  "trin-state",
  "trin-storage",
@@ -8350,7 +8348,7 @@ dependencies = [
  "tracing",
  "tree_hash",
  "trin-beacon",
- "trin-history",
+ "trin-legacy-history",
  "trin-state",
  "trin-storage",
  "trin-utils",
@@ -8439,7 +8437,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "trin-history"
+name = "trin-legacy-history"
 version = "0.3.3"
 dependencies = [
  "alloy",

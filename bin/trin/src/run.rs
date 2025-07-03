@@ -14,7 +14,7 @@ use rpc::{config::RpcConfig, launch_jsonrpc_server, RpcServerHandle};
 use tokio::sync::{mpsc, RwLock};
 use tracing::info;
 use trin_beacon::initialize_beacon_network;
-use trin_history::initialize_legacy_history_network;
+use trin_legacy_history::initialize_legacy_history_network;
 use trin_state::initialize_state_network;
 use trin_storage::{config::StorageCapacityConfig, PortalStorageConfigFactory};
 #[cfg(windows)]
