@@ -86,7 +86,7 @@ impl Network {
     ) -> Self {
         if !matches!(
             subnetwork,
-            Subnetwork::History | Subnetwork::Beacon | Subnetwork::State
+            Subnetwork::LegacyHistory | Subnetwork::Beacon | Subnetwork::State
         ) {
             panic!("Unsupported subnetwork: {subnetwork}");
         }
@@ -312,7 +312,7 @@ impl Network {
 
     pub async fn ping(&self, enr: &Enr) -> anyhow::Result<Pong> {
         match self.subnetwork {
-            Subnetwork::History => {
+            Subnetwork::LegacyHistory => {
                 self.subnetwork_overlays
                     .history()?
                     .overlay
@@ -340,7 +340,7 @@ impl Network {
 
     pub async fn find_nodes(&self, enr: &Enr, distances: Vec<u16>) -> anyhow::Result<Vec<Enr>> {
         Ok(match self.subnetwork {
-            Subnetwork::History => {
+            Subnetwork::LegacyHistory => {
                 self.subnetwork_overlays
                     .history()?
                     .overlay
@@ -372,7 +372,7 @@ impl Network {
 
     pub async fn recursive_find_nodes(&self, node_id: NodeId) -> anyhow::Result<Vec<Enr>> {
         let enrs = match self.subnetwork {
-            Subnetwork::History => {
+            Subnetwork::LegacyHistory => {
                 self.subnetwork_overlays
                     .history()?
                     .overlay

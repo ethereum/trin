@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
 use super::{
-    endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint},
+    endpoints::{BeaconEndpoint, LegacyHistoryEndpoint, StateEndpoint},
     params::Params,
 };
 
@@ -51,8 +51,8 @@ pub struct JsonRpcRequest<T> {
     pub resp: Responder<Value, String>,
 }
 
-/// History network JSON-RPC request
-pub type HistoryJsonRpcRequest = JsonRpcRequest<HistoryEndpoint>;
+/// Legacy History network JSON-RPC request
+pub type LegacyHistoryJsonRpcRequest = JsonRpcRequest<LegacyHistoryEndpoint>;
 
 /// State network JSON-RPC request
 pub type StateJsonRpcRequest = JsonRpcRequest<StateEndpoint>;

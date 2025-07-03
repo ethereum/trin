@@ -31,7 +31,7 @@ use revm_primitives::B256;
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 use tree_hash::TreeHash;
-use trin_history::network::HistoryNetwork;
+use trin_history::network::LegacyHistoryNetwork;
 use trin_metrics::bridge::BridgeMetricsReporter;
 
 use crate::census::Census;
@@ -53,7 +53,7 @@ pub struct EphemeralHistoryBridge {
 
 impl EphemeralHistoryBridge {
     pub async fn new(
-        history_network: Arc<HistoryNetwork>,
+        history_network: Arc<LegacyHistoryNetwork>,
         head_offer_limit: usize,
         non_ephemeral_offer_limit: usize,
         consensus_api: ConsensusApi,

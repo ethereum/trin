@@ -10,7 +10,7 @@ mod errors;
 mod eth_rpc;
 mod evm_state;
 mod fetch;
-mod history_rpc;
+mod legacy_history_rpc;
 mod ping_extension;
 mod rpc_server;
 mod serde;
@@ -31,11 +31,13 @@ use eth_rpc::EthApi;
 use ethportal_api::{
     jsonrpsee,
     types::{
-        jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
+        jsonrpc::request::{
+            BeaconJsonRpcRequest, LegacyHistoryJsonRpcRequest, StateJsonRpcRequest,
+        },
         network::Subnetwork,
     },
 };
-use history_rpc::HistoryNetworkApi;
+use legacy_history_rpc::LegacyHistoryNetworkApi;
 use portalnet::discovery::Discovery;
 use reth_ipc::server::Builder as IpcServerBuilder;
 use state_rpc::StateNetworkApi;
@@ -50,7 +52,7 @@ pub async fn launch_jsonrpc_server(
     rpc_config: RpcConfig,
     portal_subnetworks: Arc<Vec<Subnetwork>>,
     discv5: Arc<Discovery>,
-    history_handler: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
+    history_handler: Option<mpsc::UnboundedSender<LegacyHistoryJsonRpcRequest>>,
     state_handler: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
     beacon_handler: Option<mpsc::UnboundedSender<BeaconJsonRpcRequest>>,
 ) -> Result<RpcServerHandle, RpcError> {
@@ -59,8 +61,8 @@ pub async fn launch_jsonrpc_server(
 
     for network in portal_subnetworks.iter() {
         match network {
-            Subnetwork::History => {
-                modules.push(PortalRpcModule::History);
+            Subnetwork::LegacyHistory => {
+                modules.push(PortalRpcModule::LegacyHistory);
                 modules.push(PortalRpcModule::Eth);
             }
             Subnetwork::State => modules.push(PortalRpcModule::State),
@@ -73,7 +75,7 @@ pub async fn launch_jsonrpc_server(
         Web3TransportType::IPC => {
             let transport = TransportRpcModuleConfig::default().with_ipc(modules);
             let transport_modules = RpcModuleBuilder::new(discv5)
-                .maybe_with_history(history_handler)
+                .maybe_with_legacy_history(history_handler)
                 .maybe_with_beacon(beacon_handler)
                 .maybe_with_state(state_handler)
                 .build(transport);
@@ -97,7 +99,7 @@ pub async fn launch_jsonrpc_server(
             let transport = transport.with_http(modules);
 
             let transport_modules = RpcModuleBuilder::new(discv5)
-                .maybe_with_history(history_handler)
+                .maybe_with_legacy_history(history_handler)
                 .maybe_with_beacon(beacon_handler)
                 .maybe_with_state(state_handler)
                 .build(transport);

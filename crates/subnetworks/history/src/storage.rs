@@ -4,7 +4,7 @@ use ethportal_api::{
         network::Subnetwork,
         portal::PaginateLocalContentInfo,
     },
-    HistoryContentKey, OverlayContentKey, RawContentValue,
+    LegacyHistoryContentKey, OverlayContentKey, RawContentValue,
 };
 use trin_storage::{
     error::ContentStoreError,
@@ -12,31 +12,35 @@ use trin_storage::{
     ContentId, ContentStore, PortalStorageConfig, ShouldWeStoreContent,
 };
 
-/// Storage layer for the history network. Encapsulates history network specific data and logic.
+/// Storage layer for the legacy history network. Encapsulates legacy history network specific data
+/// and logic.
 #[derive(Debug)]
-pub struct HistoryStorage {
-    store: IdIndexedV1Store<HistoryContentKey, XorMetric>,
+pub struct LegacyHistoryStorage {
+    store: IdIndexedV1Store<LegacyHistoryContentKey, XorMetric>,
 }
 
-impl ContentStore for HistoryStorage {
-    type Key = HistoryContentKey;
+impl ContentStore for LegacyHistoryStorage {
+    type Key = LegacyHistoryContentKey;
 
-    fn get(&self, key: &HistoryContentKey) -> Result<Option<RawContentValue>, ContentStoreError> {
+    fn get(
+        &self,
+        key: &LegacyHistoryContentKey,
+    ) -> Result<Option<RawContentValue>, ContentStoreError> {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
     fn put<V: AsRef<[u8]>>(
         &mut self,
-        key: HistoryContentKey,
+        key: LegacyHistoryContentKey,
         value: V,
-    ) -> Result<Vec<(HistoryContentKey, RawContentValue)>, ContentStoreError> {
+    ) -> Result<Vec<(LegacyHistoryContentKey, RawContentValue)>, ContentStoreError> {
         self.store
             .insert(&key, RawContentValue::copy_from_slice(value.as_ref()))
     }
 
     fn should_we_store(
         &self,
-        key: &HistoryContentKey,
+        key: &LegacyHistoryContentKey,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_id = ContentId::from(key.content_id());
         if key.affected_by_radius()
@@ -55,13 +59,20 @@ impl ContentStore for HistoryStorage {
     }
 }
 
-impl HistoryStorage {
+impl LegacyHistoryStorage {
     pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
         let sql_connection_pool = config.sql_connection_pool.clone();
-        let config =
-            IdIndexedV1StoreConfig::new(ContentType::HistoryEternal, Subnetwork::History, config);
+        let config = IdIndexedV1StoreConfig::new(
+            ContentType::LegacyHistoryEternal,
+            Subnetwork::LegacyHistory,
+            config,
+        );
         Ok(Self {
-            store: create_store(ContentType::HistoryEternal, config, sql_connection_pool)?,
+            store: create_store(
+                ContentType::LegacyHistoryEternal,
+                config,
+                sql_connection_pool,
+            )?,
         })
     }
 
@@ -76,7 +87,7 @@ impl HistoryStorage {
         &self,
         offset: u64,
         limit: u64,
-    ) -> Result<PaginateLocalContentInfo<HistoryContentKey>, ContentStoreError> {
+    ) -> Result<PaginateLocalContentInfo<LegacyHistoryContentKey>, ContentStoreError> {
         let paginate_result = self.store.paginate(offset, limit)?;
         Ok(PaginateLocalContentInfo {
             content_keys: paginate_result.content_keys,
@@ -88,7 +99,9 @@ impl HistoryStorage {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod test {
-    use ethportal_api::{types::content_key::history::BlockHeaderByHashKey, HistoryContentKey};
+    use ethportal_api::{
+        types::content_key::legacy_history::BlockHeaderByHashKey, LegacyHistoryContentKey,
+    };
     use quickcheck::{QuickCheck, TestResult};
     use rand::{rng, RngCore};
     use serial_test::serial;
@@ -104,8 +117,8 @@ pub mod test {
         fn test_store_random_bytes() -> TestResult {
             let (temp_dir, storage_config) =
                 create_test_portal_storage_config_with_capacity(CAPACITY_MB).unwrap();
-            let mut storage = HistoryStorage::new(storage_config).unwrap();
-            let content_key = HistoryContentKey::random().unwrap();
+            let mut storage = LegacyHistoryStorage::new(storage_config).unwrap();
+            let content_key = LegacyHistoryContentKey::random().unwrap();
             let mut value = [0u8; 32];
             rng().fill_bytes(&mut value);
             storage.put(content_key, value).unwrap();
@@ -125,8 +138,9 @@ pub mod test {
     async fn test_get_data() -> Result<(), ContentStoreError> {
         let (temp_dir, storage_config) =
             create_test_portal_storage_config_with_capacity(CAPACITY_MB).unwrap();
-        let mut storage = HistoryStorage::new(storage_config)?;
-        let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey::default());
+        let mut storage = LegacyHistoryStorage::new(storage_config)?;
+        let content_key =
+            LegacyHistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey::default());
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.put(content_key.clone(), &value)?;
 

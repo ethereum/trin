@@ -52,9 +52,13 @@ pub fn subnetworks_flag(bridge_config: &BridgeConfig) -> Vec<Subnetwork> {
     match bridge_config.portal_subnetwork {
         Subnetwork::Beacon => vec![Subnetwork::Beacon],
         // History requires beacon and history
-        Subnetwork::History => vec![Subnetwork::Beacon, Subnetwork::History],
+        Subnetwork::LegacyHistory => vec![Subnetwork::Beacon, Subnetwork::LegacyHistory],
         // State requires beacon, history and state
-        Subnetwork::State => vec![Subnetwork::Beacon, Subnetwork::History, Subnetwork::State],
+        Subnetwork::State => vec![
+            Subnetwork::Beacon,
+            Subnetwork::LegacyHistory,
+            Subnetwork::State,
+        ],
         subnetwork => panic!("Unsupported subnetwork: {subnetwork:?}"),
     }
 }

@@ -3,7 +3,7 @@ use std::{collections::HashSet, time::Duration};
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{network::Subnetwork, portal_wire::OfferTrace},
-    BeaconContentKey, HistoryContentKey, OverlayContentKey, StateContentKey,
+    BeaconContentKey, LegacyHistoryContentKey, OverlayContentKey, StateContentKey,
 };
 use network::{Network, NetworkAction, NetworkInitializationConfig, NetworkManager};
 use peer::PeerInfo;
@@ -37,21 +37,24 @@ pub enum CensusError {
 /// rfn to find new peers, and providing interested enrs for a given content id.
 #[derive(Clone)]
 pub struct Census {
-    history: Network,
+    legacy_history: Network,
     state: Network,
     beacon: Network,
     initialized: bool,
 }
 
 impl Census {
-    const SUPPORTED_SUBNETWORKS: [Subnetwork; 3] =
-        [Subnetwork::Beacon, Subnetwork::History, Subnetwork::State];
+    const SUPPORTED_SUBNETWORKS: [Subnetwork; 3] = [
+        Subnetwork::Beacon,
+        Subnetwork::LegacyHistory,
+        Subnetwork::State,
+    ];
 
     pub fn new(subnetwork_overlays: SubnetworkOverlays, bridge_config: &BridgeConfig) -> Self {
         Self {
-            history: Network::new(
+            legacy_history: Network::new(
                 subnetwork_overlays.clone(),
-                Subnetwork::History,
+                Subnetwork::LegacyHistory,
                 bridge_config,
             ),
             state: Network::new(
@@ -75,7 +78,7 @@ impl Census {
         content_key: &impl OverlayContentKey,
     ) -> Result<Vec<PeerInfo>, CensusError> {
         match subnetwork {
-            Subnetwork::History => self.history.select_peers(Some(content_key)),
+            Subnetwork::LegacyHistory => self.legacy_history.select_peers(Some(content_key)),
             Subnetwork::State => self.state.select_peers(Some(content_key)),
             Subnetwork::Beacon => self.beacon.select_peers(Some(content_key)),
             _ => Err(CensusError::UnsupportedSubnetwork(subnetwork)),
@@ -88,7 +91,9 @@ impl Census {
         subnetwork: Subnetwork,
     ) -> Result<Vec<PeerInfo>, CensusError> {
         match subnetwork {
-            Subnetwork::History => self.history.select_peers(None::<&HistoryContentKey>),
+            Subnetwork::LegacyHistory => self
+                .legacy_history
+                .select_peers(None::<&LegacyHistoryContentKey>),
             Subnetwork::State => self.state.select_peers(None::<&StateContentKey>),
             Subnetwork::Beacon => self.beacon.select_peers(None::<&BeaconContentKey>),
             _ => Err(CensusError::UnsupportedSubnetwork(subnetwork)),
@@ -104,7 +109,7 @@ impl Census {
         offer_trace: &OfferTrace,
     ) {
         let network = match subnetwork {
-            Subnetwork::History => &self.history,
+            Subnetwork::LegacyHistory => &self.legacy_history,
             Subnetwork::State => &self.state,
             Subnetwork::Beacon => &self.beacon,
             _ => {
@@ -148,9 +153,9 @@ impl Census {
         } else {
             None
         };
-        let mut history_manager = if subnetworks.contains(&Subnetwork::History) {
-            self.history.init(&initialization_config).await?;
-            Some(self.history.create_manager())
+        let mut legacy_history_manager = if subnetworks.contains(&Subnetwork::LegacyHistory) {
+            self.legacy_history.init(&initialization_config).await?;
+            Some(self.legacy_history.create_manager())
         } else {
             None
         };
@@ -169,8 +174,8 @@ impl Census {
                             manager.execute_action(action).await;
                         }
                     }
-                    Some(action) = next_action(&mut history_manager) => {
-                        if let Some(manager) = &mut history_manager {
+                    Some(action) = next_action(&mut legacy_history_manager) => {
+                        if let Some(manager) = &mut legacy_history_manager {
                             manager.execute_action(action).await;
                         }
                     }

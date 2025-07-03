@@ -23,7 +23,7 @@ use super::{
 };
 
 // todo: remove this constant once the history network implements full chain header validation
-const DISABLE_HISTORY_HEADER_CHECK: bool = true;
+const DISABLE_LEGACY_HISTORY_HEADER_CHECK: bool = true;
 
 pub struct StateValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -76,7 +76,7 @@ impl StateValidator {
                 Ok(ValidationResult::Valid)
             }
             StateContentValue::AccountTrieNodeWithProof(value) => {
-                let state_root = match DISABLE_HISTORY_HEADER_CHECK {
+                let state_root = match DISABLE_LEGACY_HISTORY_HEADER_CHECK {
                     true => None,
                     false => Some(self.get_state_root(value.block_hash).await?),
                 };
@@ -101,7 +101,7 @@ impl StateValidator {
                 Ok(ValidationResult::Valid)
             }
             StateContentValue::ContractStorageTrieNodeWithProof(value) => {
-                let state_root = match DISABLE_HISTORY_HEADER_CHECK {
+                let state_root = match DISABLE_LEGACY_HISTORY_HEADER_CHECK {
                     true => None,
                     false => Some(self.get_state_root(value.block_hash).await?),
                 };
@@ -148,7 +148,7 @@ impl StateValidator {
                     });
                 }
 
-                let state_root = match DISABLE_HISTORY_HEADER_CHECK {
+                let state_root = match DISABLE_LEGACY_HISTORY_HEADER_CHECK {
                     true => None,
                     false => Some(self.get_state_root(value.block_hash).await?),
                 };
@@ -187,10 +187,10 @@ mod tests {
     use ethportal_api::{
         types::{
             execution::header_with_proof::{BlockHeaderProof, HeaderWithProof},
-            jsonrpc::{endpoints::HistoryEndpoint, json_rpc_mock::MockJsonRpcBuilder},
+            jsonrpc::{endpoints::LegacyHistoryEndpoint, json_rpc_mock::MockJsonRpcBuilder},
             portal::GetContentInfo,
         },
-        HistoryContentKey, HistoryContentValue, OverlayContentKey,
+        LegacyHistoryContentKey, LegacyHistoryContentValue, OverlayContentKey,
     };
     use serde::Deserialize;
     use serde_yaml::Value;
@@ -206,24 +206,25 @@ mod tests {
     }
 
     fn create_validator_with_header(header: Header) -> StateValidator {
-        let history_content_value = HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
-            header: header.clone(),
-            proof: BlockHeaderProof::HistoricalHashes(Default::default()),
-        });
-        let history_jsonrpc_tx = MockJsonRpcBuilder::new()
+        let legacy_history_content_value =
+            LegacyHistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
+                header: header.clone(),
+                proof: BlockHeaderProof::HistoricalHashes(Default::default()),
+            });
+        let legacy_history_jsonrpc_tx = MockJsonRpcBuilder::new()
             .with_response(
-                HistoryEndpoint::GetContent(HistoryContentKey::new_block_header_by_hash(
-                    header.hash_slow(),
-                )),
+                LegacyHistoryEndpoint::GetContent(
+                    LegacyHistoryContentKey::new_block_header_by_hash(header.hash_slow()),
+                ),
                 GetContentInfo {
-                    content: history_content_value.encode(),
+                    content: legacy_history_content_value.encode(),
                     utp_transfer: false,
                 },
             )
             .or_fail();
 
         let mut header_oracle = HeaderOracle::new();
-        header_oracle.history_jsonrpc_tx = Some(history_jsonrpc_tx);
+        header_oracle.legacy_history_jsonrpc_tx = Some(legacy_history_jsonrpc_tx);
 
         StateValidator {
             header_oracle: Arc::new(RwLock::new(header_oracle)),

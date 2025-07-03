@@ -23,7 +23,7 @@ pub const HISTORY_EPHEMERAL_HEADER_OFFER_KEY_PREFIX: u8 = 0x05;
 
 /// A content key in the history overlay network.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum HistoryContentKey {
+pub enum LegacyHistoryContentKey {
     /// A block header by hash.
     BlockHeaderByHash(BlockHeaderByHashKey),
     /// A block header by number.
@@ -45,7 +45,7 @@ pub enum HistoryContentKey {
     EphemeralHeaderOffer(EphemeralHeaderOfferKey),
 }
 
-impl HistoryContentKey {
+impl LegacyHistoryContentKey {
     pub fn random() -> anyhow::Result<Self> {
         let random_prefix = [
             HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX,
@@ -105,13 +105,13 @@ impl HistoryContentKey {
     }
 }
 
-impl Hash for HistoryContentKey {
+impl Hash for LegacyHistoryContentKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         state.write(&self.to_bytes());
     }
 }
 
-impl Serialize for HistoryContentKey {
+impl Serialize for LegacyHistoryContentKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -120,7 +120,7 @@ impl Serialize for HistoryContentKey {
     }
 }
 
-impl<'de> Deserialize<'de> for HistoryContentKey {
+impl<'de> Deserialize<'de> for LegacyHistoryContentKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -173,7 +173,7 @@ pub struct EphemeralHeaderOfferKey {
     pub block_hash: [u8; 32],
 }
 
-impl fmt::Display for HistoryContentKey {
+impl fmt::Display for LegacyHistoryContentKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             Self::BlockHeaderByHash(header) => format!(
@@ -215,7 +215,7 @@ impl fmt::Display for HistoryContentKey {
     }
 }
 
-impl OverlayContentKey for HistoryContentKey {
+impl OverlayContentKey for LegacyHistoryContentKey {
     fn affected_by_radius(&self) -> bool {
         match self {
             Self::BlockHeaderByHash(_) => true,
@@ -231,32 +231,32 @@ impl OverlayContentKey for HistoryContentKey {
         let mut bytes;
 
         match self {
-            HistoryContentKey::BlockHeaderByHash(key) => {
+            LegacyHistoryContentKey::BlockHeaderByHash(key) => {
                 bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
                 bytes.put_u8(HISTORY_BLOCK_HEADER_BY_HASH_KEY_PREFIX);
                 bytes.put_slice(&key.as_ssz_bytes());
             }
-            HistoryContentKey::BlockBody(key) => {
+            LegacyHistoryContentKey::BlockBody(key) => {
                 bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
                 bytes.put_u8(HISTORY_BLOCK_BODY_KEY_PREFIX);
                 bytes.put_slice(&key.as_ssz_bytes());
             }
-            HistoryContentKey::BlockReceipts(key) => {
+            LegacyHistoryContentKey::BlockReceipts(key) => {
                 bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
                 bytes.put_u8(HISTORY_BLOCK_RECEIPTS_KEY_PREFIX);
                 bytes.put_slice(&key.as_ssz_bytes());
             }
-            HistoryContentKey::BlockHeaderByNumber(key) => {
+            LegacyHistoryContentKey::BlockHeaderByNumber(key) => {
                 bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
                 bytes.put_u8(HISTORY_BLOCK_HEADER_BY_NUMBER_KEY_PREFIX);
                 bytes.put_slice(&key.as_ssz_bytes());
             }
-            HistoryContentKey::EphemeralHeadersFindContent(key) => {
+            LegacyHistoryContentKey::EphemeralHeadersFindContent(key) => {
                 bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
                 bytes.put_u8(HISTORY_EPHEMERAL_HEADERS_FIND_CONTENT_KEY_PREFIX);
                 bytes.put_slice(&key.as_ssz_bytes());
             }
-            HistoryContentKey::EphemeralHeaderOffer(key) => {
+            LegacyHistoryContentKey::EphemeralHeaderOffer(key) => {
                 bytes = BytesMut::with_capacity(1 + key.ssz_bytes_len());
                 bytes.put_u8(HISTORY_EPHEMERAL_HEADER_OFFER_KEY_PREFIX);
                 bytes.put_slice(&key.as_ssz_bytes());
@@ -336,7 +336,7 @@ mod test {
             block_hash: BLOCK_HASH,
         };
 
-        let key = HistoryContentKey::BlockHeaderByHash(header);
+        let key = LegacyHistoryContentKey::BlockHeaderByHash(header);
 
         assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
@@ -362,10 +362,10 @@ mod test {
             block_number: BLOCK_NUMBER,
         };
 
-        let key = HistoryContentKey::BlockHeaderByNumber(header);
+        let key = LegacyHistoryContentKey::BlockHeaderByNumber(header);
 
         // round trip
-        let decoded = HistoryContentKey::try_from_bytes(key.to_bytes()).unwrap();
+        let decoded = LegacyHistoryContentKey::try_from_bytes(key.to_bytes()).unwrap();
         assert_eq!(decoded, key);
 
         assert_eq!(key.to_bytes(), expected_content_key);
@@ -392,10 +392,10 @@ mod test {
             block_hash: BLOCK_HASH,
         };
 
-        let key = HistoryContentKey::BlockBody(body);
+        let key = LegacyHistoryContentKey::BlockBody(body);
 
         // round trip
-        let decoded = HistoryContentKey::try_from_bytes(key.to_bytes()).unwrap();
+        let decoded = LegacyHistoryContentKey::try_from_bytes(key.to_bytes()).unwrap();
         assert_eq!(decoded, key);
 
         assert_eq!(key.to_bytes(), expected_content_key);
@@ -419,7 +419,7 @@ mod test {
             block_hash: BLOCK_HASH,
         };
 
-        let key = HistoryContentKey::BlockReceipts(receipts);
+        let key = LegacyHistoryContentKey::BlockReceipts(receipts);
 
         assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
@@ -434,11 +434,12 @@ mod test {
     fn ser_de_block_header_by_hash() {
         let content_key_json =
             "\"0x00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
-        let expected_content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
-            block_hash: BLOCK_HASH,
-        });
+        let expected_content_key =
+            LegacyHistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
+                block_hash: BLOCK_HASH,
+            });
 
-        let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
+        let content_key: LegacyHistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 
         assert_eq!(content_key, expected_content_key);
         assert_eq!(
@@ -450,11 +451,12 @@ mod test {
     #[test]
     fn ser_de_block_header_by_number() {
         let content_key_json = "\"0x034e61bc0000000000\"";
-        let expected_content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
-            block_number: 12345678,
-        });
+        let expected_content_key =
+            LegacyHistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
+                block_number: 12345678,
+            });
 
-        let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
+        let content_key: LegacyHistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 
         assert_eq!(content_key, expected_content_key);
         assert_eq!(
@@ -466,7 +468,7 @@ mod test {
     #[test]
     fn ser_de_block_body_failure_prints_debuggable_data() {
         let content_key_json = "\"0x0123456789\"";
-        let content_key_result = serde_json::from_str::<HistoryContentKey>(content_key_json);
+        let content_key_result = serde_json::from_str::<LegacyHistoryContentKey>(content_key_json);
         // Test the error Display representation
         assert_eq!(
             content_key_result.as_ref().unwrap_err().to_string(),
@@ -478,9 +480,9 @@ mod test {
     fn ser_de_block_body() {
         let content_key_json =
             "\"0x01d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
-        let expected_content_key = HistoryContentKey::new_block_body(BLOCK_HASH);
+        let expected_content_key = LegacyHistoryContentKey::new_block_body(BLOCK_HASH);
 
-        let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
+        let content_key: LegacyHistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 
         assert_eq!(content_key, expected_content_key);
         assert_eq!(
@@ -493,9 +495,9 @@ mod test {
     fn ser_de_block_receipts() {
         let content_key_json =
             "\"0x02d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
-        let expected_content_key = HistoryContentKey::new_block_receipts(BLOCK_HASH);
+        let expected_content_key = LegacyHistoryContentKey::new_block_receipts(BLOCK_HASH);
 
-        let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
+        let content_key: LegacyHistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 
         assert_eq!(content_key, expected_content_key);
         assert_eq!(
@@ -511,9 +513,9 @@ mod test {
         let block_hash = b256!("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183");
         let ancestor_count = 1;
         let expected_content_key =
-            HistoryContentKey::new_ephemeral_headers_find_content(block_hash, ancestor_count);
+            LegacyHistoryContentKey::new_ephemeral_headers_find_content(block_hash, ancestor_count);
 
-        let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
+        let content_key: LegacyHistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 
         assert_eq!(content_key, expected_content_key);
         assert_eq!(
@@ -527,7 +529,7 @@ mod test {
         let block_hash = b256!("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183");
         let ancestor_count = 1;
         let content_key =
-            HistoryContentKey::new_ephemeral_headers_find_content(block_hash, ancestor_count);
+            LegacyHistoryContentKey::new_ephemeral_headers_find_content(block_hash, ancestor_count);
         assert_eq!(
             **content_key.to_bytes(),
             hex_decode("0x04d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f27618301")
@@ -544,9 +546,9 @@ mod test {
         let content_key_json =
             "\"0x05d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183\"";
         let block_hash = b256!("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183");
-        let expected_content_key = HistoryContentKey::new_ephemeral_header_offer(block_hash);
+        let expected_content_key = LegacyHistoryContentKey::new_ephemeral_header_offer(block_hash);
 
-        let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
+        let content_key: LegacyHistoryContentKey = serde_json::from_str(content_key_json).unwrap();
 
         assert_eq!(content_key, expected_content_key);
         assert_eq!(
@@ -558,7 +560,7 @@ mod test {
     #[test]
     fn ephemeral_header_offer_content_id_derivations() {
         let block_hash = b256!("d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183");
-        let content_key = HistoryContentKey::new_ephemeral_header_offer(block_hash);
+        let content_key = LegacyHistoryContentKey::new_ephemeral_header_offer(block_hash);
         assert_eq!(
             **content_key.to_bytes(),
             hex_decode("0x05d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183")

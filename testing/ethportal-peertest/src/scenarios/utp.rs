@@ -1,7 +1,7 @@
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::portal::{GetContentInfo, TraceContentInfo},
-    ContentValue, HistoryNetworkApiClient,
+    ContentValue, LegacyHistoryNetworkApiClient,
 };
 use tracing::info;
 

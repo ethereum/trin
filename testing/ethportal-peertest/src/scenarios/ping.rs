@@ -12,7 +12,7 @@ use ethportal_api::{
             },
         },
     },
-    BeaconNetworkApiClient, HistoryNetworkApiClient, StateNetworkApiClient,
+    BeaconNetworkApiClient, LegacyHistoryNetworkApiClient, StateNetworkApiClient,
 };
 use jsonrpsee::async_client::Client;
 use serde_json::json;
@@ -30,7 +30,9 @@ pub async fn test_ping_no_specified_ping_payload(
     let bootnode_sequence = bootnode_enr.seq();
     let result = match subnetwork {
         Subnetwork::Beacon => BeaconNetworkApiClient::ping(target, bootnode_enr, None, None),
-        Subnetwork::History => HistoryNetworkApiClient::ping(target, bootnode_enr, None, None),
+        Subnetwork::LegacyHistory => {
+            LegacyHistoryNetworkApiClient::ping(target, bootnode_enr, None, None)
+        }
         Subnetwork::State => StateNetworkApiClient::ping(target, bootnode_enr, None, None),
         _ => panic!("Unexpected subnetwork: {subnetwork}"),
     }
@@ -50,7 +52,7 @@ pub async fn test_ping_capabilities_payload(target: &Client, peertest: &Peertest
     info!("Testing ping with capabilities payload");
     let bootnode_enr = peertest.bootnode.enr.clone();
     let bootnode_sequence = bootnode_enr.seq();
-    let result = HistoryNetworkApiClient::ping(
+    let result = LegacyHistoryNetworkApiClient::ping(
         target,
         bootnode_enr,
         Some(PingExtensionType::Capabilities),
@@ -113,7 +115,7 @@ pub async fn test_ping_history_radius_payload(target: &Client, peertest: &Peerte
     info!("Testing ping with history radius payload");
     let bootnode_enr = peertest.bootnode.enr.clone();
     let bootnode_sequence = bootnode_enr.seq();
-    let result = HistoryNetworkApiClient::ping(
+    let result = LegacyHistoryNetworkApiClient::ping(
         target,
         bootnode_enr,
         Some(PingExtensionType::HistoryRadius),
@@ -243,7 +245,7 @@ pub async fn test_ping_history_radius_payload_type(target: &Client, peertest: &P
     info!("Testing ping with history radius payload type");
     let bootnode_enr = peertest.bootnode.enr.clone();
     let bootnode_sequence = bootnode_enr.seq();
-    let result = HistoryNetworkApiClient::ping(
+    let result = LegacyHistoryNetworkApiClient::ping(
         target,
         bootnode_enr,
         Some(PingExtensionType::HistoryRadius),

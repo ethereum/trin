@@ -1,19 +1,19 @@
 use ethportal_api::types::ping_extensions::{
-    consts::HISTORY_SUPPORTED_EXTENSIONS, extension_types::PingExtensionType,
+    consts::LEGACY_HISTORY_SUPPORTED_EXTENSIONS, extension_types::PingExtensionType,
 };
 use portalnet::overlay::ping_extensions::PingExtensions;
 
-pub struct HistoryPingExtensions {}
+pub struct LegacyHistoryPingExtensions {}
 
-impl HistoryPingExtensions {
-    pub const SUPPORTED_EXTENSIONS: &[PingExtensionType] = HISTORY_SUPPORTED_EXTENSIONS;
+impl LegacyHistoryPingExtensions {
+    pub const SUPPORTED_EXTENSIONS: &[PingExtensionType] = LEGACY_HISTORY_SUPPORTED_EXTENSIONS;
 
     /// Base extensions that are required for the core subnetwork to function.
     /// These must be sorted by latest to oldest
     pub const BASE_EXTENSIONS: &[PingExtensionType] = &[PingExtensionType::HistoryRadius];
 }
 
-impl PingExtensions for HistoryPingExtensions {
+impl PingExtensions for LegacyHistoryPingExtensions {
     fn latest_mutually_supported_base_extension(
         &self,
         extensions: &[PingExtensionType],

@@ -11,12 +11,12 @@ use ethportal_api::{
     types::{
         execution::block_body::BlockBody,
         jsonrpc::{
-            endpoints::HistoryEndpoint,
-            request::{HistoryJsonRpcRequest, StateJsonRpcRequest},
+            endpoints::LegacyHistoryEndpoint,
+            request::{LegacyHistoryJsonRpcRequest, StateJsonRpcRequest},
         },
         portal::GetContentInfo,
     },
-    ContentValue, EthApiServer, HistoryContentKey, HistoryContentValue,
+    ContentValue, EthApiServer, LegacyHistoryContentKey, LegacyHistoryContentValue,
 };
 use revm::context::result::ExecutionResult;
 use tokio::sync::mpsc;
@@ -34,17 +34,17 @@ use crate::{
 };
 
 pub struct EthApi {
-    history_network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+    legacy_history_network: mpsc::UnboundedSender<LegacyHistoryJsonRpcRequest>,
     state_network: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
 }
 
 impl EthApi {
     pub fn new(
-        history_network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+        history_network: mpsc::UnboundedSender<LegacyHistoryJsonRpcRequest>,
         state_network: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
     ) -> Self {
         Self {
-            history_network,
+            legacy_history_network: history_network,
             state_network,
         }
     }
@@ -161,12 +161,12 @@ impl EthApi {
 
     async fn fetch_history_content(
         &self,
-        content_key: HistoryContentKey,
-    ) -> Result<HistoryContentValue, RpcServeError> {
-        let endpoint = HistoryEndpoint::GetContent(content_key.clone());
+        content_key: LegacyHistoryContentKey,
+    ) -> Result<LegacyHistoryContentValue, RpcServeError> {
+        let endpoint = LegacyHistoryEndpoint::GetContent(content_key.clone());
         let GetContentInfo { content, .. } =
-            proxy_to_subnet(&self.history_network, endpoint).await?;
-        let content_value = HistoryContentValue::decode(&content_key, &content)?;
+            proxy_to_subnet(&self.legacy_history_network, endpoint).await?;
+        let content_value = LegacyHistoryContentValue::decode(&content_key, &content)?;
         Ok(content_value)
     }
 
@@ -178,9 +178,12 @@ impl EthApi {
             .as_number()
             .ok_or_else(|| RpcServeError::Message("Block tag is not supported yet.".to_string()))?;
         let content_value = self
-            .fetch_history_content(HistoryContentKey::new_block_header_by_number(block_number))
+            .fetch_history_content(LegacyHistoryContentKey::new_block_header_by_number(
+                block_number,
+            ))
             .await?;
-        let HistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value else {
+        let LegacyHistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value
+        else {
             return Err(RpcServeError::Message(format!(
                 "Invalid response: expected block header; got {content_value:?}"
             )));
@@ -190,9 +193,12 @@ impl EthApi {
 
     async fn fetch_header_by_hash(&self, block_hash: B256) -> Result<Header, RpcServeError> {
         let content_value = self
-            .fetch_history_content(HistoryContentKey::new_block_header_by_hash(block_hash))
+            .fetch_history_content(LegacyHistoryContentKey::new_block_header_by_hash(
+                block_hash,
+            ))
             .await?;
-        let HistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value else {
+        let LegacyHistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value
+        else {
             return Err(RpcServeError::Message(format!(
                 "Invalid response: expected block header; got {content_value:?}"
             )));
@@ -234,9 +240,9 @@ impl EthApi {
 
     async fn fetch_block_body(&self, block_hash: B256) -> Result<BlockBody, RpcServeError> {
         let content_value = self
-            .fetch_history_content(HistoryContentKey::new_block_body(block_hash))
+            .fetch_history_content(LegacyHistoryContentKey::new_block_body(block_hash))
             .await?;
-        let HistoryContentValue::BlockBody(block_body) = content_value else {
+        let LegacyHistoryContentValue::BlockBody(block_body) = content_value else {
             return Err(RpcServeError::Message(format!(
                 "Invalid response: expected block body; got {content_value:?}"
             )));

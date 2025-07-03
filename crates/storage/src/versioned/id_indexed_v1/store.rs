@@ -561,9 +561,9 @@ impl<TContentKey: OverlayContentKey, TMetric: Metric> IdIndexedV1Store<TContentK
 /// See https://github.com/ethereum/trin/issues/1653 for details.
 const fn extra_disk_usage_per_content_bytes(content_type: &ContentType) -> u64 {
     match content_type {
-        ContentType::HistoryEternal => 750,
+        ContentType::LegacyHistoryEternal => 750,
         ContentType::State => 500,
-        ContentType::HistoryEphemeral => panic!("HistoryEphemeral is not supported"),
+        ContentType::LegacyHistoryEphemeral => panic!("HistoryEphemeral is not supported"),
     }
 }
 

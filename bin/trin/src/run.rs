@@ -14,7 +14,7 @@ use rpc::{config::RpcConfig, launch_jsonrpc_server, RpcServerHandle};
 use tokio::sync::{mpsc, RwLock};
 use tracing::info;
 use trin_beacon::initialize_beacon_network;
-use trin_history::initialize_history_network;
+use trin_history::initialize_legacy_history_network;
 use trin_state::initialize_state_network;
 use trin_storage::{config::StorageCapacityConfig, PortalStorageConfigFactory};
 #[cfg(windows)]
@@ -182,20 +182,21 @@ async fn run_trin_internal(
 
     // Initialize chain history sub-network service and event handlers, if selected
     let (
-        history_handler,
-        history_network_task,
-        history_event_tx,
-        history_jsonrpc_tx,
-        history_event_stream,
+        legacy_history_handler,
+        legacy_history_network_task,
+        legacy_history_event_tx,
+        legacy_history_jsonrpc_tx,
+        legacy_history_event_stream,
     ) = if node_runtime_config
         .portal_subnetworks
-        .contains(&Subnetwork::History)
+        .contains(&Subnetwork::LegacyHistory)
     {
-        initialize_history_network(
+        initialize_legacy_history_network(
             &discovery,
             utp_socket.clone(),
             portalnet_config.clone(),
-            storage_config_factory.create(&Subnetwork::History, node_runtime_config.max_radius)?,
+            storage_config_factory
+                .create(&Subnetwork::LegacyHistory, node_runtime_config.max_radius)?,
             header_oracle.clone(),
         )
         .await?
@@ -211,7 +212,7 @@ async fn run_trin_internal(
                 rpc_config,
                 node_runtime_config.portal_subnetworks,
                 jsonrpc_discovery,
-                history_jsonrpc_tx,
+                legacy_history_jsonrpc_tx,
                 state_jsonrpc_tx,
                 beacon_jsonrpc_tx,
             )
@@ -222,7 +223,7 @@ async fn run_trin_internal(
     };
 
     let subnetwork_overlays = SubnetworkOverlays {
-        history: history_handler
+        legacy_history: legacy_history_handler
             .as_ref()
             .map(|handler| handler.network.clone()),
         state: state_handler
@@ -236,7 +237,7 @@ async fn run_trin_internal(
     if let Some(handler) = state_handler {
         tokio::spawn(async move { handler.handle_client_queries().await });
     }
-    if let Some(handler) = history_handler {
+    if let Some(handler) = legacy_history_handler {
         tokio::spawn(async move { handler.handle_client_queries().await });
     }
     if let Some(handler) = beacon_handler {
@@ -247,7 +248,7 @@ async fn run_trin_internal(
     tokio::spawn(async move {
         let events = PortalnetEvents::new(
             talk_req_rx,
-            (history_event_tx, history_event_stream),
+            (legacy_history_event_tx, legacy_history_event_stream),
             (state_event_tx, state_event_stream),
             (beacon_event_tx, beacon_event_stream),
             utp_talk_reqs_tx,
@@ -256,7 +257,7 @@ async fn run_trin_internal(
         events.start().await;
     });
 
-    if let Some(network) = history_network_task {
+    if let Some(network) = legacy_history_network_task {
         tokio::spawn(network);
     }
     if let Some(network) = state_network_task {

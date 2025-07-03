@@ -642,11 +642,11 @@ mod tests {
 
     /// Returns an [RpcModuleBuilder] with testing components.
     pub fn test_rpc_builder() -> RpcModuleBuilder {
-        let (history_tx, _) = tokio::sync::mpsc::unbounded_channel();
+        let (legacy_history_tx, _) = tokio::sync::mpsc::unbounded_channel();
         let (beacon_tx, _) = tokio::sync::mpsc::unbounded_channel();
         let discv5 = Arc::new(Discovery::new(Default::default()).unwrap());
         RpcModuleBuilder::new(discv5)
-            .with_history(history_tx)
+            .with_legacy_history(legacy_history_tx)
             .with_beacon(beacon_tx)
     }
 
@@ -694,11 +694,11 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_http_addr_in_use() {
-        let handle = launch_http(vec![PortalRpcModule::History]).await;
+        let handle = launch_http(vec![PortalRpcModule::LegacyHistory]).await;
         let addr = handle.http_local_addr().unwrap();
         let builder = test_rpc_builder();
         let server = builder.build(TransportRpcModuleConfig::set_http(vec![
-            PortalRpcModule::History,
+            PortalRpcModule::LegacyHistory,
         ]));
         let result = server
             .start_server(RpcServerConfig::http(Default::default()).with_http_address(addr))
@@ -709,11 +709,11 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_ws_addr_in_use() {
-        let handle = launch_ws(vec![PortalRpcModule::History]).await;
+        let handle = launch_ws(vec![PortalRpcModule::LegacyHistory]).await;
         let addr = handle.ws_local_addr().unwrap();
         let builder = test_rpc_builder();
         let server = builder.build(TransportRpcModuleConfig::set_ws(vec![
-            PortalRpcModule::History,
+            PortalRpcModule::LegacyHistory,
         ]));
         let result = server
             .start_server(RpcServerConfig::ws(Default::default()).with_ws_address(addr))
@@ -724,7 +724,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_launch_same_port() {
-        let handle = launch_http_ws_same_port(vec![PortalRpcModule::History]).await;
+        let handle = launch_http_ws_same_port(vec![PortalRpcModule::LegacyHistory]).await;
         let ws_addr = handle.ws_local_addr().unwrap();
         let http_addr = handle.http_local_addr().unwrap();
         assert_eq!(ws_addr, http_addr);
@@ -734,7 +734,7 @@ mod tests {
     async fn test_launch_same_port_different_modules() {
         let builder = test_rpc_builder();
         let server = builder.build(
-            TransportRpcModuleConfig::set_ws(vec![PortalRpcModule::History])
+            TransportRpcModuleConfig::set_ws(vec![PortalRpcModule::LegacyHistory])
                 .with_http(vec![PortalRpcModule::Beacon]),
         );
         let addr = test_address();
@@ -757,8 +757,8 @@ mod tests {
     async fn test_launch_same_port_same_cors() {
         let builder = test_rpc_builder();
         let server = builder.build(
-            TransportRpcModuleConfig::set_ws(vec![PortalRpcModule::History])
-                .with_http(vec![PortalRpcModule::History]),
+            TransportRpcModuleConfig::set_ws(vec![PortalRpcModule::LegacyHistory])
+                .with_http(vec![PortalRpcModule::LegacyHistory]),
         );
         let addr = test_address();
         let res = server
@@ -778,8 +778,8 @@ mod tests {
     async fn test_launch_same_port_different_cors() {
         let builder = test_rpc_builder();
         let server = builder.build(
-            TransportRpcModuleConfig::set_ws(vec![PortalRpcModule::History])
-                .with_http(vec![PortalRpcModule::History]),
+            TransportRpcModuleConfig::set_ws(vec![PortalRpcModule::LegacyHistory])
+                .with_http(vec![PortalRpcModule::LegacyHistory]),
         );
         let addr = test_address();
         let res = server

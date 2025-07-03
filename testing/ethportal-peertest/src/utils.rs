@@ -8,12 +8,13 @@ use alloy::{consensus::Header, primitives::Bytes, rlp::Decodable};
 use anyhow::Result;
 use ethportal_api::{
     types::{
-        content_key::history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
+        content_key::legacy_history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
         execution::header_with_proof::HeaderWithProof,
     },
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, BlockBodyKey, BlockReceiptsKey,
-    ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient, RawContentValue,
-    StateContentKey, StateContentValue, StateNetworkApiClient,
+    ContentValue, LegacyHistoryContentKey, LegacyHistoryContentValue,
+    LegacyHistoryNetworkApiClient, RawContentValue, StateContentKey, StateContentValue,
+    StateNetworkApiClient,
 };
 use futures::{Future, TryFutureExt};
 use serde::{Deserialize, Deserializer};
@@ -43,18 +44,21 @@ where
     panic!("Retried too many times");
 }
 
-/// Wait for the history content to be transferred
-pub async fn wait_for_history_content<P: HistoryNetworkApiClient + std::marker::Sync>(
+/// Wait for the legacy history content to be transferred
+pub async fn wait_for_legacy_history_content<
+    P: LegacyHistoryNetworkApiClient + std::marker::Sync,
+>(
     ipc_client: &P,
-    content_key: HistoryContentKey,
-) -> HistoryContentValue {
+    content_key: LegacyHistoryContentKey,
+) -> LegacyHistoryContentValue {
     wait_for_successful_result(|| {
         let content_key = content_key.clone();
         ipc_client
             .local_content(content_key.clone())
             .map_err(anyhow::Error::from)
             .and_then(|content| async move {
-                HistoryContentValue::decode(&content_key, &content).map_err(anyhow::Error::from)
+                LegacyHistoryContentValue::decode(&content_key, &content)
+                    .map_err(anyhow::Error::from)
             })
     })
     .await
@@ -94,62 +98,65 @@ pub async fn wait_for_state_content<P: StateNetworkApiClient + std::marker::Sync
     .await
 }
 
-fn read_history_fixture_from_file(path: &Path) -> Result<(HistoryContentKey, HistoryContentValue)> {
+fn read_legacy_history_fixture_from_file(
+    path: &Path,
+) -> Result<(LegacyHistoryContentKey, LegacyHistoryContentValue)> {
     let yaml_content = fs::read_to_string(path)?;
 
     let value: Value = serde_yaml::from_str(&yaml_content)?;
 
-    let content_key = HistoryContentKey::deserialize(&value["content_key"])?;
+    let content_key = LegacyHistoryContentKey::deserialize(&value["content_key"])?;
     let content_value = RawContentValue::deserialize(&value["content_value"])?;
-    let content_value = HistoryContentValue::decode(&content_key, &content_value)?;
+    let content_value = LegacyHistoryContentValue::decode(&content_key, &content_value)?;
 
     Ok((content_key, content_value))
 }
 
 /// Wrapper function for fixtures that directly returns the tuple.
-fn read_history_fixture(path: &str) -> (HistoryContentKey, HistoryContentValue) {
+fn read_legacy_history_fixture(path: &str) -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
     let path = portal_spec_tests_file_path(PathBuf::from("tests/mainnet/history").join(path));
-    read_history_fixture_from_file(&path)
+    read_legacy_history_fixture_from_file(&path)
         .unwrap_or_else(|err| panic!("Error reading fixture in {path:?}: {err}"))
 }
 
-/// History HeaderWithProof content key & value
+/// Legacy History HeaderWithProof content key & value
 /// Block #1000010
-pub fn fixture_header_by_hash_1000010() -> (HistoryContentKey, HistoryContentValue) {
-    read_history_fixture("headers_with_proof/1000010.yaml")
+pub fn fixture_header_by_hash_1000010() -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
+    read_legacy_history_fixture("headers_with_proof/1000010.yaml")
 }
 
-/// History HeaderByHash content key & value
+/// Legacy History HeaderByHash content key & value
 /// Block #14764013 (pre-merge)
-pub fn fixture_header_by_hash() -> (HistoryContentKey, HistoryContentValue) {
-    read_history_fixture("headers_with_proof/14764013.yaml")
+pub fn fixture_header_by_hash() -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
+    read_legacy_history_fixture("headers_with_proof/14764013.yaml")
 }
 
-/// History HeaderByNumber content key & value
+/// Legacy History HeaderByNumber content key & value
 /// Block #14764013 (pre-merge)
-pub fn fixture_header_by_number() -> (HistoryContentKey, HistoryContentValue) {
-    let (_, content_value) = read_history_fixture("headers_with_proof/14764013.yaml");
+pub fn fixture_header_by_number() -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
+    let (_, content_value) = read_legacy_history_fixture("headers_with_proof/14764013.yaml");
 
     // Create a content key from the block number
-    let HistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value.clone() else {
+    let LegacyHistoryContentValue::BlockHeaderWithProof(header_with_proof) = content_value.clone()
+    else {
         panic!("Expected HistoryContentValue::BlockHeaderWithProof")
     };
-    let content_key = HistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
+    let content_key = LegacyHistoryContentKey::BlockHeaderByNumber(BlockHeaderByNumberKey {
         block_number: header_with_proof.header.number,
     });
     (content_key, content_value)
 }
 
-/// History BlockBody content key & value
+/// Legacy History BlockBody content key & value
 /// Block #14764013 (pre-merge)
-pub fn fixture_block_body() -> (HistoryContentKey, HistoryContentValue) {
-    read_history_fixture("bodies/14764013.yaml")
+pub fn fixture_block_body() -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
+    read_legacy_history_fixture("bodies/14764013.yaml")
 }
 
-/// History Receipts content key & value
+/// Legacy History Receipts content key & value
 /// Block #14764013 (pre-merge)
-pub fn fixture_receipts() -> (HistoryContentKey, HistoryContentValue) {
-    read_history_fixture("receipts/14764013.yaml")
+pub fn fixture_receipts() -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
+    read_legacy_history_fixture("receipts/14764013.yaml")
 }
 
 enum DependentType {
@@ -166,46 +173,48 @@ impl Display for DependentType {
     }
 }
 
-/// History HeaderWithProof content key & value
+/// Legacy History HeaderWithProof content key & value
 /// Block #15040641 (pre-merge)
-pub fn fixture_header_by_hash_with_proof_15040641() -> (HistoryContentKey, HistoryContentValue) {
+pub fn fixture_header_by_hash_with_proof_15040641(
+) -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
     read_binary_history_fixture(15040641, None)
 }
 
-/// History BlockBody content key & value
+/// Legacy History BlockBody content key & value
 /// Block #15040641 (pre-merge)
-pub fn fixture_block_body_15040641() -> (HistoryContentKey, HistoryContentValue) {
+pub fn fixture_block_body_15040641() -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
     read_binary_history_fixture(15040641, Some(DependentType::BlockBody))
 }
 
-/// History Receipts content key & value
+/// Legacy History Receipts content key & value
 /// Block #15040641 (pre-merge)
-pub fn fixture_receipts_15040641() -> (HistoryContentKey, HistoryContentValue) {
+pub fn fixture_receipts_15040641() -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
     read_binary_history_fixture(15040641, Some(DependentType::Receipts))
 }
 
-/// History HeaderWithProof content key & value
+/// Legacy History HeaderWithProof content key & value
 /// Block #15040708 (pre-merge)
-pub fn fixture_header_by_hash_with_proof_15040708() -> (HistoryContentKey, HistoryContentValue) {
+pub fn fixture_header_by_hash_with_proof_15040708(
+) -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
     read_binary_history_fixture(15040708, None)
 }
 
-/// History BlockBody content key & value
+/// Legacy History BlockBody content key & value
 /// Block #15040708 (pre-merge)
-pub fn fixture_block_body_15040708() -> (HistoryContentKey, HistoryContentValue) {
+pub fn fixture_block_body_15040708() -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
     read_binary_history_fixture(15040708, Some(DependentType::BlockBody))
 }
 
-/// History Receipts content key & value
+/// Legacy History Receipts content key & value
 /// Block #15040708 (pre-merge)
-pub fn fixture_receipts_15040708() -> (HistoryContentKey, HistoryContentValue) {
+pub fn fixture_receipts_15040708() -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
     read_binary_history_fixture(15040708, Some(DependentType::Receipts))
 }
 
 fn read_binary_history_fixture(
     block_number: u64,
     dependent: Option<DependentType>,
-) -> (HistoryContentKey, HistoryContentValue) {
+) -> (LegacyHistoryContentKey, LegacyHistoryContentValue) {
     let header_value = std::fs::read(format!(
         "../../test_assets/mainnet/large_content/{block_number}/header.bin"
     ))
@@ -221,28 +230,29 @@ fn read_binary_history_fixture(
             .unwrap();
             match dependent_type {
                 DependentType::BlockBody => {
-                    let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
+                    let content_key = LegacyHistoryContentKey::BlockBody(BlockBodyKey {
                         block_hash: header_content_value.header.hash_slow().0,
                     });
                     let content_value =
-                        HistoryContentValue::decode(&content_key, &dependent_value).unwrap();
+                        LegacyHistoryContentValue::decode(&content_key, &dependent_value).unwrap();
                     (content_key, content_value)
                 }
                 DependentType::Receipts => {
-                    let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
+                    let content_key = LegacyHistoryContentKey::BlockReceipts(BlockReceiptsKey {
                         block_hash: header_content_value.header.hash_slow().0,
                     });
                     let content_value =
-                        HistoryContentValue::decode(&content_key, &dependent_value).unwrap();
+                        LegacyHistoryContentValue::decode(&content_key, &dependent_value).unwrap();
                     (content_key, content_value)
                 }
             }
         }
         None => {
-            let content_key = HistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
+            let content_key = LegacyHistoryContentKey::BlockHeaderByHash(BlockHeaderByHashKey {
                 block_hash: header_content_value.header.hash_slow().0,
             });
-            let content_value = HistoryContentValue::BlockHeaderWithProof(header_content_value);
+            let content_value =
+                LegacyHistoryContentValue::BlockHeaderWithProof(header_content_value);
             (content_key, content_value)
         }
     }

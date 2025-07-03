@@ -4,7 +4,7 @@ use alloy::primitives::B256;
 use ethportal_api::{
     jsonrpsee::async_client::Client,
     types::{enr::Enr, portal::FindContentInfo},
-    ContentValue, HistoryContentKey, HistoryNetworkApiClient,
+    ContentValue, LegacyHistoryContentKey, LegacyHistoryNetworkApiClient,
 };
 use tracing::info;
 
@@ -92,7 +92,7 @@ pub async fn test_invalidate_header_by_hash(peertest: &Peertest, target: &Client
 
     // store header_with_proof - doesn't perform validation
     let (_, content_value) = fixture_header_by_hash();
-    let invalid_content_key = HistoryContentKey::new_block_header_by_hash(B256::random());
+    let invalid_content_key = LegacyHistoryContentKey::new_block_header_by_hash(B256::random());
 
     let store_result = peertest
         .bootnode

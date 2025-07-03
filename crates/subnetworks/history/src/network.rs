@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ethportal_api::{
     types::{distance::XorMetric, network::Subnetwork},
-    HistoryContentKey,
+    LegacyHistoryContentKey,
 };
 use parking_lot::Mutex;
 use portalnet::{
@@ -16,30 +16,30 @@ use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
 
 use crate::{
-    ping_extensions::HistoryPingExtensions, storage::HistoryStorage,
-    validation::ChainHistoryValidator,
+    ping_extensions::LegacyHistoryPingExtensions, storage::LegacyHistoryStorage,
+    validation::LegacyHistoryValidator,
 };
 
 /// Gossip content as it gets dropped from local storage,
 /// enabled by default for the history network.
 const GOSSIP_DROPPED: bool = true;
 
-/// History network layer on top of the overlay protocol. Encapsulates history network specific data
-/// and logic.
+/// Legacy History network layer on top of the overlay protocol. Encapsulates legacy history
+/// network specific data and logic.
 #[derive(Clone)]
-pub struct HistoryNetwork {
+pub struct LegacyHistoryNetwork {
     pub overlay: Arc<
         OverlayProtocol<
-            HistoryContentKey,
+            LegacyHistoryContentKey,
             XorMetric,
-            ChainHistoryValidator,
-            HistoryStorage,
-            HistoryPingExtensions,
+            LegacyHistoryValidator,
+            LegacyHistoryStorage,
+            LegacyHistoryPingExtensions,
         >,
     >,
 }
 
-impl HistoryNetwork {
+impl LegacyHistoryNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
         utp_socket: Arc<UtpSocket<UtpPeer>>,
@@ -54,15 +54,15 @@ impl HistoryNetwork {
             utp_transfer_limit: portal_config.utp_transfer_limit,
             ..Default::default()
         };
-        let storage = Arc::new(Mutex::new(HistoryStorage::new(storage_config)?));
-        let validator = Arc::new(ChainHistoryValidator::new(header_oracle));
-        let ping_extensions = Arc::new(HistoryPingExtensions {});
+        let storage = Arc::new(Mutex::new(LegacyHistoryStorage::new(storage_config)?));
+        let validator = Arc::new(LegacyHistoryValidator::new(header_oracle));
+        let ping_extensions = Arc::new(LegacyHistoryPingExtensions {});
         let overlay = OverlayProtocol::new(
             config,
             discovery,
             utp_socket,
             storage,
-            Subnetwork::History,
+            Subnetwork::LegacyHistory,
             validator,
             ping_extensions,
         )

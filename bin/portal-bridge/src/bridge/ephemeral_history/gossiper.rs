@@ -11,8 +11,8 @@ use ethportal_api::{
         network::Subnetwork,
         portal_wire::{OfferTrace, OfferTraceMultipleItems},
     },
-    ContentValue, HistoryContentKey, HistoryContentValue, OverlayContentKey, RawContentKey,
-    RawContentValue,
+    ContentValue, LegacyHistoryContentKey, LegacyHistoryContentValue, OverlayContentKey,
+    RawContentKey, RawContentValue,
 };
 use futures::future::join_all;
 use revm_primitives::B256;
@@ -22,7 +22,7 @@ use tokio::{
     time::{sleep, timeout},
 };
 use tracing::{error, info, warn};
-use trin_history::network::HistoryNetwork;
+use trin_history::network::LegacyHistoryNetwork;
 use trin_metrics::bridge::BridgeMetricsReporter;
 
 use super::ephemeral_bundle::EphemeralBundle;
@@ -39,7 +39,7 @@ pub struct Gossiper {
     /// Used to request all interested enrs in the network.
     census: Census,
     /// Used to send RPC request to trin
-    history_network: Arc<HistoryNetwork>,
+    history_network: Arc<LegacyHistoryNetwork>,
     /// Records and reports bridge metrics
     metrics: BridgeMetricsReporter,
     /// Semaphore used to limit the number of concurrent offers sent at the head of the chain
@@ -51,7 +51,7 @@ pub struct Gossiper {
 impl Gossiper {
     pub fn new(
         census: Census,
-        history_network: Arc<HistoryNetwork>,
+        history_network: Arc<LegacyHistoryNetwork>,
         metrics: BridgeMetricsReporter,
         head_offer_limit: usize,
         non_ephemeral_offer_limit: usize,
@@ -99,13 +99,13 @@ impl Gossiper {
 
         // Start gossiping BlockBody and BlockReceipts
         for (block_hash, body) in bodies {
-            let content_key = HistoryContentKey::new_block_body(block_hash);
-            let content_value = HistoryContentValue::BlockBody(body);
+            let content_key = LegacyHistoryContentKey::new_block_body(block_hash);
+            let content_value = LegacyHistoryContentValue::BlockBody(body);
             gossip_tasks.push(self.start_gossip_task(content_key, content_value, true));
         }
         for (block_hash, receipts) in receipts {
-            let content_key = HistoryContentKey::new_block_receipts(block_hash);
-            let content_value = HistoryContentValue::Receipts(receipts);
+            let content_key = LegacyHistoryContentKey::new_block_receipts(block_hash);
+            let content_value = LegacyHistoryContentValue::Receipts(receipts);
             gossip_tasks.push(self.start_gossip_task(content_key, content_value, true));
         }
 
@@ -142,11 +142,13 @@ impl Gossiper {
                 ExecutionBlockBuilder::electra(&beacon_block, &historical_batch)
                     .expect("Failed to build header with proof");
 
-            let header_by_hash_key =
-                HistoryContentKey::new_block_header_by_hash(header_with_proof.header.hash_slow());
-            let header_by_number_key =
-                HistoryContentKey::new_block_header_by_number(header_with_proof.header.number);
-            let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
+            let header_by_hash_key = LegacyHistoryContentKey::new_block_header_by_hash(
+                header_with_proof.header.hash_slow(),
+            );
+            let header_by_number_key = LegacyHistoryContentKey::new_block_header_by_number(
+                header_with_proof.header.number,
+            );
+            let content_value = LegacyHistoryContentValue::BlockHeaderWithProof(header_with_proof);
             gossip_tasks.push(self.start_gossip_task(
                 header_by_hash_key,
                 content_value.clone(),
@@ -161,8 +163,8 @@ impl Gossiper {
     /// Starts async task that gossips content, retuning [JoinHandle] for it.
     fn start_gossip_task(
         &self,
-        content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_key: LegacyHistoryContentKey,
+        content_value: LegacyHistoryContentValue,
         is_head_offer: bool,
     ) -> JoinHandle<Vec<OfferTrace>> {
         let gossiper = self.clone();
@@ -178,11 +180,14 @@ impl Gossiper {
     /// Returns once all tasks complete.
     async fn gossip_content(
         &self,
-        content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_key: LegacyHistoryContentKey,
+        content_value: LegacyHistoryContentValue,
         is_head_offer: bool,
     ) -> Vec<OfferTrace> {
-        let Ok(peers) = self.census.select_peers(Subnetwork::History, &content_key) else {
+        let Ok(peers) = self
+            .census
+            .select_peers(Subnetwork::LegacyHistory, &content_key)
+        else {
             error!("Failed to request enrs for content key, skipping offer: {content_key:?}");
             return vec![];
         };
@@ -225,7 +230,7 @@ impl Gossiper {
         &self,
         offer_permit: OwnedSemaphorePermit,
         peer: PeerInfo,
-        content_key: HistoryContentKey,
+        content_key: LegacyHistoryContentKey,
         raw_content_value: RawContentValue,
     ) -> OfferTrace {
         let timer = self.metrics.start_process_timer("history_send_offer");
@@ -263,7 +268,7 @@ impl Gossiper {
         };
 
         self.census.record_offer_result(
-            Subnetwork::History,
+            Subnetwork::LegacyHistory,
             peer.enr.node_id(),
             content_value_size,
             start_time.elapsed(),
@@ -272,14 +277,14 @@ impl Gossiper {
 
         self.metrics.report_offer(
             match content_key {
-                HistoryContentKey::BlockHeaderByHash(_) => "header_by_hash",
-                HistoryContentKey::BlockHeaderByNumber(_) => "header_by_number",
-                HistoryContentKey::BlockBody(_) => "block_body",
-                HistoryContentKey::BlockReceipts(_) => "receipts",
-                HistoryContentKey::EphemeralHeadersFindContent(_) => {
+                LegacyHistoryContentKey::BlockHeaderByHash(_) => "header_by_hash",
+                LegacyHistoryContentKey::BlockHeaderByNumber(_) => "header_by_number",
+                LegacyHistoryContentKey::BlockBody(_) => "block_body",
+                LegacyHistoryContentKey::BlockReceipts(_) => "receipts",
+                LegacyHistoryContentKey::EphemeralHeadersFindContent(_) => {
                     "ephemeral_headers_find_content"
                 }
-                HistoryContentKey::EphemeralHeaderOffer(_) => "ephemeral_header_offer",
+                LegacyHistoryContentKey::EphemeralHeaderOffer(_) => "ephemeral_header_offer",
             },
             &peer.client_type,
             &offer_trace,
@@ -302,12 +307,13 @@ impl Gossiper {
         let mut content_items = vec![];
         for header in headers {
             content_items.push((
-                HistoryContentKey::new_ephemeral_header_offer(header.hash_slow()).to_bytes(),
-                HistoryContentValue::EphemeralHeaderOffer(EphemeralHeaderOffer { header }).encode(),
+                LegacyHistoryContentKey::new_ephemeral_header_offer(header.hash_slow()).to_bytes(),
+                LegacyHistoryContentValue::EphemeralHeaderOffer(EphemeralHeaderOffer { header })
+                    .encode(),
             ));
         }
 
-        let Ok(peers) = self.census.select_random_peers(Subnetwork::History) else {
+        let Ok(peers) = self.census.select_random_peers(Subnetwork::LegacyHistory) else {
             error!("Failed to request enrs for content key, this is unexpected");
             return vec![];
         };

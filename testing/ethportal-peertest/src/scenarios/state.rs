@@ -8,8 +8,8 @@ use ethportal_api::{
         },
         network_spec::network_spec,
     },
-    ContentValue, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
-    StateNetworkApiClient,
+    ContentValue, LegacyHistoryContentKey, LegacyHistoryContentValue,
+    LegacyHistoryNetworkApiClient, StateNetworkApiClient,
 };
 use tracing::info;
 
@@ -53,8 +53,8 @@ pub async fn test_state_gossip_contract_bytecode(peertest: &Peertest, target: &C
 
 async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &PeertestNode) {
     // Make sure that peer has block header
-    let history_content_key =
-        HistoryContentKey::new_block_header_by_hash(fixture.block_header.hash_slow());
+    let legacy_history_content_key =
+        LegacyHistoryContentKey::new_block_header_by_hash(fixture.block_header.hash_slow());
 
     let proof = if network_spec().is_shanghai_active_at_timestamp(fixture.block_header.timestamp) {
         BlockHeaderProof::HistoricalSummariesCapella(BlockProofHistoricalSummariesCapella {
@@ -74,15 +74,16 @@ async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &Peerte
         BlockHeaderProof::HistoricalHashes(Default::default())
     };
 
-    let history_content_value = HistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
-        header: fixture.block_header.clone(),
-        proof: proof.clone(),
-    });
+    let legacy_history_content_value =
+        LegacyHistoryContentValue::BlockHeaderWithProof(HeaderWithProof {
+            header: fixture.block_header.clone(),
+            proof: proof.clone(),
+        });
 
-    HistoryNetworkApiClient::store(
+    LegacyHistoryNetworkApiClient::store(
         &peer.ipc_client,
-        history_content_key,
-        history_content_value.encode(),
+        legacy_history_content_key,
+        legacy_history_content_value.encode(),
     )
     .await
     .unwrap();

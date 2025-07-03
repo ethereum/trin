@@ -10,8 +10,8 @@ pub mod validation;
 
 use std::sync::Arc;
 
-use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
-use network::HistoryNetwork;
+use ethportal_api::types::jsonrpc::request::LegacyHistoryJsonRpcRequest;
+use network::LegacyHistoryNetwork;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpPeer},
@@ -27,32 +27,33 @@ use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
 use utp_rs::socket::UtpSocket;
 
-use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
+use crate::{events::LegacyHistoryEvents, jsonrpc::LegacyHistoryRequestHandler};
 
-type HistoryHandler = Option<HistoryRequestHandler>;
-type HistoryNetworkTask = Option<JoinHandle<()>>;
-type HistoryMessageTx = Option<mpsc::UnboundedSender<OverlayRequest>>;
-type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>;
-type HistoryEventStream = Option<broadcast::Receiver<EventEnvelope>>;
+type LegacyHistoryHandler = Option<LegacyHistoryRequestHandler>;
+type LegacyHistoryNetworkTask = Option<JoinHandle<()>>;
+type LegacyHistoryMessageTx = Option<mpsc::UnboundedSender<OverlayRequest>>;
+type LegacyHistoryJsonRpcTx = Option<mpsc::UnboundedSender<LegacyHistoryJsonRpcRequest>>;
+type LegacyHistoryEventStream = Option<broadcast::Receiver<EventEnvelope>>;
 
-pub async fn initialize_history_network(
+pub async fn initialize_legacy_history_network(
     discovery: &Arc<Discovery>,
     utp_socket: Arc<UtpSocket<UtpPeer>>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
 ) -> anyhow::Result<(
-    HistoryHandler,
-    HistoryNetworkTask,
-    HistoryMessageTx,
-    HistoryJsonRpcTx,
-    HistoryEventStream,
+    LegacyHistoryHandler,
+    LegacyHistoryNetworkTask,
+    LegacyHistoryMessageTx,
+    LegacyHistoryJsonRpcTx,
+    LegacyHistoryEventStream,
 )> {
-    let (history_jsonrpc_tx, history_jsonrpc_rx) =
-        mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-    header_oracle.write().await.history_jsonrpc_tx = Some(history_jsonrpc_tx.clone());
-    let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<OverlayRequest>();
-    let history_network = HistoryNetwork::new(
+    let (legacy_history_jsonrpc_tx, legacy_history_jsonrpc_rx) =
+        mpsc::unbounded_channel::<LegacyHistoryJsonRpcRequest>();
+    header_oracle.write().await.legacy_history_jsonrpc_tx = Some(legacy_history_jsonrpc_tx.clone());
+    let (legacy_history_event_tx, legacy_history_event_rx) =
+        mpsc::unbounded_channel::<OverlayRequest>();
+    let legacy_history_network = LegacyHistoryNetwork::new(
         Arc::clone(discovery),
         utp_socket,
         storage_config,
@@ -60,42 +61,45 @@ pub async fn initialize_history_network(
         header_oracle,
     )
     .await?;
-    let event_stream = history_network.overlay.event_stream().await?;
-    let history_network = Arc::new(history_network);
-    let history_handler = HistoryRequestHandler {
-        network: history_network.clone(),
-        history_rx: history_jsonrpc_rx,
+    let event_stream = legacy_history_network.overlay.event_stream().await?;
+    let legacy_history_network = Arc::new(legacy_history_network);
+    let legacy_history_handler = LegacyHistoryRequestHandler {
+        network: legacy_history_network.clone(),
+        legacy_history_rx: legacy_history_jsonrpc_rx,
     };
-    let history_network_task =
-        spawn_history_network(history_network.clone(), portalnet_config, history_event_rx);
-    spawn_history_heartbeat(history_network);
+    let legacy_history_network_task = spawn_history_network(
+        legacy_history_network.clone(),
+        portalnet_config,
+        legacy_history_event_rx,
+    );
+    spawn_legacy_history_heartbeat(legacy_history_network);
     Ok((
-        Some(history_handler),
-        Some(history_network_task),
-        Some(history_event_tx),
-        Some(history_jsonrpc_tx),
+        Some(legacy_history_handler),
+        Some(legacy_history_network_task),
+        Some(legacy_history_event_tx),
+        Some(legacy_history_jsonrpc_tx),
         Some(event_stream),
     ))
 }
 
 pub fn spawn_history_network(
-    network: Arc<HistoryNetwork>,
+    network: Arc<LegacyHistoryNetwork>,
     portalnet_config: PortalnetConfig,
-    history_message_rx: mpsc::UnboundedReceiver<OverlayRequest>,
+    legacy_history_message_rx: mpsc::UnboundedReceiver<OverlayRequest>,
 ) -> JoinHandle<()> {
     info!(
-        "About to spawn History Network with {} boot nodes",
+        "About to spawn Legacy History Network with {} boot nodes",
         portalnet_config.bootnodes.len()
     );
 
     tokio::spawn(async move {
-        let history_events = HistoryEvents {
+        let legacy_history_events = LegacyHistoryEvents {
             network: Arc::clone(&network),
-            message_rx: history_message_rx,
+            message_rx: legacy_history_message_rx,
         };
 
-        // Spawn history event handler
-        tokio::spawn(history_events.start());
+        // Spawn legacy history event handler
+        tokio::spawn(legacy_history_events.start());
 
         // hacky test: make sure we establish a session with the boot node
         network.overlay.ping_bootnodes().await;
@@ -106,7 +110,7 @@ pub fn spawn_history_network(
     })
 }
 
-pub fn spawn_history_heartbeat(network: Arc<HistoryNetwork>) {
+pub fn spawn_legacy_history_heartbeat(network: Arc<LegacyHistoryNetwork>) {
     tokio::spawn(async move {
         let mut heart_interval = interval(Duration::from_millis(30000));
 

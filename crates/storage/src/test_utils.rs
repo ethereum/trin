@@ -15,13 +15,13 @@ pub fn create_test_portal_storage_config_with_capacity(
     let config = PortalStorageConfigFactory::new(
         StorageCapacityConfig::Combined {
             total_mb: capacity_mb,
-            subnetworks: vec![Subnetwork::History],
+            subnetworks: vec![Subnetwork::LegacyHistory],
         },
         NodeId::random(),
         temp_dir.path().to_path_buf(),
     )
     .unwrap()
-    .create(&Subnetwork::History, Distance::MAX)
+    .create(&Subnetwork::LegacyHistory, Distance::MAX)
     .unwrap();
     Ok((temp_dir, config))
 }
