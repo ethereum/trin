@@ -12,6 +12,9 @@ FEATURES ?=
 # Cargo profile for builds. Default is for local builds, CI uses an override.
 PROFILE ?= release
 
+# The directory where Cargo will place the build artifacts.
+CARGO_TARGET_DIR ?= target
+
 # Extra flags for Cargo
 CARGO_INSTALL_EXTRA_FLAGS ?=
 
@@ -148,3 +151,17 @@ clean: ## Perform a `cargo` clean and remove the binary and test vectors directo
 	cargo clean
 	rm -rf $(BIN_DIR)
 	rm -rf $(EF_TESTS_DIR)
+
+.PHONY: build-debug
+build-debug: ## Build the trin binary into `target/debug` directory.
+	cargo build --bin trin --features "$(FEATURES)"
+
+.PHONY: update-book-cli
+update-book-cli: build-debug ## Update book cli documentation.
+	@echo "Updating book cli doc..."
+	@./book/src/cli/update.sh $(CARGO_TARGET_DIR)/debug/trin
+
+pr: ## Run the `lint`, `update-book-cli`, and `test` targets.
+	make lint && \
+	make update-book-cli && \
+	make test
