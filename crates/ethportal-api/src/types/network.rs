@@ -47,6 +47,7 @@ impl std::str::FromStr for Network {
 /// Enum for various different portal subnetworks in a "core" network.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum Subnetwork {
+    History,
     Beacon,
     LegacyHistory,
     State,
@@ -60,6 +61,7 @@ pub enum Subnetwork {
 impl fmt::Display for Subnetwork {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Subnetwork::History => write!(f, "History"),
             Subnetwork::Beacon => write!(f, "Beacon"),
             Subnetwork::LegacyHistory => write!(f, "Legacy History"),
             Subnetwork::State => write!(f, "State"),
@@ -76,6 +78,7 @@ impl std::str::FromStr for Subnetwork {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "history" => Ok(Subnetwork::History),
             "beacon" => Ok(Subnetwork::Beacon),
             "legacy_history" => Ok(Subnetwork::LegacyHistory),
             "state" => Ok(Subnetwork::State),
@@ -92,6 +95,7 @@ impl Subnetwork {
     /// Convert Subnetwork enum to camel_case cli arg.
     pub fn to_cli_arg(&self) -> String {
         match self {
+            Subnetwork::History => "history".to_string(),
             Subnetwork::Beacon => "beacon".to_string(),
             Subnetwork::LegacyHistory => "legacy_history".to_string(),
             Subnetwork::State => "state".to_string(),
@@ -105,6 +109,7 @@ impl Subnetwork {
     /// Returns true if the subnetwork has been "fully" activated.
     pub fn is_active(&self) -> bool {
         match self {
+            Subnetwork::History => false,
             Subnetwork::Beacon => true,
             Subnetwork::LegacyHistory => true,
             Subnetwork::State => true,

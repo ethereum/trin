@@ -8,13 +8,14 @@ use alloy::{consensus::Header, primitives::Bytes, rlp::Decodable};
 use anyhow::Result;
 use ethportal_api::{
     types::{
-        content_key::legacy_history::{BlockHeaderByHashKey, BlockHeaderByNumberKey},
+        content_key::legacy_history::{
+            BlockBodyKey, BlockHeaderByHashKey, BlockHeaderByNumberKey, BlockReceiptsKey,
+        },
         execution::header_with_proof::HeaderWithProof,
     },
-    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, BlockBodyKey, BlockReceiptsKey,
-    ContentValue, LegacyHistoryContentKey, LegacyHistoryContentValue,
-    LegacyHistoryNetworkApiClient, RawContentValue, StateContentKey, StateContentValue,
-    StateNetworkApiClient,
+    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, ContentValue,
+    LegacyHistoryContentKey, LegacyHistoryContentValue, LegacyHistoryNetworkApiClient,
+    RawContentValue, StateContentKey, StateContentValue, StateNetworkApiClient,
 };
 use futures::{Future, TryFutureExt};
 use serde::{Deserialize, Deserializer};
