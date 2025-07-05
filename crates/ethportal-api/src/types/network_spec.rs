@@ -157,6 +157,7 @@ impl EthereumHardforks for NetworkSpec {
 
 pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     let mut portal_subnetworks = BiHashMap::new();
+    portal_subnetworks.insert(Subnetwork::History, "0x5000".to_string());
     portal_subnetworks.insert(Subnetwork::State, "0x500A".to_string());
     portal_subnetworks.insert(Subnetwork::LegacyHistory, "0x500B".to_string());
     portal_subnetworks.insert(Subnetwork::Beacon, "0x500C".to_string());
