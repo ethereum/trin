@@ -29,7 +29,7 @@ use crate::{
         set_int_gauge_vec, start_timer_vec, stop_timer, BLOCK_HEIGHT, BLOCK_PROCESSING_TIMES,
         TRANSACTION_PROCESSING_TIMES,
     },
-    storage::evm_db::EvmDB,
+    storage::evm_db::{EvmDB, ACCOUNTS_TABLE, BLOCK_HASHES_TABLE},
 };
 
 pub const BLOCKHASH_SERVE_WINDOW: u64 = 256;
@@ -127,23 +127,28 @@ impl BlockExecutor {
     fn process_genesis(&mut self) -> anyhow::Result<()> {
         let genesis: GenesisConfig =
             serde_json::from_str(include_str!("../../resources/genesis/mainnet.json"))?;
+        let db = &self.evm.db().database.db;
+        let txn = db.begin_write()?;
+        {
+            let mut table = txn.open_table(ACCOUNTS_TABLE)?;
+            for (address, alloc_balance) in genesis.alloc {
+                let address_hash = keccak256(address);
+                let mut account = AccountState::default();
+                account.balance += alloc_balance.balance;
+                self.evm
+                    .db()
+                    .database
+                    .trie
+                    .lock()
+                    .insert(address_hash.as_ref(), &alloy::rlp::encode(&account))?;
 
-        for (address, alloc_balance) in genesis.alloc {
-            let address_hash = keccak256(address);
-            let mut account = AccountState::default();
-            account.balance += alloc_balance.balance;
-            self.evm
-                .db()
-                .database
-                .trie
-                .lock()
-                .insert(address_hash.as_ref(), &alloy::rlp::encode(&account))?;
-            self.evm
-                .db()
-                .database
-                .db
-                .put(address_hash, alloy::rlp::encode(account))?;
+                table.insert(
+                    address_hash.as_slice(),
+                    alloy::rlp::encode(account).as_slice(),
+                )?;
+            }
         }
+        txn.commit()?;
 
         Ok(())
     }
@@ -240,19 +245,24 @@ impl BlockExecutor {
     /// insert block hash into database and remove old one
     fn manage_block_hash_serve_window(&mut self, header: &Header) -> anyhow::Result<()> {
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["insert_blockhash"]);
-        self.evm.db().database.db.put(
-            keccak256(B256::from(U256::from(header.number))),
-            header.hash_slow(),
-        )?;
-        if header.number >= BLOCKHASH_SERVE_WINDOW {
-            self.evm
-                .db()
-                .database
-                .db
-                .delete(keccak256(B256::from(U256::from(
+
+        let db = &self.evm.db().database.db;
+        let txn = db.begin_write()?;
+        {
+            let mut table = txn.open_table(BLOCK_HASHES_TABLE)?;
+            let key = keccak256(B256::from(U256::from(header.number)));
+            let value = header.hash_slow();
+            table.insert(key.as_slice(), value.as_slice())?;
+
+            if header.number >= BLOCKHASH_SERVE_WINDOW {
+                let old_key = keccak256(B256::from(U256::from(
                     header.number - BLOCKHASH_SERVE_WINDOW,
-                ))))?;
+                )));
+                table.remove(old_key.as_slice())?;
+            }
         }
+        txn.commit()?;
+
         stop_timer(timer);
         Ok(())
     }
