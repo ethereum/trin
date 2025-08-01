@@ -15,6 +15,7 @@ pub mod node_id;
 pub mod ping_extensions;
 pub mod portal;
 pub mod portal_wire;
+pub mod protocol_info;
 pub mod protocol_versions;
 pub mod query_trace;
 pub mod state_trie;

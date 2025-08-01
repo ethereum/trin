@@ -47,5 +47,7 @@ pub use types::{
     execution::{block_body::*, receipts::*},
     node_id::*,
     portal::{RawContentKey, RawContentValue},
+    protocol_info::*,
+    protocol_versions::*,
 };
 pub use web3::{Web3ApiClient, Web3ApiServer};
