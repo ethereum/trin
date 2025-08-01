@@ -17,8 +17,23 @@ pub enum ProtocolVersion {
     V0,
     /// Adds `accept codes` and varint size encoding for find content messages.
     V1,
+    /// Uses 'p' ENR key to indicate protocol version and chain id.
+    V2,
     /// Unspecified version is a version that we don't know about, but the other side does.
     UnspecifiedVersion(u8),
+}
+
+impl Deref for ProtocolVersion {
+    type Target = u8;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            ProtocolVersion::V0 => &0,
+            ProtocolVersion::V1 => &1,
+            ProtocolVersion::V2 => &2,
+            ProtocolVersion::UnspecifiedVersion(version) => version,
+        }
+    }
 }
 
 impl ProtocolVersion {
@@ -29,11 +44,7 @@ impl ProtocolVersion {
 
 impl From<ProtocolVersion> for u8 {
     fn from(version: ProtocolVersion) -> u8 {
-        match version {
-            ProtocolVersion::V0 => 0,
-            ProtocolVersion::V1 => 1,
-            ProtocolVersion::UnspecifiedVersion(version) => version,
-        }
+        *version
     }
 }
 
@@ -42,6 +53,7 @@ impl From<u8> for ProtocolVersion {
         match version {
             0 => ProtocolVersion::V0,
             1 => ProtocolVersion::V1,
+            2 => ProtocolVersion::V2,
             version => ProtocolVersion::UnspecifiedVersion(version),
         }
     }
