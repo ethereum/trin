@@ -11,8 +11,8 @@ use crate::{
 };
 
 // Prefixes for the different types of history content keys
-pub const HISTORY_BLOCK_BODY_KEY_PREFIX: u8 = 0x09;
-pub const HISTORY_BLOCK_RECEIPTS_KEY_PREFIX: u8 = 0x0A;
+pub const HISTORY_BLOCK_BODY_KEY_PREFIX: u8 = 0x00;
+pub const HISTORY_BLOCK_RECEIPTS_KEY_PREFIX: u8 = 0x01;
 
 /// A content key used in Portal History network
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -155,7 +155,7 @@ mod tests {
 
         #[rstest]
         #[case::block_number_0(0, B256::with_last_byte(HISTORY_BLOCK_BODY_KEY_PREFIX))]
-        #[case::block_number_12_345_678(12_345_678, b256!("0x614e3d0000000000000000000000000000000000000000000000000000000009"))]
+        #[case::block_number_12_345_678(12_345_678, b256!("0x614e3d0000000000000000000000000000000000000000000000000000000000"))]
         fn block_body(#[case] block_number: u64, #[case] expected_content_id: B256) {
             let content_key = HistoryContentKey::new_block_body(block_number);
             assert_eq!(content_key.content_id(), expected_content_id);
@@ -163,7 +163,7 @@ mod tests {
 
         #[rstest]
         #[case::block_number_0(0, B256::with_last_byte(HISTORY_BLOCK_RECEIPTS_KEY_PREFIX))]
-        #[case::block_number_12_345_678(12_345_678, b256!("0x614e3d000000000000000000000000000000000000000000000000000000000a"))]
+        #[case::block_number_12_345_678(12_345_678, b256!("0x614e3d0000000000000000000000000000000000000000000000000000000001"))]
         fn block_receipts(#[case] block_number: u64, #[case] expected_content_id: B256) {
             let content_key = HistoryContentKey::new_block_receipts(block_number);
             assert_eq!(content_key.content_id(), expected_content_id);
@@ -173,8 +173,8 @@ mod tests {
         use super::*;
 
         #[rstest]
-        #[case::block_number_0(0, bytes!("0x090000000000000000"))]
-        #[case::block_number_12_345_678(12_345_678, bytes!("0x094e61bc0000000000"))]
+        #[case::block_number_0(0, bytes!("0x000000000000000000"))]
+        #[case::block_number_12_345_678(12_345_678, bytes!("0x004e61bc0000000000"))]
         fn block_body(#[case] block_number: u64, #[case] content_key_bytes: RawContentKey) {
             let content_key = HistoryContentKey::new_block_body(block_number);
 
@@ -186,8 +186,8 @@ mod tests {
         }
 
         #[rstest]
-        #[case::block_number_0(0, bytes!("0x0a0000000000000000"))]
-        #[case::block_number_12_345_678(12_345_678, bytes!("0x0a4e61bc0000000000"))]
+        #[case::block_number_0(0, bytes!("0x010000000000000000"))]
+        #[case::block_number_12_345_678(12_345_678, bytes!("0x014e61bc0000000000"))]
         fn block_receipts(#[case] block_number: u64, #[case] content_key_bytes: RawContentKey) {
             let content_key = HistoryContentKey::new_block_receipts(block_number);
 
