@@ -76,3 +76,11 @@ pub fn entry_count_and_size(content_type: &ContentType) -> String {
         table_name(content_type)
     )
 }
+
+pub fn purge_by_slot(content_type: &ContentType) -> String {
+    format!(
+        "DELETE FROM {}
+         WHERE slot < :slot",
+        table_name(content_type)
+    )
+}
