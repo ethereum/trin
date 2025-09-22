@@ -208,8 +208,8 @@ pub async fn test_ping_capabilities_payload_type(target: &Client, peertest: &Pee
 
     assert_eq!(capabilities_payload.data_radius, Distance::MAX);
     assert_eq!(
-        capabilities_payload.client_info,
-        Some(ClientInfo::trin_client_info())
+        capabilities_payload.get_client_info(),
+        ClientInfo::trin_client_info(),
     );
     assert_eq!(capabilities_payload.capabilities.len(), 3);
     assert_eq!(result.enr_seq, bootnode_sequence);

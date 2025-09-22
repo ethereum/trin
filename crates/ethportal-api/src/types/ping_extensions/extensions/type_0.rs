@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, iter::repeat, str::FromStr};
 
 use alloy::primitives::U256;
 use anyhow::{bail, ensure};
@@ -24,7 +24,7 @@ use crate::{
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientInfoRadiusCapabilities {
-    pub client_info: Option<ClientInfo>,
+    pub client_info: String,
     pub data_radius: Distance,
     pub capabilities: VariableList<PingExtensionType, U400>,
 }
@@ -32,14 +32,14 @@ pub struct ClientInfoRadiusCapabilities {
 impl ClientInfoRadiusCapabilities {
     pub fn new(radius: Distance, capabilities: Vec<PingExtensionType>) -> Self {
         Self {
-            client_info: Some(ClientInfo::trin_client_info()),
+            client_info: ClientInfo::trin_client_info().to_string(),
             data_radius: radius,
             capabilities: VariableList::from(capabilities),
         }
     }
 
     pub fn new_with_client_info(
-        client_info: Option<ClientInfo>,
+        client_info: String,
         radius: Distance,
         capabilities: Vec<PingExtensionType>,
     ) -> Self {
@@ -48,6 +48,13 @@ impl ClientInfoRadiusCapabilities {
             data_radius: radius,
             capabilities: VariableList::from(capabilities),
         }
+    }
+
+    /// Returns [ClientInfo] type.
+    ///
+    /// See [ClientInfo::from_str_or_empty] for exact behaviour.
+    pub fn get_client_info(&self) -> ClientInfo {
+        ClientInfo::from_str_or_empty(&self.client_info)
     }
 
     /// ClientType is not robust and should not be used for any critical logic.
@@ -59,11 +66,7 @@ impl ClientInfoRadiusCapabilities {
     /// For projects built on Portal like Glados, it is recommended  the respective projects
     /// maintain their own client type parsing logic.
     pub fn get_client_type(&self) -> ClientType {
-        if let Some(client_info) = &self.client_info {
-            ClientType::from(client_info.client_name.as_str())
-        } else {
-            ClientType::Unknown(None)
-        }
+        ClientType::from(self.get_client_info().client_name.as_str())
     }
 }
 
@@ -83,11 +86,7 @@ impl Encode for ClientInfoRadiusCapabilities {
             + <U256 as Encode>::ssz_fixed_len()
             + <VariableList<u16, U400> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let client_info = match &self.client_info {
-            Some(client_info) => client_info.to_string(),
-            None => "".to_string(),
-        };
-        let bytes: Vec<u8> = client_info.as_bytes().to_vec();
+        let bytes: Vec<u8> = self.client_info.as_bytes().to_vec();
         let client_info: VariableList<u8, U200> = VariableList::from(bytes);
 
         encoder.append(&client_info);
@@ -112,15 +111,9 @@ impl Decode for ClientInfoRadiusCapabilities {
         let data_radius: U256 = decoder.decode_next()?;
         let capabilities: VariableList<PingExtensionType, U400> = decoder.decode_next()?;
 
-        let string = String::from_utf8(client_info.to_vec()).map_err(|_| {
+        let client_info = String::from_utf8(client_info.to_vec()).map_err(|_| {
             ssz::DecodeError::BytesInvalid(format!("Invalid utf8 string: {client_info:?}"))
         })?;
-        let client_info = match string.as_str() {
-            "" => None,
-            _ => Some(ClientInfo::from_str(&string).map_err(|err| {
-                ssz::DecodeError::BytesInvalid(format!("Failed to parse client info: {err:?}"))
-            })?),
-        };
 
         Ok(Self {
             client_info,
@@ -157,6 +150,42 @@ impl ClientInfo {
             programming_language_version: format!("rustc{PROGRAMMING_LANGUAGE_VERSION}"),
         }
     }
+
+    /// Parses a string `s` to return value of this type.
+    ///
+    /// Unlike [FromStr::from_str], this function doesn't fail. This means that if input doesn't
+    /// follow strict format, parsing might result in completely wrong interpretation (e.g.
+    /// `client_version` might be set to `operating_system`).
+    pub fn from_str_or_empty(s: &str) -> Self {
+        let mut parts = s.split('/');
+
+        let client_name = parts.next().unwrap_or_default();
+
+        let client_version_and_short_commit = parts.next().unwrap_or_default();
+        let (client_version, short_commit) = client_version_and_short_commit
+            .splitn(2, '-')
+            .chain(repeat(""))
+            .next_tuple()
+            .expect("must have enough elemets");
+
+        let os_and_cpu = parts.next().unwrap_or_default();
+        let (operating_system, cpu_architecture) = os_and_cpu
+            .splitn(2, '-')
+            .chain(repeat(""))
+            .next_tuple()
+            .expect("muct have enough elements");
+
+        let programming_language_version = parts.next().unwrap_or_default();
+
+        Self {
+            client_name: client_name.to_string(),
+            client_version: client_version.to_string(),
+            short_commit: short_commit.to_string(),
+            operating_system: operating_system.to_string(),
+            cpu_architecture: cpu_architecture.to_string(),
+            programming_language_version: programming_language_version.to_string(),
+        }
+    }
 }
 
 impl Display for ClientInfo {
@@ -177,15 +206,15 @@ impl Display for ClientInfo {
 impl FromStr for ClientInfo {
     type Err = anyhow::Error;
 
-    fn from_str(string: &str) -> Result<Self, anyhow::Error> {
-        ensure!(string.len() <= 200, "Client info string is too long");
-        let parts: Vec<&str> = string.split('/').collect();
+    fn from_str(s: &str) -> Result<Self, anyhow::Error> {
+        ensure!(s.len() <= 200, "Client info string is too long");
+        let parts: Vec<&str> = s.split('/').collect();
 
         if parts.len() != 4 {
             bail!(
                 "Invalid client info string: should have 4 /'s instead got {} | {}",
                 parts.len(),
-                string
+                s
             );
         }
 
@@ -249,8 +278,130 @@ mod tests {
         utils::bytes::{hex_decode, hex_encode},
     };
 
+    mod client_info {
+        use super::*;
+
+        #[test]
+        fn from_str() {
+            let client_info = ClientInfo::trin_client_info();
+            let string = client_info.to_string();
+            let decoded = ClientInfo::from_str(&string).unwrap();
+            assert_eq!(client_info, decoded);
+        }
+
+        #[rstest]
+        /// Fails because there are not enough parts
+        #[case("trin/0.1.1-2b00d730/linux-x86_64")]
+        /// Fails because there are too many parts
+        #[case("trin/0.1.1-2b00d730/linux-x86_64/rustc1.81.0/extra")]
+        /// Fails because the short commit is missing
+        #[case("trin/0.1.1/linux-x86_64/rustc1.81.0")]
+        /// Fails because the CPU architecture is missing
+        #[case("trin/0.1.1-2b00d730/linux/rustc1.81.0")]
+        /// Fails because client string is too long
+        #[case(&"t".repeat(201))]
+        #[should_panic]
+        fn from_str_invalid(#[case] string: &str) {
+            ClientInfo::from_str(string).unwrap();
+        }
+
+        #[rstest]
+        /// Regular client info format
+        #[case::regular(
+            "trin/0.1.1-2b00d730/linux-x86_64/rustc1.81.0",
+            "0.1.1",
+            "2b00d730",
+            "linux",
+            "x86_64",
+            "rustc1.81.0"
+        )]
+        /// Only Client name
+        #[case::only_client_name("trin", "", "", "", "", "")]
+        /// Only Client name and slashes
+        #[case::only_client_name_with_slashes("trin///", "", "", "", "", "")]
+        /// Only Client name and slashes and dashes
+        #[case::only_client_name_with_slashes_and_dashes("trin/-/-/", "", "", "", "", "")]
+        /// Short commit is missing
+        #[case::missing_commit(
+            "trin/0.1.1/linux-x86_64/rustc1.81.0",
+            "0.1.1",
+            "",
+            "linux",
+            "x86_64",
+            "rustc1.81.0"
+        )]
+        /// CPU architecture is missing
+        #[case::missing_cpu_architecture(
+            "trin/0.1.1-2b00d730/linux/rustc1.81.0",
+            "0.1.1",
+            "2b00d730",
+            "linux",
+            "",
+            "rustc1.81.0"
+        )]
+        /// Programming language is missing
+        #[case::missing_programming_language(
+            "trin/0.1.1-2b00d730/linux-x86_64",
+            "0.1.1",
+            "2b00d730",
+            "linux",
+            "x86_64",
+            ""
+        )]
+        /// Extra part
+        #[case::extra_part(
+            "trin/0.1.1-2b00d730/linux-x86_64/rustc1.81.0/extra",
+            "0.1.1",
+            "2b00d730",
+            "linux",
+            "x86_64",
+            "rustc1.81.0"
+        )]
+        fn from_str_or_empty(
+            #[case] string: &str,
+            #[case] client_version: &str,
+            #[case] short_commit: &str,
+            #[case] operating_system: &str,
+            #[case] cpu_architecture: &str,
+            #[case] programming_language_version: &str,
+        ) {
+            assert_eq!(
+                ClientInfo::from_str_or_empty(string),
+                ClientInfo {
+                    client_name: "trin".to_string(),
+                    client_version: client_version.to_string(),
+                    short_commit: short_commit.to_string(),
+                    operating_system: operating_system.to_string(),
+                    cpu_architecture: cpu_architecture.to_string(),
+                    programming_language_version: programming_language_version.to_string(),
+                },
+            );
+        }
+
+        #[rstest]
+        #[case("")]
+        #[case("/")]
+        #[case("//")]
+        #[case("///")]
+        #[case("////")]
+        #[case("/-/-/")]
+        fn from_empty_string(#[case] string: &str) {
+            assert_eq!(
+                ClientInfo::from_str_or_empty(string),
+                ClientInfo {
+                    client_name: "".to_string(),
+                    client_version: "".to_string(),
+                    short_commit: "".to_string(),
+                    operating_system: "".to_string(),
+                    cpu_architecture: "".to_string(),
+                    programming_language_version: "".to_string(),
+                },
+            );
+        }
+    }
+
     #[test]
-    fn test_client_info_radius_capabilities() {
+    fn client_info_radius_capabilities() {
         let radius = Distance::from(U256::from(42));
         let capabilities = vec![
             PingExtensionType::Capabilities,
@@ -277,41 +428,16 @@ mod tests {
     }
 
     #[test]
-    fn test_client_info_from_str() {
-        let client_info = ClientInfo::trin_client_info();
-        let string = client_info.to_string();
-        let decoded = ClientInfo::from_str(&string).unwrap();
-        assert_eq!(client_info, decoded);
-    }
-
-    #[rstest]
-    /// Fails because there are not enough parts
-    #[case("trin/0.1.1-2b00d730/linux-x86_64")]
-    /// Fails because there are too many parts
-    #[case("trin/0.1.1-2b00d730/linux-x86_64/rustc1.81.0/extra")]
-    /// Fails because the short commit is missing
-    #[case("trin/0.1.1/linux-x86_64/rustc1.81.0")]
-    /// Fails because the CPU architecture is missing
-    #[case("trin/0.1.1-2b00d730/linux/rustc1.81.0")]
-    /// Fails because client string is too long
-    #[case(&"t".repeat(201))]
-    #[should_panic]
-    fn test_client_info_from_str_invalid(#[case] string: &str) {
-        ClientInfo::from_str(string).unwrap();
-    }
-
-    #[test]
     fn message_encoding_ping_capabilities_with_client_info() {
         let data_radius = Distance::from(U256::MAX - U256::from(1));
-        let client_info =
-            ClientInfo::from_str("trin/v0.1.1-b61fdc5c/linux-x86_64/rustc1.81.0").unwrap();
+        let client_info = "trin/v0.1.1-b61fdc5c/linux-x86_64/rustc1.81.0".to_string();
         let capabilities = vec![
             PingExtensionType::Capabilities,
             PingExtensionType::BasicRadius,
             PingExtensionType::Error,
         ];
         let capabilities_payload = ClientInfoRadiusCapabilities::new_with_client_info(
-            Some(client_info),
+            client_info,
             data_radius,
             capabilities,
         );
@@ -340,8 +466,11 @@ mod tests {
             PingExtensionType::BasicRadius,
             PingExtensionType::Error,
         ];
-        let capabilities_payload =
-            ClientInfoRadiusCapabilities::new_with_client_info(None, data_radius, capabilities);
+        let capabilities_payload = ClientInfoRadiusCapabilities::new_with_client_info(
+            String::default(),
+            data_radius,
+            capabilities,
+        );
         let payload = CustomPayload::from(capabilities_payload);
         let ping = Ping {
             enr_seq: 1,
@@ -362,15 +491,14 @@ mod tests {
     #[test]
     fn message_encoding_pong_capabilities_with_client_info() {
         let data_radius = Distance::from(U256::MAX - U256::from(1));
-        let client_info =
-            ClientInfo::from_str("trin/v0.1.1-b61fdc5c/linux-x86_64/rustc1.81.0").unwrap();
+        let client_info = "trin/v0.1.1-b61fdc5c/linux-x86_64/rustc1.81.0".to_string();
         let capabilities = vec![
             PingExtensionType::Capabilities,
             PingExtensionType::BasicRadius,
             PingExtensionType::Error,
         ];
         let capabilities_payload = ClientInfoRadiusCapabilities::new_with_client_info(
-            Some(client_info),
+            client_info,
             data_radius,
             capabilities,
         );
@@ -399,8 +527,11 @@ mod tests {
             PingExtensionType::BasicRadius,
             PingExtensionType::Error,
         ];
-        let capabilities_payload =
-            ClientInfoRadiusCapabilities::new_with_client_info(None, data_radius, capabilities);
+        let capabilities_payload = ClientInfoRadiusCapabilities::new_with_client_info(
+            String::default(),
+            data_radius,
+            capabilities,
+        );
         let payload = CustomPayload::from(capabilities_payload);
         let pong = Pong {
             enr_seq: 1,
