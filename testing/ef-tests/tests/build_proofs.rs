@@ -92,10 +92,10 @@ fn block_body_execution_payload_proof() {
     .expect("cannot find test asset");
     let content: BeaconBlockBodyBellatrix = serde_yaml::from_str(&value).unwrap();
     let expected_execution_payload_proof = [
-        "0x6f0e62bdce10586442ef0e4576f7f89d32d58259dd922f5a77ceff213600f5a3",
+        "0x2b76d38371c161b639e922b0c42031f99dba98e903dd63ccd21a633143aabbaa",
         "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
         "0xdb56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d71",
-        "0x2d296d5f5bc5ffd16277f9ed45c8336bdbec9f6ec9297415031ceaaa4da7680c",
+        "0xab95e3d062c58f9e1108fc4248ab84a4c87c142ba956ee7e77a6933cf40ea7aa",
     ]
     .map(|x| B256::from_str(x).unwrap());
     let proof = content.build_execution_payload_proof();
@@ -104,10 +104,10 @@ fn block_body_execution_payload_proof() {
     assert_eq!(proof, expected_execution_payload_proof.to_vec());
 
     let expected_block_hash_proof = [
-        "0x2efbd2cd6514292c8a5888a40958fd3c31aac7dd7d192414fbd8f34731076b09",
+        "0x7ffe241ea60187fdb0187bfa22de35d1f9bed7ab061d9401fd47e34a54fbede1",
         "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
-        "0x18a00335b0da8726239fccb1b19079b2e0f82584a8515d56a633fad33b446eb9",
-        "0x6542b54766ab0730a18ae5cf17493a2e9ab8c3cc9ae3e73336d2ea2d37895807",
+        "0x661a812e736b705fc21352b256146b2fc7622861a29b4fa774dcd5164543fea3",
+        "0xb7a4dae09ab0b87e06da935cc55d6f14a6c85dabc2b5472b44df4c6da99bb078",
     ]
     .map(|x| B256::from_str(x).unwrap())
     .to_vec();
