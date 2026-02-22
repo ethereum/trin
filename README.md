@@ -1,6 +1,6 @@
 # ⚠️ ⚠️ ⚠️</br>THIS PROJECT IS NO LONGER ACTIVELY MAINTAINED
 
-**The project is no longer actively supported and things will most likely not work**
+**The project is no longer actively supported, and things will most likely not work**
 
 # Trin
 
