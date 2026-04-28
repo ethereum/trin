@@ -64,5 +64,9 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [build-dependencies]
-vergen = { version = "9.0", features = ["build", "cargo", "emit_and_set", "rustc"] }
+# Pinned to 9.0.x: vergen 9.1.0 (a) introduced an `Add` trait incompatible
+# with vergen-git2 1.0.7's `Git2`, breaking the build below, and (b) raised
+# its MSRV to 1.88, above this workspace's pinned 1.87. Unpinning re-breaks
+# both the moment `cargo update` runs in any downstream tree.
+vergen = { version = "~9.0", features = ["build", "cargo", "emit_and_set", "rustc"] }
 vergen-git2 = "1.0"
