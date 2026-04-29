@@ -101,19 +101,21 @@ build-release-tarballs: ## Create a series of `.tar.gz` files in the BIN_DIR dir
 
 EF_TESTS_TARGET = mainnet.tar.gz
 EF_TESTS_DIR = ./testing/ef-tests/mainnet
-ALL_RELEASES_URL = https://api.github.com/repos/ethereum/consensus-spec-tests/releases
+# Pinned to a specific consensus-spec-tests release.
+# `testing/ef-tests/tests/build_proofs.rs` hardcodes expected proofs over
+# `*/ssz_random/*` fixtures, which are regenerated each release with
+# fresh randomness — leaving this unpinned silently rots the proofs the
+# moment a new release lands. Bump deliberately after refreshing the
+# expected-proof arrays in `build_proofs.rs` against the new release.
+EF_TESTS_VERSION = v1.6.0-alpha.6
+EF_TESTS_URL = https://github.com/ethereum/consensus-spec-tests/releases/download/$(EF_TESTS_VERSION)/$(EF_TESTS_TARGET)
 
 download_test_data:
 	@if [ -d $(EF_TESTS_DIR) ]; then \
 		echo "$(EF_TESTS_DIR) already downloaded. Skipping download."; \
 	else \
-		echo "Fetching the latest release (including pre-releases) for $(EF_TESTS_TARGET)..."; \
-		curl -s $(ALL_RELEASES_URL) \
-		| grep "browser_download_url.*$(EF_TESTS_TARGET)" \
-		| head -n 1 \
-		| cut -d : -f 2,3 \
-		| tr -d \" \
-		| wget -qi -; \
+		echo "Fetching $(EF_TESTS_TARGET) at $(EF_TESTS_VERSION)..."; \
+		wget -q $(EF_TESTS_URL); \
 		echo "$(EF_TESTS_TARGET) downloaded successfully."; \
 	fi
 
